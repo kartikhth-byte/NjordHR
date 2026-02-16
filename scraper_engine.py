@@ -3,7 +3,6 @@ import base64
 import re
 import json
 import os
-from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -96,7 +95,7 @@ class Scraper:
             return True
         except Exception: return False
 
-    def _process_single_list(self, logger, rank, ship_type, target_folder, existing_ids):
+    def _process_single_list(self, logger, rank, ship_type, target_folder, existing_ids, force_redownload):
         page_number = 1
         while True:
             logger.info(f"--- Processing page {page_number} ---")
@@ -124,7 +123,19 @@ class Scraper:
                 raw_id = id_match.group(1)
                 candidate_id = base64.b64decode(raw_id).decode('utf-8') if not raw_id.isdigit() else raw_id
 
-                if candidate_id in existing_ids: continue
+                if candidate_id in existing_ids:
+                    logger.info(f"Skipping {candidate_id} - already processed this session")
+                    continue
+
+                rank_slug = rank.replace(' ', '_').replace('/', '-')
+                pdf_filename = f"{rank_slug}_{candidate_id}.pdf"
+                file_path = os.path.join(target_folder, pdf_filename)
+
+                if not force_redownload and os.path.exists(file_path):
+                    logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
+                    existing_ids.add(candidate_id)
+                    continue
+
                 logger.info(f"Processing new candidate ID: {candidate_id}")
                 
                 self.driver.execute_script("window.open(arguments[0]);", url)
@@ -139,8 +150,6 @@ class Scraper:
                     )
                     self.driver.switch_to.window(new_window)
                     self.wait.until(EC.visibility_of_element_located((By.XPATH, DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH)))
-                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                    pdf_filename = f"{rank.replace(' ', '-')}_{ship_type.replace(' ', '-')}_{candidate_id}_{timestamp}.pdf"
                     if self._save_page_as_pdf(target_folder, pdf_filename):
                         logger.info(f"  -> Saved: {pdf_filename}")
                         existing_ids.add(candidate_id)
@@ -183,10 +192,6 @@ class Scraper:
             rank_folder_name = rank.replace(' ', '_').replace('/', '-')
             target_folder = os.path.join(self.base_download_folder, rank_folder_name)
             existing_ids = set()
-            if not force_redownload and os.path.exists(target_folder):
-                 for filename in os.listdir(target_folder):
-                    match = re.search(r'_(\d+)_', filename)
-                    if match: existing_ids.add(match.group(1))
 
             for candidate_list in lists_to_process:
                 logger.info(f"\n--- Processing List: {candidate_list['name']} ---")
@@ -200,7 +205,7 @@ class Scraper:
                 
                 self.wait.until(EC.staleness_of(old_table))
                 
-                self._process_single_list(logger, rank, ship_type, target_folder, existing_ids)
+                self._process_single_list(logger, rank, ship_type, target_folder, existing_ids, force_redownload)
             
             message = "Download process completed for all lists."
             logger.info(message)
