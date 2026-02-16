@@ -134,7 +134,9 @@ class Scraper:
                     self.wait.until(EC.element_to_be_clickable((By.XPATH, DOWNLOAD_PDF_BUTTON_XPATH))).click()
                     try: WebDriverWait(self.driver, 3).until(EC.alert_is_present()).accept()
                     except TimeoutException: pass
-                    new_window = WebDriverWait(self.driver, 15).until(lambda d: [w for w in d.window_handles if w not in original_windows][0])
+                    new_window = WebDriverWait(self.driver, 15).until(
+                        lambda d: next((w for w in d.window_handles if w not in original_windows), False)
+                    )
                     self.driver.switch_to.window(new_window)
                     self.wait.until(EC.visibility_of_element_located((By.XPATH, DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH)))
                     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
