@@ -100,7 +100,7 @@ class CSVManager:
         df = self._load_master_df()
         if df.empty:
             return []
-        history = df[df['Candidate_ID'] == str(candidate_id)].sort_values('Date_Added')
+        history = df[df['Candidate_ID'].astype(str) == str(candidate_id)].sort_values('Date_Added')
         return history.to_dict(orient='records')
 
     def get_latest_candidate_row(self, candidate_id):
@@ -108,7 +108,7 @@ class CSVManager:
         df = self._load_master_df()
         if df.empty:
             return None
-        candidate_rows = df[df['Candidate_ID'] == str(candidate_id)]
+        candidate_rows = df[df['Candidate_ID'].astype(str) == str(candidate_id)]
         if candidate_rows.empty:
             return None
         latest = candidate_rows.sort_values('Date_Added').tail(1)
@@ -168,7 +168,7 @@ class CSVManager:
         if df.empty:
             return False
 
-        candidate_rows = df[df['Candidate_ID'] == str(candidate_id)]
+        candidate_rows = df[df['Candidate_ID'].astype(str) == str(candidate_id)]
         if candidate_rows.empty:
             return False
 

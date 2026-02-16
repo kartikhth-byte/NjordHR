@@ -313,10 +313,13 @@ def verify_resumes():
                     match_reason=ai_match_reason
                 )
 
+                candidate_history = csv_manager.get_candidate_history(candidate_id)
+                event_type = 'resume_updated' if candidate_history else 'initial_verification'
+
                 csv_ok = csv_manager.log_event(
                     candidate_id=candidate_id,
                     filename=filename,
-                    event_type='initial_verification',
+                    event_type=event_type,
                     status='New',
                     notes='',
                     rank_applied_for=rank_folder,
