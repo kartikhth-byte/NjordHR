@@ -177,10 +177,45 @@ class Scraper:
         os.makedirs(folder, exist_ok=True)
         file_path = os.path.join(folder, filename)
         try:
-            result = self.driver.execute_cdp_cmd("Page.printToPDF", {"printBackground": True})
+            self._sanitize_resume_page_before_pdf()
+            result = self.driver.execute_cdp_cmd(
+                "Page.printToPDF",
+                {
+                    "printBackground": True,
+                    "displayHeaderFooter": False
+                }
+            )
             with open(file_path, "wb") as f: f.write(base64.b64decode(result['data']))
             return True
         except Exception: return False
+
+    def _sanitize_resume_page_before_pdf(self):
+        """Remove known portal header/footer strings before PDF capture."""
+        script = """
+            const blockedPhrases = [
+                'https://www.seajob.net',
+                'download by njorships management india pvt ltd'
+            ];
+
+            const nodes = Array.from(document.body.querySelectorAll('*'));
+            for (const el of nodes) {
+                if (!el || !el.innerText) continue;
+                const text = el.innerText.trim().toLowerCase();
+                if (!text || text.length > 220) continue;
+                if (blockedPhrases.some((phrase) => text.includes(phrase))) {
+                    el.style.display = 'none';
+                }
+            }
+
+            const domainLinks = Array.from(document.querySelectorAll("a[href*='seajob.net']"));
+            for (const link of domainLinks) {
+                if (link && link.innerText && link.innerText.toLowerCase().includes('seajob')) {
+                    link.style.display = 'none';
+                }
+            }
+        """
+        self.driver.execute_script(script)
+        time.sleep(0.15)
 
     def _process_single_list(self, logger, rank, ship_type, target_folder, existing_ids, force_redownload):
         page_number = 1
