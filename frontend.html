@@ -146,9 +146,12 @@
             const [sortOrder, setSortOrder] = useState('desc');
             const [isDashboardLoading, setIsDashboardLoading] = useState(false);
             const [reviewCompleted, setReviewCompleted] = useState(false);
+            const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false);
+            const [drawerCandidateId, setDrawerCandidateId] = useState('');
             
             const eventSourceRef = useRef(null);
             const downloadEventSourceRef = useRef(null);
+            const dashboardTableScrollRef = useRef(null);
             
             const API_BASE_URL = 'http://127.0.0.1:5000';
             const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Not Interested', 'Interview Scheduled', 'Offer Made', 'Hired', 'Rejected'];
@@ -161,12 +164,12 @@
             useEffect(() => {
                 if (activeTab === 'dashboard') {
                     fetchAvailableRanks();
-                    fetchDashboardData();
+                    fetchDashboardData({ resetPage: true });
                 }
             }, [activeTab]);
             
             useEffect(() => {
-                fetchDashboardData();
+                fetchDashboardData({ resetPage: true });
             }, [dashboardView, dashboardRank]);
             
             useEffect(() => {
@@ -174,11 +177,27 @@
             }, [dashboardData, searchQuery, sortColumn, sortOrder]);
 
             useEffect(() => {
+                const totalPages = Math.max(1, Math.ceil(filteredData.length / rowsPerPage));
+                if (currentPage > totalPages) {
+                    setCurrentPage(totalPages);
+                }
+            }, [filteredData, currentPage, rowsPerPage]);
+
+            useEffect(() => {
                 setSelectedDashboardIds(prev => {
                     const validIds = new Set(dashboardData.map(row => String(row.candidate_id)));
                     return new Set([...prev].filter(id => validIds.has(id)));
                 });
             }, [dashboardData]);
+
+            useEffect(() => {
+                if (!isDashboardDrawerOpen || !drawerCandidateId) return;
+                const exists = dashboardData.some(row => String(row.candidate_id) === String(drawerCandidateId));
+                if (!exists) {
+                    setIsDashboardDrawerOpen(false);
+                    setDrawerCandidateId('');
+                }
+            }, [dashboardData, isDashboardDrawerOpen, drawerCandidateId]);
 
             useEffect(() => {
                 if (!otpExpiresAt || loginStep !== 'otp') {
@@ -290,7 +309,10 @@
                 }
             };
             
-            const fetchDashboardData = async () => {
+            const fetchDashboardData = async ({ resetPage = false, preserveScroll = false } = {}) => {
+                const previousScrollTop = preserveScroll && dashboardTableScrollRef.current
+                    ? dashboardTableScrollRef.current.scrollTop
+                    : 0;
                 setIsDashboardLoading(true);
                 try {
                     let url = `${API_BASE_URL}/get_dashboard_data?view=${dashboardView}`;
@@ -303,7 +325,9 @@
                     
                     if (data.success) {
                         setDashboardData(data.data);
-                        setCurrentPage(1);
+                        if (resetPage) {
+                            setCurrentPage(1);
+                        }
                     } else {
                         handleSendMessage('error', data.message || 'Failed to load dashboard data');
                         setDashboardData([]);
@@ -313,6 +337,13 @@
                     handleSendMessage('error', 'Failed to load dashboard data');
                     setDashboardData([]);
                 } finally {
+                    if (preserveScroll && dashboardTableScrollRef.current) {
+                        setTimeout(() => {
+                            if (dashboardTableScrollRef.current) {
+                                dashboardTableScrollRef.current.scrollTop = previousScrollTop;
+                            }
+                        }, 0);
+                    }
                     setIsDashboardLoading(false);
                 }
             };
@@ -383,6 +414,7 @@
             };
 
             const handleDashboardStatusChange = async (candidateId, status) => {
+                const candidateIdStr = String(candidateId);
                 try {
                     const response = await fetch(`${API_BASE_URL}/update_status`, {
                         method: 'POST',
@@ -394,20 +426,24 @@
                         handleSendMessage('error', data.message || 'Failed to update status');
                         return;
                     }
+                    setDashboardData(prev => prev.map(row =>
+                        String(row.candidate_id) === candidateIdStr ? { ...row, status } : row
+                    ));
                     handleSendMessage('success', `Status updated for candidate ${candidateId}`);
-                    fetchDashboardData();
+                    fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to update status');
                 }
             };
 
-            const handleDashboardAddNotes = async (candidateId) => {
-                const notes = (dashboardNotesDraft[candidateId] || '').trim();
+            const handleDashboardAddNotes = async (candidateId, notesInput = null) => {
+                const notes = (notesInput !== null ? notesInput : (dashboardNotesDraft[candidateId] || '')).trim();
                 if (!notes) {
                     handleSendMessage('error', 'Notes cannot be empty');
                     return;
                 }
 
+                const candidateIdStr = String(candidateId);
                 try {
                     const response = await fetch(`${API_BASE_URL}/add_notes`, {
                         method: 'POST',
@@ -419,12 +455,25 @@
                         handleSendMessage('error', data.message || 'Failed to add notes');
                         return;
                     }
+                    setDashboardData(prev => prev.map(row =>
+                        String(row.candidate_id) === candidateIdStr ? { ...row, notes } : row
+                    ));
                     handleSendMessage('success', `Notes added for candidate ${candidateId}`);
                     setDashboardNotesDraft(prev => ({ ...prev, [candidateId]: '' }));
-                    fetchDashboardData();
+                    fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to add notes');
                 }
+            };
+
+            const openDashboardDrawer = (candidateId) => {
+                setDrawerCandidateId(String(candidateId));
+                setIsDashboardDrawerOpen(true);
+            };
+
+            const closeDashboardDrawer = () => {
+                setIsDashboardDrawerOpen(false);
+                setDrawerCandidateId('');
             };
 
             const handleOpenHistory = async (candidateId) => {
@@ -1059,6 +1108,8 @@
                 const totalSelectable = filteredData.length;
                 const selectedInFiltered = filteredData.filter(row => selectedDashboardIds.has(String(row.candidate_id))).length;
                 const allSelected = totalSelectable > 0 && selectedInFiltered === totalSelectable;
+                const drawerCandidate = dashboardData.find(row => String(row.candidate_id) === drawerCandidateId) || null;
+                const paginatedRows = getPaginatedData();
 
                 return (
                     <div>
@@ -1096,7 +1147,7 @@
                             )}
                             
                             <button 
-                                onClick={fetchDashboardData}
+                                onClick={() => fetchDashboardData({ preserveScroll: true })}
                                 className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                             >
                                 Refresh
@@ -1125,6 +1176,29 @@
                                 </p>
                             )}
                         </div>
+
+                        {selectedDashboardIds.size > 0 && (
+                            <div className="sticky top-0 z-20 mb-4 border border-blue-200 bg-blue-50 rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-blue-800">
+                                    {selectedDashboardIds.size} candidate(s) selected
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setSelectedDashboardIds(new Set())}
+                                        className="px-3 py-1.5 text-sm border border-blue-300 rounded-md text-blue-700 hover:bg-blue-100"
+                                    >
+                                        Clear Selection
+                                    </button>
+                                    <button
+                                        onClick={handleExportResumes}
+                                        disabled={isExporting}
+                                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
+                                    >
+                                        {isExporting ? 'Exporting...' : 'Export Selected'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         
                         {/* Loading State */}
                         {isDashboardLoading && (
@@ -1146,7 +1220,7 @@
                         {!isDashboardLoading && dashboardData.length > 0 && (
                             <div>
                                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                                    <div className="overflow-x-auto" style={{maxHeight: '600px'}}>
+                                    <div ref={dashboardTableScrollRef} className="overflow-x-auto" style={{maxHeight: '600px'}}>
                                         <table className="min-w-full divide-y divide-gray-200 dashboard-table">
                                             <thead>
                                                 <tr>
@@ -1208,7 +1282,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
-                                                {getPaginatedData().map((row, idx) => (
+                                                {paginatedRows.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-gray-50">
                                                         <td className="px-4 py-3 whitespace-nowrap">
                                                             <input
@@ -1265,21 +1339,14 @@
                                                             <div className="text-xs text-gray-600 mb-1 truncate-reason" title={row.notes || ''}>
                                                                 {row.notes || 'No notes'}
                                                             </div>
-                                                            <textarea
-                                                                rows="2"
-                                                                value={dashboardNotesDraft[row.candidate_id] || ''}
-                                                                onChange={(e) => setDashboardNotesDraft(prev => ({ ...prev, [row.candidate_id]: e.target.value }))}
-                                                                placeholder="Add note..."
-                                                                className="w-full p-1 border border-gray-300 rounded text-xs"
-                                                            />
                                                         </td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
                                                             <div className="flex flex-col space-y-2">
                                                                 <button
-                                                                    onClick={() => handleDashboardAddNotes(row.candidate_id)}
+                                                                    onClick={() => openDashboardDrawer(row.candidate_id)}
                                                                     className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700"
                                                                 >
-                                                                    Add Note
+                                                                    Details
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleOpenHistory(row.candidate_id)}
@@ -1342,6 +1409,86 @@
                                         </div>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {isDashboardDrawerOpen && drawerCandidate && (
+                            <div className="fixed inset-0 z-40 flex justify-end">
+                                <div className="absolute inset-0 bg-black/30" onClick={closeDashboardDrawer}></div>
+                                <div className="relative h-full w-full max-w-md bg-white shadow-2xl border-l border-gray-200 p-5 overflow-y-auto">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="text-lg font-semibold text-gray-900">Candidate Details</h3>
+                                        <button onClick={closeDashboardDrawer} className="text-sm text-gray-500 hover:text-gray-800">Close</button>
+                                    </div>
+
+                                    <div className="space-y-4 text-sm">
+                                        <div>
+                                            <p className="text-xs uppercase text-gray-500">Name</p>
+                                            <p className="font-medium">{drawerCandidate.name || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs uppercase text-gray-500">Candidate ID</p>
+                                            <p className="font-medium">{drawerCandidate.candidate_id || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs uppercase text-gray-500">Resume</p>
+                                            <a href={drawerCandidate.resume_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                                                {drawerCandidate.filename}
+                                            </a>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <p className="text-xs uppercase text-gray-500">Present Rank</p>
+                                                <p>{drawerCandidate.present_rank || '-'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs uppercase text-gray-500">Country</p>
+                                                <p>{drawerCandidate.country || '-'}</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs uppercase text-gray-500">Match Reason</p>
+                                            <p className="text-gray-700">{drawerCandidate.ai_match_reason || '-'}</p>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs uppercase text-gray-500 mb-1">Status</label>
+                                            <select
+                                                value={drawerCandidate.status || 'New'}
+                                                onChange={(e) => handleDashboardStatusChange(drawerCandidate.candidate_id, e.target.value)}
+                                                className="w-full p-2 border border-gray-300 rounded text-sm"
+                                            >
+                                                {STATUS_OPTIONS.map(status => (
+                                                    <option key={status} value={status}>{status}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs uppercase text-gray-500 mb-1">Add Note</label>
+                                            <textarea
+                                                rows="4"
+                                                value={dashboardNotesDraft[drawerCandidate.candidate_id] || ''}
+                                                onChange={(e) => setDashboardNotesDraft(prev => ({ ...prev, [drawerCandidate.candidate_id]: e.target.value }))}
+                                                placeholder="Write note for this candidate..."
+                                                className="w-full p-2 border border-gray-300 rounded text-sm"
+                                            />
+                                            <button
+                                                onClick={() => handleDashboardAddNotes(drawerCandidate.candidate_id)}
+                                                className="mt-2 w-full bg-blue-600 text-white text-sm py-2 rounded-md hover:bg-blue-700"
+                                            >
+                                                Save Note
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            onClick={() => handleOpenHistory(drawerCandidate.candidate_id)}
+                                            className="w-full bg-gray-700 text-white text-sm py-2 rounded-md hover:bg-gray-800"
+                                        >
+                                            View Full History
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
