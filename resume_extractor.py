@@ -2,7 +2,6 @@
 
 import re
 import os
-from datetime import datetime
 import PyPDF2
 
 class ResumeExtractor:
@@ -24,12 +23,13 @@ class ResumeExtractor:
             print(f"[ERROR] Failed to extract text from {pdf_path}: {e}")
             return ""
     
-    def extract_resume_data(self, pdf_path, match_reason=""):
+    def extract_resume_data(self, pdf_path, candidate_id=None, match_reason=""):
         """
         Extract structured data from resume PDF.
         
         Args:
             pdf_path: Path to the PDF file
+            candidate_id: Candidate ID from filename/url
             match_reason: AI match reason from the verification process
             
         Returns:
@@ -40,6 +40,7 @@ class ResumeExtractor:
         if not text:
             # Return minimal data if extraction fails
             return {
+                'candidate_id': str(candidate_id or ''),
                 'resume': os.path.basename(pdf_path),
                 'name': 'Extraction Failed',
                 'present_rank': '',
@@ -51,6 +52,7 @@ class ResumeExtractor:
             }
         
         data = {
+            'candidate_id': str(candidate_id or ''),
             'resume': os.path.basename(pdf_path),
             'extraction_status': 'Success'
         }

@@ -2,12 +2,10 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 import configparser
 import os
+import re
 import sys
 import uuid
-import shutil
 import json
-import time
-import pandas as pd
 
 # Dependency Check & Imports
 try:
@@ -57,6 +55,14 @@ def _is_safe_name(value):
     if not value or value in {'.', '..'}:
         return False
     return value == os.path.basename(value)
+
+
+def _extract_candidate_id_from_filename(filename):
+    """Extract numeric candidate ID from {rank}_{candidate_id}.pdf pattern."""
+    match = re.search(r'_(\d+)\.pdf$', filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
 
 # --- NEW: Serve the Frontend ---
 @app.route('/')
@@ -246,13 +252,15 @@ def get_resume(rank_folder, filename):
 
 @app.route('/verify_resumes', methods=['POST'])
 def verify_resumes():
-    """Verify resumes with data extraction and CSV export"""
+    """Verify resumes by logging initial verification events to master CSV."""
     data = request.json
     rank_folder = data.get('rank_folder')
     filenames = data.get('filenames')
     
     # Get AI match data for each file (if available from frontend)
     match_data = data.get('match_data', {})  # {filename: {reason: "...", confidence: 0.9}}
+    ai_prompt = data.get('ai_prompt', '')
+    search_ship_type = data.get('search_ship_type', '')
 
     if not rank_folder or not filenames:
         return jsonify({"success": False, "message": "Missing required data."}), 400
@@ -265,50 +273,60 @@ def verify_resumes():
             return jsonify({"success": False, "message": f"Invalid filename: {filename}"}), 400
 
     source_base_dir = os.path.abspath(settings['Default_Download_Folder'])
-    dest_base_dir = os.path.abspath("Verified_Resumes")
-
     source_folder = _resolve_within_base(source_base_dir, rank_folder)
-    dest_folder = _resolve_within_base(dest_base_dir, rank_folder)
 
     try:
-        os.makedirs(dest_folder, exist_ok=True)
-        
         processed_files = 0
         csv_exports = 0
         extraction_errors = []
         
         for filename in filenames:
             source_path = _resolve_within_base(source_folder, filename)
-            dest_path = _resolve_within_base(dest_folder, filename)
 
             if os.path.isfile(source_path):
-                # Step 1: Extract data from resume
+                candidate_id = _extract_candidate_id_from_filename(filename)
+                if not candidate_id:
+                    extraction_errors.append(f"{filename}: Could not extract candidate ID from filename")
+                    continue
+
                 ai_match_reason = match_data.get(filename, {}).get('reason', 'Manually verified')
                 
                 print(f"[VERIFY] Extracting data from {filename}...")
-                resume_data = resume_extractor.extract_resume_data(source_path, ai_match_reason)
-                
-                # Step 2: Export to CSV
-                if resume_data.get('extraction_status') == 'Success':
-                    master_ok, rank_ok = csv_manager.export_resume_data(resume_data, rank_folder)
-                    if master_ok and rank_ok:
-                        csv_exports += 1
-                        print(f"[VERIFY] CSV export successful for {filename}")
-                    else:
-                        extraction_errors.append(f"{filename}: CSV export failed")
+                resume_data = resume_extractor.extract_resume_data(
+                    source_path,
+                    candidate_id=candidate_id,
+                    match_reason=ai_match_reason
+                )
+
+                csv_ok = csv_manager.log_event(
+                    candidate_id=candidate_id,
+                    filename=filename,
+                    event_type='initial_verification',
+                    status='New',
+                    notes='',
+                    rank_applied_for=rank_folder,
+                    search_ship_type=search_ship_type,
+                    ai_prompt=ai_prompt,
+                    ai_reason=ai_match_reason,
+                    extracted_data=resume_data
+                )
+
+                if csv_ok:
+                    csv_exports += 1
+                    print(f"[VERIFY] Event logged for {filename}")
                 else:
+                    extraction_errors.append(f"{filename}: CSV event logging failed")
+
+                if resume_data.get('extraction_status') != 'Success':
                     extraction_errors.append(f"{filename}: Data extraction failed")
-                
-                # Step 3: Move file (even if extraction failed)
-                shutil.copy2(source_path, dest_path)
+
                 processed_files += 1
-                print(f"[VERIFY] Moved {filename} to {dest_folder}")
             else:
                 extraction_errors.append(f"{filename}: Source file not found")
         
         # Prepare response message
         message = f"Successfully processed {processed_files} file(s). "
-        message += f"Data exported to CSV for {csv_exports} resume(s)."
+        message += f"Logged {csv_exports} event(s) to master CSV."
         
         if extraction_errors:
             message += f" Warnings: {len(extraction_errors)} file(s) had extraction issues."
@@ -338,16 +356,14 @@ def get_dashboard_data():
         view_type = request.args.get('view', 'master')  # 'master' or 'rank'
         rank_name = request.args.get('rank_name', '')
         
-        # Determine which CSV to read
-        if view_type == 'master':
-            csv_path = os.path.join('Verified_Resumes', 'verified_resumes.csv')
-        elif view_type == 'rank' and rank_name:
-            csv_path = os.path.join('Verified_Resumes', rank_name, f'{rank_name}_verified.csv')
-        else:
+        if view_type not in ('master', 'rank'):
             return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
-        
-        # Check if CSV exists
-        if not os.path.exists(csv_path):
+        if view_type == 'rank' and not rank_name:
+            return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
+
+        rows = csv_manager.get_latest_status_per_candidate(rank_name if view_type == 'rank' else '')
+
+        if rows.empty:
             return jsonify({
                 "success": True,
                 "view": view_type,
@@ -355,17 +371,18 @@ def get_dashboard_data():
                 "data": [],
                 "message": "No data available yet"
             })
-        
-        # Read CSV
-        df = pd.read_csv(csv_path)
-        
-        # Convert to list of dictionaries
         data = []
-        for _, row in df.iterrows():
+        for _, row in rows.iterrows():
             data.append({
+                "candidate_id": row.get('Candidate_ID', ''),
                 "filename": row.get('Filename', ''),
                 "resume_url": row.get('Resume_URL', ''),
                 "date_added": row.get('Date_Added', ''),
+                "event_type": row.get('Event_Type', ''),
+                "status": row.get('Status', ''),
+                "notes": row.get('Notes', ''),
+                "rank_applied_for": row.get('Rank_Applied_For', ''),
+                "search_ship_type": row.get('Search_Ship_Type', ''),
                 "name": row.get('Name', ''),
                 "present_rank": row.get('Present_Rank', ''),
                 "email": row.get('Email', ''),
@@ -390,30 +407,19 @@ def get_dashboard_data():
 
 @app.route('/get_available_ranks', methods=['GET'])
 def get_available_ranks():
-    """Get list of ranks that have CSV data"""
+    """Get list of ranks from master CSV latest-candidate view."""
     try:
-        verified_folder = 'Verified_Resumes'
-        if not os.path.exists(verified_folder):
-            return jsonify({"success": True, "ranks": []})
-        
+        rank_counts = csv_manager.get_rank_counts()
         ranks = []
-        for item in os.listdir(verified_folder):
-            item_path = os.path.join(verified_folder, item)
-            if os.path.isdir(item_path):
-                csv_path = os.path.join(item_path, f'{item}_verified.csv')
-                if os.path.exists(csv_path):
-                    # Get row count
-                    try:
-                        df = pd.read_csv(csv_path)
-                        ranks.append({
-                            "rank": item,
-                            "display_name": item.replace('_', ' '),
-                            "count": len(df)
-                        })
-                    except:
-                        pass
-        
-        # Sort by rank name
+        for row in rank_counts:
+            rank_name = row.get('Rank_Applied_For', '')
+            if rank_name:
+                ranks.append({
+                    "rank": rank_name,
+                    "display_name": rank_name.replace('_', ' '),
+                    "count": int(row.get('count', 0))
+                })
+
         ranks.sort(key=lambda x: x['rank'])
         
         return jsonify({"success": True, "ranks": ranks})
