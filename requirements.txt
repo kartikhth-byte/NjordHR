@@ -1,0 +1,26 @@
+# Core Framework
+flask
+flask-cors
+
+# Web Scraping
+selenium
+webdriver-manager
+
+# PDF and OCR Processing
+pymupdf
+pytesseract
+pillow
+pdfplumber
+opencv-python
+PyPDF2
+
+# AI and Vector DB
+google-generativeai
+pinecone
+requests
+
+# Data Processing
+pandas
+
+# Local Database
+# sqlite3 is part of the standard Python library, no install needed

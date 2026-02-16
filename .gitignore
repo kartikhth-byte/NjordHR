@@ -1,0 +1,34 @@
+# OS/editor
+.DS_Store
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Runtime outputs
+logs/
+AI_Search_Results/
+Verified_Resumes/
+
+# Local databases/state
+*.db
+*.sqlite
+*.sqlite3
+registry.db
+feedback.db
+
+# Local config/secrets
+config.ini
+.env
+.env.*
+
+# Local project metadata
+NjordHR.bbprojectd/
+
+# Historical local backups
+Backup_*/

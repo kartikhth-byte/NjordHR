@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NjordHR - Dashboard Complete</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-color: #3b82f6; color: #3b82f6; }
+        .log-area { height: 24rem; }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
+        
+        @keyframes scale-in {
+            0% {
+                transform: scale(0);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        .animate-scale-in {
+            animation: scale-in 0.3s ease-out;
+        }
+        
+        .dashboard-table {
+            font-size: 0.875rem;
+        }
+        
+        .dashboard-table th {
+            position: sticky;
+            top: 0;
+            background: #f3f4f6;
+            z-index: 10;
+        }
+        
+        .truncate-reason {
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('download');
+            const [isLoading, setIsLoading] = useState(false);
+            const [message, setMessage] = useState({ type: '', text: '' });
+            
+            const [sessionConnected, setSessionConnected] = useState(false);
+            const [loginStep, setLoginStep] = useState('phone');
+            const [phoneNumber, setPhoneNumber] = useState('');
+            const [otp, setOtp] = useState('');
+
+            const [ranks, setRanks] = useState([]);
+            const [shipTypes, setShipTypes] = useState([]);
+            const [selectedRank, setSelectedRank] = useState('');
+            const [selectedShipType, setSelectedShipType] = useState('');
+            const [forceRedownload, setForceRedownload] = useState(false);
+            const [downloadLog, setDownloadLog] = useState([]);
+            const [logFile, setLogFile] = useState(null);
+
+            const [rankFolders, setRankFolders] = useState([]);
+            const [selectedRankFolder, setSelectedRankFolder] = useState('');
+            const [aiPrompt, setAiPrompt] = useState('');
+            const [analysisResults, setAnalysisResults] = useState(null);
+            
+            const [analysisProgress, setAnalysisProgress] = useState({
+                isAnalyzing: false,
+                current: 0,
+                total: 0,
+                message: '',
+                liveVerified: [],
+                liveUncertain: []
+            });
+            
+            const [selectedFiles, setSelectedFiles] = useState(new Set());
+            const [feedbackNotes, setFeedbackNotes] = useState({});
+            const [verifyStatus, setVerifyStatus] = useState('idle');
+            
+            // Dashboard state
+            const [dashboardView, setDashboardView] = useState('master');
+            const [dashboardRank, setDashboardRank] = useState('');
+            const [availableRanks, setAvailableRanks] = useState([]);
+            const [dashboardData, setDashboardData] = useState([]);
+            const [filteredData, setFilteredData] = useState([]);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [currentPage, setCurrentPage] = useState(1);
+            const [rowsPerPage] = useState(20);
+            const [sortColumn, setSortColumn] = useState('date_added');
+            const [sortOrder, setSortOrder] = useState('desc');
+            const [isDashboardLoading, setIsDashboardLoading] = useState(false);
+            
+            const eventSourceRef = useRef(null);
+            
+            const API_BASE_URL = 'http://127.0.0.1:5000';
+
+            useEffect(() => {
+                fetchRankFolders();
+            }, [downloadLog]);
+            
+            useEffect(() => {
+                if (activeTab === 'dashboard') {
+                    fetchAvailableRanks();
+                    fetchDashboardData();
+                }
+            }, [activeTab]);
+            
+            useEffect(() => {
+                fetchDashboardData();
+            }, [dashboardView, dashboardRank]);
+            
+            useEffect(() => {
+                filterAndSortData();
+            }, [dashboardData, searchQuery, sortColumn, sortOrder]);
+
+            const fetchRankFolders = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_rank_folders`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setRankFolders(data.folders);
+                        if (data.folders.length > 0 && !selectedRankFolder) {
+                            setSelectedRankFolder(data.folders[0]);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Could not fetch rank folders", error);
+                }
+            };
+            
+            const fetchAvailableRanks = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_available_ranks`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setAvailableRanks(data.ranks);
+                        if (data.ranks.length > 0 && !dashboardRank) {
+                            setDashboardRank(data.ranks[0].rank);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Could not fetch available ranks", error);
+                }
+            };
+            
+            const fetchDashboardData = async () => {
+                setIsDashboardLoading(true);
+                try {
+                    let url = `${API_BASE_URL}/get_dashboard_data?view=${dashboardView}`;
+                    if (dashboardView === 'rank' && dashboardRank) {
+                        url += `&rank_name=${dashboardRank}`;
+                    }
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        setDashboardData(data.data);
+                        setCurrentPage(1);
+                    } else {
+                        handleSendMessage('error', data.message || 'Failed to load dashboard data');
+                        setDashboardData([]);
+                    }
+                } catch (error) {
+                    console.error("Dashboard data fetch error:", error);
+                    handleSendMessage('error', 'Failed to load dashboard data');
+                    setDashboardData([]);
+                } finally {
+                    setIsDashboardLoading(false);
+                }
+            };
+            
+            const filterAndSortData = () => {
+                let filtered = [...dashboardData];
+                
+                // Apply search filter
+                if (searchQuery.trim()) {
+                    const query = searchQuery.toLowerCase();
+                    filtered = filtered.filter(row => 
+                        row.name.toLowerCase().includes(query) ||
+                        row.email.toLowerCase().includes(query) ||
+                        row.country.toLowerCase().includes(query) ||
+                        row.present_rank.toLowerCase().includes(query) ||
+                        row.ai_match_reason.toLowerCase().includes(query)
+                    );
+                }
+                
+                // Apply sorting
+                filtered.sort((a, b) => {
+                    let aVal = a[sortColumn] || '';
+                    let bVal = b[sortColumn] || '';
+                    
+                    // Handle date sorting
+                    if (sortColumn === 'date_added') {
+                        aVal = new Date(aVal);
+                        bVal = new Date(bVal);
+                    }
+                    
+                    if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+                    if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+                    return 0;
+                });
+                
+                setFilteredData(filtered);
+            };
+            
+            const handleSort = (column) => {
+                if (sortColumn === column) {
+                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                } else {
+                    setSortColumn(column);
+                    setSortOrder('desc');
+                }
+            };
+            
+            const formatDate = (isoString) => {
+                if (!isoString) return '';
+                try {
+                    const date = new Date(isoString);
+                    return date.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                    });
+                } catch {
+                    return isoString;
+                }
+            };
+            
+            const getPaginatedData = () => {
+                const startIndex = (currentPage - 1) * rowsPerPage;
+                const endIndex = startIndex + rowsPerPage;
+                return filteredData.slice(startIndex, endIndex);
+            };
+            
+            const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+
+            const handleSendMessage = (type, text) => {
+                setMessage({ type, text });
+                setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+            };
+
+            const handleSendOTP = async () => {
+                if (!phoneNumber) return handleSendMessage('error', 'Please enter a mobile number.');
+                setIsLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/start_session`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mobileNumber: phoneNumber }),
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        handleSendMessage('success', data.message);
+                        setLoginStep('otp');
+                    } else { handleSendMessage('error', data.message); }
+                } catch (error) { handleSendMessage('error', 'Failed to connect to backend.'); }
+                setIsLoading(false);
+            };
+
+            const handleVerifyOTP = async () => {
+                if (!otp) return handleSendMessage('error', 'Please enter the OTP.');
+                setIsLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/verify_otp`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ otp }),
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        handleSendMessage('success', 'Session started successfully!');
+                        setRanks(data.ranks || []);
+                        setShipTypes(data.ship_types || []);
+                        setSelectedRank(data.ranks ? data.ranks[0] : '');
+                        setSelectedShipType(data.ship_types ? data.ship_types[0] : '');
+                        setSessionConnected(true);
+                    } else {
+                        handleSendMessage('error', data.message);
+                        setLoginStep('phone');
+                    }
+                } catch (error) { handleSendMessage('error', 'Failed to connect to backend.'); }
+                setIsLoading(false);
+            };
+
+            const handleStartDownload = async () => {
+                 if (!selectedRank || !selectedShipType) return handleSendMessage('error', 'Rank and Ship Type are mandatory.');
+                setIsLoading(true);
+                setDownloadLog(['Starting download process...']);
+                setLogFile(null);
+                 try {
+                    const response = await fetch(`${API_BASE_URL}/start_download`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ rank: selectedRank, shipType: selectedShipType, forceRedownload }),
+                    });
+                    const data = await response.json();
+                    setDownloadLog(data.log || ['An unknown error occurred.']);
+                    setLogFile(data.log_file);
+                    if(data.success) {
+                        handleSendMessage('success', data.message || 'Download finished.');
+                        fetchRankFolders();
+                    }
+                    else handleSendMessage('error', data.message || 'Download failed.');
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to connect to backend server.');
+                    setDownloadLog(prev => [...prev, 'Error: Could not connect to the backend.']);
+                }
+                setIsLoading(false);
+            };
+            
+            const handleDisconnect = async () => {
+                setIsLoading(true);
+                try {
+                    await fetch(`${API_BASE_URL}/disconnect_session`, { method: 'POST' });
+                    setSessionConnected(false);
+                    setLoginStep('phone');
+                    setPhoneNumber('');
+                    setOtp('');
+                    setDownloadLog([]);
+                    setLogFile(null);
+                    handleSendMessage('success', 'Session disconnected.');
+                } catch(error) { handleSendMessage('error', 'Failed to disconnect session cleanly.'); }
+                setIsLoading(false);
+            };
+
+            const handleAnalyze = async () => {
+                if (!selectedRankFolder) return handleSendMessage('error', 'Please select a rank folder to analyze.');
+                if (!aiPrompt.trim()) return handleSendMessage('error', 'AI prompt cannot be empty.');
+                
+                if (eventSourceRef.current) {
+                    eventSourceRef.current.close();
+                }
+                
+                setIsLoading(true);
+                setAnalysisResults(null);
+                setSelectedFiles(new Set());
+                setFeedbackNotes({});
+                setVerifyStatus('idle');
+                setAnalysisProgress({
+                    isAnalyzing: true,
+                    current: 0,
+                    total: 0,
+                    message: 'Connecting...',
+                    liveVerified: [],
+                    liveUncertain: []
+                });
+                
+                try {
+                    const url = `${API_BASE_URL}/analyze_stream?` + new URLSearchParams({
+                        prompt: aiPrompt,
+                        rank_folder: selectedRankFolder
+                    });
+                    
+                    const eventSource = new EventSource(url);
+                    eventSourceRef.current = eventSource;
+                    
+                    eventSource.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'status') {
+                            setAnalysisProgress(prev => ({ ...prev, message: data.message }));
+                        } else if (data.type === 'progress') {
+                            setAnalysisProgress(prev => ({
+                                ...prev,
+                                current: data.current,
+                                total: data.total,
+                                message: data.message
+                            }));
+                        } else if (data.type === 'match_found') {
+                            setAnalysisProgress(prev => ({
+                                ...prev,
+                                liveVerified: [...prev.liveVerified, data.match],
+                                current: data.current,
+                                total: data.total
+                            }));
+                        } else if (data.type === 'uncertain_found') {
+                            setAnalysisProgress(prev => ({
+                                ...prev,
+                                liveUncertain: [...prev.liveUncertain, data.match],
+                                current: data.current,
+                                total: data.total
+                            }));
+                        } else if (data.type === 'complete') {
+                            setAnalysisResults({
+                                success: true,
+                                verified_matches: data.verified_matches || [],
+                                uncertain_matches: data.uncertain_matches || [],
+                                message: data.message
+                            });
+                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                            setIsLoading(false);
+                            handleSendMessage('success', data.message);
+                            eventSource.close();
+                        } else if (data.type === 'error') {
+                            handleSendMessage('error', data.message);
+                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                            setIsLoading(false);
+                            eventSource.close();
+                        }
+                    };
+                    
+                    eventSource.onerror = (error) => {
+                        console.error('EventSource error:', error);
+                        handleSendMessage('error', 'Connection to server lost.');
+                        setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                        setIsLoading(false);
+                        eventSource.close();
+                    };
+                    
+                } catch (error) {
+                    console.error('Analysis error:', error);
+                    handleSendMessage('error', 'Failed to connect to backend.');
+                    setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                    setIsLoading(false);
+                }
+            };
+
+            const handleFeedback = async (filename, llmDecision, reason, confidence, userDecision) => {
+                const notes = feedbackNotes[filename] || '';
+                
+                try {
+                    await fetch(`${API_BASE_URL}/submit_feedback`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename,
+                            query: aiPrompt,
+                            llm_decision: llmDecision,
+                            llm_reason: reason,
+                            llm_confidence: confidence,
+                            user_decision: userDecision,
+                            user_notes: notes
+                        })
+                    });
+                    
+                    handleSendMessage('success', `Feedback recorded for ${filename}`);
+                    
+                    setAnalysisResults(prev => ({
+                        ...prev,
+                        uncertain_matches: prev.uncertain_matches.filter(m => m.filename !== filename),
+                        verified_matches: userDecision === 'approve' 
+                            ? [...prev.verified_matches, { filename, reason, confidence }]
+                            : prev.verified_matches
+                    }));
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to submit feedback');
+                }
+            };
+
+            const handleFileSelection = (filename) => {
+                const newSelection = new Set(selectedFiles);
+                if (newSelection.has(filename)) {
+                    newSelection.delete(filename);
+                } else {
+                    newSelection.add(filename);
+                }
+                setSelectedFiles(newSelection);
+            };
+            
+            const handleSelectAll = (e) => {
+                if (e.target.checked) {
+                    const allFilenames = new Set(analysisResults.verified_matches.map(m => m.filename));
+                    setSelectedFiles(allFilenames);
+                } else {
+                    setSelectedFiles(new Set());
+                }
+            };
+            
+            const handleVerifyResumes = async () => {
+                if (selectedFiles.size === 0) return handleSendMessage('error', 'No files selected to verify.');
+                
+                const fileCount = selectedFiles.size;
+                setIsLoading(true);
+                setVerifyStatus('processing');
+                
+                try {
+                    const matchData = {};
+                    
+                    if (analysisResults && analysisResults.verified_matches) {
+                        analysisResults.verified_matches.forEach(match => {
+                            if (selectedFiles.has(match.filename)) {
+                                matchData[match.filename] = {
+                                    reason: match.reason,
+                                    confidence: match.confidence
+                                };
+                            }
+                        });
+                    }
+                    
+                    const response = await fetch(`${API_BASE_URL}/verify_resumes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            rank_folder: selectedRankFolder,
+                            filenames: Array.from(selectedFiles),
+                            match_data: matchData
+                        }),
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        setVerifyStatus('completed');
+                        handleSendMessage('success', `✅ Successfully moved ${data.processed} file(s) to Verified_Resumes/${selectedRankFolder}/`);
+                        
+                        setAnalysisResults({
+                            ...analysisResults,
+                            verified_matches: analysisResults.verified_matches.filter(
+                                m => !selectedFiles.has(m.filename)
+                            )
+                        });
+                        
+                        setSelectedFiles(new Set());
+                        
+                        setTimeout(() => {
+                            setVerifyStatus('idle');
+                            setIsLoading(false);
+                        }, 2000);
+                    } else {
+                        handleSendMessage('error', data.message || 'Failed to verify resumes.');
+                        setVerifyStatus('idle');
+                        setIsLoading(false);
+                    }
+                } catch (error) {
+                    console.error('Verification error:', error);
+                    handleSendMessage('error', 'Failed to connect to backend.');
+                    setVerifyStatus('idle');
+                    setIsLoading(false);
+                }
+            };
+
+            const getConfidenceBadge = (confidence) => {
+                const percentage = Math.round(confidence * 100);
+                let colorClass = 'bg-green-100 text-green-800';
+                if (confidence < 0.7) colorClass = 'bg-yellow-100 text-yellow-800';
+                if (confidence < 0.5) colorClass = 'bg-orange-100 text-orange-800';
+                
+                return (
+                    <span className={`px-2 py-1 text-xs font-semibold rounded ${colorClass}`}>
+                        {percentage}%
+                    </span>
+                );
+            };
+            
+            const DownloadTabContent = () => {
+                if (!sessionConnected) {
+                    return (
+                        <div>
+                            <h2 className="text-2xl font-semibold mb-2">Online Resume Download</h2>
+                            <p className="text-gray-600 mb-6">Connect to the website to start downloading new resumes.</p>
+                            <div className="bg-gray-50 p-6 rounded-lg border">
+                                {loginStep === 'phone' && (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Registered Mobile Number</label>
+                                            <input type="text" id="phone" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" placeholder="e.g. 91xxxxxxxxxx"/>
+                                        </div>
+                                        <button onClick={handleSendOTP} disabled={isLoading} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
+                                            {isLoading ? 'Connecting...' : 'Connect & Get OTP'}
+                                        </button>
+                                    </div>
+                                )}
+                                {loginStep === 'otp' && (
+                                     <div className="space-y-4">
+                                        <p className="text-sm text-center text-gray-600">An OTP was sent to {phoneNumber}.</p>
+                                        <div>
+                                            <label htmlFor="otp" className="block text-sm font-medium text-gray-700">Enter OTP</label>
+                                            <input type="text" key="otp-input" id="otp" value={otp} onChange={e => setOtp(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md"/>
+                                        </div>
+                                        <button onClick={handleVerifyOTP} disabled={isLoading} className="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-300">
+                                            {isLoading ? 'Verifying...' : 'Verify & Start Session'}
+                                        </button>
+                                         <button onClick={() => { setLoginStep('phone'); setOtp(''); }} className="w-full text-sm text-center text-blue-600 hover:underline">
+                                            Use a different number
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-semibold">Download Resumes</h2>
+                            <div className="flex items-center space-x-4">
+                                <div className="flex items-center space-x-2">
+                                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>
+                                    <span className="text-sm font-medium text-green-700">Connected to Website</span>
+                                </div>
+                                <button onClick={handleDisconnect} disabled={isLoading} className="text-sm text-red-600 hover:underline disabled:text-gray-400">Disconnect</button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-6">
+                                <div>
+                                    <label htmlFor="rank" className="block text-sm font-medium text-gray-700 mb-1">Select Rank</label>
+                                    <select id="rank" value={selectedRank} onChange={e => setSelectedRank(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                                        {ranks.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="shipType" className="block text-sm font-medium text-gray-700 mb-1">Select Ship Type</label>
+                                    <select id="shipType" value={selectedShipType} onChange={e => setSelectedShipType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                                        {shipTypes.map(st => <option key={st} value={st}>{st}</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex items-center">
+                                    <input id="force" type="checkbox" checked={forceRedownload} onChange={e => setForceRedownload(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                                    <label htmlFor="force" className="ml-2 block text-sm text-gray-900">Force re-download all resumes (slower)</label>
+                                </div>
+                                <button onClick={handleStartDownload} disabled={isLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
+                                    {isLoading ? 'Downloading...' : 'Start Download'}
+                                </button>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-medium text-gray-800 mb-2">Download Log</h3>
+                                <div className="bg-gray-800 text-white font-mono text-sm p-4 rounded-lg log-area overflow-y-auto">
+                                    {downloadLog.map((line, i) => <p key={i} className="whitespace-pre-wrap">{line}</p>)}
+                                </div>
+                                {logFile && (
+                                    <p className="text-center text-sm text-green-700 mt-2">
+                                        Full log saved to: <span className="font-mono">{logFile}</span>
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+            
+            const DashboardTabContent = () => {
+                return (
+                    <div>
+                        <h2 className="text-2xl font-semibold mb-6">Verified Candidates Dashboard</h2>
+                        
+                        {/* View Selector */}
+                        <div className="mb-6 flex items-center space-x-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">View</label>
+                                <select 
+                                    value={dashboardView} 
+                                    onChange={e => setDashboardView(e.target.value)}
+                                    className="p-2 border border-gray-300 rounded-md"
+                                >
+                                    <option value="master">All Candidates (Master)</option>
+                                    <option value="rank">By Rank</option>
+                                </select>
+                            </div>
+                            
+                            {dashboardView === 'rank' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Rank</label>
+                                    <select 
+                                        value={dashboardRank} 
+                                        onChange={e => setDashboardRank(e.target.value)}
+                                        className="p-2 border border-gray-300 rounded-md"
+                                    >
+                                        {availableRanks.map(rank => (
+                                            <option key={rank.rank} value={rank.rank}>
+                                                {rank.display_name} ({rank.count})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            
+                            <button 
+                                onClick={fetchDashboardData}
+                                className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                        
+                        {/* Search Bar */}
+                        <div className="mb-4">
+                            <input
+                                type="text"
+                                placeholder="Search by name, email, country, rank, or match reason..."
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-md"
+                            />
+                            {searchQuery && (
+                                <p className="text-sm text-gray-600 mt-2">
+                                    Showing {filteredData.length} of {dashboardData.length} results
+                                </p>
+                            )}
+                        </div>
+                        
+                        {/* Loading State */}
+                        {isDashboardLoading && (
+                            <div className="text-center py-8">
+                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                <p className="mt-2 text-gray-600">Loading dashboard data...</p>
+                            </div>
+                        )}
+                        
+                        {/* Empty State */}
+                        {!isDashboardLoading && dashboardData.length === 0 && (
+                            <div className="text-center py-12 bg-gray-50 rounded-lg">
+                                <p className="text-gray-600 mb-2">No verified candidates yet.</p>
+                                <p className="text-sm text-gray-500">Use AI Search to find and verify candidates.</p>
+                            </div>
+                        )}
+                        
+                        {/* Data Table */}
+                        {!isDashboardLoading && dashboardData.length > 0 && (
+                            <div>
+                                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="overflow-x-auto" style={{maxHeight: '600px'}}>
+                                        <table className="min-w-full divide-y divide-gray-200 dashboard-table">
+                                            <thead>
+                                                <tr>
+                                                    <th 
+                                                        onClick={() => handleSort('filename')}
+                                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
+                                                    >
+                                                        Filename {sortColumn === 'filename' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => handleSort('date_added')}
+                                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
+                                                    >
+                                                        Date Added {sortColumn === 'date_added' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => handleSort('name')}
+                                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
+                                                    >
+                                                        Name {sortColumn === 'name' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => handleSort('present_rank')}
+                                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
+                                                    >
+                                                        Rank {sortColumn === 'present_rank' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Email
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => handleSort('country')}
+                                                        className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
+                                                    >
+                                                        Country {sortColumn === 'country' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Mobile
+                                                    </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Match Reason
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {getPaginatedData().map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50">
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <a 
+                                                                href={row.resume_url} 
+                                                                target="_blank" 
+                                                                rel="noopener noreferrer"
+                                                                className="text-blue-600 hover:underline"
+                                                            >
+                                                                {row.filename}
+                                                            </a>
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                                                            {formatDate(row.date_added)}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap font-medium">
+                                                            {row.name}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            {row.present_rank}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                                                            {row.email}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            {row.country}
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                                                            {row.mobile_no}
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="truncate-reason" title={row.ai_match_reason}>
+                                                                {row.ai_match_reason}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                {/* Pagination */}
+                                {totalPages > 1 && (
+                                    <div className="mt-4 flex items-center justify-between">
+                                        <div className="text-sm text-gray-600">
+                                            Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length} results
+                                        </div>
+                                        <div className="flex space-x-2">
+                                            <button
+                                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                                disabled={currentPage === 1}
+                                                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-100"
+                                            >
+                                                Previous
+                                            </button>
+                                            {[...Array(Math.min(5, totalPages))].map((_, idx) => {
+                                                let pageNum;
+                                                if (totalPages <= 5) {
+                                                    pageNum = idx + 1;
+                                                } else if (currentPage <= 3) {
+                                                    pageNum = idx + 1;
+                                                } else if (currentPage >= totalPages - 2) {
+                                                    pageNum = totalPages - 4 + idx;
+                                                } else {
+                                                    pageNum = currentPage - 2 + idx;
+                                                }
+                                                
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        onClick={() => setCurrentPage(pageNum)}
+                                                        className={`px-3 py-1 border rounded ${currentPage === pageNum ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-100'}`}
+                                                    >
+                                                        {pageNum}
+                                                    </button>
+                                                );
+                                            })}
+                                            <button
+                                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                                disabled={currentPage === totalPages}
+                                                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-100"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+            
+            return (
+                <div className="min-h-screen p-8 bg-gray-50 text-gray-800">
+                    <div className="max-w-7xl mx-auto">
+                        <header className="flex justify-between items-center mb-8">
+                             <div>
+                                <h1 className="text-3xl font-bold text-gray-900">NjordHR</h1>
+                                <p className="text-xs text-gray-500 mt-1">Multi-Stage Retrieval + CSV Export + Dashboard</p>
+                             </div>
+                            <div className="text-sm text-gray-500">Phase 1: Core Engine</div>
+                        </header>
+                        {message.text && (
+                            <div className={`p-4 mb-4 rounded-lg ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {message.text}
+                            </div>
+                        )}
+                        <div className="flex border-b border-gray-300 mb-6">
+                            <button onClick={() => setActiveTab('download')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'download' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Download</button>
+                            <button onClick={() => setActiveTab('search')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'search' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>AI Search</button>
+                            <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
+                        </div>
+                        <main className="bg-white p-8 rounded-xl shadow-lg">
+                             {activeTab === 'download' && <DownloadTabContent />}
+                             {activeTab === 'search' && (
+                                <div>
+                                    <h2 className="text-2xl font-semibold mb-6">AI Search</h2>
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label htmlFor="rankFolder" className="block text-sm font-medium text-gray-700 mb-1">Select Rank Folder to Analyze</label>
+                                            <select 
+                                                id="rankFolder" 
+                                                value={selectedRankFolder} 
+                                                onChange={e => setSelectedRankFolder(e.target.value)} 
+                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                                disabled={rankFolders.length === 0}
+                                            >
+                                                {rankFolders.length > 0 ? (
+                                                    rankFolders.map(folder => <option key={folder} value={folder}>{folder.replace(/_/g, ' ')}</option>)
+                                                ) : (
+                                                    <option>No downloaded resume folders found</option>
+                                                )}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-1">Enter AI Search Prompt</label>
+                                            <textarea id="prompt" rows="4" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Having a valid US visa and oil tanker experience"></textarea>
+                                        </div>
+                                        <button onClick={handleAnalyze} disabled={isLoading || sessionConnected || analysisProgress.isAnalyzing} className="bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition">
+                                            {analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Resumes'}
+                                        </button>
+                                        {sessionConnected && <p className="text-xs text-gray-500">Note: AI Search is disabled while a download session is active.</p>}
+                                    </div>
+                                    
+                                    {analysisProgress.isAnalyzing && (
+                                        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-lg font-semibold text-blue-900">🔍 Analysis in Progress</h3>
+                                                <span className="text-sm text-blue-700 animate-pulse-slow">
+                                                    {analysisProgress.current}/{analysisProgress.total} processed
+                                                </span>
+                                            </div>
+                                            
+                                            {analysisProgress.total > 0 && (
+                                                <div className="mb-4">
+                                                    <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                                                        <div 
+                                                            className="bg-blue-600 h-3 rounded-full transition-all duration-500"
+                                                            style={{width: `${(analysisProgress.current / analysisProgress.total) * 100}%`}}
+                                                        ></div>
+                                                    </div>
+                                                    <p className="text-sm text-blue-700 mt-2 text-center">
+                                                        {Math.round((analysisProgress.current / analysisProgress.total) * 100)}% complete
+                                                    </p>
+                                                </div>
+                                            )}
+                                            
+                                            <p className="text-sm text-blue-800 mb-4">{analysisProgress.message}</p>
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {analysisProgress.liveVerified.length > 0 && (
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold text-green-700 mb-2">
+                                                            ✓ Verified ({analysisProgress.liveVerified.length}):
+                                                        </h4>
+                                                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                            {analysisProgress.liveVerified.map((m, i) => (
+                                                                <p key={i} className="text-xs text-green-600">• {m.filename}</p>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                {analysisProgress.liveUncertain.length > 0 && (
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold text-yellow-700 mb-2">
+                                                            ⚠️ Uncertain ({analysisProgress.liveUncertain.length}):
+                                                        </h4>
+                                                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                            {analysisProgress.liveUncertain.map((m, i) => (
+                                                                <p key={i} className="text-xs text-yellow-600">• {m.filename}</p>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {analysisResults && !analysisProgress.isAnalyzing && (
+                                        <div className="mt-8 space-y-6">
+                                            <div>
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <h3 className="text-xl font-semibold">
+                                                        ✓ Verified Matches ({analysisResults.verified_matches.length})
+                                                    </h3>
+                                                    {analysisResults.verified_matches.length > 0 && (
+                                                        <button 
+                                                            onClick={handleVerifyResumes} 
+                                                            disabled={isLoading || selectedFiles.size === 0}
+                                                            className={`font-bold py-2 px-4 rounded-lg transition flex items-center space-x-2 ${
+                                                                verifyStatus === 'completed' 
+                                                                    ? 'bg-green-600 hover:bg-green-700' 
+                                                                    : 'bg-blue-600 hover:bg-blue-700'
+                                                            } text-white disabled:bg-gray-400`}
+                                                        >
+                                                            {verifyStatus === 'processing' && (
+                                                                <>
+                                                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                    </svg>
+                                                                    <span>Processing...</span>
+                                                                </>
+                                                            )}
+                                                            
+                                                            {verifyStatus === 'completed' && (
+                                                                <>
+                                                                    <svg className="h-5 w-5 text-white animate-scale-in" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                    <span>Completed!</span>
+                                                                </>
+                                                            )}
+                                                            
+                                                            {verifyStatus === 'idle' && (
+                                                                <span>Move {selectedFiles.size} Selected</span>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="bg-gray-50 border border-gray-200 rounded-lg max-h-96 overflow-y-auto">
+                                                    {analysisResults.verified_matches.length > 0 ? (
+                                                        <table className="min-w-full divide-y divide-gray-200">
+                                                            <thead className="bg-gray-100 sticky top-0">
+                                                                <tr>
+                                                                    <th className="px-4 py-3 text-left">
+                                                                        <input type="checkbox" onChange={handleSelectAll} 
+                                                                               checked={selectedFiles.size > 0 && selectedFiles.size === analysisResults.verified_matches.length}/>
+                                                                    </th>
+                                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Filename</th>
+                                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Confidence</th>
+                                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                                {analysisResults.verified_matches.map((match, i) => (
+                                                                    <tr key={i} className={selectedFiles.has(match.filename) ? 'bg-blue-50' : ''}>
+                                                                        <td className="px-4 py-4">
+                                                                            <input type="checkbox" checked={selectedFiles.has(match.filename)}
+                                                                                   onChange={() => handleFileSelection(match.filename)}/>
+                                                                        </td>
+                                                                        <td className="px-6 py-4 text-sm font-medium text-blue-600 hover:underline">
+                                                                            <a href={`${API_BASE_URL}/get_resume/${selectedRankFolder}/${encodeURIComponent(match.filename)}`} 
+                                                                               target="_blank" rel="noopener noreferrer">
+                                                                                {match.filename}
+                                                                            </a>
+                                                                        </td>
+                                                                        <td className="px-6 py-4 text-sm">{getConfidenceBadge(match.confidence)}</td>
+                                                                        <td className="px-6 py-4 text-sm text-gray-500">{match.reason}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    ) : <p className="text-center text-gray-500 p-4">No verified matches found.</p>}
+                                                </div>
+                                            </div>
+
+                                            {analysisResults.uncertain_matches && analysisResults.uncertain_matches.length > 0 && (
+                                                <div>
+                                                    <h3 className="text-xl font-semibold text-yellow-700 mb-4">
+                                                        ⚠️ Uncertain Matches - Review Required ({analysisResults.uncertain_matches.length})
+                                                    </h3>
+                                                    <p className="text-sm text-gray-600 mb-4">
+                                                        These matches have lower confidence. Please review and provide feedback to help improve future searches.
+                                                    </p>
+                                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-4">
+                                                        {analysisResults.uncertain_matches.map((match, i) => (
+                                                            <div key={i} className="bg-white p-4 rounded border border-yellow-200">
+                                                                <div className="flex justify-between items-start mb-3">
+                                                                    <div className="flex-1">
+                                                                        <a href={`${API_BASE_URL}/get_resume/${selectedRankFolder}/${encodeURIComponent(match.filename)}`}
+                                                                           target="_blank" rel="noopener noreferrer"
+                                                                           className="text-sm font-medium text-blue-600 hover:underline">
+                                                                            {match.filename}
+                                                                        </a>
+                                                                        <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
+                                                                    </div>
+                                                                    {getConfidenceBadge(match.confidence)}
+                                                                </div>
+                                                                
+                                                                <div className="space-y-2">
+                                                                    <textarea
+                                                                        placeholder="Add notes (optional)"
+                                                                        value={feedbackNotes[match.filename] || ''}
+                                                                        onChange={(e) => setFeedbackNotes({...feedbackNotes, [match.filename]: e.target.value})}
+                                                                        className="w-full p-2 text-xs border border-gray-300 rounded"
+                                                                        rows="2"
+                                                                    />
+                                                                    <div className="flex space-x-2">
+                                                                        <button
+                                                                            onClick={() => handleFeedback(match.filename, 'match', match.reason, match.confidence, 'approve')}
+                                                                            className="flex-1 bg-green-600 text-white text-sm py-2 px-3 rounded hover:bg-green-700"
+                                                                        >
+                                                                            ✓ Approve Match
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleFeedback(match.filename, 'match', match.reason, match.confidence, 'reject')}
+                                                                            className="flex-1 bg-red-600 text-white text-sm py-2 px-3 rounded hover:bg-red-700"
+                                                                        >
+                                                                            ✗ Reject Match
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {activeTab === 'dashboard' && <DashboardTabContent />}
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
