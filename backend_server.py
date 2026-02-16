@@ -9,6 +9,9 @@ import sys
 import uuid
 import json
 import zipfile
+import logging
+import threading
+from queue import Queue, Empty
 
 # Dependency Check & Imports
 try:
@@ -143,6 +146,104 @@ def start_download():
     
     result['log_file'] = log_filepath
     return jsonify(result)
+
+
+@app.route('/download_stream', methods=['GET'])
+def download_stream():
+    """Stream download progress using Server-Sent Events."""
+    global scraper_session
+
+    rank = request.args.get('rank', '').strip()
+    ship_type = request.args.get('shipType', '').strip()
+    force_redownload_raw = request.args.get('forceRedownload', 'false').strip().lower()
+    force_redownload = force_redownload_raw in {'1', 'true', 'yes', 'on'}
+
+    def generate():
+        local_scraper = scraper_session
+
+        if not local_scraper or not local_scraper.driver:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Website session is not active or has expired.'})}\n\n"
+            return
+        if not rank or not ship_type:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Rank and Ship Type are required.'})}\n\n"
+            return
+
+        if hasattr(local_scraper, 'get_session_health'):
+            health = local_scraper.get_session_health()
+            if not health.get('valid'):
+                invalid_reason = health.get('reason', 'Unknown')
+                payload = {
+                    "type": "error",
+                    "message": f"Website session invalid: {invalid_reason}",
+                    "session_health": health
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+                return
+
+        session_id = str(uuid.uuid4())
+        logger, log_filepath = setup_logger(session_id)
+        yield f"data: {json.dumps({'type': 'started', 'log_file': log_filepath, 'message': 'Download stream started.'})}\n\n"
+
+        stream_queue = Queue()
+        result_holder = {"result": None}
+
+        class QueueLogHandler(logging.Handler):
+            def emit(self, record):
+                try:
+                    message = self.format(record)
+                except Exception:
+                    message = record.getMessage()
+                stream_queue.put({"type": "log", "line": message})
+
+        queue_handler = QueueLogHandler()
+        queue_handler.setLevel(logging.INFO)
+        queue_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logger.addHandler(queue_handler)
+
+        def worker():
+            try:
+                result_holder["result"] = local_scraper.download_resumes(
+                    rank,
+                    ship_type,
+                    force_redownload,
+                    logger
+                )
+            except Exception as exc:
+                result_holder["result"] = {"success": False, "message": f"Download failed: {str(exc)}", "log": []}
+            finally:
+                stream_queue.put({"type": "_done"})
+
+        download_thread = threading.Thread(target=worker, daemon=True)
+        download_thread.start()
+
+        try:
+            while True:
+                try:
+                    event = stream_queue.get(timeout=1.0)
+                except Empty:
+                    if not download_thread.is_alive():
+                        break
+                    yield ": keepalive\n\n"
+                    continue
+
+                if event.get("type") == "_done":
+                    break
+
+                yield f"data: {json.dumps(event)}\n\n"
+        finally:
+            logger.removeHandler(queue_handler)
+            queue_handler.close()
+
+        result = result_holder.get("result") or {"success": False, "message": "Download ended unexpectedly.", "log": []}
+        payload = {
+            "type": "complete",
+            "success": bool(result.get("success")),
+            "message": result.get("message", "Download finished."),
+            "log_file": log_filepath
+        }
+        yield f"data: {json.dumps(payload)}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route('/disconnect_session', methods=['POST'])
 def disconnect_session():
