@@ -122,6 +122,15 @@ def start_download():
     if not scraper_session or not scraper_session.driver:
         return jsonify({"success": False, "message": "Website session is not active or has expired."})
 
+    if hasattr(scraper_session, 'get_session_health'):
+        health = scraper_session.get_session_health()
+        if not health.get('valid'):
+            return jsonify({
+                "success": False,
+                "message": f"Website session invalid: {health.get('reason', 'Unknown')}",
+                "session_health": health
+            })
+
     session_id = str(uuid.uuid4())
     logger, log_filepath = setup_logger(session_id)
     
@@ -142,6 +151,44 @@ def disconnect_session():
         scraper_session.quit()
         scraper_session = None
     return jsonify({"success": True, "message": "Session disconnected successfully."})
+
+
+@app.route('/session_health', methods=['GET'])
+def session_health():
+    """Return current scraper session health for OTP/session timeout handling."""
+    global scraper_session
+    if not scraper_session:
+        return jsonify({
+            "success": True,
+            "connected": False,
+            "health": {
+                "active": False,
+                "valid": False,
+                "otp_pending": False,
+                "otp_expired": False,
+                "reason": "No active scraper session"
+            }
+        })
+
+    if hasattr(scraper_session, 'get_session_health'):
+        health = scraper_session.get_session_health()
+        return jsonify({
+            "success": True,
+            "connected": bool(scraper_session and scraper_session.driver),
+            "health": health
+        })
+
+    return jsonify({
+        "success": True,
+        "connected": bool(scraper_session and scraper_session.driver),
+        "health": {
+            "active": bool(scraper_session and scraper_session.driver),
+            "valid": bool(scraper_session and scraper_session.driver),
+            "otp_pending": False,
+            "otp_expired": False,
+            "reason": "Legacy scraper without health checks"
+        }
+    })
 
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
