@@ -514,7 +514,8 @@
                         body: JSON.stringify({
                             rank_folder: selectedRankFolder,
                             filenames: Array.from(selectedFiles),
-                            match_data: matchData
+                            match_data: matchData,
+                            ai_prompt: aiPrompt
                         }),
                     });
                     
@@ -522,7 +523,7 @@
                     
                     if (data.success) {
                         setVerifyStatus('completed');
-                        handleSendMessage('success', `✅ Successfully moved ${data.processed} file(s) to Verified_Resumes/${selectedRankFolder}/`);
+                        handleSendMessage('success', `✅ Successfully processed ${data.processed} file(s) and updated dashboard CSV.`);
                         
                         setAnalysisResults({
                             ...analysisResults,

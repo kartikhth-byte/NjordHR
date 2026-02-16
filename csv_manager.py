@@ -1,141 +1,139 @@
-# csv_manager.py - CSV Export Manager with Plain Filename & URL
+# csv_manager.py - Event Log CSV Manager
 
 import os
-import csv
-import pandas as pd
 from datetime import datetime
+import pandas as pd
+
 
 class CSVManager:
-    """Manages CSV export with plain filename and URL columns"""
-    
+    """Manages a single master CSV as an event log."""
+
+    COLUMNS = [
+        'Candidate_ID',
+        'Filename',
+        'Resume_URL',
+        'Date_Added',
+        'Event_Type',
+        'Status',
+        'Notes',
+        'Rank_Applied_For',
+        'Search_Ship_Type',
+        'AI_Search_Prompt',
+        'AI_Match_Reason',
+        'Name',
+        'Present_Rank',
+        'Email',
+        'Country',
+        'Mobile_No'
+    ]
+
     def __init__(self, base_folder='Verified_Resumes', server_url='http://127.0.0.1:5000'):
         self.base_folder = base_folder
         self.server_url = server_url
         self.master_csv = os.path.join(base_folder, 'verified_resumes.csv')
-        
-        # Ensure base folder exists
         os.makedirs(base_folder, exist_ok=True)
-    
-    def get_rank_csv_path(self, rank):
-        """Get path to rank-specific CSV file"""
-        rank_folder = os.path.join(self.base_folder, rank)
-        os.makedirs(rank_folder, exist_ok=True)
-        return os.path.join(rank_folder, f"{rank}_verified.csv")
-    
-    def append_to_csv(self, csv_path, data_dict, rank):
-        """
-        Append data to CSV file, or create if doesn't exist.
-        Updates existing row if filename already exists.
-        """
-        # Define column order - Filename, Resume_URL, and Date_Added first
-        columns = [
-            'Filename',
-            'Resume_URL',
-            'Date_Added',
-            'Name', 
-            'Present_Rank',
-            'Email',
-            'Country',
-            'Mobile_No',
-            'AI_Match_Reason'
-        ]
-        
-        # Build the URL for this resume
-        resume_url = f"{self.server_url}/get_resume/{rank}/{data_dict['resume']}"
-        
-        # Generate ISO 8601 timestamp
+
+    def _load_master_df(self):
+        if os.path.exists(self.master_csv):
+            df = pd.read_csv(self.master_csv, keep_default_na=False)
+            for col in self.COLUMNS:
+                if col not in df.columns:
+                    df[col] = ''
+            return df[self.COLUMNS]
+        return pd.DataFrame(columns=self.COLUMNS)
+
+    def _save_master_df(self, df):
+        df.to_csv(self.master_csv, index=False)
+
+    def log_event(self, candidate_id, filename, event_type, status='New', notes='',
+                  rank_applied_for='', search_ship_type='', ai_prompt='',
+                  ai_reason='', extracted_data=None):
+        """Append one event row to the single master CSV."""
+        extracted_data = extracted_data or {}
         timestamp = datetime.utcnow().isoformat() + 'Z'
-        
-        # Map extracted fields to CSV columns
-        csv_row = {
-            'Filename': data_dict['resume'],
+        resume_url = f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
+
+        new_row = {
+            'Candidate_ID': str(candidate_id),
+            'Filename': filename,
             'Resume_URL': resume_url,
             'Date_Added': timestamp,
-            'Name': data_dict.get('name', ''),
-            'Present_Rank': data_dict.get('present_rank', ''),
-            'Email': data_dict.get('email', ''),
-            'Country': data_dict.get('country', ''),
-            'Mobile_No': data_dict.get('mobile_no', ''),
-            'AI_Match_Reason': data_dict.get('ai_match_reason', '')
+            'Event_Type': event_type,
+            'Status': status,
+            'Notes': notes,
+            'Rank_Applied_For': rank_applied_for,
+            'Search_Ship_Type': search_ship_type,
+            'AI_Search_Prompt': ai_prompt,
+            'AI_Match_Reason': ai_reason,
+            'Name': extracted_data.get('name', ''),
+            'Present_Rank': extracted_data.get('present_rank', ''),
+            'Email': extracted_data.get('email', ''),
+            'Country': extracted_data.get('country', ''),
+            'Mobile_No': extracted_data.get('mobile_no', '')
         }
-        
+
         try:
-            if os.path.exists(csv_path):
-                # Read existing CSV
-                df = pd.read_csv(csv_path)
-                
-                # Check if this resume already exists (by checking Filename column)
-                if data_dict['resume'] in df['Filename'].values:
-                    # Update existing row
-                    idx = df[df['Filename'] == data_dict['resume']].index[0]
-                    for col in columns:
-                        df.at[idx, col] = csv_row[col]
-                    print(f"[CSV] Updated existing entry for {data_dict['resume']}")
-                else:
-                    # Append new row
-                    df = pd.concat([df, pd.DataFrame([csv_row])], ignore_index=True)
-                    print(f"[CSV] Added new entry for {data_dict['resume']}")
-            else:
-                # Create new CSV
-                df = pd.DataFrame([csv_row], columns=columns)
-                print(f"[CSV] Created new CSV: {csv_path}")
-            
-            # Save CSV
-            df.to_csv(csv_path, index=False)
+            df = self._load_master_df()
+            df = pd.concat([df, pd.DataFrame([new_row], columns=self.COLUMNS)], ignore_index=True)
+            self._save_master_df(df)
             return True
-            
         except Exception as e:
-            print(f"[CSV ERROR] Failed to update {csv_path}: {e}")
+            print(f"[CSV ERROR] Failed to append event row: {e}")
             return False
-    
-    def export_resume_data(self, resume_data, rank):
-        """
-        Export resume data to both master CSV and rank-specific CSV.
-        
-        Args:
-            resume_data: dict with extracted resume fields
-            rank: rank folder name (e.g., 'Chief_Officer')
-            
-        Returns:
-            tuple: (master_success, rank_success)
-        """
-        # Update master CSV
-        master_success = self.append_to_csv(self.master_csv, resume_data, rank)
-        
-        # Update rank-specific CSV
-        rank_csv = self.get_rank_csv_path(rank)
-        rank_success = self.append_to_csv(rank_csv, resume_data, rank)
-        
-        return (master_success, rank_success)
-    
+
+    def get_latest_status_per_candidate(self, rank_name=''):
+        """Return latest event row per candidate, optionally filtered by rank."""
+        df = self._load_master_df()
+        if df.empty:
+            return df
+
+        if rank_name:
+            df = df[df['Rank_Applied_For'] == rank_name]
+            if df.empty:
+                return df
+
+        df_sorted = df.sort_values('Date_Added')
+        latest = df_sorted.groupby('Candidate_ID', as_index=False).tail(1)
+        return latest.sort_values('Date_Added', ascending=False).reset_index(drop=True)
+
+    def get_candidate_history(self, candidate_id):
+        df = self._load_master_df()
+        if df.empty:
+            return []
+        history = df[df['Candidate_ID'] == str(candidate_id)].sort_values('Date_Added')
+        return history.to_dict(orient='records')
+
+    def update_last_row_notes(self, candidate_id, new_notes):
+        """Update notes on the most recent event row for a candidate."""
+        df = self._load_master_df()
+        if df.empty:
+            return False
+
+        candidate_rows = df[df['Candidate_ID'] == str(candidate_id)]
+        if candidate_rows.empty:
+            return False
+
+        last_idx = candidate_rows.sort_values('Date_Added').index[-1]
+        df.at[last_idx, 'Notes'] = new_notes
+        self._save_master_df(df)
+        return True
+
+    def get_rank_counts(self):
+        """Return counts of latest candidate rows grouped by rank."""
+        latest = self.get_latest_status_per_candidate()
+        if latest.empty:
+            return []
+
+        counts = latest.groupby('Rank_Applied_For').size().reset_index(name='count')
+        rows = counts.to_dict(orient='records')
+        rows.sort(key=lambda r: r['Rank_Applied_For'])
+        return rows
+
     def get_csv_stats(self):
-        """Get statistics about exported CSVs"""
-        stats = {
+        latest = self.get_latest_status_per_candidate()
+        return {
             'master_csv_exists': os.path.exists(self.master_csv),
-            'master_csv_rows': 0,
-            'rank_csvs': []
+            'master_csv_rows': len(self._load_master_df()),
+            'latest_candidates': len(latest),
+            'rank_breakdown': self.get_rank_counts()
         }
-        
-        if stats['master_csv_exists']:
-            try:
-                df = pd.read_csv(self.master_csv)
-                stats['master_csv_rows'] = len(df)
-            except:
-                pass
-        
-        # Find all rank CSVs
-        if os.path.exists(self.base_folder):
-            for rank_folder in os.listdir(self.base_folder):
-                rank_csv = os.path.join(self.base_folder, rank_folder, f"{rank_folder}_verified.csv")
-                if os.path.exists(rank_csv):
-                    try:
-                        df = pd.read_csv(rank_csv)
-                        stats['rank_csvs'].append({
-                            'rank': rank_folder,
-                            'rows': len(df),
-                            'path': rank_csv
-                        })
-                    except:
-                        pass
-        
-        return stats
