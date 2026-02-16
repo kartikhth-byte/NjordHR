@@ -39,6 +39,25 @@ scraper_session = None
 resume_extractor = ResumeExtractor()
 csv_manager = CSVManager(base_folder='Verified_Resumes')
 
+
+def _resolve_within_base(base_dir, *parts):
+    """Resolve a path and ensure it stays within base_dir."""
+    base_abs = os.path.abspath(base_dir)
+    candidate = os.path.abspath(os.path.join(base_abs, *parts))
+    if os.path.commonpath([base_abs, candidate]) != base_abs:
+        raise ValueError("Path escapes base directory")
+    return candidate
+
+
+def _is_safe_name(value):
+    """Allow only single path components (no separators/traversal)."""
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    if not value or value in {'.', '..'}:
+        return False
+    return value == os.path.basename(value)
+
 # --- NEW: Serve the Frontend ---
 @app.route('/')
 def serve_frontend():
@@ -198,26 +217,25 @@ def submit_feedback():
 @app.route('/get_resume/<path:rank_folder>/<path:filename>')
 def get_resume(rank_folder, filename):
     try:
-        # Get absolute paths
         base_dir = os.path.abspath(settings['Default_Download_Folder'])
-        directory = os.path.abspath(os.path.join(base_dir, rank_folder))
-        full_path = os.path.join(directory, filename)
-        
-        # Security check: ensure the resolved path is within base_dir
-        if not os.path.abspath(full_path).startswith(base_dir):
-            print(f"[SECURITY] Access denied. Path outside base dir:")
-            print(f"  Base: {base_dir}")
-            print(f"  Requested: {os.path.abspath(full_path)}")
-            return "Access denied.", 403
-        
-        # Check if file exists
-        if not os.path.exists(full_path):
+        full_path = _resolve_within_base(base_dir, rank_folder, filename)
+
+        if not os.path.isfile(full_path):
             print(f"[ERROR] File not found: {full_path}")
             return "File not found", 404
-        
+
+        directory = os.path.dirname(full_path)
+        safe_filename = os.path.basename(full_path)
+
+        if not safe_filename:
+            return "Access denied.", 403
+
         print(f"[PDF] Serving file: {full_path}")
-        return send_from_directory(directory, filename, as_attachment=False)
-    
+        return send_from_directory(directory, safe_filename, as_attachment=False)
+
+    except ValueError:
+        print("[SECURITY] Access denied. Invalid path request.")
+        return "Access denied.", 403
     except FileNotFoundError:
         return "File not found", 404
     except Exception as e:
@@ -238,12 +256,19 @@ def verify_resumes():
 
     if not rank_folder or not filenames:
         return jsonify({"success": False, "message": "Missing required data."}), 400
+    if not _is_safe_name(rank_folder):
+        return jsonify({"success": False, "message": "Invalid rank folder."}), 400
+    if not isinstance(filenames, list):
+        return jsonify({"success": False, "message": "Invalid filenames payload."}), 400
+    for filename in filenames:
+        if not _is_safe_name(filename) or not filename.lower().endswith('.pdf'):
+            return jsonify({"success": False, "message": f"Invalid filename: {filename}"}), 400
 
-    source_base_dir = settings['Default_Download_Folder']
-    dest_base_dir = "Verified_Resumes"  # Using same base (Verified_Resumes)
-    
-    source_folder = os.path.join(source_base_dir, rank_folder)
-    dest_folder = os.path.join(dest_base_dir, rank_folder)
+    source_base_dir = os.path.abspath(settings['Default_Download_Folder'])
+    dest_base_dir = os.path.abspath("Verified_Resumes")
+
+    source_folder = _resolve_within_base(source_base_dir, rank_folder)
+    dest_folder = _resolve_within_base(dest_base_dir, rank_folder)
 
     try:
         os.makedirs(dest_folder, exist_ok=True)
@@ -253,10 +278,10 @@ def verify_resumes():
         extraction_errors = []
         
         for filename in filenames:
-            source_path = os.path.join(source_folder, filename)
-            dest_path = os.path.join(dest_folder, filename)
-            
-            if os.path.exists(source_path):
+            source_path = _resolve_within_base(source_folder, filename)
+            dest_path = _resolve_within_base(dest_folder, filename)
+
+            if os.path.isfile(source_path):
                 # Step 1: Extract data from resume
                 ai_match_reason = match_data.get(filename, {}).get('reason', 'Manually verified')
                 
@@ -278,6 +303,8 @@ def verify_resumes():
                 shutil.copy2(source_path, dest_path)
                 processed_files += 1
                 print(f"[VERIFY] Moved {filename} to {dest_folder}")
+            else:
+                extraction_errors.append(f"{filename}: Source file not found")
         
         # Prepare response message
         message = f"Successfully processed {processed_files} file(s). "

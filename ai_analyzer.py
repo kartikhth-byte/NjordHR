@@ -8,6 +8,7 @@ import hashlib
 import sqlite3
 import re
 import io
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -67,60 +68,70 @@ class FileRegistry:
     
     def __init__(self, db_path='registry.db'):
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
-        self.cursor = self.conn.cursor()
+        self.lock = threading.Lock()
         self._migrate_schema()
 
     def _get_db_version(self):
-        try:
-            self.cursor.execute("SELECT version FROM schema_version")
-            result = self.cursor.fetchone()
-            return result[0] if result else 0
-        except sqlite3.OperationalError:
-            return 0
+        with self.lock:
+            try:
+                result = self.conn.execute("SELECT version FROM schema_version").fetchone()
+                return result[0] if result else 0
+            except sqlite3.OperationalError:
+                return 0
 
     def _set_db_version(self, version):
-        self.cursor.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)")
-        self.cursor.execute("DELETE FROM schema_version")
-        self.cursor.execute("INSERT INTO schema_version VALUES (?)", (version,))
-        self.conn.commit()
+        with self.lock:
+            self.conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)")
+            self.conn.execute("DELETE FROM schema_version")
+            self.conn.execute("INSERT INTO schema_version VALUES (?)", (version,))
+            self.conn.commit()
 
     def _migrate_schema(self):
         current_version = self._get_db_version()
         if current_version < self.DB_VERSION:
             if current_version > 0:
                 print(f"[Database Migration] Upgrading from version {current_version} to {self.DB_VERSION}...")
-                self.cursor.execute("DROP TABLE IF EXISTS files")
+                with self.lock:
+                    self.conn.execute("DROP TABLE IF EXISTS files")
             self._create_table()
             self._set_db_version(self.DB_VERSION)
 
     def _create_table(self):
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS files (
-                file_path TEXT PRIMARY KEY,
-                last_modified REAL NOT NULL,
-                resume_id TEXT NOT NULL
-            )
-        """)
-        self.conn.commit()
+        with self.lock:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS files (
+                    file_path TEXT PRIMARY KEY,
+                    last_modified REAL NOT NULL,
+                    resume_id TEXT NOT NULL
+                )
+            """)
+            self.conn.commit()
 
     def generate_resume_id(self, file_path):
         return hashlib.sha1(file_path.encode()).hexdigest()
 
     def needs_processing(self, file_path, last_modified):
-        self.cursor.execute("SELECT last_modified FROM files WHERE file_path=?", (file_path,))
-        result = self.cursor.fetchone()
+        with self.lock:
+            result = self.conn.execute(
+                "SELECT last_modified FROM files WHERE file_path=?",
+                (file_path,)
+            ).fetchone()
         return not result or result[0] < last_modified
 
     def upsert_file_record(self, file_path, last_modified, resume_id):
-        self.cursor.execute("""
-            INSERT INTO files (file_path, last_modified, resume_id) VALUES (?, ?, ?)
-            ON CONFLICT(file_path) DO UPDATE SET last_modified=excluded.last_modified
-        """, (file_path, last_modified, resume_id))
-        self.conn.commit()
+        with self.lock:
+            self.conn.execute("""
+                INSERT INTO files (file_path, last_modified, resume_id) VALUES (?, ?, ?)
+                ON CONFLICT(file_path) DO UPDATE SET last_modified=excluded.last_modified
+            """, (file_path, last_modified, resume_id))
+            self.conn.commit()
 
     def get_resume_id(self, file_path):
-        self.cursor.execute("SELECT resume_id FROM files WHERE file_path=?", (file_path,))
-        result = self.cursor.fetchone()
+        with self.lock:
+            result = self.conn.execute(
+                "SELECT resume_id FROM files WHERE file_path=?",
+                (file_path,)
+            ).fetchone()
         return result[0] if result else self.generate_resume_id(file_path)
 
 
@@ -132,47 +143,54 @@ class FeedbackStore:
     
     def __init__(self, db_path='feedback.db'):
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
-        self.cursor = self.conn.cursor()
+        self.lock = threading.Lock()
         self._create_table()
     
     def _create_table(self):
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename TEXT NOT NULL,
-                query TEXT NOT NULL,
-                llm_decision TEXT NOT NULL,
-                llm_reason TEXT,
-                llm_confidence REAL,
-                user_decision TEXT NOT NULL,
-                user_notes TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        self.conn.commit()
+        with self.lock:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filename TEXT NOT NULL,
+                    query TEXT NOT NULL,
+                    llm_decision TEXT NOT NULL,
+                    llm_reason TEXT,
+                    llm_confidence REAL,
+                    user_decision TEXT NOT NULL,
+                    user_notes TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            self.conn.commit()
     
     def add_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence, 
                      user_decision, user_notes=""):
         """Store user feedback"""
-        self.cursor.execute("""
-            INSERT INTO feedback 
-            (filename, query, llm_decision, llm_reason, llm_confidence, user_decision, user_notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (filename, query, llm_decision, llm_reason, llm_confidence, user_decision, user_notes))
-        self.conn.commit()
+        with self.lock:
+            self.conn.execute("""
+                INSERT INTO feedback 
+                (filename, query, llm_decision, llm_reason, llm_confidence, user_decision, user_notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (filename, query, llm_decision, llm_reason, llm_confidence, user_decision, user_notes))
+            self.conn.commit()
         print(f"[FEEDBACK] Stored: {filename} - User: {user_decision}, LLM: {llm_decision}")
     
     def get_recent_feedback(self, query, limit=5):
         """Get recent feedback for similar queries (for learning)"""
+        query_terms = (query or "").split()
+        if not query_terms:
+            return []
+
         # Simple keyword matching - could be improved with embeddings
-        self.cursor.execute("""
-            SELECT filename, llm_decision, user_decision, llm_reason, user_notes
-            FROM feedback 
-            WHERE query LIKE ? 
-            ORDER BY timestamp DESC 
-            LIMIT ?
-        """, (f"%{query.split()[0]}%", limit))
-        return self.cursor.fetchall()
+        with self.lock:
+            cursor = self.conn.execute("""
+                SELECT filename, llm_decision, user_decision, llm_reason, user_notes
+                FROM feedback 
+                WHERE query LIKE ? 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            """, (f"%{query_terms[0]}%", limit))
+            return cursor.fetchall()
 
 
 # ==============================================================================
