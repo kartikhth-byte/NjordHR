@@ -64,6 +64,18 @@ def _extract_candidate_id_from_filename(filename):
         return match.group(1)
     return None
 
+
+VALID_STATUSES = {
+    'New',
+    'Contacted',
+    'Interested',
+    'Not Interested',
+    'Interview Scheduled',
+    'Offer Made',
+    'Hired',
+    'Rejected'
+}
+
 # --- NEW: Serve the Frontend ---
 @app.route('/')
 def serve_frontend():
@@ -426,6 +438,68 @@ def get_available_ranks():
     
     except Exception as e:
         print(f"[ERROR] Get available ranks failed: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/get_candidate_history/<candidate_id>', methods=['GET'])
+def get_candidate_history(candidate_id):
+    """Return full event log for one candidate."""
+    try:
+        history = csv_manager.get_candidate_history(candidate_id)
+        return jsonify({
+            "success": True,
+            "candidate_id": candidate_id,
+            "count": len(history),
+            "history": history
+        })
+    except Exception as e:
+        print(f"[ERROR] Candidate history fetch failed: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/update_status', methods=['POST'])
+def update_status():
+    """Append a status_change event for a candidate."""
+    try:
+        data = request.json or {}
+        candidate_id = str(data.get('candidate_id', '')).strip()
+        status = str(data.get('status', '')).strip()
+
+        if not candidate_id or not candidate_id.isdigit():
+            return jsonify({"success": False, "message": "Invalid candidate_id"}), 400
+        if status not in VALID_STATUSES:
+            return jsonify({"success": False, "message": "Invalid status value"}), 400
+
+        ok = csv_manager.log_status_change(candidate_id, status)
+        if not ok:
+            return jsonify({"success": False, "message": "Candidate not found"}), 404
+
+        return jsonify({"success": True, "message": "Status updated"})
+    except Exception as e:
+        print(f"[ERROR] Status update failed: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/add_notes', methods=['POST'])
+def add_notes():
+    """Append a note_added event for a candidate."""
+    try:
+        data = request.json or {}
+        candidate_id = str(data.get('candidate_id', '')).strip()
+        notes = str(data.get('notes', '')).strip()
+
+        if not candidate_id or not candidate_id.isdigit():
+            return jsonify({"success": False, "message": "Invalid candidate_id"}), 400
+        if not notes:
+            return jsonify({"success": False, "message": "Notes cannot be empty"}), 400
+
+        ok = csv_manager.log_note_added(candidate_id, notes)
+        if not ok:
+            return jsonify({"success": False, "message": "Candidate not found"}), 404
+
+        return jsonify({"success": True, "message": "Notes added"})
+    except Exception as e:
+        print(f"[ERROR] Add notes failed: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 
