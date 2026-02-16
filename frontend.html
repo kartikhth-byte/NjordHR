@@ -47,13 +47,34 @@
             z-index: 10;
         }
         
-        .truncate-reason {
-            max-width: 300px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-    </style>
+            .truncate-reason {
+                max-width: 300px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .download-indeterminate {
+                position: relative;
+                overflow: hidden;
+            }
+
+            .download-indeterminate::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: -35%;
+                width: 35%;
+                height: 100%;
+                background: linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.65), rgba(255,255,255,0.15));
+                animation: download-shimmer 1.2s linear infinite;
+            }
+
+            @keyframes download-shimmer {
+                0% { left: -35%; }
+                100% { left: 100%; }
+            }
+        </style>
 </head>
 <body class="bg-gray-100">
     <div id="root"></div>
@@ -80,6 +101,8 @@
             const [forceRedownload, setForceRedownload] = useState(false);
             const [downloadLog, setDownloadLog] = useState([]);
             const [logFile, setLogFile] = useState(null);
+            const [isDownloadInProgress, setIsDownloadInProgress] = useState(false);
+            const [downloadElapsedSeconds, setDownloadElapsedSeconds] = useState(0);
 
             const [rankFolders, setRankFolders] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
@@ -168,6 +191,17 @@
                 const timer = setInterval(tick, 1000);
                 return () => clearInterval(timer);
             }, [otpExpiresAt, loginStep]);
+
+            useEffect(() => {
+                if (!isDownloadInProgress) {
+                    setDownloadElapsedSeconds(0);
+                    return;
+                }
+                const timer = setInterval(() => {
+                    setDownloadElapsedSeconds(prev => prev + 1);
+                }, 1000);
+                return () => clearInterval(timer);
+            }, [isDownloadInProgress]);
 
             useEffect(() => {
                 if (!sessionConnected && loginStep !== 'otp') return;
@@ -537,6 +571,7 @@
             const handleStartDownload = async () => {
                  if (!selectedRank || !selectedShipType) return handleSendMessage('error', 'Rank and Ship Type are mandatory.');
                 setIsLoading(true);
+                setIsDownloadInProgress(true);
                 setDownloadLog(['Starting download process...']);
                 setLogFile(null);
                  try {
@@ -558,6 +593,7 @@
                     setDownloadLog(prev => [...prev, 'Error: Could not connect to the backend.']);
                 }
                 setIsLoading(false);
+                setIsDownloadInProgress(false);
             };
             
             const handleDisconnect = async () => {
@@ -571,6 +607,7 @@
                     setOtpExpiresAt(null);
                     setDownloadLog([]);
                     setLogFile(null);
+                    setIsDownloadInProgress(false);
                     handleSendMessage('success', 'Session disconnected.');
                 } catch(error) { handleSendMessage('error', 'Failed to disconnect session cleanly.'); }
                 setIsLoading(false);
@@ -872,6 +909,22 @@
                                 <button onClick={handleStartDownload} disabled={isLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
                                     {isLoading ? 'Downloading...' : 'Start Download'}
                                 </button>
+                                {isDownloadInProgress && (
+                                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center space-x-2">
+                                                <svg className="animate-spin h-5 w-5 text-blue-700" viewBox="0 0 24 24" fill="none">
+                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"></circle>
+                                                    <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" className="opacity-90"></path>
+                                                </svg>
+                                                <span className="text-sm font-semibold text-blue-800">Download in progress</span>
+                                            </div>
+                                            <span className="text-xs text-blue-700">Elapsed: {downloadElapsedSeconds}s</span>
+                                        </div>
+                                        <div className="h-2 rounded bg-blue-100 download-indeterminate"></div>
+                                        <p className="text-xs text-blue-700 mt-2">The scraper is collecting profiles and generating PDFs. This may take a few minutes.</p>
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <h3 className="text-lg font-medium text-gray-800 mb-2">Download Log</h3>
