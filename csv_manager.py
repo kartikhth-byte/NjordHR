@@ -1,6 +1,7 @@
 # csv_manager.py - Event Log CSV Manager
 
 import os
+import threading
 from datetime import datetime
 import pandas as pd
 
@@ -31,6 +32,7 @@ class CSVManager:
         self.base_folder = base_folder
         self.server_url = server_url
         self.master_csv = os.path.join(base_folder, 'verified_resumes.csv')
+        self._lock = threading.RLock()
         os.makedirs(base_folder, exist_ok=True)
 
     def _load_master_df(self):
@@ -43,7 +45,9 @@ class CSVManager:
         return pd.DataFrame(columns=self.COLUMNS)
 
     def _save_master_df(self, df):
-        df.to_csv(self.master_csv, index=False)
+        temp_path = f"{self.master_csv}.tmp"
+        df.to_csv(temp_path, index=False)
+        os.replace(temp_path, self.master_csv)
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
@@ -73,9 +77,10 @@ class CSVManager:
         }
 
         try:
-            df = self._load_master_df()
-            df = pd.concat([df, pd.DataFrame([new_row], columns=self.COLUMNS)], ignore_index=True)
-            self._save_master_df(df)
+            with self._lock:
+                df = self._load_master_df()
+                df = pd.concat([df, pd.DataFrame([new_row], columns=self.COLUMNS)], ignore_index=True)
+                self._save_master_df(df)
             return True
         except Exception as e:
             print(f"[CSV ERROR] Failed to append event row: {e}")
@@ -83,7 +88,8 @@ class CSVManager:
 
     def get_latest_status_per_candidate(self, rank_name=''):
         """Return latest event row per candidate, optionally filtered by rank."""
-        df = self._load_master_df()
+        with self._lock:
+            df = self._load_master_df()
         if df.empty:
             return df
 
@@ -97,7 +103,8 @@ class CSVManager:
         return latest.sort_values('Date_Added', ascending=False).reset_index(drop=True)
 
     def get_candidate_history(self, candidate_id):
-        df = self._load_master_df()
+        with self._lock:
+            df = self._load_master_df()
         if df.empty:
             return []
         history = df[df['Candidate_ID'].astype(str) == str(candidate_id)].sort_values('Date_Added')
@@ -105,7 +112,8 @@ class CSVManager:
 
     def get_latest_candidate_row(self, candidate_id):
         """Get latest event row for a candidate as dict."""
-        df = self._load_master_df()
+        with self._lock:
+            df = self._load_master_df()
         if df.empty:
             return None
         candidate_rows = df[df['Candidate_ID'].astype(str) == str(candidate_id)]
@@ -164,18 +172,19 @@ class CSVManager:
 
     def update_last_row_notes(self, candidate_id, new_notes):
         """Update notes on the most recent event row for a candidate."""
-        df = self._load_master_df()
-        if df.empty:
-            return False
+        with self._lock:
+            df = self._load_master_df()
+            if df.empty:
+                return False
 
-        candidate_rows = df[df['Candidate_ID'].astype(str) == str(candidate_id)]
-        if candidate_rows.empty:
-            return False
+            candidate_rows = df[df['Candidate_ID'].astype(str) == str(candidate_id)]
+            if candidate_rows.empty:
+                return False
 
-        last_idx = candidate_rows.sort_values('Date_Added').index[-1]
-        df.at[last_idx, 'Notes'] = new_notes
-        self._save_master_df(df)
-        return True
+            last_idx = candidate_rows.sort_values('Date_Added').index[-1]
+            df.at[last_idx, 'Notes'] = new_notes
+            self._save_master_df(df)
+            return True
 
     def get_rank_counts(self):
         """Return counts of latest candidate rows grouped by rank."""
@@ -189,10 +198,12 @@ class CSVManager:
         return rows
 
     def get_csv_stats(self):
-        latest = self.get_latest_status_per_candidate()
-        return {
-            'master_csv_exists': os.path.exists(self.master_csv),
-            'master_csv_rows': len(self._load_master_df()),
-            'latest_candidates': len(latest),
-            'rank_breakdown': self.get_rank_counts()
-        }
+        with self._lock:
+            full_df = self._load_master_df()
+            latest = self.get_latest_status_per_candidate()
+            return {
+                'master_csv_exists': os.path.exists(self.master_csv),
+                'master_csv_rows': len(full_df),
+                'latest_candidates': len(latest),
+                'rank_breakdown': self.get_rank_counts()
+            }
