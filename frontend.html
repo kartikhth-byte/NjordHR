@@ -102,6 +102,8 @@
             const [dashboardRank, setDashboardRank] = useState('');
             const [availableRanks, setAvailableRanks] = useState([]);
             const [dashboardData, setDashboardData] = useState([]);
+            const [dashboardNotesDraft, setDashboardNotesDraft] = useState({});
+            const [historyModal, setHistoryModal] = useState({ open: false, candidateId: '', rows: [] });
             const [filteredData, setFilteredData] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [currentPage, setCurrentPage] = useState(1);
@@ -113,6 +115,7 @@
             const eventSourceRef = useRef(null);
             
             const API_BASE_URL = 'http://127.0.0.1:5000';
+            const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Not Interested', 'Interview Scheduled', 'Offer Made', 'Hired', 'Rejected'];
 
             useEffect(() => {
                 fetchRankFolders();
@@ -201,6 +204,8 @@
                         row.email.toLowerCase().includes(query) ||
                         row.country.toLowerCase().includes(query) ||
                         row.present_rank.toLowerCase().includes(query) ||
+                        (row.status || '').toLowerCase().includes(query) ||
+                        (row.notes || '').toLowerCase().includes(query) ||
                         row.ai_match_reason.toLowerCase().includes(query)
                     );
                 }
@@ -251,6 +256,65 @@
                 const startIndex = (currentPage - 1) * rowsPerPage;
                 const endIndex = startIndex + rowsPerPage;
                 return filteredData.slice(startIndex, endIndex);
+            };
+
+            const handleDashboardStatusChange = async (candidateId, status) => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/update_status`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ candidate_id: candidateId, status })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to update status');
+                        return;
+                    }
+                    handleSendMessage('success', `Status updated for candidate ${candidateId}`);
+                    fetchDashboardData();
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to update status');
+                }
+            };
+
+            const handleDashboardAddNotes = async (candidateId) => {
+                const notes = (dashboardNotesDraft[candidateId] || '').trim();
+                if (!notes) {
+                    handleSendMessage('error', 'Notes cannot be empty');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/add_notes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ candidate_id: candidateId, notes })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to add notes');
+                        return;
+                    }
+                    handleSendMessage('success', `Notes added for candidate ${candidateId}`);
+                    setDashboardNotesDraft(prev => ({ ...prev, [candidateId]: '' }));
+                    fetchDashboardData();
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to add notes');
+                }
+            };
+
+            const handleOpenHistory = async (candidateId) => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_candidate_history/${encodeURIComponent(candidateId)}`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load history');
+                        return;
+                    }
+                    setHistoryModal({ open: true, candidateId, rows: data.history || [] });
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to load history');
+                }
             };
             
             const totalPages = Math.ceil(filteredData.length / rowsPerPage);
@@ -775,6 +839,15 @@
                                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Match Reason
                                                     </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Status
+                                                    </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Notes
+                                                    </th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Actions
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-200">
@@ -811,6 +884,45 @@
                                                         <td className="px-4 py-3">
                                                             <div className="truncate-reason" title={row.ai_match_reason}>
                                                                 {row.ai_match_reason}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <select
+                                                                value={row.status || 'New'}
+                                                                onChange={(e) => handleDashboardStatusChange(row.candidate_id, e.target.value)}
+                                                                className="p-1 border border-gray-300 rounded text-sm"
+                                                            >
+                                                                {STATUS_OPTIONS.map(status => (
+                                                                    <option key={status} value={status}>{status}</option>
+                                                                ))}
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="text-xs text-gray-600 mb-1 truncate-reason" title={row.notes || ''}>
+                                                                {row.notes || 'No notes'}
+                                                            </div>
+                                                            <textarea
+                                                                rows="2"
+                                                                value={dashboardNotesDraft[row.candidate_id] || ''}
+                                                                onChange={(e) => setDashboardNotesDraft(prev => ({ ...prev, [row.candidate_id]: e.target.value }))}
+                                                                placeholder="Add note..."
+                                                                className="w-full p-1 border border-gray-300 rounded text-xs"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <div className="flex flex-col space-y-2">
+                                                                <button
+                                                                    onClick={() => handleDashboardAddNotes(row.candidate_id)}
+                                                                    className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700"
+                                                                >
+                                                                    Add Note
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleOpenHistory(row.candidate_id)}
+                                                                    className="bg-gray-600 text-white text-xs px-2 py-1 rounded hover:bg-gray-700"
+                                                                >
+                                                                    View History
+                                                                </button>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -873,6 +985,7 @@
             };
             
             return (
+                <>
                 <div className="min-h-screen p-8 bg-gray-50 text-gray-800">
                     <div className="max-w-7xl mx-auto">
                         <header className="flex justify-between items-center mb-8">
@@ -1117,6 +1230,48 @@
                         </main>
                     </div>
                 </div>
+                {historyModal.open && (
+                    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden">
+                            <div className="flex items-center justify-between px-6 py-4 border-b">
+                                <h3 className="text-lg font-semibold">Candidate History: {historyModal.candidateId}</h3>
+                                <button
+                                    onClick={() => setHistoryModal({ open: false, candidateId: '', rows: [] })}
+                                    className="text-gray-500 hover:text-gray-700"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                            <div className="overflow-y-auto max-h-[65vh] p-4">
+                                {historyModal.rows.length === 0 ? (
+                                    <p className="text-sm text-gray-600">No history found.</p>
+                                ) : (
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
+                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {historyModal.rows.map((item, idx) => (
+                                                <tr key={idx}>
+                                                    <td className="px-3 py-2 text-sm text-gray-600">{formatDate(item.Date_Added)}</td>
+                                                    <td className="px-3 py-2 text-sm">{item.Event_Type || ''}</td>
+                                                    <td className="px-3 py-2 text-sm">{item.Status || ''}</td>
+                                                    <td className="px-3 py-2 text-sm text-gray-600">{item.Notes || ''}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                </>
             );
         }
 

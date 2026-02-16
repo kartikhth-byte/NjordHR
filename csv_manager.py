@@ -103,6 +103,65 @@ class CSVManager:
         history = df[df['Candidate_ID'] == str(candidate_id)].sort_values('Date_Added')
         return history.to_dict(orient='records')
 
+    def get_latest_candidate_row(self, candidate_id):
+        """Get latest event row for a candidate as dict."""
+        df = self._load_master_df()
+        if df.empty:
+            return None
+        candidate_rows = df[df['Candidate_ID'] == str(candidate_id)]
+        if candidate_rows.empty:
+            return None
+        latest = candidate_rows.sort_values('Date_Added').tail(1)
+        return latest.iloc[0].to_dict()
+
+    def log_status_change(self, candidate_id, status):
+        """Log a status_change event using latest known candidate fields."""
+        latest = self.get_latest_candidate_row(candidate_id)
+        if not latest:
+            return False
+        return self.log_event(
+            candidate_id=candidate_id,
+            filename=latest.get('Filename', ''),
+            event_type='status_change',
+            status=status,
+            notes=latest.get('Notes', ''),
+            rank_applied_for=latest.get('Rank_Applied_For', ''),
+            search_ship_type=latest.get('Search_Ship_Type', ''),
+            ai_prompt=latest.get('AI_Search_Prompt', ''),
+            ai_reason=latest.get('AI_Match_Reason', ''),
+            extracted_data={
+                'name': latest.get('Name', ''),
+                'present_rank': latest.get('Present_Rank', ''),
+                'email': latest.get('Email', ''),
+                'country': latest.get('Country', ''),
+                'mobile_no': latest.get('Mobile_No', '')
+            }
+        )
+
+    def log_note_added(self, candidate_id, notes):
+        """Log a note_added event using latest known candidate fields."""
+        latest = self.get_latest_candidate_row(candidate_id)
+        if not latest:
+            return False
+        return self.log_event(
+            candidate_id=candidate_id,
+            filename=latest.get('Filename', ''),
+            event_type='note_added',
+            status=latest.get('Status', 'New'),
+            notes=notes,
+            rank_applied_for=latest.get('Rank_Applied_For', ''),
+            search_ship_type=latest.get('Search_Ship_Type', ''),
+            ai_prompt=latest.get('AI_Search_Prompt', ''),
+            ai_reason=latest.get('AI_Match_Reason', ''),
+            extracted_data={
+                'name': latest.get('Name', ''),
+                'present_rank': latest.get('Present_Rank', ''),
+                'email': latest.get('Email', ''),
+                'country': latest.get('Country', ''),
+                'mobile_no': latest.get('Mobile_No', '')
+            }
+        )
+
     def update_last_row_notes(self, candidate_id, new_notes):
         """Update notes on the most recent event row for a candidate."""
         df = self._load_master_df()
