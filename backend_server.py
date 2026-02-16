@@ -1,11 +1,14 @@
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory, Response, send_file
 from flask_cors import CORS
 import configparser
+import csv
+import io
 import os
 import re
 import sys
 import uuid
 import json
+import zipfile
 
 # Dependency Check & Imports
 try:
@@ -500,6 +503,77 @@ def add_notes():
         return jsonify({"success": True, "message": "Notes added"})
     except Exception as e:
         print(f"[ERROR] Add notes failed: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route('/export_resumes', methods=['POST'])
+def export_resumes():
+    """Export selected candidates as ZIP (PDFs + CSV snapshot)."""
+    try:
+        data = request.json or {}
+        candidate_ids = data.get('candidate_ids', [])
+        if not isinstance(candidate_ids, list) or not candidate_ids:
+            return jsonify({"success": False, "message": "candidate_ids is required"}), 400
+
+        clean_ids = [str(c).strip() for c in candidate_ids if str(c).strip().isdigit()]
+        if not clean_ids:
+            return jsonify({"success": False, "message": "No valid candidate IDs provided"}), 400
+
+        latest_rows = csv_manager.get_latest_status_per_candidate()
+        if latest_rows.empty:
+            return jsonify({"success": False, "message": "No dashboard data found"}), 404
+
+        selected = latest_rows[latest_rows['Candidate_ID'].astype(str).isin(clean_ids)]
+        if selected.empty:
+            return jsonify({"success": False, "message": "Selected candidates not found"}), 404
+
+        zip_buffer = io.BytesIO()
+        download_root = os.path.abspath(settings['Default_Download_Folder'])
+        missing_files = []
+        added_files = 0
+
+        with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as archive:
+            csv_rows = selected.to_dict(orient='records')
+            csv_buffer = io.StringIO()
+            writer = csv.DictWriter(csv_buffer, fieldnames=list(selected.columns))
+            writer.writeheader()
+            writer.writerows(csv_rows)
+            archive.writestr("selected_candidates.csv", csv_buffer.getvalue())
+
+            for row in csv_rows:
+                rank_folder = str(row.get('Rank_Applied_For', '')).strip()
+                filename = str(row.get('Filename', '')).strip()
+
+                if not _is_safe_name(rank_folder) or not _is_safe_name(filename):
+                    missing_files.append(filename or "invalid_name")
+                    continue
+
+                pdf_path = _resolve_within_base(download_root, rank_folder, filename)
+                if not os.path.isfile(pdf_path):
+                    missing_files.append(filename)
+                    continue
+
+                arcname = os.path.join("resumes", rank_folder, filename)
+                archive.write(pdf_path, arcname=arcname)
+                added_files += 1
+
+        zip_buffer.seek(0)
+        timestamp = uuid.uuid4().hex[:8]
+        download_name = f"njord_export_{timestamp}.zip"
+
+        response = send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=download_name
+        )
+        response.headers['X-Exported-Count'] = str(len(selected))
+        response.headers['X-Included-Files'] = str(added_files)
+        response.headers['X-Missing-Files'] = str(len(missing_files))
+        return response
+
+    except Exception as e:
+        print(f"[ERROR] Export resumes failed: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 

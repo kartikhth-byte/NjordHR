@@ -102,6 +102,8 @@
             const [dashboardRank, setDashboardRank] = useState('');
             const [availableRanks, setAvailableRanks] = useState([]);
             const [dashboardData, setDashboardData] = useState([]);
+            const [selectedDashboardIds, setSelectedDashboardIds] = useState(new Set());
+            const [isExporting, setIsExporting] = useState(false);
             const [dashboardNotesDraft, setDashboardNotesDraft] = useState({});
             const [historyModal, setHistoryModal] = useState({ open: false, candidateId: '', rows: [] });
             const [filteredData, setFilteredData] = useState([]);
@@ -135,6 +137,13 @@
             useEffect(() => {
                 filterAndSortData();
             }, [dashboardData, searchQuery, sortColumn, sortOrder]);
+
+            useEffect(() => {
+                setSelectedDashboardIds(prev => {
+                    const validIds = new Set(dashboardData.map(row => String(row.candidate_id)));
+                    return new Set([...prev].filter(id => validIds.has(id)));
+                });
+            }, [dashboardData]);
 
             const fetchRankFolders = async () => {
                 try {
@@ -314,6 +323,74 @@
                     setHistoryModal({ open: true, candidateId, rows: data.history || [] });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to load history');
+                }
+            };
+
+            const handleDashboardSelectAll = (checked) => {
+                if (checked) {
+                    const ids = filteredData.map(row => String(row.candidate_id));
+                    setSelectedDashboardIds(new Set(ids));
+                } else {
+                    setSelectedDashboardIds(new Set());
+                }
+            };
+
+            const handleDashboardRowSelect = (candidateId) => {
+                const id = String(candidateId);
+                setSelectedDashboardIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(id)) {
+                        next.delete(id);
+                    } else {
+                        next.add(id);
+                    }
+                    return next;
+                });
+            };
+
+            const handleExportResumes = async () => {
+                if (selectedDashboardIds.size === 0) {
+                    handleSendMessage('error', 'Select at least one candidate to export');
+                    return;
+                }
+
+                setIsExporting(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/export_resumes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ candidate_ids: Array.from(selectedDashboardIds) })
+                    });
+
+                    if (!response.ok) {
+                        let err = {};
+                        try { err = await response.json(); } catch {}
+                        handleSendMessage('error', err.message || 'Failed to export resumes');
+                        return;
+                    }
+
+                    const blob = await response.blob();
+                    const contentDisposition = response.headers.get('content-disposition') || '';
+                    let filename = 'njord_export.zip';
+                    const match = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+                    if (match && match[1]) {
+                        filename = match[1];
+                    }
+
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+
+                    handleSendMessage('success', `Exported ${selectedDashboardIds.size} candidate(s)`);
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to export resumes');
+                } finally {
+                    setIsExporting(false);
                 }
             };
             
@@ -717,6 +794,10 @@
             };
             
             const DashboardTabContent = () => {
+                const totalSelectable = filteredData.length;
+                const selectedInFiltered = filteredData.filter(row => selectedDashboardIds.has(String(row.candidate_id))).length;
+                const allSelected = totalSelectable > 0 && selectedInFiltered === totalSelectable;
+
                 return (
                     <div>
                         <h2 className="text-2xl font-semibold mb-6">Verified Candidates Dashboard</h2>
@@ -757,6 +838,13 @@
                                 className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                             >
                                 Refresh
+                            </button>
+                            <button
+                                onClick={handleExportResumes}
+                                disabled={selectedDashboardIds.size === 0 || isExporting}
+                                className="mt-6 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400"
+                            >
+                                {isExporting ? 'Exporting...' : `Export Selected (${selectedDashboardIds.size})`}
                             </button>
                         </div>
                         
@@ -800,6 +888,13 @@
                                         <table className="min-w-full divide-y divide-gray-200 dashboard-table">
                                             <thead>
                                                 <tr>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={allSelected}
+                                                            onChange={(e) => handleDashboardSelectAll(e.target.checked)}
+                                                        />
+                                                    </th>
                                                     <th 
                                                         onClick={() => handleSort('filename')}
                                                         className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
@@ -853,6 +948,13 @@
                                             <tbody className="bg-white divide-y divide-gray-200">
                                                 {getPaginatedData().map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-gray-50">
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedDashboardIds.has(String(row.candidate_id))}
+                                                                onChange={() => handleDashboardRowSelect(row.candidate_id)}
+                                                            />
+                                                        </td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
                                                             <a 
                                                                 href={row.resume_url} 
