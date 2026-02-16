@@ -38,6 +38,9 @@ class Scraper:
         self.driver = None
         self.wait = None
         self.base_download_folder = download_folder
+        self.otp_sent_at = None
+        self.otp_window_seconds = 120
+        self.otp_pending = False
 
     def _setup_driver(self):
         options = webdriver.ChromeOptions()
@@ -64,26 +67,110 @@ class Scraper:
             if "Not Registered" in alert_text:
                 self.quit()
                 return {"success": False, "message": f"Login failed: {alert_text}"}
-            return {"success": True, "message": "OTP Sent."}
+            self.otp_sent_at = time.time()
+            self.otp_pending = True
+            return {
+                "success": True,
+                "message": "OTP Sent.",
+                "otp_expires_in": self.otp_window_seconds
+            }
         except TimeoutException:
             self.quit()
             return {"success": False, "message": "No confirmation alert appeared."}
 
+    def _is_element_present(self, by, value):
+        try:
+            self.driver.find_element(by, value)
+            return True
+        except Exception:
+            return False
+
+    def _is_login_page(self):
+        if not self.driver:
+            return True
+        return (
+            self._is_element_present(By.ID, USERNAME_INPUT_ID) or
+            self._is_element_present(By.XPATH, PASSWORD_INPUT_XPATH)
+        )
+
+    def _is_otp_page(self):
+        return self.driver is not None and self._is_element_present(By.XPATH, OTP_INPUT_XPATH)
+
+    def get_session_health(self):
+        """Return session and OTP state for backend/frontend polling."""
+        now = time.time()
+        otp_age = (now - self.otp_sent_at) if self.otp_sent_at else None
+        otp_expired = bool(self.otp_pending and otp_age is not None and otp_age > self.otp_window_seconds)
+
+        if not self.driver:
+            return {
+                "active": False,
+                "valid": False,
+                "otp_pending": False,
+                "otp_expired": False,
+                "reason": "No active browser session"
+            }
+
+        if otp_expired:
+            return {
+                "active": True,
+                "valid": False,
+                "otp_pending": True,
+                "otp_expired": True,
+                "reason": "OTP expired"
+            }
+
+        if self._is_login_page():
+            return {
+                "active": True,
+                "valid": False,
+                "otp_pending": self.otp_pending,
+                "otp_expired": False,
+                "reason": "Returned to login page"
+            }
+
+        return {
+            "active": True,
+            "valid": True,
+            "otp_pending": self.otp_pending,
+            "otp_expired": False,
+            "reason": "Session valid"
+        }
+
     def verify_otp(self, otp_code):
+        if not self.driver:
+            return {"success": False, "message": "Session not active. Please reconnect."}
+        if not self.otp_pending:
+            return {"success": False, "message": "No OTP challenge is pending. Please request OTP again."}
+        if self.otp_sent_at and (time.time() - self.otp_sent_at) > self.otp_window_seconds:
+            self.otp_pending = False
+            return {"success": False, "message": "OTP expired. Please request a new OTP."}
+        if not self._is_otp_page():
+            self.otp_pending = False
+            if self._is_login_page():
+                return {"success": False, "message": "Session reset before OTP verification. Please request OTP again."}
+            return {"success": False, "message": "OTP input is not available. Please request OTP again."}
+
         try:
             self.driver.find_element(By.XPATH, OTP_INPUT_XPATH).send_keys(otp_code + Keys.RETURN)
             long_wait = WebDriverWait(self.driver, 20)
             long_wait.until(EC.element_to_be_clickable((By.XPATH, CANDIDATE_COUNT_LINKS_XPATH)))
+            self.otp_pending = False
+            self.otp_sent_at = None
             return {"success": True}
         except Exception as e:
             try:
                 self.driver.find_element(By.XPATH, INCORRECT_PASSWORD_XPATH)
+                self.otp_pending = False
                 return {"success": False, "message": "Incorrect password entered."}
             except NoSuchElementException:
                 try:
                     self.driver.find_element(By.XPATH, INCORRECT_OTP_XPATH)
                     return {"success": False, "message": "Incorrect OTP entered."}
                 except NoSuchElementException:
+                    if self._is_login_page():
+                        self.otp_pending = False
+                        return {"success": False, "message": "Session reset or OTP expired. Please request a new OTP."}
                     return {"success": False, "message": f"Login failed (unknown reason): {str(e)}"}
 
     def _save_page_as_pdf(self, folder, filename):
@@ -178,6 +265,14 @@ class Scraper:
         success = True
         message = ""
         try:
+            health = self.get_session_health()
+            if not health.get("valid"):
+                return {
+                    "success": False,
+                    "log": [],
+                    "message": f"Session is not valid for download: {health.get('reason', 'Unknown')}"
+                }
+
             # THE FIX: Always start from the dashboard to ensure lists are found
             logger.info("Navigating to dashboard to begin...")
             self.driver.get(DASHBOARD_URL)
@@ -222,6 +317,8 @@ class Scraper:
         return {"success": success, "log": log_content_for_ui, "message": message}
 
     def quit(self):
+        self.otp_pending = False
+        self.otp_sent_at = None
         if self.driver:
             try: self.driver.quit()
             except Exception as e: print(f"Warning: Minor error on browser shutdown: {e}")

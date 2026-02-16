@@ -70,6 +70,8 @@
             const [loginStep, setLoginStep] = useState('phone');
             const [phoneNumber, setPhoneNumber] = useState('');
             const [otp, setOtp] = useState('');
+            const [otpExpiresAt, setOtpExpiresAt] = useState(null);
+            const [otpSecondsLeft, setOtpSecondsLeft] = useState(null);
 
             const [ranks, setRanks] = useState([]);
             const [shipTypes, setShipTypes] = useState([]);
@@ -144,6 +146,64 @@
                     return new Set([...prev].filter(id => validIds.has(id)));
                 });
             }, [dashboardData]);
+
+            useEffect(() => {
+                if (!otpExpiresAt || loginStep !== 'otp') {
+                    setOtpSecondsLeft(null);
+                    return;
+                }
+
+                const tick = () => {
+                    const seconds = Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000));
+                    setOtpSecondsLeft(seconds);
+                    if (seconds <= 0) {
+                        setLoginStep('phone');
+                        setOtp('');
+                        setOtpExpiresAt(null);
+                        handleSendMessage('error', 'OTP expired. Please request a new OTP.');
+                    }
+                };
+
+                tick();
+                const timer = setInterval(tick, 1000);
+                return () => clearInterval(timer);
+            }, [otpExpiresAt, loginStep]);
+
+            useEffect(() => {
+                if (!sessionConnected && loginStep !== 'otp') return;
+
+                const checkHealth = async () => {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/session_health`);
+                        const data = await response.json();
+                        if (!data.success) return;
+
+                        const health = data.health || {};
+                        if (loginStep === 'otp') {
+                            if (health.otp_expired || health.reason === 'Returned to login page') {
+                                setLoginStep('phone');
+                                setOtp('');
+                                setOtpExpiresAt(null);
+                                handleSendMessage('error', health.reason === 'OTP expired' ? 'OTP expired. Please request a new OTP.' : 'Session reset before OTP verification. Request OTP again.');
+                            }
+                        }
+
+                        if (sessionConnected && !health.valid) {
+                            setSessionConnected(false);
+                            setLoginStep('phone');
+                            setOtp('');
+                            setOtpExpiresAt(null);
+                            handleSendMessage('error', `Session disconnected: ${health.reason || 'Unknown reason'}`);
+                        }
+                    } catch (_error) {
+                        // Best-effort polling; no UI disruption on transient failures.
+                    }
+                };
+
+                checkHealth();
+                const poller = setInterval(checkHealth, 15000);
+                return () => clearInterval(poller);
+            }, [sessionConnected, loginStep]);
 
             const fetchRankFolders = async () => {
                 try {
@@ -435,6 +495,8 @@
                     if (data.success) {
                         handleSendMessage('success', data.message);
                         setLoginStep('otp');
+                        const expiresIn = Number(data.otp_expires_in || 120);
+                        setOtpExpiresAt(Date.now() + (expiresIn * 1000));
                     } else { handleSendMessage('error', data.message); }
                 } catch (error) { handleSendMessage('error', 'Failed to connect to backend.'); }
                 setIsLoading(false);
@@ -457,9 +519,16 @@
                         setSelectedRank(data.ranks ? data.ranks[0] : '');
                         setSelectedShipType(data.ship_types ? data.ship_types[0] : '');
                         setSessionConnected(true);
+                        setOtpExpiresAt(null);
                     } else {
                         handleSendMessage('error', data.message);
-                        setLoginStep('phone');
+                        const msg = (data.message || '').toLowerCase();
+                        if (msg.includes('incorrect otp')) {
+                            setLoginStep('otp');
+                        } else {
+                            setLoginStep('phone');
+                            setOtpExpiresAt(null);
+                        }
                     }
                 } catch (error) { handleSendMessage('error', 'Failed to connect to backend.'); }
                 setIsLoading(false);
@@ -499,6 +568,7 @@
                     setLoginStep('phone');
                     setPhoneNumber('');
                     setOtp('');
+                    setOtpExpiresAt(null);
                     setDownloadLog([]);
                     setLogFile(null);
                     handleSendMessage('success', 'Session disconnected.');
@@ -747,6 +817,11 @@
                                 {loginStep === 'otp' && (
                                      <div className="space-y-4">
                                         <p className="text-sm text-center text-gray-600">An OTP was sent to {phoneNumber}.</p>
+                                        {otpSecondsLeft !== null && (
+                                            <p className={`text-xs text-center ${otpSecondsLeft <= 30 ? 'text-red-600' : 'text-gray-500'}`}>
+                                                OTP expires in {otpSecondsLeft}s
+                                            </p>
+                                        )}
                                         <div>
                                             <label htmlFor="otp" className="block text-sm font-medium text-gray-700">Enter OTP</label>
                                             <input type="text" key="otp-input" id="otp" value={otp} onChange={e => setOtp(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md"/>
@@ -754,7 +829,7 @@
                                         <button onClick={handleVerifyOTP} disabled={isLoading} className="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-300">
                                             {isLoading ? 'Verifying...' : 'Verify & Start Session'}
                                         </button>
-                                         <button onClick={() => { setLoginStep('phone'); setOtp(''); }} className="w-full text-sm text-center text-blue-600 hover:underline">
+                                         <button onClick={() => { setLoginStep('phone'); setOtp(''); setOtpExpiresAt(null); }} className="w-full text-sm text-center text-blue-600 hover:underline">
                                             Use a different number
                                         </button>
                                     </div>

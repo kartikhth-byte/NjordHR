@@ -77,9 +77,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
             }
 
         backend_server.resume_extractor.extract_resume_data = fake_extract
+        backend_server.scraper_session = None
         self.client = backend_server.app.test_client()
 
     def tearDown(self):
+        backend_server.scraper_session = None
         self.temp_dir.cleanup()
 
     def _write_fake_resume(self, filename):
@@ -198,6 +200,37 @@ class BackendEventLogFlowTests(unittest.TestCase):
             self.assertIn("Candidate_ID", csv_data)
             self.assertIn("4001", csv_data)
             self.assertIn("4002", csv_data)
+
+    def test_session_health_reports_disconnected_without_session(self):
+        backend_server.scraper_session = None
+        resp = self.client.get("/session_health")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["success"])
+        self.assertFalse(data["connected"])
+        self.assertFalse(data["health"]["valid"])
+
+    def test_session_health_reports_custom_scraper_health(self):
+        class DummySession:
+            driver = object()
+
+            def get_session_health(self):
+                return {
+                    "active": True,
+                    "valid": False,
+                    "otp_pending": True,
+                    "otp_expired": True,
+                    "reason": "OTP expired"
+                }
+
+        backend_server.scraper_session = DummySession()
+        resp = self.client.get("/session_health")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["success"])
+        self.assertTrue(data["connected"])
+        self.assertFalse(data["health"]["valid"])
+        self.assertTrue(data["health"]["otp_expired"])
 
 
 if __name__ == "__main__":
