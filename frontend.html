@@ -370,6 +370,17 @@
                     }
 
                     const blob = await response.blob();
+                    const exportedCount = parseInt(response.headers.get('X-Exported-Count') || '0', 10);
+                    const includedFiles = parseInt(response.headers.get('X-Included-Files') || '0', 10);
+                    const missingFiles = parseInt(response.headers.get('X-Missing-Files') || '0', 10);
+                    const truncatedMissing = parseInt(response.headers.get('X-Missing-Files-Truncated') || '0', 10);
+                    let missingPreview = [];
+                    try {
+                        missingPreview = JSON.parse(response.headers.get('X-Missing-Files-Preview') || '[]');
+                    } catch {
+                        missingPreview = [];
+                    }
+
                     const contentDisposition = response.headers.get('content-disposition') || '';
                     let filename = 'njord_export.zip';
                     const match = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
@@ -386,7 +397,17 @@
                     a.remove();
                     window.URL.revokeObjectURL(url);
 
-                    handleSendMessage('success', `Exported ${selectedDashboardIds.size} candidate(s)`);
+                    if (missingFiles > 0) {
+                        const previewText = missingPreview.length
+                            ? ` Missing: ${missingPreview.slice(0, 3).join(', ')}${(missingPreview.length > 3 || truncatedMissing > 0) ? ', ...' : ''}`
+                            : '';
+                        handleSendMessage(
+                            'success',
+                            `Export complete: selected ${exportedCount}, included ${includedFiles}, missing ${missingFiles}.${previewText}`
+                        );
+                    } else {
+                        handleSendMessage('success', `Export complete: selected ${exportedCount}, included ${includedFiles}, missing 0.`);
+                    }
                 } catch (error) {
                     handleSendMessage('error', 'Failed to export resumes');
                 } finally {

@@ -573,6 +573,9 @@ def export_resumes():
         response.headers['X-Exported-Count'] = str(len(selected))
         response.headers['X-Included-Files'] = str(added_files)
         response.headers['X-Missing-Files'] = str(len(missing_files))
+        missing_preview = missing_files[:20]
+        response.headers['X-Missing-Files-Preview'] = json.dumps(missing_preview)
+        response.headers['X-Missing-Files-Truncated'] = str(max(0, len(missing_files) - len(missing_preview)))
         return response
 
     except Exception as e:
