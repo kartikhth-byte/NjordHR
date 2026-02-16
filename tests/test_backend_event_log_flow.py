@@ -232,6 +232,40 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertFalse(data["health"]["valid"])
         self.assertTrue(data["health"]["otp_expired"])
 
+    def test_download_stream_reports_error_when_session_missing(self):
+        backend_server.scraper_session = None
+        resp = self.client.get("/download_stream?rank=Chief_Officer&shipType=Bulk%20Carrier")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "error"', payload)
+        self.assertIn("Website session is not active or has expired", payload)
+
+    def test_download_stream_emits_complete_event_for_valid_session(self):
+        class DummySession:
+            driver = object()
+
+            def get_session_health(self):
+                return {
+                    "active": True,
+                    "valid": True,
+                    "otp_pending": False,
+                    "otp_expired": False,
+                    "reason": "Session valid"
+                }
+
+            def download_resumes(self, rank, ship_type, force_redownload, logger):
+                logger.info(f"Downloading for {rank} / {ship_type} force={force_redownload}")
+                return {"success": True, "message": "Download done", "log": []}
+
+        backend_server.scraper_session = DummySession()
+        resp = self.client.get("/download_stream?rank=Chief_Officer&shipType=Bulk%20Carrier&forceRedownload=true")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "started"', payload)
+        self.assertIn('"type": "log"', payload)
+        self.assertIn('"type": "complete"', payload)
+        self.assertIn('"success": true', payload.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

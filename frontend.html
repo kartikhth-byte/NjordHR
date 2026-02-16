@@ -148,6 +148,7 @@
             const [reviewCompleted, setReviewCompleted] = useState(false);
             
             const eventSourceRef = useRef(null);
+            const downloadEventSourceRef = useRef(null);
             
             const API_BASE_URL = 'http://127.0.0.1:5000';
             const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Not Interested', 'Interview Scheduled', 'Offer Made', 'Hired', 'Rejected'];
@@ -247,6 +248,17 @@
                 const poller = setInterval(checkHealth, 15000);
                 return () => clearInterval(poller);
             }, [sessionConnected, loginStep]);
+
+            useEffect(() => {
+                return () => {
+                    if (eventSourceRef.current) {
+                        eventSourceRef.current.close();
+                    }
+                    if (downloadEventSourceRef.current) {
+                        downloadEventSourceRef.current.close();
+                    }
+                };
+            }, []);
 
             const fetchRankFolders = async () => {
                 try {
@@ -613,32 +625,91 @@
                 setDownloadCompleted(false);
                 setDownloadLog(['Starting download process...']);
                 setLogFile(null);
-                 try {
-                    const response = await fetch(`${API_BASE_URL}/start_download`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ rank: selectedRank, shipType: selectedShipType, forceRedownload }),
-                    });
-                    const data = await response.json();
-                    setDownloadLog(data.log || ['An unknown error occurred.']);
-                    setLogFile(data.log_file);
-                    if(data.success) {
-                        handleSendMessage('success', data.message || 'Download finished.');
-                        setDownloadCompleted(true);
-                        fetchRankFolders();
+                try {
+                    if (downloadEventSourceRef.current) {
+                        downloadEventSourceRef.current.close();
                     }
-                    else handleSendMessage('error', data.message || 'Download failed.');
+
+                    const params = new URLSearchParams({
+                        rank: selectedRank,
+                        shipType: selectedShipType,
+                        forceRedownload: forceRedownload ? 'true' : 'false'
+                    });
+
+                    const stream = new EventSource(`${API_BASE_URL}/download_stream?${params.toString()}`);
+                    downloadEventSourceRef.current = stream;
+
+                    stream.onmessage = (event) => {
+                        let data = {};
+                        try {
+                            data = JSON.parse(event.data);
+                        } catch {
+                            return;
+                        }
+
+                        if (data.type === 'started') {
+                            if (data.log_file) {
+                                setLogFile(data.log_file);
+                            }
+                            return;
+                        }
+
+                        if (data.type === 'log') {
+                            setDownloadLog(prev => [...prev, data.line]);
+                            return;
+                        }
+
+                        if (data.type === 'error') {
+                            handleSendMessage('error', data.message || 'Download failed.');
+                            setDownloadLog(prev => [...prev, `ERROR: ${data.message || 'Download failed.'}`]);
+                            setIsDownloadLoading(false);
+                            setIsDownloadInProgress(false);
+                            stream.close();
+                            downloadEventSourceRef.current = null;
+                            return;
+                        }
+
+                        if (data.type === 'complete') {
+                            if (data.log_file) {
+                                setLogFile(data.log_file);
+                            }
+                            if (data.success) {
+                                handleSendMessage('success', data.message || 'Download finished.');
+                                setDownloadCompleted(true);
+                                fetchRankFolders();
+                            } else {
+                                handleSendMessage('error', data.message || 'Download failed.');
+                            }
+                            setIsDownloadLoading(false);
+                            setIsDownloadInProgress(false);
+                            stream.close();
+                            downloadEventSourceRef.current = null;
+                        }
+                    };
+
+                    stream.onerror = () => {
+                        handleSendMessage('error', 'Download stream disconnected.');
+                        setDownloadLog(prev => [...prev, 'ERROR: Download stream disconnected.']);
+                        setIsDownloadLoading(false);
+                        setIsDownloadInProgress(false);
+                        stream.close();
+                        downloadEventSourceRef.current = null;
+                    };
                 } catch (error) {
                     handleSendMessage('error', 'Failed to connect to backend server.');
                     setDownloadLog(prev => [...prev, 'Error: Could not connect to the backend.']);
+                    setIsDownloadLoading(false);
+                    setIsDownloadInProgress(false);
                 }
-                setIsDownloadLoading(false);
-                setIsDownloadInProgress(false);
             };
             
             const handleDisconnect = async () => {
                 setIsDisconnecting(true);
                 try {
+                    if (downloadEventSourceRef.current) {
+                        downloadEventSourceRef.current.close();
+                        downloadEventSourceRef.current = null;
+                    }
                     await fetch(`${API_BASE_URL}/disconnect_session`, { method: 'POST' });
                     setSessionConnected(false);
                     setLoginStep('phone');
