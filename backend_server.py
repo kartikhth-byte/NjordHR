@@ -88,6 +88,19 @@ def serve_frontend():
     """Serve the frontend HTML file"""
     return send_from_directory('.', 'frontend.html')
 
+
+@app.route('/app_asset/<path:filename>')
+def serve_app_asset(filename):
+    """Serve local UI assets (e.g., logo) from project root."""
+    allowed_ext = {'.png', '.jpg', '.jpeg', '.svg', '.webp', '.gif', '.ico'}
+    ext = os.path.splitext(filename)[1].lower()
+    if not _is_safe_name(filename) or ext not in allowed_ext:
+        return "Invalid asset request.", 400
+    try:
+        return send_from_directory('.', filename)
+    except FileNotFoundError:
+        return "Asset not found.", 404
+
 # --- API Endpoints ---
 @app.route('/start_session', methods=['POST'])
 def start_session():
