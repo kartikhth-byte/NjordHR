@@ -234,6 +234,7 @@ class RAGPrepper:
     """Handles text chunking and calls the Gemini API for embeddings."""
     def __init__(self, config_manager):
         self.config = config_manager
+        self.last_error = None
 
     def chunk_text(self, text, resume_id, rank):
         tokens = text.split()
@@ -247,18 +248,57 @@ class RAGPrepper:
 
     def get_embeddings(self, texts):
         if not texts: return []
-        
-        api_url = f"https://generativelanguage.googleapis.com/v1/models/{self.config.embedding_model}:batchEmbedContents"
+
+        self.last_error = None
         headers = {'Content-Type': 'application/json', 'x-goog-api-key': self.config.gemini_api_key}
-        requests_data = [{"model": f"models/{self.config.embedding_model}", "content": {"parts": [{"text": t}]}} for t in texts]
-        
-        try:
-            response = requests.post(api_url, headers=headers, json={"requests": requests_data})
-            response.raise_for_status()
-            return [item['values'] for item in response.json()['embeddings']]
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Embedding failed: {e}")
-            return []
+
+        configured_model = self.config.embedding_model
+        model_candidates = [configured_model]
+        # Fallback to current Gemini embedding model if older model is configured.
+        if configured_model == "text-embedding-004":
+            model_candidates.append("gemini-embedding-001")
+        elif configured_model == "gemini-embedding-001":
+            model_candidates.append("text-embedding-004")
+
+        api_versions = ["v1beta", "v1"]
+
+        for model_name in model_candidates:
+            requests_data = [
+                {"model": f"models/{model_name}", "content": {"parts": [{"text": t}]}}
+                for t in texts
+            ]
+            for api_version in api_versions:
+                api_url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:batchEmbedContents"
+                try:
+                    response = requests.post(
+                        api_url,
+                        headers=headers,
+                        json={"requests": requests_data},
+                        timeout=45
+                    )
+                    if response.ok:
+                        payload = response.json()
+                        if "embeddings" in payload:
+                            return [item["values"] for item in payload["embeddings"]]
+                        self.last_error = "Embedding API returned no embeddings."
+                        continue
+
+                    error_text = response.text.strip().replace("\n", " ")
+                    if len(error_text) > 300:
+                        error_text = error_text[:300] + "..."
+                    self.last_error = (
+                        f"Embedding request failed ({response.status_code}) "
+                        f"using {model_name} on {api_version}: {error_text}"
+                    )
+                except requests.exceptions.RequestException as e:
+                    self.last_error = f"Embedding request error using {model_name} on {api_version}: {e}"
+
+        if self.last_error:
+            print(f"[ERROR] {self.last_error}")
+        else:
+            self.last_error = "Embedding request failed for unknown reasons."
+            print(f"[ERROR] {self.last_error}")
+        return []
 
 
 # ==============================================================================
@@ -588,7 +628,8 @@ Examples of GOOD responses:
                 query_embedding = self.prepper.get_embeddings([user_prompt])
                 
                 if not query_embedding:
-                    yield {"type": "error", "message": "Could not generate query embedding."}
+                    error_hint = self.prepper.last_error or "No details available."
+                    yield {"type": "error", "message": f"Could not generate query embedding. {error_hint}"}
                     return
 
                 yield {"type": "status", "message": "Searching vector database..."}
