@@ -170,7 +170,8 @@
             const downloadEventSourceRef = useRef(null);
             const dashboardTableScrollRef = useRef(null);
             
-            const API_BASE_URL = 'http://127.0.0.1:5000';
+            const API_BASE_URL = window.NJORDHR_API_BASE_URL
+                || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:5000');
             const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Not Interested', 'Interview Scheduled', 'Offer Made', 'Hired', 'Rejected'];
             const WORKFLOW_STEPS = ['Connect', 'Download', 'Analyze', 'Review', 'Export'];
 

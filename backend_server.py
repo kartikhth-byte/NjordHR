@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory, Response, send_file
 from flask_cors import CORS
-import configparser
 import csv
 import io
 import os
@@ -24,24 +23,30 @@ from scraper_engine import Scraper
 from ai_analyzer import Analyzer
 from logger_config import setup_logger
 from resume_extractor import ResumeExtractor
-from csv_manager import CSVManager
+from app_settings import load_app_settings
+from repositories.repo_factory import build_candidate_event_repo
 
 # --- App Initialization ---
 app = Flask(__name__)
 CORS(app) 
 
 # --- Configuration ---
-config = configparser.ConfigParser()
-config.read('config.ini')
-creds = config['Credentials']
-settings = config['Settings']
+app_settings = load_app_settings()
+config = app_settings.config
+creds = app_settings.credentials
+settings = app_settings.settings
+feature_flags = app_settings.feature_flags
 
 # --- Global State ---
 scraper_session = None
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
-csv_manager = CSVManager(base_folder='Verified_Resumes')
+csv_manager = build_candidate_event_repo(
+    flags=feature_flags,
+    base_folder='Verified_Resumes',
+    server_url=app_settings.server_url
+)
 
 
 def _resolve_within_base(base_dir, *parts):
