@@ -356,12 +356,15 @@ def analyze_stream():
                 return
             
             target_folder = os.path.join(settings['Default_Download_Folder'], rank_folder)
+            if not os.path.isdir(target_folder):
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Rank folder not found: ' + rank_folder})}\n\n"
+                return
             
             # Create analyzer and run streaming analysis
             analyzer = Analyzer(creds['Gemini_API_Key'])
             
             # Stream progress events
-            for progress_event in analyzer.run_analysis_stream(target_folder, prompt):
+            for progress_event in analyzer.run_analysis_stream(rank_folder, prompt):
                 yield f"data: {json.dumps(progress_event)}\n\n"
             
         except Exception as e:
@@ -384,12 +387,14 @@ def analyze():
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
         
         target_folder = os.path.join(settings['Default_Download_Folder'], rank_folder)
+        if not os.path.isdir(target_folder):
+            return jsonify({"success": False, "message": f"Rank folder not found: {rank_folder}"}), 400
         
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
         
         analyzer = Analyzer(creds['Gemini_API_Key'])
-        result = analyzer.run_analysis(target_folder, prompt)
+        result = analyzer.run_analysis(rank_folder, prompt)
         
         print(f"[BACKEND] Analysis complete. Success: {result.get('success')}")
         return jsonify(result)
