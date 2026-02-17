@@ -49,6 +49,13 @@ csv_manager = build_candidate_event_repo(
 )
 
 
+def _current_repo_backend():
+    name = type(csv_manager).__name__.lower()
+    if "supabase" in name:
+        return "supabase"
+    return "csv"
+
+
 def _resolve_within_base(base_dir, *parts):
     """Resolve a path and ensure it stays within base_dir."""
     base_abs = os.path.abspath(base_dir)
@@ -307,6 +314,21 @@ def session_health():
             "otp_expired": False,
             "reason": "Legacy scraper without health checks"
         }
+    })
+
+
+@app.route('/config/runtime', methods=['GET'])
+def runtime_config():
+    """Expose safe runtime mode information for diagnostics/UI."""
+    return jsonify({
+        "success": True,
+        "feature_flags": {
+            "use_supabase_db": bool(feature_flags.use_supabase_db),
+            "use_local_agent": bool(feature_flags.use_local_agent),
+            "use_cloud_export": bool(feature_flags.use_cloud_export),
+        },
+        "persistence_backend": _current_repo_backend(),
+        "server_url": app_settings.server_url,
     })
 
 @app.route('/get_rank_folders', methods=['GET'])

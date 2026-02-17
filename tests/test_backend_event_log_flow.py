@@ -232,6 +232,15 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertFalse(data["health"]["valid"])
         self.assertTrue(data["health"]["otp_expired"])
 
+    def test_runtime_config_reports_backend_mode(self):
+        resp = self.client.get("/config/runtime")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["success"])
+        self.assertIn(data["persistence_backend"], {"csv", "supabase"})
+        self.assertIn("feature_flags", data)
+        self.assertIn("use_supabase_db", data["feature_flags"])
+
     def test_download_stream_reports_error_when_session_missing(self):
         backend_server.scraper_session = None
         resp = self.client.get("/download_stream?rank=Chief_Officer&shipType=Bulk%20Carrier")

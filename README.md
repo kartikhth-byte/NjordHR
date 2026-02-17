@@ -11,6 +11,9 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
 - SQL migrations are under:
   - `supabase/migrations/001_initial_schema.sql`
   - `supabase/migrations/002_rls_baseline.sql`
+- Helper script:
+  - `python3 scripts/apply_supabase_migrations.py --dry-run`
+  - `SUPABASE_DB_URL=postgresql://... python3 scripts/apply_supabase_migrations.py --apply`
 - Current runtime remains CSV by default.
 - Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` to enable Supabase repository.
 
