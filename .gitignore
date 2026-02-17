@@ -26,6 +26,7 @@ feedback.db
 config.ini
 .env
 .env.*
+!.env.example
 
 # Local project metadata
 NjordHR.bbprojectd/

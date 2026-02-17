@@ -1,5 +1,12 @@
 # NjordHR
 
+## Runtime Flags
+Copy `.env.example` to `.env` (or set env vars in your runtime) to control migration flags:
+- `USE_SUPABASE_DB` (default `false`)
+- `USE_LOCAL_AGENT` (default `false`)
+- `USE_CLOUD_EXPORT` (default `false`)
+- `NJORDHR_SERVER_URL` (default `http://127.0.0.1:5000`)
+
 ## Migration Runbook
 Use the migration helper to convert legacy CSV layouts into the single master event-log CSV.
 
