@@ -235,6 +235,31 @@ class RAGPrepper:
     def __init__(self, config_manager):
         self.config = config_manager
         self.last_error = None
+        self._resolved_embedding_model = None
+
+    def _list_available_embedding_models(self):
+        """Return embedding-capable model names from Gemini ListModels."""
+        api_url = "https://generativelanguage.googleapis.com/v1beta/models"
+        params = {"key": self.config.gemini_api_key, "pageSize": 1000}
+        try:
+            response = requests.get(api_url, params=params, timeout=30)
+            response.raise_for_status()
+            payload = response.json()
+            models = payload.get("models", [])
+            supported = []
+            for model in models:
+                name = model.get("name", "")
+                methods = model.get("supportedGenerationMethods", [])
+                if not name.startswith("models/"):
+                    continue
+                short_name = name.split("/", 1)[1]
+                method_set = set(methods or [])
+                if "batchEmbedContents" in method_set or "embedContent" in method_set:
+                    supported.append(short_name)
+            return supported
+        except requests.exceptions.RequestException as e:
+            self.last_error = f"Could not list Gemini models: {e}"
+            return []
 
     def chunk_text(self, text, resume_id, rank):
         tokens = text.split()
@@ -253,14 +278,28 @@ class RAGPrepper:
         headers = {'Content-Type': 'application/json', 'x-goog-api-key': self.config.gemini_api_key}
 
         configured_model = self.config.embedding_model
-        model_candidates = [configured_model]
+        model_candidates = []
+        if self._resolved_embedding_model:
+            model_candidates.append(self._resolved_embedding_model)
+        model_candidates.append(configured_model)
         # Fallback to current Gemini embedding model if older model is configured.
         if configured_model == "text-embedding-004":
             model_candidates.append("gemini-embedding-001")
         elif configured_model == "gemini-embedding-001":
             model_candidates.append("text-embedding-004")
 
-        api_versions = ["v1beta", "v1"]
+        # Deduplicate while preserving order.
+        deduped = []
+        seen = set()
+        for m in model_candidates:
+            if m and m not in seen:
+                deduped.append(m)
+                seen.add(m)
+        model_candidates = deduped
+
+        # Gemini embedding endpoints are reliably exposed on v1beta.
+        api_versions = ["v1beta"]
+        attempt_errors = []
 
         for model_name in model_candidates:
             requests_data = [
@@ -279,21 +318,66 @@ class RAGPrepper:
                     if response.ok:
                         payload = response.json()
                         if "embeddings" in payload:
+                            self._resolved_embedding_model = model_name
                             return [item["values"] for item in payload["embeddings"]]
-                        self.last_error = "Embedding API returned no embeddings."
+                        attempt_errors.append(
+                            f"{model_name}@{api_version}: Embedding API returned no embeddings."
+                        )
                         continue
 
                     error_text = response.text.strip().replace("\n", " ")
                     if len(error_text) > 300:
                         error_text = error_text[:300] + "..."
-                    self.last_error = (
+                    attempt_errors.append(
                         f"Embedding request failed ({response.status_code}) "
                         f"using {model_name} on {api_version}: {error_text}"
                     )
                 except requests.exceptions.RequestException as e:
-                    self.last_error = f"Embedding request error using {model_name} on {api_version}: {e}"
+                    attempt_errors.append(
+                        f"Embedding request error using {model_name} on {api_version}: {e}"
+                    )
 
-        if self.last_error:
+        # If preferred models fail, discover a working embedding model for this key.
+        discovered_models = self._list_available_embedding_models()
+        for model_name in discovered_models:
+            if model_name in seen:
+                continue
+            requests_data = [
+                {"model": f"models/{model_name}", "content": {"parts": [{"text": t}]}}
+                for t in texts
+            ]
+            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:batchEmbedContents"
+            try:
+                response = requests.post(
+                    api_url,
+                    headers=headers,
+                    json={"requests": requests_data},
+                    timeout=45
+                )
+                if response.ok:
+                    payload = response.json()
+                    if "embeddings" in payload:
+                        self._resolved_embedding_model = model_name
+                        return [item["values"] for item in payload["embeddings"]]
+                    attempt_errors.append(
+                        f"{model_name}@v1beta: Embedding API returned no embeddings."
+                    )
+                    continue
+
+                error_text = response.text.strip().replace("\n", " ")
+                if len(error_text) > 300:
+                    error_text = error_text[:300] + "..."
+                attempt_errors.append(
+                    f"Embedding request failed ({response.status_code}) "
+                    f"using {model_name} on v1beta: {error_text}"
+                )
+            except requests.exceptions.RequestException as e:
+                attempt_errors.append(
+                    f"Embedding request error using {model_name} on v1beta: {e}"
+                )
+
+        if attempt_errors:
+            self.last_error = " | ".join(attempt_errors[-3:])
             print(f"[ERROR] {self.last_error}")
         else:
             self.last_error = "Embedding request failed for unknown reasons."
@@ -375,6 +459,7 @@ class AIResumeAnalyzer:
             return
 
         print(f"[{rank}] Found {len(files_to_process)} new/updated files to index.")
+        embedding_failures = 0
         for path in files_to_process:
             print(f"  -> Processing: {path.name}")
             text = self.pdf_processor.extract_text(str(path))
@@ -387,9 +472,18 @@ class AIResumeAnalyzer:
             embeddings = self.prepper.get_embeddings([c['text'] for c in chunks])
 
             if embeddings:
+                embedding_failures = 0
                 self.vector_db.upsert_chunks(chunks, embeddings, rank)
                 print(f"    - Indexed {len(chunks)} chunks.")
                 self.registry.upsert_file_record(str(path), path.stat().st_mtime, resume_id)
+            else:
+                embedding_failures += 1
+                print("    - SKIPPED: Embedding generation failed.")
+                if embedding_failures >= 3:
+                    error_hint = self.prepper.last_error or "No details available."
+                    raise RuntimeError(
+                        f"Embedding repeatedly failed while indexing. Last error: {error_hint}"
+                    )
 
     def _parse_compound_query(self, user_prompt):
         """
