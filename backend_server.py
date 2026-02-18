@@ -42,9 +42,11 @@ scraper_session = None
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+VERIFIED_RESUMES_DIR = os.path.join(PROJECT_ROOT, 'Verified_Resumes')
 csv_manager = build_candidate_event_repo(
     flags=feature_flags,
-    base_folder='Verified_Resumes',
+    base_folder=VERIFIED_RESUMES_DIR,
     server_url=app_settings.server_url
 )
 
@@ -77,6 +79,12 @@ def _is_safe_name(value):
 
 def _extract_candidate_id_from_filename(filename):
     """Extract numeric candidate ID from {rank}_{candidate_id}.pdf pattern."""
+    # Expected format:
+    # <rank>_<ship_type>_<candidate_id>_<YYYY-MM-DD>_<HH-MM-SS>.pdf
+    match = re.search(r'_(\d+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf$', filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    # Legacy fallback (older names without timestamp suffix).
     match = re.search(r'_(\d+)\.pdf$', filename, re.IGNORECASE)
     if match:
         return match.group(1)
@@ -329,6 +337,7 @@ def runtime_config():
         },
         "persistence_backend": _current_repo_backend(),
         "server_url": app_settings.server_url,
+        "verified_resumes_dir": VERIFIED_RESUMES_DIR,
     })
 
 @app.route('/get_rank_folders', methods=['GET'])
@@ -545,14 +554,16 @@ def verify_resumes():
         # Get CSV stats for response
         csv_stats = csv_manager.get_csv_stats()
         
+        success = csv_exports > 0
         return jsonify({
-            "success": True, 
+            "success": success,
             "message": message,
             "processed": processed_files,
             "csv_exports": csv_exports,
             "errors": extraction_errors,
-            "csv_stats": csv_stats
-        })
+            "csv_stats": csv_stats,
+            "persistence_backend": _current_repo_backend(),
+        }), (200 if success else 500)
 
     except Exception as e:
         print(f"[ERROR] Verify resumes failed: {e}")
@@ -570,7 +581,14 @@ def get_dashboard_data():
         if view_type not in ('master', 'rank'):
             return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
         if view_type == 'rank' and not rank_name:
-            return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
+            return jsonify({
+                "success": True,
+                "view": "rank",
+                "rank_name": "",
+                "total_count": 0,
+                "data": [],
+                "message": "No rank selected"
+            })
 
         rows = csv_manager.get_latest_status_per_candidate(rank_name if view_type == 'rank' else '')
 
