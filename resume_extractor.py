@@ -9,6 +9,68 @@ class ResumeExtractor:
     
     def __init__(self):
         pass
+
+    _EMAIL_RE = re.compile(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})')
+
+    def _clean_email(self, value):
+        value = value.strip().strip('.,;:()[]{}<>').lower()
+        value = re.sub(r'\s*@\s*', '@', value)
+        value = re.sub(r'\s*\.\s*', '.', value)
+        value = value.replace(' ', '')
+        return value
+
+    def _is_valid_email_candidate(self, email):
+        """
+        Lightweight guardrails against OCR/noise captures like '1@gmail.com'.
+        """
+        if not email:
+            return False
+        if '@' not in email:
+            return False
+        local, _domain = email.split('@', 1)
+        if len(local) < 3:
+            return False
+        if local.isdigit():
+            return False
+        return True
+
+    def _extract_best_email(self, text):
+        normalized_text = text
+        normalized_text = re.sub(r'\s*@\s*', '@', normalized_text)
+        normalized_text = re.sub(r'\s*\.\s*', '.', normalized_text)
+
+        # Prefer email found right after the "Email Address" label.
+        labeled_line = re.search(r'Email Address\s+([^\n\r]+)', normalized_text, flags=re.IGNORECASE)
+        if labeled_line:
+            labeled_text = labeled_line.group(1)
+            for source in (labeled_text, labeled_text.replace(' ', '')):
+                labeled_match = self._EMAIL_RE.search(source)
+                if labeled_match:
+                    candidate = self._clean_email(labeled_match.group(1))
+                    if self._is_valid_email_candidate(candidate):
+                        return candidate
+
+        # Fallback: choose best valid email across full text.
+        best = ''
+        best_score = -1
+        all_candidates = list(self._EMAIL_RE.findall(normalized_text))
+        # Also try with local-part space splits repaired (common PDF extraction artifact).
+        repaired_local_text = re.sub(r'([A-Za-z0-9._%+-])\s+([A-Za-z0-9._%+-]+@)', r'\1\2', normalized_text)
+        all_candidates.extend(self._EMAIL_RE.findall(repaired_local_text))
+        for raw in all_candidates:
+            candidate = self._clean_email(raw)
+            if not self._is_valid_email_candidate(candidate):
+                continue
+            local, _domain = candidate.split('@', 1)
+            score = len(local)
+            if any(c.isalpha() for c in local):
+                score += 5
+            if any(c.isdigit() for c in local):
+                score += 2
+            if score > best_score:
+                best = candidate
+                best_score = score
+        return best
     
     def extract_text_from_pdf(self, pdf_path):
         """Extract text from PDF file"""
@@ -65,9 +127,8 @@ class ResumeExtractor:
         present_rank_match = re.search(r'Present Rank\s+([^\n]+)', text)
         data['present_rank'] = present_rank_match.group(1).strip() if present_rank_match else ''
         
-        # Extract Email - use proper email regex pattern
-        email_match = re.search(r'Email Address.*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', text)
-        data['email'] = email_match.group(1).strip() if email_match else ''
+        # Extract Email with label-priority + noise filtering.
+        data['email'] = self._extract_best_email(text)
         
         # Extract Country (from address field)
         country_match = re.search(r'City, State, Country\s+[^,]+,\s*[^,]+,\s*([^\n]+)', text)

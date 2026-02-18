@@ -7,6 +7,16 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
 - `USE_CLOUD_EXPORT` (default `false`)
 - `NJORDHR_SERVER_URL` (default `http://127.0.0.1:5000`)
 
+## Supabase Migrations (Scaffold)
+- SQL migrations are under:
+  - `supabase/migrations/001_initial_schema.sql`
+  - `supabase/migrations/002_rls_baseline.sql`
+- Helper script:
+  - `python3 scripts/apply_supabase_migrations.py --dry-run`
+  - `SUPABASE_DB_URL=postgresql://... python3 scripts/apply_supabase_migrations.py --apply`
+- Current runtime remains CSV by default.
+- Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` to enable Supabase repository.
+
 ## Migration Runbook
 Use the migration helper to convert legacy CSV layouts into the single master event-log CSV.
 

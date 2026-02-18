@@ -42,11 +42,20 @@ scraper_session = None
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+VERIFIED_RESUMES_DIR = os.path.join(PROJECT_ROOT, 'Verified_Resumes')
 csv_manager = build_candidate_event_repo(
     flags=feature_flags,
-    base_folder='Verified_Resumes',
+    base_folder=VERIFIED_RESUMES_DIR,
     server_url=app_settings.server_url
 )
+
+
+def _current_repo_backend():
+    name = type(csv_manager).__name__.lower()
+    if "supabase" in name:
+        return "supabase"
+    return "csv"
 
 
 def _resolve_within_base(base_dir, *parts):
@@ -70,6 +79,12 @@ def _is_safe_name(value):
 
 def _extract_candidate_id_from_filename(filename):
     """Extract numeric candidate ID from {rank}_{candidate_id}.pdf pattern."""
+    # Expected format:
+    # <rank>_<ship_type>_<candidate_id>_<YYYY-MM-DD>_<HH-MM-SS>.pdf
+    match = re.search(r'_(\d+)_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf$', filename, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    # Legacy fallback (older names without timestamp suffix).
     match = re.search(r'_(\d+)\.pdf$', filename, re.IGNORECASE)
     if match:
         return match.group(1)
@@ -309,6 +324,22 @@ def session_health():
         }
     })
 
+
+@app.route('/config/runtime', methods=['GET'])
+def runtime_config():
+    """Expose safe runtime mode information for diagnostics/UI."""
+    return jsonify({
+        "success": True,
+        "feature_flags": {
+            "use_supabase_db": bool(feature_flags.use_supabase_db),
+            "use_local_agent": bool(feature_flags.use_local_agent),
+            "use_cloud_export": bool(feature_flags.use_cloud_export),
+        },
+        "persistence_backend": _current_repo_backend(),
+        "server_url": app_settings.server_url,
+        "verified_resumes_dir": VERIFIED_RESUMES_DIR,
+    })
+
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
     base_folder = settings['Default_Download_Folder']
@@ -334,12 +365,15 @@ def analyze_stream():
                 return
             
             target_folder = os.path.join(settings['Default_Download_Folder'], rank_folder)
+            if not os.path.isdir(target_folder):
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Rank folder not found: ' + rank_folder})}\n\n"
+                return
             
             # Create analyzer and run streaming analysis
             analyzer = Analyzer(creds['Gemini_API_Key'])
             
             # Stream progress events
-            for progress_event in analyzer.run_analysis_stream(target_folder, prompt):
+            for progress_event in analyzer.run_analysis_stream(rank_folder, prompt):
                 yield f"data: {json.dumps(progress_event)}\n\n"
             
         except Exception as e:
@@ -362,12 +396,14 @@ def analyze():
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
         
         target_folder = os.path.join(settings['Default_Download_Folder'], rank_folder)
+        if not os.path.isdir(target_folder):
+            return jsonify({"success": False, "message": f"Rank folder not found: {rank_folder}"}), 400
         
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
         
         analyzer = Analyzer(creds['Gemini_API_Key'])
-        result = analyzer.run_analysis(target_folder, prompt)
+        result = analyzer.run_analysis(rank_folder, prompt)
         
         print(f"[BACKEND] Analysis complete. Success: {result.get('success')}")
         return jsonify(result)
@@ -518,14 +554,16 @@ def verify_resumes():
         # Get CSV stats for response
         csv_stats = csv_manager.get_csv_stats()
         
+        success = csv_exports > 0
         return jsonify({
-            "success": True, 
+            "success": success,
             "message": message,
             "processed": processed_files,
             "csv_exports": csv_exports,
             "errors": extraction_errors,
-            "csv_stats": csv_stats
-        })
+            "csv_stats": csv_stats,
+            "persistence_backend": _current_repo_backend(),
+        }), (200 if success else 500)
 
     except Exception as e:
         print(f"[ERROR] Verify resumes failed: {e}")
@@ -543,7 +581,14 @@ def get_dashboard_data():
         if view_type not in ('master', 'rank'):
             return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
         if view_type == 'rank' and not rank_name:
-            return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
+            return jsonify({
+                "success": True,
+                "view": "rank",
+                "rank_name": "",
+                "total_count": 0,
+                "data": [],
+                "message": "No rank selected"
+            })
 
         rows = csv_manager.get_latest_status_per_candidate(rank_name if view_type == 'rank' else '')
 

@@ -234,6 +234,44 @@ class RAGPrepper:
     """Handles text chunking and calls the Gemini API for embeddings."""
     def __init__(self, config_manager):
         self.config = config_manager
+        self.last_error = None
+        self._resolved_embedding_model = None
+
+    def expected_embedding_dimension(self):
+        """
+        Return known embedding dimension for configured model when available.
+        This avoids Pinecone dimension mismatches during index selection.
+        """
+        model = self.config.embedding_model
+        known_dims = {
+            "text-embedding-004": 768,
+            "gemini-embedding-001": 3072,
+        }
+        return known_dims.get(model)
+
+    def _list_available_embedding_models(self):
+        """Return embedding-capable model names from Gemini ListModels."""
+        api_url = "https://generativelanguage.googleapis.com/v1beta/models"
+        params = {"key": self.config.gemini_api_key, "pageSize": 1000}
+        try:
+            response = requests.get(api_url, params=params, timeout=30)
+            response.raise_for_status()
+            payload = response.json()
+            models = payload.get("models", [])
+            supported = []
+            for model in models:
+                name = model.get("name", "")
+                methods = model.get("supportedGenerationMethods", [])
+                if not name.startswith("models/"):
+                    continue
+                short_name = name.split("/", 1)[1]
+                method_set = set(methods or [])
+                if "batchEmbedContents" in method_set or "embedContent" in method_set:
+                    supported.append(short_name)
+            return supported
+        except requests.exceptions.RequestException as e:
+            self.last_error = f"Could not list Gemini models: {e}"
+            return []
 
     def chunk_text(self, text, resume_id, rank):
         tokens = text.split()
@@ -247,18 +285,116 @@ class RAGPrepper:
 
     def get_embeddings(self, texts):
         if not texts: return []
-        
-        api_url = f"https://generativelanguage.googleapis.com/v1/models/{self.config.embedding_model}:batchEmbedContents"
+
+        self.last_error = None
         headers = {'Content-Type': 'application/json', 'x-goog-api-key': self.config.gemini_api_key}
-        requests_data = [{"model": f"models/{self.config.embedding_model}", "content": {"parts": [{"text": t}]}} for t in texts]
-        
-        try:
-            response = requests.post(api_url, headers=headers, json={"requests": requests_data})
-            response.raise_for_status()
-            return [item['values'] for item in response.json()['embeddings']]
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Embedding failed: {e}")
-            return []
+
+        configured_model = self.config.embedding_model
+        model_candidates = []
+        if self._resolved_embedding_model:
+            model_candidates.append(self._resolved_embedding_model)
+        model_candidates.append(configured_model)
+        # Fallback to current Gemini embedding model if older model is configured.
+        if configured_model == "text-embedding-004":
+            model_candidates.append("gemini-embedding-001")
+        elif configured_model == "gemini-embedding-001":
+            model_candidates.append("text-embedding-004")
+
+        # Deduplicate while preserving order.
+        deduped = []
+        seen = set()
+        for m in model_candidates:
+            if m and m not in seen:
+                deduped.append(m)
+                seen.add(m)
+        model_candidates = deduped
+
+        # Gemini embedding endpoints are reliably exposed on v1beta.
+        api_versions = ["v1beta"]
+        attempt_errors = []
+
+        for model_name in model_candidates:
+            requests_data = [
+                {"model": f"models/{model_name}", "content": {"parts": [{"text": t}]}}
+                for t in texts
+            ]
+            for api_version in api_versions:
+                api_url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:batchEmbedContents"
+                try:
+                    response = requests.post(
+                        api_url,
+                        headers=headers,
+                        json={"requests": requests_data},
+                        timeout=45
+                    )
+                    if response.ok:
+                        payload = response.json()
+                        if "embeddings" in payload:
+                            self._resolved_embedding_model = model_name
+                            return [item["values"] for item in payload["embeddings"]]
+                        attempt_errors.append(
+                            f"{model_name}@{api_version}: Embedding API returned no embeddings."
+                        )
+                        continue
+
+                    error_text = response.text.strip().replace("\n", " ")
+                    if len(error_text) > 300:
+                        error_text = error_text[:300] + "..."
+                    attempt_errors.append(
+                        f"Embedding request failed ({response.status_code}) "
+                        f"using {model_name} on {api_version}: {error_text}"
+                    )
+                except requests.exceptions.RequestException as e:
+                    attempt_errors.append(
+                        f"Embedding request error using {model_name} on {api_version}: {e}"
+                    )
+
+        # If preferred models fail, discover a working embedding model for this key.
+        discovered_models = self._list_available_embedding_models()
+        for model_name in discovered_models:
+            if model_name in seen:
+                continue
+            requests_data = [
+                {"model": f"models/{model_name}", "content": {"parts": [{"text": t}]}}
+                for t in texts
+            ]
+            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:batchEmbedContents"
+            try:
+                response = requests.post(
+                    api_url,
+                    headers=headers,
+                    json={"requests": requests_data},
+                    timeout=45
+                )
+                if response.ok:
+                    payload = response.json()
+                    if "embeddings" in payload:
+                        self._resolved_embedding_model = model_name
+                        return [item["values"] for item in payload["embeddings"]]
+                    attempt_errors.append(
+                        f"{model_name}@v1beta: Embedding API returned no embeddings."
+                    )
+                    continue
+
+                error_text = response.text.strip().replace("\n", " ")
+                if len(error_text) > 300:
+                    error_text = error_text[:300] + "..."
+                attempt_errors.append(
+                    f"Embedding request failed ({response.status_code}) "
+                    f"using {model_name} on v1beta: {error_text}"
+                )
+            except requests.exceptions.RequestException as e:
+                attempt_errors.append(
+                    f"Embedding request error using {model_name} on v1beta: {e}"
+                )
+
+        if attempt_errors:
+            self.last_error = " | ".join(attempt_errors[-3:])
+            print(f"[ERROR] {self.last_error}")
+        else:
+            self.last_error = "Embedding request failed for unknown reasons."
+            print(f"[ERROR] {self.last_error}")
+        return []
 
 
 # ==============================================================================
@@ -266,46 +402,95 @@ class RAGPrepper:
 # ==============================================================================
 class PineconeManager:
     """Manages the connection and querying of a Pinecone index."""
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, embedding_dimension=None):
         self.config = config_manager
         self.pc = Pinecone(api_key=self.config.pinecone_api_key)
-        self.index_name = self.config.pinecone_index
+        self.base_index_name = self.config.pinecone_index
+        self.index_name = self.base_index_name
+        self.embedding_dimension = embedding_dimension
         self._index = None
+        self.last_error = None
+
+    def _coerce_dict(self, value):
+        if isinstance(value, dict):
+            return value
+        if hasattr(value, "to_dict"):
+            return value.to_dict()
+        return {}
+
+    def _index_name_for_dimension(self, dimension):
+        # Pinecone index names should stay compact and deterministic.
+        suffix = f"-d{dimension}"
+        if self.base_index_name.endswith(suffix):
+            return self.base_index_name
+        max_base_len = 45 - len(suffix)
+        trimmed_base = self.base_index_name[:max_base_len]
+        return f"{trimmed_base}{suffix}"
+
+    def _ensure_dimension(self, vector_dimension):
+        if vector_dimension is None:
+            return
+        if self.embedding_dimension != vector_dimension:
+            self.embedding_dimension = vector_dimension
+            self._index = None
+
+    def namespace_vector_count(self, namespace):
+        try:
+            stats = self._coerce_dict(self.index.describe_index_stats())
+            namespaces = stats.get("namespaces", {})
+            ns_meta = namespaces.get(namespace, {})
+            return int(ns_meta.get("vector_count", 0) or 0)
+        except Exception as e:
+            self.last_error = f"Failed to inspect namespace stats: {e}"
+            print(f"[ERROR] {self.last_error}")
+            return 0
 
     @property
     def index(self):
         if self._index is None:
+            dimension = self.embedding_dimension or 768
+            self.index_name = self._index_name_for_dimension(dimension)
             available_indexes = self.pc.list_indexes().names()
-            
+
             if self.index_name not in available_indexes:
                 print(f"[PINECONE] Creating new index: {self.index_name}")
                 self.pc.create_index(
                     name=self.index_name,
-                    dimension=768,
+                    dimension=dimension,
                     metric='cosine',
                     spec=ServerlessSpec(cloud='aws', region='us-east-1')
                 )
-            
+
             self._index = self.pc.Index(self.index_name)
         return self._index
 
     def upsert_chunks(self, chunks, embeddings, rank):
         if not embeddings: return
-        
+        self.last_error = None
+        self._ensure_dimension(len(embeddings[0]))
+
         vectors_to_upsert = []
         for i, chunk in enumerate(chunks):
             chunk_id = f"{chunk['metadata']['resume_id']}-{i}"
             vectors_to_upsert.append({"id": chunk_id, "values": embeddings[i], "metadata": chunk['metadata']})
-        
-        if vectors_to_upsert:
+
+        if not vectors_to_upsert:
+            return
+        try:
             self.index.upsert(vectors=vectors_to_upsert, namespace=rank)
+        except Exception as e:
+            self.last_error = f"Upsert failed: {e}"
+            print(f"[ERROR] {self.last_error}")
 
     def query(self, query_embedding, rank, top_k=30):
+        self.last_error = None
+        self._ensure_dimension(len(query_embedding))
         try:
             results = self.index.query(namespace=rank, vector=query_embedding, top_k=top_k, include_metadata=True)
             return results['matches']
         except Exception as e:
-            print(f"[ERROR] Query failed: {e}")
+            self.last_error = f"Query failed: {e}"
+            print(f"[ERROR] {self.last_error}")
             return []
 
 
@@ -322,7 +507,7 @@ class AIResumeAnalyzer:
         self.feedback = FeedbackStore()
         self.pdf_processor = AdvancedPDFProcessor()
         self.prepper = RAGPrepper(self.config)
-        self.vector_db = PineconeManager(self.config)
+        self.vector_db = PineconeManager(self.config, embedding_dimension=self.prepper.expected_embedding_dimension())
         print("[INIT] Initialization complete")
 
     def _ingest_folder(self, folder_path, rank):
@@ -331,15 +516,44 @@ class AIResumeAnalyzer:
         files_to_process = [p for p in pdf_paths if self.registry.needs_processing(str(p), p.stat().st_mtime)]
         
         if not files_to_process:
-            print(f"[{rank}] Index is up to date.")
-            return
+            # If local registry is up-to-date but vector namespace is empty
+            # (e.g., switched to a new dimension-specific index), force reindex.
+            vector_count = self.vector_db.namespace_vector_count(rank)
+            if pdf_paths and vector_count == 0:
+                print(f"[{rank}] Registry is up to date but vector index is empty. Reindexing all {len(pdf_paths)} files.")
+                files_to_process = pdf_paths
+            else:
+                print(f"[{rank}] Index is up to date.")
+                yield {
+                    "type": "indexing_complete",
+                    "current": 0,
+                    "total": 0,
+                    "message": "Index is up to date."
+                }
+                return
 
         print(f"[{rank}] Found {len(files_to_process)} new/updated files to index.")
+        total_files = len(files_to_process)
+        processed_files = 0
+        yield {
+            "type": "indexing_start",
+            "current": 0,
+            "total": total_files,
+            "message": f"Indexing {total_files} file(s)..."
+        }
+        embedding_failures = 0
         for path in files_to_process:
             print(f"  -> Processing: {path.name}")
             text = self.pdf_processor.extract_text(str(path))
             if not text or len(text.strip()) < 100:
                 print("    - SKIPPED: Not enough text extracted.")
+                processed_files += 1
+                yield {
+                    "type": "indexing_progress",
+                    "current": processed_files,
+                    "total": total_files,
+                    "message": f"Skipping {path.name} (insufficient text)"
+                }
                 continue
             
             resume_id = self.registry.get_resume_id(str(path))
@@ -347,9 +561,38 @@ class AIResumeAnalyzer:
             embeddings = self.prepper.get_embeddings([c['text'] for c in chunks])
 
             if embeddings:
+                embedding_failures = 0
                 self.vector_db.upsert_chunks(chunks, embeddings, rank)
                 print(f"    - Indexed {len(chunks)} chunks.")
                 self.registry.upsert_file_record(str(path), path.stat().st_mtime, resume_id)
+                processed_files += 1
+                yield {
+                    "type": "indexing_progress",
+                    "current": processed_files,
+                    "total": total_files,
+                    "message": f"Indexed {path.name}"
+                }
+            else:
+                embedding_failures += 1
+                print("    - SKIPPED: Embedding generation failed.")
+                processed_files += 1
+                yield {
+                    "type": "indexing_progress",
+                    "current": processed_files,
+                    "total": total_files,
+                    "message": f"Skipped {path.name} (embedding failed)"
+                }
+                if embedding_failures >= 3:
+                    error_hint = self.prepper.last_error or "No details available."
+                    raise RuntimeError(
+                        f"Embedding repeatedly failed while indexing. Last error: {error_hint}"
+                    )
+        yield {
+            "type": "indexing_complete",
+            "current": processed_files,
+            "total": total_files,
+            "message": "Indexing complete."
+        }
 
     def _parse_compound_query(self, user_prompt):
         """
@@ -381,7 +624,8 @@ class AIResumeAnalyzer:
         # Generate embedding for this sub-query
         query_embedding = self.prepper.get_embeddings([sub_query])
         if not query_embedding:
-            return {}
+            print("[SUBQUERY] Embedding unavailable, falling back to keyword retrieval.")
+            return self._retrieve_candidates_keyword_fallback(rank, sub_query, top_k=top_k)
         
         # Search vector database
         search_results = self.vector_db.query(query_embedding[0], rank, top_k=top_k)
@@ -397,6 +641,66 @@ class AIResumeAnalyzer:
         
         print(f"[SUBQUERY] Found {len(results_by_resume)} candidate resumes")
         return results_by_resume
+
+    def _extract_query_terms(self, user_prompt):
+        """Extract useful keyword terms for lexical fallback retrieval."""
+        stop_words = {
+            "a", "an", "and", "or", "the", "is", "are", "to", "of", "for", "with",
+            "in", "on", "by", "from", "having", "has", "have", "valid"
+        }
+        terms = re.findall(r"[a-zA-Z0-9/+.-]{2,}", user_prompt.lower())
+        return [t for t in terms if t not in stop_words]
+
+    def _retrieve_candidates_keyword_fallback(self, rank, user_prompt, top_k=50):
+        """
+        Fallback retrieval when embeddings are unavailable.
+        Builds pseudo-chunks from local PDFs based on keyword overlap.
+        """
+        target_folder = Path(self.config.download_root) / rank.replace(' ', '_').replace('/', '-')
+        if not target_folder.exists():
+            return {}
+
+        query_terms = self._extract_query_terms(user_prompt)
+        if not query_terms:
+            query_terms = [user_prompt.lower().strip()]
+
+        ranked = []
+        for pdf_path in target_folder.glob("*.pdf"):
+            try:
+                text = self.pdf_processor.extract_text(str(pdf_path))
+            except Exception:
+                continue
+            if not text:
+                continue
+
+            text_l = text.lower()
+            hits = sum(1 for t in query_terms if t and t in text_l)
+            if hits == 0:
+                continue
+
+            score = hits / max(1, len(query_terms))
+            ranked.append((score, pdf_path, text))
+
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        top_ranked = ranked[:top_k]
+
+        candidates = {}
+        for idx, (score, pdf_path, text) in enumerate(top_ranked):
+            resume_id = self.registry.get_resume_id(str(pdf_path))
+            chunk_text = text[:12000]
+            pseudo_chunk = {
+                "id": f"fallback-{resume_id}-{idx}",
+                "score": score,
+                "metadata": {
+                    "resume_id": resume_id,
+                    "rank": rank,
+                    "raw_text": chunk_text
+                }
+            }
+            candidates.setdefault(resume_id, []).append(pseudo_chunk)
+
+        print(f"[FALLBACK] Keyword retrieval found {len(candidates)} candidate resumes")
+        return candidates
 
     def _merge_compound_results(self, operator, subquery_results):
         """
@@ -561,7 +865,8 @@ Examples of GOOD responses:
                 return
 
             yield {"type": "status", "message": "Scanning for new files..."}
-            self._ingest_folder(str(target_folder), rank)
+            for ingest_event in self._ingest_folder(str(target_folder), rank):
+                yield ingest_event
             
             # Parse query to detect compound logic
             is_compound, operator, sub_queries = self._parse_compound_query(user_prompt)
@@ -588,19 +893,24 @@ Examples of GOOD responses:
                 query_embedding = self.prepper.get_embeddings([user_prompt])
                 
                 if not query_embedding:
-                    yield {"type": "error", "message": "Could not generate query embedding."}
-                    return
+                    error_hint = self.prepper.last_error or "No details available."
+                    yield {"type": "status", "message": "Embedding unavailable. Switching to keyword fallback retrieval..."}
+                    print(f"[FALLBACK] Embedding unavailable. Reason: {error_hint}")
+                    candidates = self._retrieve_candidates_keyword_fallback(rank, user_prompt, top_k=50)
+                else:
+                    yield {"type": "status", "message": "Searching vector database..."}
+                    search_results = self.vector_db.query(query_embedding[0], rank, top_k=50)
+                    if self.vector_db.last_error:
+                        yield {"type": "error", "message": self.vector_db.last_error}
+                        return
 
-                yield {"type": "status", "message": "Searching vector database..."}
-                search_results = self.vector_db.query(query_embedding[0], rank, top_k=50)
-                
-                candidates = {}
-                for match in search_results:
-                    if match['score'] >= self.config.min_similarity_score:
-                        resume_id = match['metadata']['resume_id']
-                        if resume_id not in candidates:
-                            candidates[resume_id] = []
-                        candidates[resume_id].append(match)
+                    candidates = {}
+                    for match in search_results:
+                        if match['score'] >= self.config.min_similarity_score:
+                            resume_id = match['metadata']['resume_id']
+                            if resume_id not in candidates:
+                                candidates[resume_id] = []
+                            candidates[resume_id].append(match)
             
             total_candidates = len(candidates)
             yield {"type": "progress", "current": 0, "total": total_candidates, 
