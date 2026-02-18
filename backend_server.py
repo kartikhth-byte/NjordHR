@@ -53,6 +53,8 @@ csv_manager = build_candidate_event_repo(
 
 def _current_repo_backend():
     name = type(csv_manager).__name__.lower()
+    if "dualwrite" in name:
+        return "dual_write"
     if "supabase" in name:
         return "supabase"
     return "csv"
@@ -332,6 +334,7 @@ def runtime_config():
         "success": True,
         "feature_flags": {
             "use_supabase_db": bool(feature_flags.use_supabase_db),
+            "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
             "use_local_agent": bool(feature_flags.use_local_agent),
             "use_cloud_export": bool(feature_flags.use_cloud_export),
         },
