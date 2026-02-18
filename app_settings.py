@@ -13,6 +13,7 @@ def _env_bool(name, default=False):
 @dataclass(frozen=True)
 class FeatureFlags:
     use_supabase_db: bool
+    use_dual_write: bool
     use_local_agent: bool
     use_cloud_export: bool
 
@@ -39,6 +40,7 @@ def load_app_settings():
 
     flags = FeatureFlags(
         use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
+        use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
         use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
         use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
     )
