@@ -27,11 +27,13 @@ def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url
 
     if getattr(flags, "use_dual_write", False):
         idempotency_db_path = os.path.join(base_folder, "dual_write_idempotency.db")
+        read_repo = supabase_repo if getattr(flags, "use_supabase_reads", False) else csv_repo
         print("[CONFIG] Using dual-write candidate event repository (primary=csv, mirror=supabase).")
         return DualWriteCandidateEventRepo(
             primary_repo=csv_repo,
             secondary_repo=supabase_repo,
-            idempotency_db_path=idempotency_db_path
+            idempotency_db_path=idempotency_db_path,
+            read_repo=read_repo
         )
 
     print("[CONFIG] Using Supabase candidate event repository.")

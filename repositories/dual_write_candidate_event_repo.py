@@ -11,13 +11,14 @@ from repositories.candidate_event_repo import CandidateEventRepo
 class DualWriteCandidateEventRepo(CandidateEventRepo):
     """
     Dual-write adapter.
-    - Reads are served from primary repo.
+    - Reads are served from read_repo (defaults to primary).
     - Writes go to primary + secondary, with idempotency guard on log_event.
     """
 
-    def __init__(self, primary_repo, secondary_repo, idempotency_db_path):
+    def __init__(self, primary_repo, secondary_repo, idempotency_db_path, read_repo=None):
         self.primary_repo = primary_repo
         self.secondary_repo = secondary_repo
+        self.read_repo = read_repo or primary_repo
         self.idempotency_db_path = idempotency_db_path
         os.makedirs(os.path.dirname(idempotency_db_path), exist_ok=True)
         self._lock = threading.RLock()
@@ -119,10 +120,10 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         return primary_ok
 
     def get_latest_status_per_candidate(self, *args, **kwargs):
-        return self.primary_repo.get_latest_status_per_candidate(*args, **kwargs)
+        return self.read_repo.get_latest_status_per_candidate(*args, **kwargs)
 
     def get_candidate_history(self, *args, **kwargs):
-        return self.primary_repo.get_candidate_history(*args, **kwargs)
+        return self.read_repo.get_candidate_history(*args, **kwargs)
 
     def log_status_change(self, *args, **kwargs):
         primary_ok = self.primary_repo.log_status_change(*args, **kwargs)
@@ -141,7 +142,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         return primary_ok
 
     def get_rank_counts(self, *args, **kwargs):
-        return self.primary_repo.get_rank_counts(*args, **kwargs)
+        return self.read_repo.get_rank_counts(*args, **kwargs)
 
     def get_csv_stats(self, *args, **kwargs):
         stats = self.primary_repo.get_csv_stats(*args, **kwargs)
@@ -151,4 +152,5 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
             stats = dict(stats)
             stats["dual_write_idempotency_keys"] = int(keys_count)
             stats["write_mode"] = "dual_write"
+            stats["read_mode"] = type(self.read_repo).__name__
         return stats

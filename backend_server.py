@@ -335,6 +335,7 @@ def runtime_config():
         "feature_flags": {
             "use_supabase_db": bool(feature_flags.use_supabase_db),
             "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
+            "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
             "use_local_agent": bool(feature_flags.use_local_agent),
             "use_cloud_export": bool(feature_flags.use_cloud_export),
         },

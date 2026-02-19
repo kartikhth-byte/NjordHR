@@ -240,6 +240,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn(data["persistence_backend"], {"csv", "supabase"})
         self.assertIn("feature_flags", data)
         self.assertIn("use_supabase_db", data["feature_flags"])
+        self.assertIn("use_supabase_reads", data["feature_flags"])
 
     def test_download_stream_reports_error_when_session_missing(self):
         backend_server.scraper_session = None
