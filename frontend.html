@@ -166,6 +166,8 @@
             const [reviewCompleted, setReviewCompleted] = useState(false);
             const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false);
             const [drawerCandidateId, setDrawerCandidateId] = useState('');
+            const [drawerNoteDraft, setDrawerNoteDraft] = useState('');
+            const [drawerNoteCandidateId, setDrawerNoteCandidateId] = useState('');
             
             const eventSourceRef = useRef(null);
             const downloadEventSourceRef = useRef(null);
@@ -217,6 +219,19 @@
                     setDrawerCandidateId('');
                 }
             }, [dashboardData, isDashboardDrawerOpen, drawerCandidateId]);
+
+            useEffect(() => {
+                if (!isDashboardDrawerOpen || !drawerCandidateId) return;
+                if (String(drawerNoteCandidateId) === String(drawerCandidateId)) return;
+                const existingDraft = dashboardNotesDraft[drawerCandidateId];
+                if (typeof existingDraft === 'string' && existingDraft.length > 0) {
+                    setDrawerNoteDraft(existingDraft);
+                } else {
+                    const row = dashboardData.find(r => String(r.candidate_id) === String(drawerCandidateId));
+                    setDrawerNoteDraft((row && row.notes) ? row.notes : '');
+                }
+                setDrawerNoteCandidateId(String(drawerCandidateId));
+            }, [isDashboardDrawerOpen, drawerCandidateId, drawerNoteCandidateId, dashboardData, dashboardNotesDraft]);
 
             useEffect(() => {
                 if (!otpExpiresAt || loginStep !== 'otp') {
@@ -498,6 +513,10 @@
                     ));
                     handleSendMessage('success', `Notes added for candidate ${candidateId}`);
                     setDashboardNotesDraft(prev => ({ ...prev, [candidateId]: '' }));
+                    if (String(drawerCandidateId) === candidateIdStr) {
+                        setDrawerNoteDraft('');
+                        setDrawerNoteCandidateId(candidateIdStr);
+                    }
                     fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to add notes');
@@ -512,6 +531,8 @@
             const closeDashboardDrawer = () => {
                 setIsDashboardDrawerOpen(false);
                 setDrawerCandidateId('');
+                setDrawerNoteDraft('');
+                setDrawerNoteCandidateId('');
             };
 
             const handleOpenHistory = async (candidateId) => {
@@ -1544,13 +1565,17 @@
                                             <label className="block text-xs uppercase text-gray-500 mb-1">Add Note</label>
                                             <textarea
                                                 rows="4"
-                                                value={dashboardNotesDraft[drawerCandidate.candidate_id] || ''}
-                                                onChange={(e) => setDashboardNotesDraft(prev => ({ ...prev, [drawerCandidate.candidate_id]: e.target.value }))}
+                                                value={drawerNoteDraft}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setDrawerNoteDraft(value);
+                                                    setDashboardNotesDraft(prev => ({ ...prev, [drawerCandidate.candidate_id]: value }));
+                                                }}
                                                 placeholder="Write note for this candidate..."
                                                 className="w-full p-2 border border-gray-300 rounded text-sm"
                                             />
                                             <button
-                                                onClick={() => handleDashboardAddNotes(drawerCandidate.candidate_id)}
+                                                onClick={() => handleDashboardAddNotes(drawerCandidate.candidate_id, drawerNoteDraft)}
                                                 className="mt-2 w-full bg-blue-600 text-white text-sm py-2 rounded-md hover:bg-blue-700"
                                             >
                                                 Save Note
