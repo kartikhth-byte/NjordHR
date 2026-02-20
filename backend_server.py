@@ -25,6 +25,7 @@ from logger_config import setup_logger
 from resume_extractor import ResumeExtractor
 from app_settings import load_app_settings
 from repositories.repo_factory import build_candidate_event_repo
+from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -330,6 +331,14 @@ def session_health():
 @app.route('/config/runtime', methods=['GET'])
 def runtime_config():
     """Expose safe runtime mode information for diagnostics/UI."""
+    key_source = "none"
+    if os.getenv("SUPABASE_SECRET_KEY", "").strip():
+        key_source = "secret"
+    elif os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip():
+        key_source = "legacy_service_role"
+    supabase_key = resolve_supabase_api_key()
+    key_hint = f"{supabase_key[:12]}..." if supabase_key else ""
+
     return jsonify({
         "success": True,
         "feature_flags": {
@@ -342,6 +351,11 @@ def runtime_config():
         "persistence_backend": _current_repo_backend(),
         "server_url": app_settings.server_url,
         "verified_resumes_dir": VERIFIED_RESUMES_DIR,
+        "supabase_auth": {
+            "key_source": key_source,
+            "key_hint": key_hint,
+            "url_configured": bool(os.getenv("SUPABASE_URL", "").strip()),
+        },
     })
 
 @app.route('/get_rank_folders', methods=['GET'])

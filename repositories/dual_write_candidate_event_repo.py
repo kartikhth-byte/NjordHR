@@ -120,10 +120,24 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         return primary_ok
 
     def get_latest_status_per_candidate(self, *args, **kwargs):
-        return self.read_repo.get_latest_status_per_candidate(*args, **kwargs)
+        preferred = self.read_repo.get_latest_status_per_candidate(*args, **kwargs)
+        # Guardrail: if Supabase read path fails/returns empty while CSV has rows,
+        # keep UI/data paths operational by falling back to primary CSV read.
+        if self.read_repo is self.secondary_repo and getattr(preferred, "empty", True):
+            primary = self.primary_repo.get_latest_status_per_candidate(*args, **kwargs)
+            if not getattr(primary, "empty", True):
+                print("[DUAL-WRITE] Read fallback engaged: using primary repo due to empty secondary read.")
+                return primary
+        return preferred
 
     def get_candidate_history(self, *args, **kwargs):
-        return self.read_repo.get_candidate_history(*args, **kwargs)
+        preferred = self.read_repo.get_candidate_history(*args, **kwargs)
+        if self.read_repo is self.secondary_repo and not preferred:
+            primary = self.primary_repo.get_candidate_history(*args, **kwargs)
+            if primary:
+                print("[DUAL-WRITE] History fallback engaged: using primary repo due to empty secondary read.")
+                return primary
+        return preferred
 
     def log_status_change(self, *args, **kwargs):
         primary_ok = self.primary_repo.log_status_change(*args, **kwargs)
@@ -142,7 +156,13 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         return primary_ok
 
     def get_rank_counts(self, *args, **kwargs):
-        return self.read_repo.get_rank_counts(*args, **kwargs)
+        preferred = self.read_repo.get_rank_counts(*args, **kwargs)
+        if self.read_repo is self.secondary_repo and not preferred:
+            primary = self.primary_repo.get_rank_counts(*args, **kwargs)
+            if primary:
+                print("[DUAL-WRITE] Rank-count fallback engaged: using primary repo due to empty secondary read.")
+                return primary
+        return preferred
 
     def get_csv_stats(self, *args, **kwargs):
         stats = self.primary_repo.get_csv_stats(*args, **kwargs)
