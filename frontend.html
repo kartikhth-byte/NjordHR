@@ -383,12 +383,10 @@
                         }
                     } else {
                         handleSendMessage('error', data.message || 'Failed to load dashboard data');
-                        setDashboardData([]);
                     }
                 } catch (error) {
                     console.error("Dashboard data fetch error:", error);
                     handleSendMessage('error', 'Failed to load dashboard data');
-                    setDashboardData([]);
                 } finally {
                     if (preserveScroll && dashboardTableScrollRef.current) {
                         setTimeout(() => {
