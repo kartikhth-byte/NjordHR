@@ -502,7 +502,12 @@
                         String(row.candidate_id) === candidateIdStr ? { ...row, notes } : row
                     ));
                     handleSendMessage('success', `Notes added for candidate ${candidateId}`);
-                    if (String(drawerCandidateId) === candidateIdStr) setDrawerNoteSeed('');
+                    if (String(drawerCandidateId) === candidateIdStr) {
+                        setDrawerNoteSeed('');
+                        if (drawerNoteInputRef.current) {
+                            drawerNoteInputRef.current.value = '';
+                        }
+                    }
                     fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to add notes');
