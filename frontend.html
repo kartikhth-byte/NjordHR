@@ -154,7 +154,6 @@
             const [selectedDashboardIds, setSelectedDashboardIds] = useState(new Set());
             const [isExporting, setIsExporting] = useState(false);
             const [exportCompleted, setExportCompleted] = useState(false);
-            const [dashboardNotesDraft, setDashboardNotesDraft] = useState({});
             const [historyModal, setHistoryModal] = useState({ open: false, candidateId: '', rows: [] });
             const [filteredData, setFilteredData] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
@@ -166,12 +165,12 @@
             const [reviewCompleted, setReviewCompleted] = useState(false);
             const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false);
             const [drawerCandidateId, setDrawerCandidateId] = useState('');
-            const [drawerNoteDraft, setDrawerNoteDraft] = useState('');
-            const [drawerNoteCandidateId, setDrawerNoteCandidateId] = useState('');
+            const [drawerNoteSeed, setDrawerNoteSeed] = useState('');
             
             const eventSourceRef = useRef(null);
             const downloadEventSourceRef = useRef(null);
             const dashboardTableScrollRef = useRef(null);
+            const drawerNoteInputRef = useRef(null);
             
             const API_BASE_URL = window.NJORDHR_API_BASE_URL
                 || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:5000');
@@ -222,16 +221,9 @@
 
             useEffect(() => {
                 if (!isDashboardDrawerOpen || !drawerCandidateId) return;
-                if (String(drawerNoteCandidateId) === String(drawerCandidateId)) return;
-                const existingDraft = dashboardNotesDraft[drawerCandidateId];
-                if (typeof existingDraft === 'string' && existingDraft.length > 0) {
-                    setDrawerNoteDraft(existingDraft);
-                } else {
-                    const row = dashboardData.find(r => String(r.candidate_id) === String(drawerCandidateId));
-                    setDrawerNoteDraft((row && row.notes) ? row.notes : '');
-                }
-                setDrawerNoteCandidateId(String(drawerCandidateId));
-            }, [isDashboardDrawerOpen, drawerCandidateId, drawerNoteCandidateId, dashboardData, dashboardNotesDraft]);
+                const row = dashboardData.find(r => String(r.candidate_id) === String(drawerCandidateId));
+                setDrawerNoteSeed((row && row.notes) ? row.notes : '');
+            }, [isDashboardDrawerOpen, drawerCandidateId, dashboardData]);
 
             useEffect(() => {
                 if (!otpExpiresAt || loginStep !== 'otp') {
@@ -488,7 +480,7 @@
             };
 
             const handleDashboardAddNotes = async (candidateId, notesInput = null) => {
-                const notes = (notesInput !== null ? notesInput : (dashboardNotesDraft[candidateId] || '')).trim();
+                const notes = (notesInput !== null ? notesInput : '').trim();
                 if (!notes) {
                     handleSendMessage('error', 'Notes cannot be empty');
                     return;
@@ -510,11 +502,7 @@
                         String(row.candidate_id) === candidateIdStr ? { ...row, notes } : row
                     ));
                     handleSendMessage('success', `Notes added for candidate ${candidateId}`);
-                    setDashboardNotesDraft(prev => ({ ...prev, [candidateId]: '' }));
-                    if (String(drawerCandidateId) === candidateIdStr) {
-                        setDrawerNoteDraft('');
-                        setDrawerNoteCandidateId(candidateIdStr);
-                    }
+                    if (String(drawerCandidateId) === candidateIdStr) setDrawerNoteSeed('');
                     fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to add notes');
@@ -1562,18 +1550,18 @@
                                         <div>
                                             <label className="block text-xs uppercase text-gray-500 mb-1">Add Note</label>
                                             <textarea
+                                                key={`drawer-note-${drawerCandidate.candidate_id}`}
+                                                ref={drawerNoteInputRef}
                                                 rows="4"
-                                                value={drawerNoteDraft}
-                                                onChange={(e) => {
-                                                    const value = e.target.value;
-                                                    setDrawerNoteDraft(value);
-                                                    setDashboardNotesDraft(prev => ({ ...prev, [drawerCandidate.candidate_id]: value }));
-                                                }}
+                                                defaultValue={drawerNoteSeed}
                                                 placeholder="Write note for this candidate..."
                                                 className="w-full p-2 border border-gray-300 rounded text-sm"
                                             />
                                             <button
-                                                onClick={() => handleDashboardAddNotes(drawerCandidate.candidate_id, drawerNoteDraft)}
+                                                onClick={() => handleDashboardAddNotes(
+                                                    drawerCandidate.candidate_id,
+                                                    drawerNoteInputRef.current ? drawerNoteInputRef.current.value : ''
+                                                )}
                                                 className="mt-2 w-full bg-blue-600 text-white text-sm py-2 rounded-md hover:bg-blue-700"
                                             >
                                                 Save Note
