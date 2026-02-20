@@ -154,13 +154,13 @@ def main():
     args = parser.parse_args()
 
     if not can_enable_supabase_repo():
-        print("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for parity report.")
+        print("SUPABASE_URL and SUPABASE_SECRET_KEY/SUPABASE_SERVICE_ROLE_KEY are required for parity report.")
         return 2
 
     csv_repo = CSVCandidateEventRepo(base_folder=args.base_folder, server_url=args.server_url)
     sup_repo = SupabaseCandidateEventRepo(
         supabase_url=os.getenv("SUPABASE_URL", ""),
-        service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
+        service_role_key=(os.getenv("SUPABASE_SECRET_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")),
         server_url=args.server_url,
     )
 

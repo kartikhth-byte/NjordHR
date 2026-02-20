@@ -15,7 +15,8 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
   - `python3 scripts/apply_supabase_migrations.py --dry-run`
   - `SUPABASE_DB_URL=postgresql://... python3 scripts/apply_supabase_migrations.py --apply`
 - Current runtime remains CSV by default.
-- Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` to enable Supabase repository.
+- Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (preferred) to enable Supabase repository.
+- Legacy fallback: `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Migration Runbook
 Use the migration helper to convert legacy CSV layouts into the single master event-log CSV.

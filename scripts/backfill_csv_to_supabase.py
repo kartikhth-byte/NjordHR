@@ -78,7 +78,7 @@ def backfill_csv_to_supabase(
     limit=0,
 ):
     if not can_enable_supabase_repo():
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.")
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SECRET_KEY/SUPABASE_SERVICE_ROLE_KEY are required.")
 
     master_csv_path = os.path.join(base_folder, "verified_resumes.csv")
     df = _load_csv_events(master_csv_path)
@@ -97,7 +97,7 @@ def backfill_csv_to_supabase(
 
     repo = SupabaseCandidateEventRepo(
         supabase_url=os.getenv("SUPABASE_URL", ""),
-        service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
+        service_role_key=(os.getenv("SUPABASE_SECRET_KEY", "") or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")),
         server_url=server_url,
     )
 

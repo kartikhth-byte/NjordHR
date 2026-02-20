@@ -2,7 +2,11 @@ import os
 
 from repositories.csv_candidate_event_repo import CSVCandidateEventRepo
 from repositories.dual_write_candidate_event_repo import DualWriteCandidateEventRepo
-from repositories.supabase_candidate_event_repo import SupabaseCandidateEventRepo, can_enable_supabase_repo
+from repositories.supabase_candidate_event_repo import (
+    SupabaseCandidateEventRepo,
+    can_enable_supabase_repo,
+    resolve_supabase_api_key,
+)
 
 
 def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url="http://127.0.0.1:5000"):
@@ -16,12 +20,18 @@ def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url
         return csv_repo
 
     if not can_enable_supabase_repo():
-        print("[CONFIG] USE_SUPABASE_DB=true requested but SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY missing. Falling back to CSV repo.")
+        print("[CONFIG] USE_SUPABASE_DB=true requested but SUPABASE_URL and SUPABASE_SECRET_KEY/SUPABASE_SERVICE_ROLE_KEY are missing. Falling back to CSV repo.")
         return csv_repo
+
+    supabase_api_key = resolve_supabase_api_key()
+    if os.getenv("SUPABASE_SECRET_KEY", "").strip():
+        print("[CONFIG] Supabase auth: using SUPABASE_SECRET_KEY.")
+    else:
+        print("[CONFIG] Supabase auth: using legacy SUPABASE_SERVICE_ROLE_KEY.")
 
     supabase_repo = SupabaseCandidateEventRepo(
         supabase_url=os.getenv("SUPABASE_URL", ""),
-        service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
+        service_role_key=supabase_api_key,
         server_url=server_url
     )
 
