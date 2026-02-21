@@ -44,7 +44,18 @@ scraper_session = None
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-VERIFIED_RESUMES_DIR = os.path.join(PROJECT_ROOT, 'Verified_Resumes')
+
+
+def _resolve_verified_resumes_dir():
+    configured = settings.get('Additional_Local_Folder', fallback='Verified_Resumes').strip()
+    if not configured:
+        configured = 'Verified_Resumes'
+    if os.path.isabs(configured):
+        return os.path.abspath(configured)
+    return os.path.abspath(os.path.join(PROJECT_ROOT, configured))
+
+
+VERIFIED_RESUMES_DIR = _resolve_verified_resumes_dir()
 csv_manager = build_candidate_event_repo(
     flags=feature_flags,
     base_folder=VERIFIED_RESUMES_DIR,
@@ -60,7 +71,7 @@ def _env_bool(name, default=False):
 
 
 def _refresh_runtime_managers():
-    global feature_flags, csv_manager
+    global feature_flags, csv_manager, VERIFIED_RESUMES_DIR
     feature_flags = FeatureFlags(
         use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
         use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
@@ -68,6 +79,8 @@ def _refresh_runtime_managers():
         use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
         use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
     )
+    VERIFIED_RESUMES_DIR = _resolve_verified_resumes_dir()
+    os.makedirs(VERIFIED_RESUMES_DIR, exist_ok=True)
     csv_manager = build_candidate_event_repo(
         flags=feature_flags,
         base_folder=VERIFIED_RESUMES_DIR,
@@ -112,6 +125,7 @@ def _settings_payload():
     return {
         "non_secret": {
             "default_download_folder": settings.get("Default_Download_Folder", ""),
+            "verified_resumes_folder": settings.get("Additional_Local_Folder", fallback="Verified_Resumes"),
             "pinecone_environment": config.get("Advanced", "pinecone_environment", fallback=""),
             "pinecone_index_name": config.get("Advanced", "pinecone_index_name", fallback=""),
             "embedding_model_name": config.get("Advanced", "embedding_model_name", fallback=""),
@@ -512,6 +526,7 @@ def save_admin_settings():
     _set_if_present("Credentials", "Gemini_API_Key", "gemini_api_key")
     _set_if_present("Credentials", "Pinecone_API_Key", "pinecone_api_key")
     _set_if_present("Settings", "Default_Download_Folder", "default_download_folder")
+    _set_if_present("Settings", "Additional_Local_Folder", "verified_resumes_folder")
     _set_if_present("Advanced", "pinecone_environment", "pinecone_environment")
     _set_if_present("Advanced", "pinecone_index_name", "pinecone_index_name")
     _set_if_present("Advanced", "embedding_model_name", "embedding_model_name")
@@ -567,6 +582,49 @@ def save_admin_settings():
                 "use_cloud_export": bool(feature_flags.use_cloud_export),
             }
         }
+    })
+
+
+@app.route('/admin/fs/list', methods=['GET'])
+def admin_list_directories():
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    requested_path = request.args.get("path", "").strip()
+    base_path = os.path.expanduser("~")
+    target_path = requested_path or base_path
+    target_path = os.path.abspath(os.path.expanduser(target_path))
+
+    if not os.path.isdir(target_path):
+        return jsonify({"success": False, "message": "Directory not found"}), 400
+
+    entries = []
+    try:
+        with os.scandir(target_path) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                name = entry.name
+                if name.startswith('.'):
+                    continue
+                entries.append({
+                    "name": name,
+                    "path": os.path.abspath(entry.path),
+                })
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Failed to list directories: {exc}"}), 500
+
+    entries.sort(key=lambda item: item["name"].lower())
+    parent_path = os.path.dirname(target_path)
+    if parent_path == target_path:
+        parent_path = ""
+
+    return jsonify({
+        "success": True,
+        "current_path": target_path,
+        "parent_path": parent_path,
+        "entries": entries,
     })
 
 

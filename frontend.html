@@ -173,6 +173,7 @@
             const [settingsSection, setSettingsSection] = useState('runtime');
             const [settingsForm, setSettingsForm] = useState({
                 default_download_folder: '',
+                verified_resumes_folder: 'Verified_Resumes',
                 pinecone_environment: '',
                 pinecone_index_name: '',
                 embedding_model_name: '',
@@ -201,6 +202,14 @@
                 current_password: '',
                 new_password: '',
                 confirm_password: '',
+            });
+            const [folderPicker, setFolderPicker] = useState({
+                open: false,
+                targetKey: '',
+                currentPath: '',
+                parentPath: '',
+                entries: [],
+                loading: false,
             });
             
             const eventSourceRef = useRef(null);
@@ -450,6 +459,7 @@
                     setSettingsForm(prev => ({
                         ...prev,
                         default_download_folder: nonSecret.default_download_folder || '',
+                        verified_resumes_folder: nonSecret.verified_resumes_folder || 'Verified_Resumes',
                         pinecone_environment: nonSecret.pinecone_environment || '',
                         pinecone_index_name: nonSecret.pinecone_index_name || '',
                         embedding_model_name: nonSecret.embedding_model_name || '',
@@ -543,6 +553,56 @@
                 } finally {
                     setIsSettingsSaving(false);
                 }
+            };
+
+            const loadFolderPickerPath = async (pathValue, targetKey) => {
+                if (!adminPassword.trim()) {
+                    handleSendMessage('error', 'Enter admin password first');
+                    return;
+                }
+                setFolderPicker(prev => ({ ...prev, open: true, loading: true, targetKey }));
+                try {
+                    const query = pathValue ? `?path=${encodeURIComponent(pathValue)}` : '';
+                    const response = await fetch(`${API_BASE_URL}/admin/fs/list${query}`, {
+                        headers: { 'X-Admin-Token': adminPassword.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to browse folders');
+                        setFolderPicker(prev => ({ ...prev, loading: false }));
+                        return;
+                    }
+                    setFolderPicker(prev => ({
+                        ...prev,
+                        open: true,
+                        targetKey,
+                        currentPath: data.current_path || '',
+                        parentPath: data.parent_path || '',
+                        entries: data.entries || [],
+                        loading: false,
+                    }));
+                } catch (error) {
+                    setFolderPicker(prev => ({ ...prev, loading: false }));
+                    handleSendMessage('error', 'Failed to browse folders');
+                }
+            };
+
+            const openFolderPicker = (targetKey) => {
+                const seedPath = settingsForm[targetKey] || '';
+                loadFolderPickerPath(seedPath, targetKey);
+            };
+
+            const selectFolderFromPicker = () => {
+                if (!folderPicker.targetKey || !folderPicker.currentPath) return;
+                setSettingsForm(prev => ({ ...prev, [folderPicker.targetKey]: folderPicker.currentPath }));
+                setFolderPicker({
+                    open: false,
+                    targetKey: '',
+                    currentPath: '',
+                    parentPath: '',
+                    entries: [],
+                    loading: false,
+                });
             };
 
             const changeAdminPassword = async () => {
@@ -1899,7 +1959,17 @@
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Default Download Folder</label>
-                                                <input value={settingsForm.default_download_folder} onChange={e => setField('default_download_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                                <div className="flex gap-2">
+                                                    <input value={settingsForm.default_download_folder} onChange={e => setField('default_download_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                                    <button type="button" onClick={() => openFolderPicker('default_download_folder')} className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Browse</button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Verified Resumes Folder</label>
+                                                <div className="flex gap-2">
+                                                    <input value={settingsForm.verified_resumes_folder} onChange={e => setField('verified_resumes_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                                    <button type="button" onClick={() => openFolderPicker('verified_resumes_folder')} className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Browse</button>
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL</label>
@@ -2012,6 +2082,70 @@
                                         {isSettingsSaving ? 'Saving...' : 'Save & Apply'}
                                     </button>
                                 </div>
+
+                                {folderPicker.open && (
+                                    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                                        <div className="bg-white w-full max-w-2xl rounded-lg border border-gray-200 shadow-xl">
+                                            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                                                <h4 className="font-semibold text-gray-900">Select Folder</h4>
+                                                <button
+                                                    className="text-sm text-gray-500 hover:text-gray-800"
+                                                    onClick={() => setFolderPicker({ open: false, targetKey: '', currentPath: '', parentPath: '', entries: [], loading: false })}
+                                                >
+                                                    Close
+                                                </button>
+                                            </div>
+                                            <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-700 break-all">
+                                                Current: {folderPicker.currentPath || '-'}
+                                            </div>
+                                            <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+                                                {folderPicker.loading && <p className="text-sm text-gray-500">Loading folders...</p>}
+                                                {!folderPicker.loading && (
+                                                    <>
+                                                        {folderPicker.parentPath && (
+                                                            <button
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 rounded-md border border-gray-200 hover:bg-gray-50"
+                                                                onClick={() => loadFolderPickerPath(folderPicker.parentPath, folderPicker.targetKey)}
+                                                            >
+                                                                .. (Parent Directory)
+                                                            </button>
+                                                        )}
+                                                        {folderPicker.entries.map((entry) => (
+                                                            <button
+                                                                key={entry.path}
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 rounded-md border border-gray-200 hover:bg-gray-50"
+                                                                onClick={() => loadFolderPickerPath(entry.path, folderPicker.targetKey)}
+                                                            >
+                                                                {entry.name}
+                                                            </button>
+                                                        ))}
+                                                        {folderPicker.entries.length === 0 && !folderPicker.parentPath && (
+                                                            <p className="text-sm text-gray-500">No subfolders found.</p>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
+                                                    onClick={() => setFolderPicker({ open: false, targetKey: '', currentPath: '', parentPath: '', entries: [], loading: false })}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                                                    onClick={selectFolderFromPicker}
+                                                >
+                                                    Use This Folder
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

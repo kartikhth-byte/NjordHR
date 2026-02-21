@@ -317,6 +317,22 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(runtime_flags["use_dual_write"])
         self.assertFalse(runtime_flags["use_supabase_reads"])
 
+    def test_admin_folder_browser_lists_directories(self):
+        browse_root = self.base / "browse_root"
+        (browse_root / "A").mkdir(parents=True, exist_ok=True)
+        (browse_root / "B").mkdir(parents=True, exist_ok=True)
+
+        resp = self.client.get(
+            f"/admin/fs/list?path={browse_root}",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        names = [item["name"] for item in body.get("entries", [])]
+        self.assertIn("A", names)
+        self.assertIn("B", names)
+
 
 if __name__ == "__main__":
     unittest.main()

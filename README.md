@@ -69,3 +69,4 @@ python3 -m unittest -v tests/test_migrate_legacy_csv.py
 - Settings UI:
   - Open the `Settings` tab in the app and load with admin token.
   - Secret fields are masked and blank-by-default; blank means "keep existing secret".
+  - Operational settings include `Default Download Folder` and `Verified Resumes Folder` with an admin folder browser picker.
