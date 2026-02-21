@@ -62,6 +62,7 @@ python3 -m unittest -v tests/test_migrate_legacy_csv.py
   - `GET /admin/settings`
   - `POST /admin/settings`
   - `POST /admin/settings/test_supabase`
+  - `POST /admin/settings/change_password`
 - Authentication:
   - Header: `X-Admin-Token: <token>`
   - Configure token via `NJORDHR_ADMIN_TOKEN` (recommended) or `[Advanced] admin_token` in `config.ini`.

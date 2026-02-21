@@ -569,6 +569,39 @@ def save_admin_settings():
         }
     })
 
+
+@app.route('/admin/settings/change_password', methods=['POST'])
+def change_admin_password():
+    global app_settings, config
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    data = request.json or {}
+    new_password = str(data.get("new_admin_password", "")).strip()
+    confirm_password = str(data.get("confirm_admin_password", "")).strip()
+
+    if not new_password:
+        return jsonify({"success": False, "message": "New admin password is required"}), 400
+    if len(new_password) < 8:
+        return jsonify({"success": False, "message": "Admin password must be at least 8 characters"}), 400
+    if new_password != confirm_password:
+        return jsonify({"success": False, "message": "Password confirmation does not match"}), 400
+
+    if "Advanced" not in config:
+        config["Advanced"] = {}
+    config.set("Advanced", "admin_token", new_password)
+
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+
+    os.environ["NJORDHR_ADMIN_TOKEN"] = new_password
+    app_settings = load_app_settings()
+    config = app_settings.config
+
+    return jsonify({"success": True, "message": "Admin password updated successfully."})
+
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
     base_folder = settings['Default_Download_Folder']
