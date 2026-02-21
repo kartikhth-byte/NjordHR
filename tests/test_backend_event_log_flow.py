@@ -78,10 +78,25 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         backend_server.resume_extractor.extract_resume_data = fake_extract
         backend_server.scraper_session = None
+        self.prev_admin_token = os.environ.get("NJORDHR_ADMIN_TOKEN")
+        os.environ["NJORDHR_ADMIN_TOKEN"] = "test-admin-token"
+        self.prev_config_path = os.environ.get("NJORDHR_CONFIG_PATH")
+        self.temp_config_path = str(self.base / "config.test.ini")
+        with open(self.temp_config_path, "w", encoding="utf-8") as fh:
+            backend_server.config.write(fh)
+        os.environ["NJORDHR_CONFIG_PATH"] = self.temp_config_path
         self.client = backend_server.app.test_client()
 
     def tearDown(self):
         backend_server.scraper_session = None
+        if self.prev_admin_token is None:
+            os.environ.pop("NJORDHR_ADMIN_TOKEN", None)
+        else:
+            os.environ["NJORDHR_ADMIN_TOKEN"] = self.prev_admin_token
+        if self.prev_config_path is None:
+            os.environ.pop("NJORDHR_CONFIG_PATH", None)
+        else:
+            os.environ["NJORDHR_CONFIG_PATH"] = self.prev_config_path
         self.temp_dir.cleanup()
 
     def _write_fake_resume(self, filename):
@@ -275,6 +290,32 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn('"type": "log"', payload)
         self.assertIn('"type": "complete"', payload)
         self.assertIn('"success": true', payload.lower())
+
+    def test_admin_settings_requires_token(self):
+        resp = self.client.get("/admin/settings")
+        self.assertEqual(resp.status_code, 401)
+        self.assertFalse(resp.get_json()["success"])
+
+    def test_admin_settings_save_applies_flags(self):
+        resp = self.client.post(
+            "/admin/settings",
+            headers={"X-Admin-Token": "test-admin-token"},
+            json={
+                "settings": {
+                    "use_supabase_db": True,
+                    "use_dual_write": True,
+                    "use_supabase_reads": False,
+                    "min_similarity_score": "0.31",
+                }
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        runtime_flags = body["runtime"]["feature_flags"]
+        self.assertTrue(runtime_flags["use_supabase_db"])
+        self.assertTrue(runtime_flags["use_dual_write"])
+        self.assertFalse(runtime_flags["use_supabase_reads"])
 
 
 if __name__ == "__main__":

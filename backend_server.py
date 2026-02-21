@@ -23,7 +23,7 @@ from scraper_engine import Scraper
 from ai_analyzer import Analyzer
 from logger_config import setup_logger
 from resume_extractor import ResumeExtractor
-from app_settings import load_app_settings
+from app_settings import load_app_settings, FeatureFlags
 from repositories.repo_factory import build_candidate_event_repo
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 
@@ -50,6 +50,88 @@ csv_manager = build_candidate_event_repo(
     base_folder=VERIFIED_RESUMES_DIR,
     server_url=app_settings.server_url
 )
+
+
+def _env_bool(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _refresh_runtime_managers():
+    global feature_flags, csv_manager
+    feature_flags = FeatureFlags(
+        use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
+        use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
+        use_supabase_reads=_env_bool("USE_SUPABASE_READS", default=False),
+        use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
+        use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
+    )
+    csv_manager = build_candidate_event_repo(
+        flags=feature_flags,
+        base_folder=VERIFIED_RESUMES_DIR,
+        server_url=app_settings.server_url
+    )
+    try:
+        Analyzer._instance = None
+    except Exception:
+        pass
+
+
+def _admin_token():
+    token = os.getenv("NJORDHR_ADMIN_TOKEN", "").strip()
+    if token:
+        return token
+    return config.get("Advanced", "admin_token", fallback="").strip()
+
+
+def _require_admin():
+    token = _admin_token()
+    if not token:
+        return False, "Admin token not configured. Set NJORDHR_ADMIN_TOKEN or [Advanced].admin_token."
+    request_token = request.headers.get("X-Admin-Token", "").strip()
+    if not request_token:
+        body = request.json if request.is_json else {}
+        request_token = str((body or {}).get("admin_token", "")).strip()
+    if request_token != token:
+        return False, "Unauthorized admin token."
+    return True, ""
+
+
+def _mask_secret(value):
+    value = str(value or "").strip()
+    if not value:
+        return {"configured": False, "preview": ""}
+    if len(value) <= 8:
+        return {"configured": True, "preview": "*" * len(value)}
+    return {"configured": True, "preview": f"{value[:4]}...{value[-4:]}"}
+
+
+def _settings_payload():
+    return {
+        "non_secret": {
+            "default_download_folder": settings.get("Default_Download_Folder", ""),
+            "pinecone_environment": config.get("Advanced", "pinecone_environment", fallback=""),
+            "pinecone_index_name": config.get("Advanced", "pinecone_index_name", fallback=""),
+            "embedding_model_name": config.get("Advanced", "embedding_model_name", fallback=""),
+            "reasoning_model_name": config.get("Advanced", "reasoning_model_name", fallback=""),
+            "min_similarity_score": config.get("Advanced", "min_similarity_score", fallback="0.25"),
+            "supabase_url": os.getenv("SUPABASE_URL", ""),
+            "use_supabase_db": bool(feature_flags.use_supabase_db),
+            "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
+            "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
+            "use_local_agent": bool(feature_flags.use_local_agent),
+            "use_cloud_export": bool(feature_flags.use_cloud_export),
+        },
+        "secrets": {
+            "seajob_username": _mask_secret(creds.get("Username", "")),
+            "seajob_password": _mask_secret(creds.get("Password", "")),
+            "gemini_api_key": _mask_secret(creds.get("Gemini_API_Key", "")),
+            "pinecone_api_key": _mask_secret(creds.get("Pinecone_API_Key", "")),
+            "supabase_secret_key": _mask_secret(resolve_supabase_api_key()),
+        }
+    }
 
 
 def _current_repo_backend():
@@ -356,6 +438,135 @@ def runtime_config():
             "key_hint": key_hint,
             "url_configured": bool(os.getenv("SUPABASE_URL", "").strip()),
         },
+        "admin_settings_enabled": bool(_admin_token()),
+    })
+
+
+@app.route('/admin/settings', methods=['GET'])
+def get_admin_settings():
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+    return jsonify({"success": True, "settings": _settings_payload()})
+
+
+@app.route('/admin/settings/test_supabase', methods=['POST'])
+def test_admin_supabase():
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    data = request.json or {}
+    supabase_url = str(data.get("supabase_url", "") or os.getenv("SUPABASE_URL", "")).strip()
+    supabase_secret_key = str(data.get("supabase_secret_key", "") or resolve_supabase_api_key()).strip()
+    if not supabase_url or not supabase_secret_key:
+        return jsonify({"success": False, "message": "supabase_url and supabase_secret_key are required"}), 400
+
+    try:
+        import requests
+        resp = requests.get(
+            f"{supabase_url.rstrip('/')}/rest/v1/candidate_events",
+            params={"select": "id", "limit": 1},
+            headers={
+                "apikey": supabase_secret_key,
+                "Authorization": f"Bearer {supabase_secret_key}",
+            },
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            return jsonify({
+                "success": False,
+                "message": f"Supabase test failed ({resp.status_code})",
+                "details": resp.text[:500],
+            }), 400
+        return jsonify({"success": True, "message": "Supabase connection successful"})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Supabase test error: {exc}"}), 500
+
+
+@app.route('/admin/settings', methods=['POST'])
+def save_admin_settings():
+    global app_settings, config, creds, settings
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    data = request.json or {}
+    payload = data.get("settings", {}) if isinstance(data.get("settings", {}), dict) else data
+
+    if "Credentials" not in config:
+        config["Credentials"] = {}
+    if "Settings" not in config:
+        config["Settings"] = {}
+    if "Advanced" not in config:
+        config["Advanced"] = {}
+
+    def _set_if_present(section, key, payload_key):
+        if payload_key in payload:
+            value = str(payload.get(payload_key, "")).strip()
+            if value:
+                config.set(section, key, value)
+
+    _set_if_present("Credentials", "Username", "seajob_username")
+    _set_if_present("Credentials", "Password", "seajob_password")
+    _set_if_present("Credentials", "Gemini_API_Key", "gemini_api_key")
+    _set_if_present("Credentials", "Pinecone_API_Key", "pinecone_api_key")
+    _set_if_present("Settings", "Default_Download_Folder", "default_download_folder")
+    _set_if_present("Advanced", "pinecone_environment", "pinecone_environment")
+    _set_if_present("Advanced", "pinecone_index_name", "pinecone_index_name")
+    _set_if_present("Advanced", "embedding_model_name", "embedding_model_name")
+    _set_if_present("Advanced", "reasoning_model_name", "reasoning_model_name")
+
+    if "min_similarity_score" in payload:
+        try:
+            score = float(payload.get("min_similarity_score"))
+        except Exception:
+            return jsonify({"success": False, "message": "min_similarity_score must be a valid number"}), 400
+        config.set("Advanced", "min_similarity_score", str(score))
+
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+
+    if "supabase_url" in payload:
+        os.environ["SUPABASE_URL"] = str(payload.get("supabase_url", "")).strip()
+    if "supabase_secret_key" in payload:
+        sup_key = str(payload.get("supabase_secret_key", "")).strip()
+        if sup_key:
+            os.environ["SUPABASE_SECRET_KEY"] = sup_key
+            os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
+
+    env_flags = [
+        "use_supabase_db",
+        "use_dual_write",
+        "use_supabase_reads",
+        "use_local_agent",
+        "use_cloud_export",
+    ]
+    for flag_name in env_flags:
+        if flag_name in payload:
+            env_name = flag_name.upper()
+            os.environ[env_name] = "true" if bool(payload.get(flag_name)) else "false"
+
+    app_settings = load_app_settings()
+    config = app_settings.config
+    creds = app_settings.credentials
+    settings = app_settings.settings
+    _refresh_runtime_managers()
+
+    return jsonify({
+        "success": True,
+        "message": "Admin settings saved and applied.",
+        "runtime": {
+            "persistence_backend": _current_repo_backend(),
+            "feature_flags": {
+                "use_supabase_db": bool(feature_flags.use_supabase_db),
+                "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
+                "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
+                "use_local_agent": bool(feature_flags.use_local_agent),
+                "use_cloud_export": bool(feature_flags.use_cloud_export),
+            }
+        }
     })
 
 @app.route('/get_rank_folders', methods=['GET'])

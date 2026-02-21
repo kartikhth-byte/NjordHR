@@ -166,6 +166,36 @@
             const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false);
             const [drawerCandidateId, setDrawerCandidateId] = useState('');
             const [drawerNoteSeed, setDrawerNoteSeed] = useState('');
+            const [adminToken, setAdminToken] = useState('');
+            const [isSettingsLoading, setIsSettingsLoading] = useState(false);
+            const [isSettingsSaving, setIsSettingsSaving] = useState(false);
+            const [settingsLoaded, setSettingsLoaded] = useState(false);
+            const [settingsForm, setSettingsForm] = useState({
+                default_download_folder: '',
+                pinecone_environment: '',
+                pinecone_index_name: '',
+                embedding_model_name: '',
+                reasoning_model_name: '',
+                min_similarity_score: '0.25',
+                supabase_url: '',
+                use_supabase_db: false,
+                use_dual_write: false,
+                use_supabase_reads: false,
+                use_local_agent: false,
+                use_cloud_export: false,
+                seajob_username: '',
+                seajob_password: '',
+                gemini_api_key: '',
+                pinecone_api_key: '',
+                supabase_secret_key: '',
+            });
+            const [settingsMasks, setSettingsMasks] = useState({
+                seajob_username: { configured: false, preview: '' },
+                seajob_password: { configured: false, preview: '' },
+                gemini_api_key: { configured: false, preview: '' },
+                pinecone_api_key: { configured: false, preview: '' },
+                supabase_secret_key: { configured: false, preview: '' },
+            });
             
             const eventSourceRef = useRef(null);
             const downloadEventSourceRef = useRef(null);
@@ -187,6 +217,12 @@
                     fetchDashboardData({ resetPage: true });
                 }
             }, [activeTab]);
+
+            useEffect(() => {
+                if (activeTab === 'settings' && adminToken && !settingsLoaded) {
+                    loadAdminSettings();
+                }
+            }, [activeTab, adminToken, settingsLoaded]);
             
             useEffect(() => {
                 fetchDashboardData({ resetPage: true });
@@ -393,6 +429,120 @@
                     setIsDashboardLoading(false);
                 }
             };
+
+            const loadAdminSettings = async () => {
+                if (!adminToken.trim()) {
+                    handleSendMessage('error', 'Enter admin token first');
+                    return;
+                }
+                setIsSettingsLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+                        headers: { 'X-Admin-Token': adminToken.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load admin settings');
+                        return;
+                    }
+                    const nonSecret = data.settings?.non_secret || {};
+                    const secrets = data.settings?.secrets || {};
+                    setSettingsForm(prev => ({
+                        ...prev,
+                        default_download_folder: nonSecret.default_download_folder || '',
+                        pinecone_environment: nonSecret.pinecone_environment || '',
+                        pinecone_index_name: nonSecret.pinecone_index_name || '',
+                        embedding_model_name: nonSecret.embedding_model_name || '',
+                        reasoning_model_name: nonSecret.reasoning_model_name || '',
+                        min_similarity_score: String(nonSecret.min_similarity_score || '0.25'),
+                        supabase_url: nonSecret.supabase_url || '',
+                        use_supabase_db: Boolean(nonSecret.use_supabase_db),
+                        use_dual_write: Boolean(nonSecret.use_dual_write),
+                        use_supabase_reads: Boolean(nonSecret.use_supabase_reads),
+                        use_local_agent: Boolean(nonSecret.use_local_agent),
+                        use_cloud_export: Boolean(nonSecret.use_cloud_export),
+                        seajob_username: '',
+                        seajob_password: '',
+                        gemini_api_key: '',
+                        pinecone_api_key: '',
+                        supabase_secret_key: '',
+                    }));
+                    setSettingsMasks({
+                        seajob_username: secrets.seajob_username || { configured: false, preview: '' },
+                        seajob_password: secrets.seajob_password || { configured: false, preview: '' },
+                        gemini_api_key: secrets.gemini_api_key || { configured: false, preview: '' },
+                        pinecone_api_key: secrets.pinecone_api_key || { configured: false, preview: '' },
+                        supabase_secret_key: secrets.supabase_secret_key || { configured: false, preview: '' },
+                    });
+                    setSettingsLoaded(true);
+                    handleSendMessage('success', 'Admin settings loaded');
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to load admin settings');
+                } finally {
+                    setIsSettingsLoading(false);
+                }
+            };
+
+            const testSupabaseSettings = async () => {
+                if (!adminToken.trim()) {
+                    handleSendMessage('error', 'Enter admin token first');
+                    return;
+                }
+                setIsSettingsSaving(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/settings/test_supabase`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Admin-Token': adminToken.trim(),
+                        },
+                        body: JSON.stringify({
+                            supabase_url: settingsForm.supabase_url,
+                            supabase_secret_key: settingsForm.supabase_secret_key,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Supabase test failed');
+                        return;
+                    }
+                    handleSendMessage('success', data.message || 'Supabase connection successful');
+                } catch (error) {
+                    handleSendMessage('error', 'Supabase test failed');
+                } finally {
+                    setIsSettingsSaving(false);
+                }
+            };
+
+            const saveAdminSettings = async () => {
+                if (!adminToken.trim()) {
+                    handleSendMessage('error', 'Enter admin token first');
+                    return;
+                }
+                setIsSettingsSaving(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Admin-Token': adminToken.trim(),
+                        },
+                        body: JSON.stringify({ settings: settingsForm }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to save settings');
+                        return;
+                    }
+                    handleSendMessage('success', data.message || 'Settings saved');
+                    setSettingsLoaded(false);
+                    await loadAdminSettings();
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to save settings');
+                } finally {
+                    setIsSettingsSaving(false);
+                }
+            };
             
             const filterAndSortData = () => {
                 let filtered = [...dashboardData];
@@ -525,8 +675,10 @@
             const closeDashboardDrawer = () => {
                 setIsDashboardDrawerOpen(false);
                 setDrawerCandidateId('');
-                setDrawerNoteDraft('');
-                setDrawerNoteCandidateId('');
+                setDrawerNoteSeed('');
+                if (drawerNoteInputRef.current) {
+                    drawerNoteInputRef.current.value = '';
+                }
             };
 
             const handleOpenHistory = async (candidateId) => {
@@ -1589,6 +1741,104 @@
                     </div>
                 );
             };
+
+            const SettingsTabContent = () => {
+                const setField = (key, value) => setSettingsForm(prev => ({ ...prev, [key]: value }));
+
+                return (
+                    <div>
+                        <h2 className="text-2xl font-semibold mb-6">Admin Settings</h2>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-1 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Admin Token</label>
+                                <input
+                                    type="password"
+                                    value={adminToken}
+                                    onChange={e => { setAdminToken(e.target.value); setSettingsLoaded(false); }}
+                                    placeholder="Enter admin token"
+                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                />
+                                <button
+                                    onClick={loadAdminSettings}
+                                    disabled={isSettingsLoading || !adminToken.trim()}
+                                    className="mt-3 w-full bg-blue-600 text-white font-medium py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                                >
+                                    {isSettingsLoading ? 'Loading...' : 'Load Settings'}
+                                </button>
+                                <p className="text-xs text-gray-500 mt-2">Secrets are masked and never returned in full.</p>
+                            </div>
+
+                            <div className="lg:col-span-2 space-y-6">
+                                {!settingsLoaded && (
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                                        Load settings with a valid admin token to edit values.
+                                    </div>
+                                )}
+
+                                {settingsLoaded && (
+                                    <>
+                                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                                            <h3 className="font-semibold text-gray-900">Runtime Flags</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                                {[
+                                                    ['use_supabase_db', 'Use Supabase DB'],
+                                                    ['use_dual_write', 'Use Dual Write'],
+                                                    ['use_supabase_reads', 'Use Supabase Reads'],
+                                                    ['use_local_agent', 'Use Local Agent'],
+                                                    ['use_cloud_export', 'Use Cloud Export'],
+                                                ].map(([key, label]) => (
+                                                    <label key={key} className="flex items-center space-x-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Boolean(settingsForm[key])}
+                                                            onChange={e => setField(key, e.target.checked)}
+                                                        />
+                                                        <span>{label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                                            <h3 className="font-semibold text-gray-900">Operational Settings</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <input value={settingsForm.default_download_folder} onChange={e => setField('default_download_folder', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Default download folder" />
+                                                <input value={settingsForm.supabase_url} onChange={e => setField('supabase_url', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Supabase URL" />
+                                                <input value={settingsForm.pinecone_environment} onChange={e => setField('pinecone_environment', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Pinecone environment" />
+                                                <input value={settingsForm.pinecone_index_name} onChange={e => setField('pinecone_index_name', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Pinecone index name" />
+                                                <input value={settingsForm.embedding_model_name} onChange={e => setField('embedding_model_name', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Embedding model" />
+                                                <input value={settingsForm.reasoning_model_name} onChange={e => setField('reasoning_model_name', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Reasoning model" />
+                                                <input value={settingsForm.min_similarity_score} onChange={e => setField('min_similarity_score', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Minimum similarity score" />
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                                            <h3 className="font-semibold text-gray-900">Secrets (Admin Only)</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <input type="text" value={settingsForm.seajob_username} onChange={e => setField('seajob_username', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`SeaJobs Username (${settingsMasks.seajob_username.preview || 'not set'})`} />
+                                                <input type="password" value={settingsForm.seajob_password} onChange={e => setField('seajob_password', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`SeaJobs Password (${settingsMasks.seajob_password.preview || 'not set'})`} />
+                                                <input type="password" value={settingsForm.gemini_api_key} onChange={e => setField('gemini_api_key', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`Gemini API Key (${settingsMasks.gemini_api_key.preview || 'not set'})`} />
+                                                <input type="password" value={settingsForm.pinecone_api_key} onChange={e => setField('pinecone_api_key', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`Pinecone API Key (${settingsMasks.pinecone_api_key.preview || 'not set'})`} />
+                                                <input type="password" value={settingsForm.supabase_secret_key} onChange={e => setField('supabase_secret_key', e.target.value)} className="p-2 border border-gray-300 rounded-md md:col-span-2" placeholder={`Supabase Secret Key (${settingsMasks.supabase_secret_key.preview || 'not set'})`} />
+                                            </div>
+                                            <p className="text-xs text-gray-500">Leave secret fields blank to keep existing values.</p>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-3">
+                                            <button onClick={testSupabaseSettings} disabled={isSettingsSaving} className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800 disabled:bg-gray-400">
+                                                Test Supabase
+                                            </button>
+                                            <button onClick={saveAdminSettings} disabled={isSettingsSaving} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400">
+                                                {isSettingsSaving ? 'Saving...' : 'Save & Apply'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
             
             return (
                 <>
@@ -1633,6 +1883,7 @@
                             <button onClick={() => setActiveTab('download')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'download' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Download</button>
                             <button onClick={() => setActiveTab('search')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'search' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>AI Search</button>
                             <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
+                            <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>
                         </div>
                         <main className="bg-white p-8 rounded-xl shadow-lg">
                              {activeTab === 'download' && <DownloadTabContent />}
@@ -1873,6 +2124,7 @@
                                 </div>
                             )}
                             {activeTab === 'dashboard' && <DashboardTabContent />}
+                            {activeTab === 'settings' && <SettingsTabContent />}
                         </main>
                     </div>
                 </div>
