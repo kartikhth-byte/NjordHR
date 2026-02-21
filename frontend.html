@@ -597,6 +597,29 @@
                     setIsSettingsSaving(false);
                 }
             };
+
+            const generateAdminPassword = () => {
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+';
+                const length = 16;
+                const bytes = new Uint32Array(length);
+                if (window.crypto && window.crypto.getRandomValues) {
+                    window.crypto.getRandomValues(bytes);
+                } else {
+                    for (let i = 0; i < length; i++) {
+                        bytes[i] = Math.floor(Math.random() * 1_000_000);
+                    }
+                }
+                let generated = '';
+                for (let i = 0; i < length; i++) {
+                    generated += chars[bytes[i] % chars.length];
+                }
+                setAdminPasswordForm(prev => ({
+                    ...prev,
+                    new_password: generated,
+                    confirm_password: generated,
+                }));
+                handleSendMessage('success', 'Generated a strong admin password. Review and click Update.');
+            };
             
             const filterAndSortData = () => {
                 let filtered = [...dashboardData];
@@ -1973,9 +1996,14 @@
                                                 />
                                             </div>
                                         </div>
-                                        <button onClick={changeAdminPassword} disabled={isSettingsSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
-                                            {isSettingsSaving ? 'Updating...' : 'Update Admin Password'}
-                                        </button>
+                                        <div className="flex flex-wrap gap-3">
+                                            <button onClick={generateAdminPassword} type="button" className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800">
+                                                Generate Password
+                                            </button>
+                                            <button onClick={changeAdminPassword} disabled={isSettingsSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                                                {isSettingsSaving ? 'Updating...' : 'Update Admin Password'}
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 
