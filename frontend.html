@@ -221,8 +221,11 @@
 
             useEffect(() => {
                 if (!isDashboardDrawerOpen || !drawerCandidateId) return;
-                const row = dashboardData.find(r => String(r.candidate_id) === String(drawerCandidateId));
-                setDrawerNoteSeed((row && row.notes) ? row.notes : '');
+                // Always start with an empty note input when opening/switching drawer candidate.
+                setDrawerNoteSeed('');
+                if (drawerNoteInputRef.current) {
+                    drawerNoteInputRef.current.value = '';
+                }
             }, [isDashboardDrawerOpen, drawerCandidateId, dashboardData]);
 
             useEffect(() => {
