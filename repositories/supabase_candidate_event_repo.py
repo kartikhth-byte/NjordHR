@@ -7,6 +7,14 @@ import requests
 from repositories.candidate_event_repo import CandidateEventRepo
 
 
+def resolve_supabase_api_key():
+    """Prefer modern Supabase secret key, fallback to legacy service role key."""
+    return (
+        os.getenv("SUPABASE_SECRET_KEY", "").strip()
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    )
+
+
 class SupabaseCandidateEventRepo(CandidateEventRepo):
     """Supabase REST-backed candidate event repository."""
 
@@ -277,4 +285,4 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
 
 def can_enable_supabase_repo():
-    return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+    return bool(os.getenv("SUPABASE_URL") and resolve_supabase_api_key())

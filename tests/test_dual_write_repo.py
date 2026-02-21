@@ -13,6 +13,7 @@ class _InMemoryRepo(CandidateEventRepo):
         self.events = []
         self.status_changes = []
         self.note_changes = []
+        self.rank_counts = []
 
     def log_event(self, *args, **kwargs):
         if self.fail_writes:
@@ -47,7 +48,7 @@ class _InMemoryRepo(CandidateEventRepo):
         return True
 
     def get_rank_counts(self, *args, **kwargs):
-        return []
+        return self.rank_counts
 
     def get_csv_stats(self, *args, **kwargs):
         return {"master_csv_rows": len(self.events)}
@@ -116,6 +117,27 @@ class DualWriteRepoTests(unittest.TestCase):
         latest = self.repo.get_latest_status_per_candidate()
         self.assertEqual(len(latest), 1)
         self.assertEqual(str(latest.iloc[0]["Candidate_ID"]), "2001")
+
+    def test_reads_can_delegate_to_secondary_when_configured(self):
+        primary = _InMemoryRepo()
+        secondary = _InMemoryRepo()
+        secondary.log_event(
+            candidate_id="3001",
+            filename="Chief_Officer_3001.pdf",
+            event_type="initial_verification",
+            rank_applied_for="Chief_Officer",
+            extracted_data={"email": "secondary@example.com"},
+        )
+        repo = DualWriteCandidateEventRepo(
+            primary_repo=primary,
+            secondary_repo=secondary,
+            idempotency_db_path=f"{self.tmp.name}/dual_write_idempotency_reads.db",
+            read_repo=secondary,
+        )
+
+        latest = repo.get_latest_status_per_candidate()
+        self.assertEqual(len(latest), 1)
+        self.assertEqual(str(latest.iloc[0]["Candidate_ID"]), "3001")
 
 
 if __name__ == "__main__":

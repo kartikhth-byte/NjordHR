@@ -6,6 +6,7 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
 - `USE_LOCAL_AGENT` (default `false`)
 - `USE_CLOUD_EXPORT` (default `false`)
 - `NJORDHR_SERVER_URL` (default `http://127.0.0.1:5000`)
+- `NJORDHR_ADMIN_TOKEN` (required for Admin Settings API/UI access)
 
 ## Supabase Migrations (Scaffold)
 - SQL migrations are under:
@@ -15,7 +16,8 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
   - `python3 scripts/apply_supabase_migrations.py --dry-run`
   - `SUPABASE_DB_URL=postgresql://... python3 scripts/apply_supabase_migrations.py --apply`
 - Current runtime remains CSV by default.
-- Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` to enable Supabase repository.
+- Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (preferred) to enable Supabase repository.
+- Legacy fallback: `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Migration Runbook
 Use the migration helper to convert legacy CSV layouts into the single master event-log CSV.
@@ -54,3 +56,15 @@ python3 -m unittest -v tests/test_migrate_legacy_csv.py
   - selected count
   - included file count
   - missing file count + preview list
+
+## Admin Settings
+- New admin-only endpoints:
+  - `GET /admin/settings`
+  - `POST /admin/settings`
+  - `POST /admin/settings/test_supabase`
+- Authentication:
+  - Header: `X-Admin-Token: <token>`
+  - Configure token via `NJORDHR_ADMIN_TOKEN` (recommended) or `[Advanced] admin_token` in `config.ini`.
+- Settings UI:
+  - Open the `Settings` tab in the app and load with admin token.
+  - Secret fields are masked and blank-by-default; blank means "keep existing secret".
