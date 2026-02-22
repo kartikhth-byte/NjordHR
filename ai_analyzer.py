@@ -57,6 +57,10 @@ class ConfigManager:
     def reasoning_model(self): return self.config.get('Advanced', 'reasoning_model_name')
     @property
     def min_similarity_score(self): return self.config.getfloat('Advanced', 'min_similarity_score')
+    @property
+    def registry_db_path(self): return self.config.get('Advanced', 'registry_db_path', fallback='registry.db')
+    @property
+    def feedback_db_path(self): return self.config.get('Advanced', 'feedback_db_path', fallback='feedback.db')
 
 
 # ==============================================================================
@@ -503,8 +507,8 @@ class AIResumeAnalyzer:
     def __init__(self, config_parser):
         print("[INIT] Initializing AIResumeAnalyzer with Multi-Stage Retrieval...")
         self.config = ConfigManager(config_parser)
-        self.registry = FileRegistry()
-        self.feedback = FeedbackStore()
+        self.registry = FileRegistry(self.config.registry_db_path)
+        self.feedback = FeedbackStore(self.config.feedback_db_path)
         self.pdf_processor = AdvancedPDFProcessor()
         self.prepper = RAGPrepper(self.config)
         self.vector_db = PineconeManager(self.config, embedding_dimension=self.prepper.expected_embedding_dimension())
@@ -1010,7 +1014,8 @@ class Analyzer:
         if Analyzer._instance is None:
             import configparser
             config = configparser.ConfigParser()
-            config.read('config.ini')
+            config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+            config.read(config_path)
             Analyzer._instance = AIResumeAnalyzer(config)
 
     def run_analysis(self, target_folder, prompt):

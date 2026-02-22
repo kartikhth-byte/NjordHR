@@ -62,9 +62,12 @@ python3 -m unittest -v tests/test_migrate_legacy_csv.py
   - `GET /admin/settings`
   - `POST /admin/settings`
   - `POST /admin/settings/test_supabase`
+  - `POST /admin/settings/change_password`
 - Authentication:
   - Header: `X-Admin-Token: <token>`
   - Configure token via `NJORDHR_ADMIN_TOKEN` (recommended) or `[Advanced] admin_token` in `config.ini`.
 - Settings UI:
   - Open the `Settings` tab in the app and load with admin token.
   - Secret fields are masked and blank-by-default; blank means "keep existing secret".
+  - Operational settings include `Default Download Folder` and `Verified Resumes Folder` with an admin folder browser picker.
+  - Additional operational settings now configurable: `seajob_login_url`, `seajob_dashboard_url`, `otp_window_seconds`, `registry_db_path`, `feedback_db_path`, `log_dir`.

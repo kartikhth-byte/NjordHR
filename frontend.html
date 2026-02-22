@@ -166,12 +166,20 @@
             const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false);
             const [drawerCandidateId, setDrawerCandidateId] = useState('');
             const [drawerNoteSeed, setDrawerNoteSeed] = useState('');
-            const [adminToken, setAdminToken] = useState('');
+            const [adminPassword, setAdminPassword] = useState('');
             const [isSettingsLoading, setIsSettingsLoading] = useState(false);
             const [isSettingsSaving, setIsSettingsSaving] = useState(false);
             const [settingsLoaded, setSettingsLoaded] = useState(false);
+            const [settingsSection, setSettingsSection] = useState('runtime');
             const [settingsForm, setSettingsForm] = useState({
                 default_download_folder: '',
+                verified_resumes_folder: 'Verified_Resumes',
+                seajob_login_url: 'http://seajob.net/seajob_login.php',
+                seajob_dashboard_url: 'http://seajob.net/company/dashboard.php',
+                otp_window_seconds: '120',
+                registry_db_path: 'registry.db',
+                feedback_db_path: 'feedback.db',
+                log_dir: 'logs',
                 pinecone_environment: '',
                 pinecone_index_name: '',
                 embedding_model_name: '',
@@ -196,6 +204,19 @@
                 pinecone_api_key: { configured: false, preview: '' },
                 supabase_secret_key: { configured: false, preview: '' },
             });
+            const [adminPasswordForm, setAdminPasswordForm] = useState({
+                current_password: '',
+                new_password: '',
+                confirm_password: '',
+            });
+            const [folderPicker, setFolderPicker] = useState({
+                open: false,
+                targetKey: '',
+                currentPath: '',
+                parentPath: '',
+                entries: [],
+                loading: false,
+            });
             
             const eventSourceRef = useRef(null);
             const downloadEventSourceRef = useRef(null);
@@ -218,12 +239,6 @@
                 }
             }, [activeTab]);
 
-            useEffect(() => {
-                if (activeTab === 'settings' && adminToken && !settingsLoaded) {
-                    loadAdminSettings();
-                }
-            }, [activeTab, adminToken, settingsLoaded]);
-            
             useEffect(() => {
                 fetchDashboardData({ resetPage: true });
             }, [dashboardView, dashboardRank]);
@@ -431,14 +446,14 @@
             };
 
             const loadAdminSettings = async () => {
-                if (!adminToken.trim()) {
-                    handleSendMessage('error', 'Enter admin token first');
+                if (!adminPassword.trim()) {
+                    handleSendMessage('error', 'Enter admin password first');
                     return;
                 }
                 setIsSettingsLoading(true);
                 try {
                     const response = await fetch(`${API_BASE_URL}/admin/settings`, {
-                        headers: { 'X-Admin-Token': adminToken.trim() }
+                        headers: { 'X-Admin-Token': adminPassword.trim() }
                     });
                     const data = await response.json();
                     if (!data.success) {
@@ -450,6 +465,13 @@
                     setSettingsForm(prev => ({
                         ...prev,
                         default_download_folder: nonSecret.default_download_folder || '',
+                        verified_resumes_folder: nonSecret.verified_resumes_folder || 'Verified_Resumes',
+                        seajob_login_url: nonSecret.seajob_login_url || 'http://seajob.net/seajob_login.php',
+                        seajob_dashboard_url: nonSecret.seajob_dashboard_url || 'http://seajob.net/company/dashboard.php',
+                        otp_window_seconds: String(nonSecret.otp_window_seconds || '120'),
+                        registry_db_path: nonSecret.registry_db_path || 'registry.db',
+                        feedback_db_path: nonSecret.feedback_db_path || 'feedback.db',
+                        log_dir: nonSecret.log_dir || 'logs',
                         pinecone_environment: nonSecret.pinecone_environment || '',
                         pinecone_index_name: nonSecret.pinecone_index_name || '',
                         embedding_model_name: nonSecret.embedding_model_name || '',
@@ -474,6 +496,7 @@
                         pinecone_api_key: secrets.pinecone_api_key || { configured: false, preview: '' },
                         supabase_secret_key: secrets.supabase_secret_key || { configured: false, preview: '' },
                     });
+                    setSettingsSection('runtime');
                     setSettingsLoaded(true);
                     handleSendMessage('success', 'Admin settings loaded');
                 } catch (error) {
@@ -484,8 +507,8 @@
             };
 
             const testSupabaseSettings = async () => {
-                if (!adminToken.trim()) {
-                    handleSendMessage('error', 'Enter admin token first');
+                if (!adminPassword.trim()) {
+                    handleSendMessage('error', 'Enter admin password first');
                     return;
                 }
                 setIsSettingsSaving(true);
@@ -494,7 +517,7 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Admin-Token': adminToken.trim(),
+                            'X-Admin-Token': adminPassword.trim(),
                         },
                         body: JSON.stringify({
                             supabase_url: settingsForm.supabase_url,
@@ -515,8 +538,8 @@
             };
 
             const saveAdminSettings = async () => {
-                if (!adminToken.trim()) {
-                    handleSendMessage('error', 'Enter admin token first');
+                if (!adminPassword.trim()) {
+                    handleSendMessage('error', 'Enter admin password first');
                     return;
                 }
                 setIsSettingsSaving(true);
@@ -525,7 +548,7 @@
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Admin-Token': adminToken.trim(),
+                            'X-Admin-Token': adminPassword.trim(),
                         },
                         body: JSON.stringify({ settings: settingsForm }),
                     });
@@ -542,6 +565,132 @@
                 } finally {
                     setIsSettingsSaving(false);
                 }
+            };
+
+            const loadFolderPickerPath = async (pathValue, targetKey) => {
+                if (!adminPassword.trim()) {
+                    handleSendMessage('error', 'Enter admin password first');
+                    return;
+                }
+                setFolderPicker(prev => ({ ...prev, open: true, loading: true, targetKey }));
+                try {
+                    const query = pathValue ? `?path=${encodeURIComponent(pathValue)}` : '';
+                    const response = await fetch(`${API_BASE_URL}/admin/fs/list${query}`, {
+                        headers: { 'X-Admin-Token': adminPassword.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to browse folders');
+                        setFolderPicker(prev => ({ ...prev, loading: false }));
+                        return;
+                    }
+                    setFolderPicker(prev => ({
+                        ...prev,
+                        open: true,
+                        targetKey,
+                        currentPath: data.current_path || '',
+                        parentPath: data.parent_path || '',
+                        entries: data.entries || [],
+                        loading: false,
+                    }));
+                } catch (error) {
+                    setFolderPicker(prev => ({ ...prev, loading: false }));
+                    handleSendMessage('error', 'Failed to browse folders');
+                }
+            };
+
+            const openFolderPicker = (targetKey) => {
+                const seedPath = settingsForm[targetKey] || '';
+                loadFolderPickerPath(seedPath, targetKey);
+            };
+
+            const selectFolderFromPicker = () => {
+                if (!folderPicker.targetKey || !folderPicker.currentPath) return;
+                setSettingsForm(prev => ({ ...prev, [folderPicker.targetKey]: folderPicker.currentPath }));
+                setFolderPicker({
+                    open: false,
+                    targetKey: '',
+                    currentPath: '',
+                    parentPath: '',
+                    entries: [],
+                    loading: false,
+                });
+            };
+
+            const changeAdminPassword = async () => {
+                if (!adminPassword.trim()) {
+                    handleSendMessage('error', 'Enter current admin password first');
+                    return;
+                }
+                const currentPassword = adminPasswordForm.current_password.trim();
+                const newPassword = adminPasswordForm.new_password.trim();
+                const confirmPassword = adminPasswordForm.confirm_password.trim();
+                if (!currentPassword || !newPassword || !confirmPassword) {
+                    handleSendMessage('error', 'Fill current, new and confirm password');
+                    return;
+                }
+                if (currentPassword !== adminPassword.trim()) {
+                    handleSendMessage('error', 'Current password does not match active admin session');
+                    return;
+                }
+                if (newPassword.length < 8) {
+                    handleSendMessage('error', 'New admin password must be at least 8 characters');
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    handleSendMessage('error', 'New password and confirmation do not match');
+                    return;
+                }
+
+                setIsSettingsSaving(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/settings/change_password`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Admin-Token': adminPassword.trim(),
+                        },
+                        body: JSON.stringify({
+                            new_admin_password: newPassword,
+                            confirm_admin_password: confirmPassword,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to update admin password');
+                        return;
+                    }
+                    setAdminPassword(newPassword);
+                    setAdminPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+                    handleSendMessage('success', data.message || 'Admin password updated');
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to update admin password');
+                } finally {
+                    setIsSettingsSaving(false);
+                }
+            };
+
+            const generateAdminPassword = () => {
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*()-_=+';
+                const length = 16;
+                const bytes = new Uint32Array(length);
+                if (window.crypto && window.crypto.getRandomValues) {
+                    window.crypto.getRandomValues(bytes);
+                } else {
+                    for (let i = 0; i < length; i++) {
+                        bytes[i] = Math.floor(Math.random() * 1_000_000);
+                    }
+                }
+                let generated = '';
+                for (let i = 0; i < length; i++) {
+                    generated += chars[bytes[i] % chars.length];
+                }
+                setAdminPasswordForm(prev => ({
+                    ...prev,
+                    new_password: generated,
+                    confirm_password: generated,
+                }));
+                handleSendMessage('success', 'Generated a strong admin password. Review and click Update.');
             };
             
             const filterAndSortData = () => {
@@ -1744,98 +1893,297 @@
 
             const SettingsTabContent = () => {
                 const setField = (key, value) => setSettingsForm(prev => ({ ...prev, [key]: value }));
+                const sectionButtonClass = (id) => `px-4 py-2 text-sm font-medium rounded-md border ${settingsSection === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`;
 
                 return (
                     <div>
                         <h2 className="text-2xl font-semibold mb-6">Admin Settings</h2>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div className="lg:col-span-1 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Admin Token</label>
+                        {!settingsLoaded ? (
+                            <div className="max-w-lg bg-gray-50 border border-gray-200 rounded-lg p-5">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Admin Password</label>
                                 <input
                                     type="password"
-                                    value={adminToken}
-                                    onChange={e => { setAdminToken(e.target.value); setSettingsLoaded(false); }}
-                                    placeholder="Enter admin token"
+                                    value={adminPassword}
+                                    onChange={e => setAdminPassword(e.target.value)}
+                                    placeholder="Enter admin password"
                                     className="w-full p-2 border border-gray-300 rounded-md"
                                 />
                                 <button
                                     onClick={loadAdminSettings}
-                                    disabled={isSettingsLoading || !adminToken.trim()}
+                                    disabled={isSettingsLoading || !adminPassword.trim()}
                                     className="mt-3 w-full bg-blue-600 text-white font-medium py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
                                 >
                                     {isSettingsLoading ? 'Loading...' : 'Load Settings'}
                                 </button>
                                 <p className="text-xs text-gray-500 mt-2">Secrets are masked and never returned in full.</p>
                             </div>
+                        ) : (
+                            <div className="space-y-5">
+                                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+                                    <p className="text-sm text-green-900">Authenticated as admin</p>
+                                    <button
+                                        onClick={() => {
+                                            setSettingsLoaded(false);
+                                            setAdminPassword('');
+                                            setSettingsSection('runtime');
+                                            setAdminPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+                                        }}
+                                        className="text-sm text-green-800 hover:underline"
+                                    >
+                                        Switch Admin
+                                    </button>
+                                </div>
 
-                            <div className="lg:col-span-2 space-y-6">
-                                {!settingsLoaded && (
-                                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                                        Load settings with a valid admin token to edit values.
+                                <div className="flex flex-wrap gap-2">
+                                    <button className={sectionButtonClass('runtime')} onClick={() => setSettingsSection('runtime')}>Runtime Flags</button>
+                                    <button className={sectionButtonClass('operational')} onClick={() => setSettingsSection('operational')}>Operational Settings</button>
+                                    <button className={sectionButtonClass('secrets')} onClick={() => setSettingsSection('secrets')}>Secrets</button>
+                                    <button className={sectionButtonClass('admin_password')} onClick={() => setSettingsSection('admin_password')}>Admin Password</button>
+                                </div>
+
+                                {settingsSection === 'runtime' && (
+                                    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+                                        <h3 className="font-semibold text-gray-900">Runtime Flags</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                            {[
+                                                ['use_supabase_db', 'Use Supabase DB'],
+                                                ['use_dual_write', 'Use Dual Write'],
+                                                ['use_supabase_reads', 'Use Supabase Reads'],
+                                                ['use_local_agent', 'Use Local Agent'],
+                                                ['use_cloud_export', 'Use Cloud Export'],
+                                            ].map(([key, label]) => (
+                                                <label key={key} className="flex items-center space-x-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(settingsForm[key])}
+                                                        onChange={e => setField(key, e.target.checked)}
+                                                    />
+                                                    <span>{label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
 
-                                {settingsLoaded && (
-                                    <>
-                                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-                                            <h3 className="font-semibold text-gray-900">Runtime Flags</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                                                {[
-                                                    ['use_supabase_db', 'Use Supabase DB'],
-                                                    ['use_dual_write', 'Use Dual Write'],
-                                                    ['use_supabase_reads', 'Use Supabase Reads'],
-                                                    ['use_local_agent', 'Use Local Agent'],
-                                                    ['use_cloud_export', 'Use Cloud Export'],
-                                                ].map(([key, label]) => (
-                                                    <label key={key} className="flex items-center space-x-2">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={Boolean(settingsForm[key])}
-                                                            onChange={e => setField(key, e.target.checked)}
-                                                        />
-                                                        <span>{label}</span>
-                                                    </label>
-                                                ))}
+                                {settingsSection === 'operational' && (
+                                    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+                                        <h3 className="font-semibold text-gray-900">Operational Settings</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Default Download Folder</label>
+                                                <div className="flex gap-2">
+                                                    <input value={settingsForm.default_download_folder} onChange={e => setField('default_download_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                                    <button type="button" onClick={() => openFolderPicker('default_download_folder')} className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Browse</button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Verified Resumes Folder</label>
+                                                <div className="flex gap-2">
+                                                    <input value={settingsForm.verified_resumes_folder} onChange={e => setField('verified_resumes_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                                    <button type="button" onClick={() => openFolderPicker('verified_resumes_folder')} className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Browse</button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL</label>
+                                                <input value={settingsForm.supabase_url} onChange={e => setField('supabase_url', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">SeaJob Login URL</label>
+                                                <input value={settingsForm.seajob_login_url} onChange={e => setField('seajob_login_url', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">SeaJob Dashboard URL</label>
+                                                <input value={settingsForm.seajob_dashboard_url} onChange={e => setField('seajob_dashboard_url', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">OTP Window Seconds</label>
+                                                <input value={settingsForm.otp_window_seconds} onChange={e => setField('otp_window_seconds', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Registry DB Path</label>
+                                                <input value={settingsForm.registry_db_path} onChange={e => setField('registry_db_path', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Feedback DB Path</label>
+                                                <input value={settingsForm.feedback_db_path} onChange={e => setField('feedback_db_path', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Log Directory</label>
+                                                <input value={settingsForm.log_dir} onChange={e => setField('log_dir', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Pinecone Environment</label>
+                                                <input value={settingsForm.pinecone_environment} onChange={e => setField('pinecone_environment', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Pinecone Index Name</label>
+                                                <input value={settingsForm.pinecone_index_name} onChange={e => setField('pinecone_index_name', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Embedding Model Name</label>
+                                                <input value={settingsForm.embedding_model_name} onChange={e => setField('embedding_model_name', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Reasoning Model Name</label>
+                                                <input value={settingsForm.reasoning_model_name} onChange={e => setField('reasoning_model_name', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Similarity Score</label>
+                                                <input value={settingsForm.min_similarity_score} onChange={e => setField('min_similarity_score', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
                                             </div>
                                         </div>
+                                        <button onClick={testSupabaseSettings} disabled={isSettingsSaving} className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800 disabled:bg-gray-400">
+                                            Test Supabase
+                                        </button>
+                                    </div>
+                                )}
 
-                                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-                                            <h3 className="font-semibold text-gray-900">Operational Settings</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                <input value={settingsForm.default_download_folder} onChange={e => setField('default_download_folder', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Default download folder" />
-                                                <input value={settingsForm.supabase_url} onChange={e => setField('supabase_url', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Supabase URL" />
-                                                <input value={settingsForm.pinecone_environment} onChange={e => setField('pinecone_environment', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Pinecone environment" />
-                                                <input value={settingsForm.pinecone_index_name} onChange={e => setField('pinecone_index_name', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Pinecone index name" />
-                                                <input value={settingsForm.embedding_model_name} onChange={e => setField('embedding_model_name', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Embedding model" />
-                                                <input value={settingsForm.reasoning_model_name} onChange={e => setField('reasoning_model_name', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Reasoning model" />
-                                                <input value={settingsForm.min_similarity_score} onChange={e => setField('min_similarity_score', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder="Minimum similarity score" />
+                                {settingsSection === 'secrets' && (
+                                    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+                                        <h3 className="font-semibold text-gray-900">Secrets (Admin Only)</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">SeaJobs Username</label>
+                                                <input type="text" value={settingsForm.seajob_username} onChange={e => setField('seajob_username', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder={`Current: ${settingsMasks.seajob_username.preview || 'not set'}`} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">SeaJobs Password</label>
+                                                <input type="password" value={settingsForm.seajob_password} onChange={e => setField('seajob_password', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder={`Current: ${settingsMasks.seajob_password.preview || 'not set'}`} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Gemini API Key</label>
+                                                <input type="password" value={settingsForm.gemini_api_key} onChange={e => setField('gemini_api_key', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder={`Current: ${settingsMasks.gemini_api_key.preview || 'not set'}`} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Pinecone API Key</label>
+                                                <input type="password" value={settingsForm.pinecone_api_key} onChange={e => setField('pinecone_api_key', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder={`Current: ${settingsMasks.pinecone_api_key.preview || 'not set'}`} />
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Supabase Secret Key</label>
+                                                <input type="password" value={settingsForm.supabase_secret_key} onChange={e => setField('supabase_secret_key', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder={`Current: ${settingsMasks.supabase_secret_key.preview || 'not set'}`} />
                                             </div>
                                         </div>
+                                        <p className="text-xs text-gray-500">Leave secret fields blank to keep existing values.</p>
+                                    </div>
+                                )}
 
-                                        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-                                            <h3 className="font-semibold text-gray-900">Secrets (Admin Only)</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                <input type="text" value={settingsForm.seajob_username} onChange={e => setField('seajob_username', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`SeaJobs Username (${settingsMasks.seajob_username.preview || 'not set'})`} />
-                                                <input type="password" value={settingsForm.seajob_password} onChange={e => setField('seajob_password', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`SeaJobs Password (${settingsMasks.seajob_password.preview || 'not set'})`} />
-                                                <input type="password" value={settingsForm.gemini_api_key} onChange={e => setField('gemini_api_key', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`Gemini API Key (${settingsMasks.gemini_api_key.preview || 'not set'})`} />
-                                                <input type="password" value={settingsForm.pinecone_api_key} onChange={e => setField('pinecone_api_key', e.target.value)} className="p-2 border border-gray-300 rounded-md" placeholder={`Pinecone API Key (${settingsMasks.pinecone_api_key.preview || 'not set'})`} />
-                                                <input type="password" value={settingsForm.supabase_secret_key} onChange={e => setField('supabase_secret_key', e.target.value)} className="p-2 border border-gray-300 rounded-md md:col-span-2" placeholder={`Supabase Secret Key (${settingsMasks.supabase_secret_key.preview || 'not set'})`} />
+                                {settingsSection === 'admin_password' && (
+                                    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+                                        <h3 className="font-semibold text-gray-900">Change Admin Password</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Current Admin Password</label>
+                                                <input
+                                                    type="password"
+                                                    value={adminPasswordForm.current_password}
+                                                    onChange={e => setAdminPasswordForm(prev => ({ ...prev, current_password: e.target.value }))}
+                                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                                    placeholder="Enter current admin password"
+                                                />
                                             </div>
-                                            <p className="text-xs text-gray-500">Leave secret fields blank to keep existing values.</p>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">New Admin Password</label>
+                                                <input
+                                                    type="password"
+                                                    value={adminPasswordForm.new_password}
+                                                    onChange={e => setAdminPasswordForm(prev => ({ ...prev, new_password: e.target.value }))}
+                                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                                    placeholder="At least 8 characters"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
+                                                <input
+                                                    type="password"
+                                                    value={adminPasswordForm.confirm_password}
+                                                    onChange={e => setAdminPasswordForm(prev => ({ ...prev, confirm_password: e.target.value }))}
+                                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                                    placeholder="Re-enter new password"
+                                                />
+                                            </div>
                                         </div>
-
                                         <div className="flex flex-wrap gap-3">
-                                            <button onClick={testSupabaseSettings} disabled={isSettingsSaving} className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800 disabled:bg-gray-400">
-                                                Test Supabase
+                                            <button onClick={generateAdminPassword} type="button" className="bg-slate-700 text-white px-4 py-2 rounded-md hover:bg-slate-800">
+                                                Generate Password
                                             </button>
-                                            <button onClick={saveAdminSettings} disabled={isSettingsSaving} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400">
-                                                {isSettingsSaving ? 'Saving...' : 'Save & Apply'}
+                                            <button onClick={changeAdminPassword} disabled={isSettingsSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                                                {isSettingsSaving ? 'Updating...' : 'Update Admin Password'}
                                             </button>
                                         </div>
-                                    </>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-wrap gap-3">
+                                    <button onClick={saveAdminSettings} disabled={isSettingsSaving} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400">
+                                        {isSettingsSaving ? 'Saving...' : 'Save & Apply'}
+                                    </button>
+                                </div>
+
+                                {folderPicker.open && (
+                                    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                                        <div className="bg-white w-full max-w-2xl rounded-lg border border-gray-200 shadow-xl">
+                                            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                                                <h4 className="font-semibold text-gray-900">Select Folder</h4>
+                                                <button
+                                                    className="text-sm text-gray-500 hover:text-gray-800"
+                                                    onClick={() => setFolderPicker({ open: false, targetKey: '', currentPath: '', parentPath: '', entries: [], loading: false })}
+                                                >
+                                                    Close
+                                                </button>
+                                            </div>
+                                            <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-700 break-all">
+                                                Current: {folderPicker.currentPath || '-'}
+                                            </div>
+                                            <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+                                                {folderPicker.loading && <p className="text-sm text-gray-500">Loading folders...</p>}
+                                                {!folderPicker.loading && (
+                                                    <>
+                                                        {folderPicker.parentPath && (
+                                                            <button
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 rounded-md border border-gray-200 hover:bg-gray-50"
+                                                                onClick={() => loadFolderPickerPath(folderPicker.parentPath, folderPicker.targetKey)}
+                                                            >
+                                                                .. (Parent Directory)
+                                                            </button>
+                                                        )}
+                                                        {folderPicker.entries.map((entry) => (
+                                                            <button
+                                                                key={entry.path}
+                                                                type="button"
+                                                                className="w-full text-left px-3 py-2 rounded-md border border-gray-200 hover:bg-gray-50"
+                                                                onClick={() => loadFolderPickerPath(entry.path, folderPicker.targetKey)}
+                                                            >
+                                                                {entry.name}
+                                                            </button>
+                                                        ))}
+                                                        {folderPicker.entries.length === 0 && !folderPicker.parentPath && (
+                                                            <p className="text-sm text-gray-500">No subfolders found.</p>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
+                                                    onClick={() => setFolderPicker({ open: false, targetKey: '', currentPath: '', parentPath: '', entries: [], loading: false })}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                                                    onClick={selectFolderFromPicker}
+                                                >
+                                                    Use This Folder
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-                        </div>
+                        )}
                     </div>
                 );
             };

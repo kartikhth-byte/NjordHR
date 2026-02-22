@@ -30,17 +30,20 @@ CANDIDATE_LINK_IN_TABLE_XPATH = ".//a[contains(@href, 'view_cand_details.php')]"
 DOWNLOAD_PDF_BUTTON_XPATH = "//a[contains(@href, 'download.php') or contains(text(), 'DOWNLOAD PDF')]"
 DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH = "//*[self::th or self::td][contains(text(), 'Name')]"
 NEXT_PAGE_BUTTON_XPATH = "//a[contains(., 'Next')]"
-DASHBOARD_URL = "http://seajob.net/company/dashboard.php" # URL to navigate back to
+DEFAULT_DASHBOARD_URL = "http://seajob.net/company/dashboard.php"
+DEFAULT_LOGIN_URL = "http://seajob.net/seajob_login.php"
 
 
 class Scraper:
-    def __init__(self, download_folder):
+    def __init__(self, download_folder, otp_window_seconds=120, login_url=DEFAULT_LOGIN_URL, dashboard_url=DEFAULT_DASHBOARD_URL):
         self.driver = None
         self.wait = None
         self.base_download_folder = download_folder
         self.otp_sent_at = None
-        self.otp_window_seconds = 120
+        self.otp_window_seconds = int(otp_window_seconds) if str(otp_window_seconds).strip() else 120
         self.otp_pending = False
+        self.login_url = login_url or DEFAULT_LOGIN_URL
+        self.dashboard_url = dashboard_url or DEFAULT_DASHBOARD_URL
 
     def _setup_driver(self):
         options = webdriver.ChromeOptions()
@@ -53,7 +56,7 @@ class Scraper:
 
     def start_session(self, username, password, mobile_number):
         self._setup_driver()
-        self.driver.get("http://seajob.net/seajob_login.php")
+        self.driver.get(self.login_url)
         self.wait.until(EC.element_to_be_clickable((By.XPATH, COMPANY_RADIO_BUTTON_XPATH))).click()
         self.driver.find_element(By.ID, USERNAME_INPUT_ID).send_keys(username)
         self.driver.find_element(By.XPATH, PASSWORD_INPUT_XPATH).send_keys(password)
@@ -310,7 +313,7 @@ class Scraper:
 
             # THE FIX: Always start from the dashboard to ensure lists are found
             logger.info("Navigating to dashboard to begin...")
-            self.driver.get(DASHBOARD_URL)
+            self.driver.get(self.dashboard_url)
             self.wait.until(EC.element_to_be_clickable((By.XPATH, CANDIDATE_COUNT_LINKS_XPATH)))
 
             logger.info("Finding all available candidate lists on dashboard...")

@@ -44,7 +44,18 @@ scraper_session = None
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-VERIFIED_RESUMES_DIR = os.path.join(PROJECT_ROOT, 'Verified_Resumes')
+
+
+def _resolve_verified_resumes_dir():
+    configured = settings.get('Additional_Local_Folder', fallback='Verified_Resumes').strip()
+    if not configured:
+        configured = 'Verified_Resumes'
+    if os.path.isabs(configured):
+        return os.path.abspath(configured)
+    return os.path.abspath(os.path.join(PROJECT_ROOT, configured))
+
+
+VERIFIED_RESUMES_DIR = _resolve_verified_resumes_dir()
 csv_manager = build_candidate_event_repo(
     flags=feature_flags,
     base_folder=VERIFIED_RESUMES_DIR,
@@ -60,7 +71,7 @@ def _env_bool(name, default=False):
 
 
 def _refresh_runtime_managers():
-    global feature_flags, csv_manager
+    global feature_flags, csv_manager, VERIFIED_RESUMES_DIR
     feature_flags = FeatureFlags(
         use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
         use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
@@ -68,6 +79,8 @@ def _refresh_runtime_managers():
         use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
         use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
     )
+    VERIFIED_RESUMES_DIR = _resolve_verified_resumes_dir()
+    os.makedirs(VERIFIED_RESUMES_DIR, exist_ok=True)
     csv_manager = build_candidate_event_repo(
         flags=feature_flags,
         base_folder=VERIFIED_RESUMES_DIR,
@@ -77,6 +90,27 @@ def _refresh_runtime_managers():
         Analyzer._instance = None
     except Exception:
         pass
+
+
+def _advanced_value(name, fallback=""):
+    return config.get("Advanced", name, fallback=fallback)
+
+
+def _int_setting(section, key, fallback):
+    try:
+        return int(config.get(section, key, fallback=str(fallback)))
+    except Exception:
+        return int(fallback)
+
+
+def _resolve_runtime_path(raw_path, fallback_name):
+    candidate = str(raw_path or "").strip()
+    if not candidate:
+        candidate = fallback_name
+    candidate = os.path.expanduser(candidate)
+    if os.path.isabs(candidate):
+        return os.path.abspath(candidate)
+    return os.path.abspath(os.path.join(PROJECT_ROOT, candidate))
 
 
 def _admin_token():
@@ -112,6 +146,13 @@ def _settings_payload():
     return {
         "non_secret": {
             "default_download_folder": settings.get("Default_Download_Folder", ""),
+            "verified_resumes_folder": settings.get("Additional_Local_Folder", fallback="Verified_Resumes"),
+            "seajob_login_url": _advanced_value("seajob_login_url", "http://seajob.net/seajob_login.php"),
+            "seajob_dashboard_url": _advanced_value("seajob_dashboard_url", "http://seajob.net/company/dashboard.php"),
+            "otp_window_seconds": _advanced_value("otp_window_seconds", "120"),
+            "registry_db_path": _advanced_value("registry_db_path", "registry.db"),
+            "feedback_db_path": _advanced_value("feedback_db_path", "feedback.db"),
+            "log_dir": _advanced_value("log_dir", "logs"),
             "pinecone_environment": config.get("Advanced", "pinecone_environment", fallback=""),
             "pinecone_index_name": config.get("Advanced", "pinecone_index_name", fallback=""),
             "embedding_model_name": config.get("Advanced", "embedding_model_name", fallback=""),
@@ -213,7 +254,12 @@ def start_session():
     data = request.json
     mobile_number = data.get('mobileNumber')
     if scraper_session: scraper_session.quit()
-    scraper_session = Scraper(settings['Default_Download_Folder'])
+    scraper_session = Scraper(
+        settings['Default_Download_Folder'],
+        otp_window_seconds=_int_setting("Advanced", "otp_window_seconds", 120),
+        login_url=_advanced_value("seajob_login_url", "http://seajob.net/seajob_login.php"),
+        dashboard_url=_advanced_value("seajob_dashboard_url", "http://seajob.net/company/dashboard.php"),
+    )
     result = scraper_session.start_session(creds['Username'], creds['Password'], mobile_number)
     return jsonify(result)
 
@@ -253,7 +299,10 @@ def start_download():
             })
 
     session_id = str(uuid.uuid4())
-    logger, log_filepath = setup_logger(session_id)
+    logger, log_filepath = setup_logger(
+        session_id,
+        logs_dir=_resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs")
+    )
     
     result = scraper_session.download_resumes(
         data['rank'], 
@@ -299,7 +348,10 @@ def download_stream():
                 return
 
         session_id = str(uuid.uuid4())
-        logger, log_filepath = setup_logger(session_id)
+        logger, log_filepath = setup_logger(
+            session_id,
+            logs_dir=_resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs")
+        )
         yield f"data: {json.dumps({'type': 'started', 'log_file': log_filepath, 'message': 'Download stream started.'})}\n\n"
 
         stream_queue = Queue()
@@ -512,6 +564,12 @@ def save_admin_settings():
     _set_if_present("Credentials", "Gemini_API_Key", "gemini_api_key")
     _set_if_present("Credentials", "Pinecone_API_Key", "pinecone_api_key")
     _set_if_present("Settings", "Default_Download_Folder", "default_download_folder")
+    _set_if_present("Settings", "Additional_Local_Folder", "verified_resumes_folder")
+    _set_if_present("Advanced", "seajob_login_url", "seajob_login_url")
+    _set_if_present("Advanced", "seajob_dashboard_url", "seajob_dashboard_url")
+    _set_if_present("Advanced", "registry_db_path", "registry_db_path")
+    _set_if_present("Advanced", "feedback_db_path", "feedback_db_path")
+    _set_if_present("Advanced", "log_dir", "log_dir")
     _set_if_present("Advanced", "pinecone_environment", "pinecone_environment")
     _set_if_present("Advanced", "pinecone_index_name", "pinecone_index_name")
     _set_if_present("Advanced", "embedding_model_name", "embedding_model_name")
@@ -523,6 +581,15 @@ def save_admin_settings():
         except Exception:
             return jsonify({"success": False, "message": "min_similarity_score must be a valid number"}), 400
         config.set("Advanced", "min_similarity_score", str(score))
+
+    if "otp_window_seconds" in payload:
+        try:
+            otp_seconds = int(str(payload.get("otp_window_seconds", "")).strip())
+            if otp_seconds < 30 or otp_seconds > 900:
+                raise ValueError("out of range")
+        except Exception:
+            return jsonify({"success": False, "message": "otp_window_seconds must be an integer between 30 and 900"}), 400
+        config.set("Advanced", "otp_window_seconds", str(otp_seconds))
 
     config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
     with open(config_path, "w", encoding="utf-8") as fh:
@@ -568,6 +635,82 @@ def save_admin_settings():
             }
         }
     })
+
+
+@app.route('/admin/fs/list', methods=['GET'])
+def admin_list_directories():
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    requested_path = request.args.get("path", "").strip()
+    base_path = os.path.expanduser("~")
+    target_path = requested_path or base_path
+    target_path = os.path.abspath(os.path.expanduser(target_path))
+
+    if not os.path.isdir(target_path):
+        return jsonify({"success": False, "message": "Directory not found"}), 400
+
+    entries = []
+    try:
+        with os.scandir(target_path) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                name = entry.name
+                if name.startswith('.'):
+                    continue
+                entries.append({
+                    "name": name,
+                    "path": os.path.abspath(entry.path),
+                })
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Failed to list directories: {exc}"}), 500
+
+    entries.sort(key=lambda item: item["name"].lower())
+    parent_path = os.path.dirname(target_path)
+    if parent_path == target_path:
+        parent_path = ""
+
+    return jsonify({
+        "success": True,
+        "current_path": target_path,
+        "parent_path": parent_path,
+        "entries": entries,
+    })
+
+
+@app.route('/admin/settings/change_password', methods=['POST'])
+def change_admin_password():
+    global app_settings, config
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    data = request.json or {}
+    new_password = str(data.get("new_admin_password", "")).strip()
+    confirm_password = str(data.get("confirm_admin_password", "")).strip()
+
+    if not new_password:
+        return jsonify({"success": False, "message": "New admin password is required"}), 400
+    if len(new_password) < 8:
+        return jsonify({"success": False, "message": "Admin password must be at least 8 characters"}), 400
+    if new_password != confirm_password:
+        return jsonify({"success": False, "message": "Password confirmation does not match"}), 400
+
+    if "Advanced" not in config:
+        config["Advanced"] = {}
+    config.set("Advanced", "admin_token", new_password)
+
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+
+    os.environ["NJORDHR_ADMIN_TOKEN"] = new_password
+    app_settings = load_app_settings()
+    config = app_settings.config
+
+    return jsonify({"success": True, "message": "Admin password updated successfully."})
 
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
@@ -1025,7 +1168,7 @@ def export_resumes():
 
 if __name__ == '__main__':
     os.makedirs(settings['Default_Download_Folder'], exist_ok=True)
-    os.makedirs("logs", exist_ok=True)
+    os.makedirs(_resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs"), exist_ok=True)
 
     print("\n" + "="*70)
     print("🚀 NjordHR Backend Server - With Dashboard")
