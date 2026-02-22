@@ -2,9 +2,8 @@ import logging
 import os
 from datetime import datetime
 
-def setup_logger(session_id):
+def setup_logger(session_id, logs_dir="logs"):
     """Sets up a logger to write to a unique, timestamped file."""
-    logs_dir = "logs"
     os.makedirs(logs_dir, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

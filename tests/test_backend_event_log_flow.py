@@ -333,6 +333,16 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("A", names)
         self.assertIn("B", names)
 
+    def test_admin_settings_rejects_invalid_otp_window(self):
+        resp = self.client.post(
+            "/admin/settings",
+            headers={"X-Admin-Token": "test-admin-token"},
+            json={"settings": {"otp_window_seconds": "10"}},
+        )
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+
 
 if __name__ == "__main__":
     unittest.main()
