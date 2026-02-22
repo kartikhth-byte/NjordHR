@@ -453,15 +453,28 @@
                 setIsSettingsLoading(true);
                 try {
                     const response = await fetch(`${API_BASE_URL}/admin/settings`, {
+                        // Admin-authenticated fetch can request full secret values.
+                        // This is intentionally admin-only and never available without valid admin password.
+                        method: 'GET',
+                        headers: { 'X-Admin-Token': adminPassword.trim() }
+                    });
+                    const responseWithSecrets = await fetch(`${API_BASE_URL}/admin/settings?include_secrets=true`, {
+                        method: 'GET',
                         headers: { 'X-Admin-Token': adminPassword.trim() }
                     });
                     const data = await response.json();
+                    const dataWithSecrets = await responseWithSecrets.json();
                     if (!data.success) {
                         handleSendMessage('error', data.message || 'Failed to load admin settings');
                         return;
                     }
+                    if (!dataWithSecrets.success) {
+                        handleSendMessage('error', dataWithSecrets.message || 'Failed to load complete admin settings');
+                        return;
+                    }
                     const nonSecret = data.settings?.non_secret || {};
                     const secrets = data.settings?.secrets || {};
+                    const secretsPlain = dataWithSecrets.settings?.secrets_plain || {};
                     setSettingsForm(prev => ({
                         ...prev,
                         default_download_folder: nonSecret.default_download_folder || '',
@@ -483,11 +496,11 @@
                         use_supabase_reads: Boolean(nonSecret.use_supabase_reads),
                         use_local_agent: Boolean(nonSecret.use_local_agent),
                         use_cloud_export: Boolean(nonSecret.use_cloud_export),
-                        seajob_username: '',
-                        seajob_password: '',
-                        gemini_api_key: '',
-                        pinecone_api_key: '',
-                        supabase_secret_key: '',
+                        seajob_username: secretsPlain.seajob_username || '',
+                        seajob_password: secretsPlain.seajob_password || '',
+                        gemini_api_key: secretsPlain.gemini_api_key || '',
+                        pinecone_api_key: secretsPlain.pinecone_api_key || '',
+                        supabase_secret_key: secretsPlain.supabase_secret_key || '',
                     }));
                     setSettingsMasks({
                         seajob_username: secrets.seajob_username || { configured: false, preview: '' },
@@ -1939,6 +1952,7 @@
                                     <button className={sectionButtonClass('operational')} onClick={() => setSettingsSection('operational')}>Operational Settings</button>
                                     <button className={sectionButtonClass('secrets')} onClick={() => setSettingsSection('secrets')}>Secrets</button>
                                     <button className={sectionButtonClass('admin_password')} onClick={() => setSettingsSection('admin_password')}>Admin Password</button>
+                                    <button className={sectionButtonClass('readme')} onClick={() => setSettingsSection('readme')}>README</button>
                                 </div>
 
                                 {settingsSection === 'runtime' && (
@@ -2109,6 +2123,56 @@
                                             <button onClick={changeAdminPassword} disabled={isSettingsSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
                                                 {isSettingsSaving ? 'Updating...' : 'Update Admin Password'}
                                             </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {settingsSection === 'readme' && (
+                                    <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4 text-sm text-gray-700">
+                                        <h3 className="font-semibold text-gray-900 text-base">Settings README</h3>
+                                        <p>
+                                            This page documents each setting, where to find its value, and how to reset it.
+                                        </p>
+
+                                        <div>
+                                            <p className="font-semibold text-gray-900">Runtime Flags</p>
+                                            <p>`use_supabase_db`: Enables Supabase repository mode. Source: your deployment/runtime mode decision. Reset: set to `false` to return to CSV-only.</p>
+                                            <p>`use_dual_write`: Writes to CSV + Supabase together. Source: migration rollout strategy. Reset: set `false` for single backend mode.</p>
+                                            <p>`use_supabase_reads`: Reads dashboard/history from Supabase. Source: migration phase status. Reset: set `false` to read from CSV.</p>
+                                            <p>`use_local_agent`: Reserved for hybrid cloud/local-agent rollout. Reset: set `false` for current architecture.</p>
+                                            <p>`use_cloud_export`: Reserved for cloud export mode. Reset: set `false` for local export behavior.</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold text-gray-900">Operational Settings</p>
+                                            <p>`default_download_folder`: Folder where downloaded resumes are stored. Source: local machine directory path chosen by admin. Reset: choose a new folder via Browse.</p>
+                                            <p>`verified_resumes_folder`: Folder where verification CSV/event data is stored. Source: local path or project-relative folder. Reset: set to `Verified_Resumes` or browse a new folder.</p>
+                                            <p>`supabase_url`: Your Supabase project URL (`https://<project-ref>.supabase.co`). Source: Supabase dashboard project URL.</p>
+                                            <p>`seajob_login_url`: SeaJob login URL used by scraper. Default should remain `http://seajob.net/seajob_login.php` unless SeaJob changes.</p>
+                                            <p>`seajob_dashboard_url`: SeaJob dashboard URL used post-login. Default should remain `http://seajob.net/company/dashboard.php` unless SeaJob changes.</p>
+                                            <p>`otp_window_seconds`: Allowed OTP entry window before considering session invalid. Source: observed SeaJob OTP behavior. Reset: recommended 120.</p>
+                                            <p>`registry_db_path`: SQLite path for analyzer file-index registry. Reset: `registry.db`.</p>
+                                            <p>`feedback_db_path`: SQLite path for feedback-learning events. Reset: `feedback.db`.</p>
+                                            <p>`log_dir`: Directory where download session logs are written. Reset: `logs`.</p>
+                                            <p>`pinecone_environment`: Pinecone deployment environment/region (for your selected SDK pattern). Source: Pinecone project settings.</p>
+                                            <p>`pinecone_index_name`: Pinecone index name used for vector retrieval. Source: Pinecone index list.</p>
+                                            <p>`embedding_model_name`: Embedding model used for retrieval vectors. Source: model provider docs/availability.</p>
+                                            <p>`reasoning_model_name`: Model used for candidate reasoning/scoring. Source: model provider docs/availability.</p>
+                                            <p>`min_similarity_score`: Retrieval threshold (`0.0` to `1.0`). Reset: `0.25` baseline.</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold text-gray-900">Secrets</p>
+                                            <p>`seajob_username`, `seajob_password`: SeaJob company login credentials. Source: SeaJob admin account owner.</p>
+                                            <p>`gemini_api_key`: Google AI API key. Source: Google AI Studio / Cloud console key management.</p>
+                                            <p>`pinecone_api_key`: Pinecone API key. Source: Pinecone console API keys.</p>
+                                            <p>`supabase_secret_key`: Supabase secret API key (`sb_secret...`). Source: Supabase Settings -> API Keys.</p>
+                                            <p>Reset approach for secrets: generate/rotate in provider console, then update here and click Save & Apply.</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold text-gray-900">Admin Password</p>
+                                            <p>Use the Admin Password tab to set a new password manually or generate a strong password. After update, re-auth with the new password.</p>
                                         </div>
                                     </div>
                                 )}

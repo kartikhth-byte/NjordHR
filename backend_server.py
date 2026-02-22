@@ -142,8 +142,8 @@ def _mask_secret(value):
     return {"configured": True, "preview": f"{value[:4]}...{value[-4:]}"}
 
 
-def _settings_payload():
-    return {
+def _settings_payload(include_plain_secrets=False):
+    payload = {
         "non_secret": {
             "default_download_folder": settings.get("Default_Download_Folder", ""),
             "verified_resumes_folder": settings.get("Additional_Local_Folder", fallback="Verified_Resumes"),
@@ -173,6 +173,15 @@ def _settings_payload():
             "supabase_secret_key": _mask_secret(resolve_supabase_api_key()),
         }
     }
+    if include_plain_secrets:
+        payload["secrets_plain"] = {
+            "seajob_username": creds.get("Username", ""),
+            "seajob_password": creds.get("Password", ""),
+            "gemini_api_key": creds.get("Gemini_API_Key", ""),
+            "pinecone_api_key": creds.get("Pinecone_API_Key", ""),
+            "supabase_secret_key": resolve_supabase_api_key(),
+        }
+    return payload
 
 
 def _current_repo_backend():
@@ -499,7 +508,8 @@ def get_admin_settings():
     ok, reason = _require_admin()
     if not ok:
         return jsonify({"success": False, "message": reason}), 401
-    return jsonify({"success": True, "settings": _settings_payload()})
+    include_plain = str(request.args.get("include_secrets", "false")).strip().lower() in {"1", "true", "yes", "on"}
+    return jsonify({"success": True, "settings": _settings_payload(include_plain_secrets=include_plain)})
 
 
 @app.route('/admin/settings/test_supabase', methods=['POST'])
