@@ -1184,12 +1184,14 @@ def export_resumes():
 if __name__ == '__main__':
     os.makedirs(settings['Default_Download_Folder'], exist_ok=True)
     os.makedirs(_resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs"), exist_ok=True)
+    server_port = int(os.getenv("NJORDHR_PORT", "5000"))
+    server_url = f"http://127.0.0.1:{server_port}"
 
     print("\n" + "="*70)
     print("🚀 NjordHR Backend Server - With Dashboard")
     print("="*70)
     print("\n🌐 Open your browser and go to:")
-    print("   👉 http://127.0.0.1:5000")
+    print(f"   👉 {server_url}")
     print("\n" + "="*70 + "\n")
     
-    app.run(port=5000, debug=False, threaded=True)
+    app.run(host='127.0.0.1', port=server_port, debug=False, threaded=True)
