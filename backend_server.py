@@ -11,6 +11,7 @@ import zipfile
 import logging
 import threading
 from queue import Queue, Empty
+import requests
 
 # Dependency Check & Imports
 try:
@@ -231,6 +232,39 @@ def _extract_candidate_id_from_filename(filename):
     return None
 
 
+def _local_agent_base_url():
+    return os.getenv("NJORDHR_AGENT_BASE_URL", "http://127.0.0.1:5051").rstrip("/")
+
+
+def _use_local_agent():
+    return bool(getattr(feature_flags, "use_local_agent", False))
+
+
+def _agent_request(method, path, *, json_body=None, params=None, stream=False, timeout=30):
+    base = _local_agent_base_url()
+    url = f"{base}{path}"
+    return requests.request(
+        method=method,
+        url=url,
+        json=json_body,
+        params=params,
+        stream=stream,
+        timeout=timeout,
+    )
+
+
+def _agent_health_summary():
+    base = _local_agent_base_url()
+    try:
+        resp = requests.get(f"{base}/health", timeout=3)
+        if resp.status_code >= 400:
+            return {"configured": True, "reachable": False, "base_url": base, "error": f"HTTP {resp.status_code}"}
+        data = resp.json()
+        return {"configured": True, "reachable": True, "base_url": base, "health": data}
+    except Exception as exc:
+        return {"configured": True, "reachable": False, "base_url": base, "error": str(exc)}
+
+
 def _build_runtime_resume_url(rank_applied_for, filename):
     rank = str(rank_applied_for or "").strip()
     name = str(filename or "").strip()
@@ -277,6 +311,13 @@ def start_session():
     global scraper_session
     data = request.json
     mobile_number = data.get('mobileNumber')
+    if _use_local_agent():
+        try:
+            resp = _agent_request("POST", "/session/start", json_body={"mobile_number": mobile_number}, timeout=60)
+            return jsonify(resp.json()), resp.status_code
+        except Exception as exc:
+            return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
     if scraper_session: scraper_session.quit()
     scraper_session = Scraper(
         settings['Default_Download_Folder'],
@@ -292,6 +333,22 @@ def verify_otp():
     global scraper_session
     data = request.json
     otp = data.get('otp')
+    if _use_local_agent():
+        try:
+            resp = _agent_request("POST", "/session/verify-otp", json_body={"otp": otp}, timeout=60)
+            login_result = resp.json()
+            if login_result.get("success"):
+                try:
+                    ranks_str = config.get('Ranks', 'rank_options', fallback='').strip()
+                    ship_types_str = config.get('ShipTypes', 'ship_type_options', fallback='').strip()
+                    login_result["ranks"] = [r.strip() for r in ranks_str.split('\n') if r.strip()]
+                    login_result["ship_types"] = [s.strip() for s in ship_types_str.split('\n') if s.strip()]
+                except Exception as e:
+                    return jsonify({"success": False, "message": f"Error in config.ini: {e}"}), 500
+            return jsonify(login_result), resp.status_code
+        except Exception as exc:
+            return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
     if not scraper_session:
         return jsonify({"success": False, "message": "Session not started."})
     
@@ -310,6 +367,25 @@ def verify_otp():
 def start_download():
     global scraper_session
     data = request.json
+    if _use_local_agent():
+        try:
+            resp = _agent_request(
+                "POST",
+                "/jobs/download",
+                json_body={
+                    "rank": data.get("rank", ""),
+                    "ship_type": data.get("shipType", ""),
+                    "force_redownload": bool(data.get("forceRedownload", False)),
+                },
+                timeout=60
+            )
+            payload = resp.json()
+            if payload.get("success"):
+                payload.setdefault("message", "Download job queued in local agent.")
+            return jsonify(payload), resp.status_code
+        except Exception as exc:
+            return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
     if not scraper_session or not scraper_session.driver:
         return jsonify({"success": False, "message": "Website session is not active or has expired."})
 
@@ -348,6 +424,72 @@ def download_stream():
     ship_type = request.args.get('shipType', '').strip()
     force_redownload_raw = request.args.get('forceRedownload', 'false').strip().lower()
     force_redownload = force_redownload_raw in {'1', 'true', 'yes', 'on'}
+
+    if _use_local_agent():
+        def generate_agent():
+            if not rank or not ship_type:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Rank and Ship Type are required.'})}\n\n"
+                return
+
+            try:
+                create_resp = _agent_request(
+                    "POST",
+                    "/jobs/download",
+                    json_body={
+                        "rank": rank,
+                        "ship_type": ship_type,
+                        "force_redownload": force_redownload,
+                    },
+                    timeout=60
+                )
+                create_payload = create_resp.json()
+                if not create_payload.get("success"):
+                    msg = create_payload.get("message", "Failed to start local agent job")
+                    yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
+                    return
+                job_id = str(create_payload.get("job_id", "")).strip()
+                if not job_id:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Local agent did not return job_id'})}\n\n"
+                    return
+                yield f"data: {json.dumps({'type': 'started', 'message': 'Download stream started.', 'job_id': job_id})}\n\n"
+
+                with _agent_request("GET", f"/jobs/{job_id}/stream", stream=True, timeout=600) as stream_resp:
+                    if stream_resp.status_code >= 400:
+                        yield f"data: {json.dumps({'type': 'error', 'message': f'Agent stream failed ({stream_resp.status_code})'})}\n\n"
+                        return
+                    for raw in stream_resp.iter_lines(decode_unicode=True):
+                        if raw is None:
+                            continue
+                        line = raw.strip()
+                        if not line:
+                            continue
+                        if line.startswith(":"):
+                            yield ": keepalive\n\n"
+                            continue
+                        if not line.startswith("data:"):
+                            continue
+                        payload_text = line[5:].strip()
+                        try:
+                            event = json.loads(payload_text)
+                        except Exception:
+                            continue
+                        ev_type = event.get("type")
+                        if ev_type == "log":
+                            yield f"data: {json.dumps({'type': 'log', 'line': event.get('message', '')})}\n\n"
+                        elif ev_type == "complete":
+                            result = (event.get("data") or {}).get("result", {}) or {}
+                            if result.get("success"):
+                                yield f"data: {json.dumps({'type': 'complete', **result})}\n\n"
+                            else:
+                                yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', 'Download failed')})}\n\n"
+                            return
+                        elif ev_type == "error":
+                            yield f"data: {json.dumps({'type': 'error', 'message': event.get('message', 'Download failed')})}\n\n"
+                            return
+            except Exception as exc:
+                yield f"data: {json.dumps({'type': 'error', 'message': f'Local agent unavailable: {exc}'})}\n\n"
+
+        return Response(generate_agent(), mimetype='text/event-stream')
 
     def generate():
         local_scraper = scraper_session
@@ -442,6 +584,13 @@ def download_stream():
 @app.route('/disconnect_session', methods=['POST'])
 def disconnect_session():
     global scraper_session
+    if _use_local_agent():
+        try:
+            resp = _agent_request("POST", "/session/disconnect", timeout=20)
+            return jsonify(resp.json()), resp.status_code
+        except Exception as exc:
+            return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
     if scraper_session:
         scraper_session.quit()
         scraper_session = None
@@ -452,6 +601,26 @@ def disconnect_session():
 def session_health():
     """Return current scraper session health for OTP/session timeout handling."""
     global scraper_session
+    if _use_local_agent():
+        try:
+            resp = _agent_request("GET", "/session/health", timeout=15)
+            payload = resp.json()
+            if isinstance(payload, dict):
+                payload.setdefault("connected", bool((payload.get("health") or {}).get("active")))
+            return jsonify(payload), resp.status_code
+        except Exception as exc:
+            return jsonify({
+                "success": False,
+                "connected": False,
+                "health": {
+                    "active": False,
+                    "valid": False,
+                    "otp_pending": False,
+                    "otp_expired": False,
+                    "reason": f"Local agent unavailable: {exc}"
+                }
+            }), 502
+
     if not scraper_session:
         return jsonify({
             "success": True,
@@ -515,6 +684,11 @@ def runtime_config():
             "url_configured": bool(os.getenv("SUPABASE_URL", "").strip()),
         },
         "admin_settings_enabled": bool(_admin_token()),
+        "local_agent": _agent_health_summary() if _use_local_agent() else {
+            "configured": False,
+            "reachable": False,
+            "base_url": _local_agent_base_url(),
+        },
     })
 
 
