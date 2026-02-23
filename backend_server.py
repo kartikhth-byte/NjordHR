@@ -231,6 +231,16 @@ def _extract_candidate_id_from_filename(filename):
     return None
 
 
+def _build_runtime_resume_url(rank_applied_for, filename):
+    rank = str(rank_applied_for or "").strip()
+    name = str(filename or "").strip()
+    if not rank or not name:
+        return ""
+    # Prefer current request host to avoid stale hardcoded port in historical rows.
+    base = request.host_url.rstrip("/") if request else app_settings.server_url.rstrip("/")
+    return f"{base}/get_resume/{rank}/{name}"
+
+
 VALID_STATUSES = {
     'New',
     'Contacted',
@@ -831,8 +841,17 @@ def get_resume(rank_folder, filename):
         full_path = _resolve_within_base(base_dir, rank_folder, filename)
 
         if not os.path.isfile(full_path):
-            print(f"[ERROR] File not found: {full_path}")
-            return "File not found", 404
+            # Fallback for historical rows where rank folder changed over time.
+            requested_name = os.path.basename(filename)
+            fallback_path = None
+            for root, _, files in os.walk(base_dir):
+                if requested_name in files:
+                    fallback_path = os.path.join(root, requested_name)
+                    break
+            if not fallback_path:
+                print(f"[ERROR] File not found: {full_path}")
+                return "File not found", 404
+            full_path = fallback_path
 
         directory = os.path.dirname(full_path)
         safe_filename = os.path.basename(full_path)
@@ -989,10 +1008,14 @@ def get_dashboard_data():
             })
         data = []
         for _, row in rows.iterrows():
+            runtime_resume_url = _build_runtime_resume_url(
+                row.get('Rank_Applied_For', ''),
+                row.get('Filename', '')
+            ) or row.get('Resume_URL', '')
             data.append({
                 "candidate_id": row.get('Candidate_ID', ''),
                 "filename": row.get('Filename', ''),
-                "resume_url": row.get('Resume_URL', ''),
+                "resume_url": runtime_resume_url,
                 "date_added": row.get('Date_Added', ''),
                 "event_type": row.get('Event_Type', ''),
                 "status": row.get('Status', ''),

@@ -169,10 +169,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
     def get_latest_status_per_candidate(self, rank_name=''):
         try:
-            filters = {}
-            if rank_name:
-                filters["rank_applied_for"] = f"eq.{rank_name}"
-            events = self._fetch_events(filters=filters, order_desc=True)
+            events = self._fetch_events(filters={}, order_desc=True)
             latest_by_candidate = {}
             for row in events:
                 cid = str(row.get("candidate_external_id", ""))
@@ -184,6 +181,10 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
             df = pd.DataFrame(rows, columns=self.COLUMNS)
             if df.empty:
                 return pd.DataFrame(columns=self.COLUMNS)
+            if rank_name:
+                df = df[df["Rank_Applied_For"] == rank_name]
+                if df.empty:
+                    return pd.DataFrame(columns=self.COLUMNS)
             return df.sort_values("Date_Added", ascending=False).reset_index(drop=True)
         except Exception as exc:
             print(f"[SUPABASE ERROR] Failed to fetch latest status: {exc}")

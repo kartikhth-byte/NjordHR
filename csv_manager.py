@@ -93,13 +93,12 @@ class CSVManager:
         if df.empty:
             return df
 
-        if rank_name:
-            df = df[df['Rank_Applied_For'] == rank_name]
-            if df.empty:
-                return df
-
         df_sorted = df.sort_values('Date_Added')
         latest = df_sorted.groupby('Candidate_ID', as_index=False).tail(1)
+        if rank_name:
+            latest = latest[latest['Rank_Applied_For'] == rank_name]
+            if latest.empty:
+                return pd.DataFrame(columns=self.COLUMNS)
         return latest.sort_values('Date_Added', ascending=False).reset_index(drop=True)
 
     def get_candidate_history(self, candidate_id):
