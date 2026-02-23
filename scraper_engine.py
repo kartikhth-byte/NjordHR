@@ -123,6 +123,17 @@ class Scraper:
                 "reason": "OTP expired"
             }
 
+        # On SeaJobs the OTP view can still contain login form fields.
+        # Prefer OTP detection over generic login-page detection to avoid false resets.
+        if self.otp_pending and self._is_otp_page():
+            return {
+                "active": True,
+                "valid": False,
+                "otp_pending": True,
+                "otp_expired": False,
+                "reason": "OTP pending"
+            }
+
         if self._is_login_page():
             return {
                 "active": True,
