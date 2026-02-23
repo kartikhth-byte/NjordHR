@@ -2334,7 +2334,7 @@
                             <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>
                         </div>
                         <main className="bg-white p-8 rounded-xl shadow-lg">
-                             {activeTab === 'download' && <DownloadTabContent />}
+                             {activeTab === 'download' && DownloadTabContent()}
                              {activeTab === 'search' && (
                                 <div>
                                     <h2 className="text-2xl font-semibold mb-6">AI Search</h2>
@@ -2571,8 +2571,8 @@
                                     )}
                                 </div>
                             )}
-                            {activeTab === 'dashboard' && <DashboardTabContent />}
-                            {activeTab === 'settings' && <SettingsTabContent />}
+                            {activeTab === 'dashboard' && DashboardTabContent()}
+                            {activeTab === 'settings' && SettingsTabContent()}
                         </main>
                     </div>
                 </div>
