@@ -205,6 +205,8 @@
                 supabase_secret_key: { configured: false, preview: '' },
             });
             const [showGeneratedAdminPassword, setShowGeneratedAdminPassword] = useState(false);
+            const [newAdminPasswordInput, setNewAdminPasswordInput] = useState('');
+            const [confirmAdminPasswordInput, setConfirmAdminPasswordInput] = useState('');
             const [folderPicker, setFolderPicker] = useState({
                 open: false,
                 targetKey: '',
@@ -220,8 +222,6 @@
             const drawerNoteInputRef = useRef(null);
             const adminPasswordInputRef = useRef(null);
             const currentAdminPasswordRef = useRef(null);
-            const newAdminPasswordRef = useRef(null);
-            const confirmAdminPasswordRef = useRef(null);
             
             const API_BASE_URL = window.NJORDHR_API_BASE_URL
                 || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:5000');
@@ -638,8 +638,8 @@
                     return;
                 }
                 const currentPassword = ((currentAdminPasswordRef.current && currentAdminPasswordRef.current.value) || '').trim();
-                const newPassword = ((newAdminPasswordRef.current && newAdminPasswordRef.current.value) || '').trim();
-                const confirmPassword = ((confirmAdminPasswordRef.current && confirmAdminPasswordRef.current.value) || '').trim();
+                const newPassword = (newAdminPasswordInput || '').trim();
+                const confirmPassword = (confirmAdminPasswordInput || '').trim();
                 if (!currentPassword || !newPassword || !confirmPassword) {
                     handleSendMessage('error', 'Fill current, new and confirm password');
                     return;
@@ -680,8 +680,8 @@
                         adminPasswordInputRef.current.value = '';
                     }
                     if (currentAdminPasswordRef.current) currentAdminPasswordRef.current.value = '';
-                    if (newAdminPasswordRef.current) newAdminPasswordRef.current.value = '';
-                    if (confirmAdminPasswordRef.current) confirmAdminPasswordRef.current.value = '';
+                    setNewAdminPasswordInput('');
+                    setConfirmAdminPasswordInput('');
                     setShowGeneratedAdminPassword(false);
                     handleSendMessage('success', data.message || 'Admin password updated');
                 } catch (error) {
@@ -689,6 +689,15 @@
                 } finally {
                     setIsSettingsSaving(false);
                 }
+            };
+
+            const syncAdminPasswordFields = (nextNewPassword, nextConfirmPassword) => {
+                setNewAdminPasswordInput(nextNewPassword || '');
+                setConfirmAdminPasswordInput(nextConfirmPassword || '');
+            };
+
+            const handleToggleGeneratedPasswordVisibility = () => {
+                setShowGeneratedAdminPassword(prev => !prev);
             };
 
             const generateAdminPassword = () => {
@@ -706,8 +715,7 @@
                 for (let i = 0; i < length; i++) {
                     generated += chars[bytes[i] % chars.length];
                 }
-                if (newAdminPasswordRef.current) newAdminPasswordRef.current.value = generated;
-                if (confirmAdminPasswordRef.current) confirmAdminPasswordRef.current.value = generated;
+                syncAdminPasswordFields(generated, generated);
                 setShowGeneratedAdminPassword(true);
                 handleSendMessage('success', 'Generated a strong admin password. Review and click Update.');
             };
@@ -1949,8 +1957,8 @@
                                             }
                                             setSettingsSection('runtime');
                                             if (currentAdminPasswordRef.current) currentAdminPasswordRef.current.value = '';
-                                            if (newAdminPasswordRef.current) newAdminPasswordRef.current.value = '';
-                                            if (confirmAdminPasswordRef.current) confirmAdminPasswordRef.current.value = '';
+                                            setNewAdminPasswordInput('');
+                                            setConfirmAdminPasswordInput('');
                                             setShowGeneratedAdminPassword(false);
                                         }}
                                         className="text-sm text-green-800 hover:underline"
@@ -2111,8 +2119,8 @@
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">New Admin Password</label>
                                                 <input
                                                     type={showGeneratedAdminPassword ? 'text' : 'password'}
-                                                    ref={newAdminPasswordRef}
-                                                    defaultValue=""
+                                                    value={newAdminPasswordInput}
+                                                    onChange={e => setNewAdminPasswordInput(e.target.value)}
                                                     className="w-full p-2 border border-gray-300 rounded-md"
                                                     placeholder="At least 8 characters"
                                                 />
@@ -2121,8 +2129,8 @@
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
                                                 <input
                                                     type={showGeneratedAdminPassword ? 'text' : 'password'}
-                                                    ref={confirmAdminPasswordRef}
-                                                    defaultValue=""
+                                                    value={confirmAdminPasswordInput}
+                                                    onChange={e => setConfirmAdminPasswordInput(e.target.value)}
                                                     className="w-full p-2 border border-gray-300 rounded-md"
                                                     placeholder="Re-enter new password"
                                                 />
@@ -2133,7 +2141,7 @@
                                                 Generate Password
                                             </button>
                                             <button
-                                                onClick={() => setShowGeneratedAdminPassword(prev => !prev)}
+                                                onClick={handleToggleGeneratedPasswordVisibility}
                                                 type="button"
                                                 className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
                                             >
