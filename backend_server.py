@@ -142,6 +142,11 @@ def _mask_secret(value):
     return {"configured": True, "preview": f"{value[:4]}...{value[-4:]}"}
 
 
+def _config_set_literal(parser, section, key, value):
+    """Write literal values safely for ConfigParser interpolation mode."""
+    parser.set(section, key, str(value).replace('%', '%%'))
+
+
 def _settings_payload(include_plain_secrets=False):
     payload = {
         "non_secret": {
@@ -567,7 +572,7 @@ def save_admin_settings():
         if payload_key in payload:
             value = str(payload.get(payload_key, "")).strip()
             if value:
-                config.set(section, key, value)
+                _config_set_literal(config, section, key, value)
 
     _set_if_present("Credentials", "Username", "seajob_username")
     _set_if_present("Credentials", "Password", "seajob_password")
@@ -590,7 +595,7 @@ def save_admin_settings():
             score = float(payload.get("min_similarity_score"))
         except Exception:
             return jsonify({"success": False, "message": "min_similarity_score must be a valid number"}), 400
-        config.set("Advanced", "min_similarity_score", str(score))
+        _config_set_literal(config, "Advanced", "min_similarity_score", str(score))
 
     if "otp_window_seconds" in payload:
         try:
@@ -599,7 +604,7 @@ def save_admin_settings():
                 raise ValueError("out of range")
         except Exception:
             return jsonify({"success": False, "message": "otp_window_seconds must be an integer between 30 and 900"}), 400
-        config.set("Advanced", "otp_window_seconds", str(otp_seconds))
+        _config_set_literal(config, "Advanced", "otp_window_seconds", str(otp_seconds))
 
     config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
     with open(config_path, "w", encoding="utf-8") as fh:
@@ -710,7 +715,7 @@ def change_admin_password():
 
     if "Advanced" not in config:
         config["Advanced"] = {}
-    config.set("Advanced", "admin_token", new_password)
+    _config_set_literal(config, "Advanced", "admin_token", new_password)
 
     config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
     with open(config_path, "w", encoding="utf-8") as fh:
