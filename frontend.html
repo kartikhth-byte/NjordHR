@@ -812,7 +812,6 @@
                         String(row.candidate_id) === candidateIdStr ? { ...row, status } : row
                     ));
                     handleSendMessage('success', `Status updated for candidate ${candidateId}`);
-                    fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to update status');
                 }
@@ -847,7 +846,6 @@
                             drawerNoteInputRef.current.value = '';
                         }
                     }
-                    fetchDashboardData({ preserveScroll: true });
                 } catch (error) {
                     handleSendMessage('error', 'Failed to add notes');
                 }
