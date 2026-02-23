@@ -1671,10 +1671,10 @@
                                                         Name {sortColumn === 'name' && (sortOrder === 'asc' ? '▲' : '▼')}
                                                     </th>
                                                     <th 
-                                                        onClick={() => handleSort('present_rank')}
+                                                        onClick={() => handleSort('rank_applied_for')}
                                                         className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-200"
                                                     >
-                                                        Rank {sortColumn === 'present_rank' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                        Applied Rank {sortColumn === 'rank_applied_for' && (sortOrder === 'asc' ? '▲' : '▼')}
                                                     </th>
                                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Email
@@ -1730,7 +1730,10 @@
                                                             {row.name}
                                                         </td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
-                                                            {row.present_rank}
+                                                            <div>{(row.rank_applied_for || '').replace(/_/g, ' ') || '-'}</div>
+                                                            <div className="text-xs text-gray-500">
+                                                                Present: {row.present_rank || '-'}
+                                                            </div>
                                                         </td>
                                                         <td className="px-4 py-3 whitespace-nowrap text-gray-600">
                                                             {row.email}
