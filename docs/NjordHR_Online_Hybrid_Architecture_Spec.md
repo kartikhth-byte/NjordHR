@@ -183,6 +183,39 @@ This spec covers:
   - Build ZIP from cloud copies if present.
   - Fallback to metadata-only export when cloud files unavailable.
 
+### 7.1 Multi-user organization storage model (v1 target)
+- Canonical storage:
+  - Use private cloud object storage as system of record for resumes.
+  - Recommended default: Supabase Storage private bucket `resumes`.
+  - Alternative (data-residency/on-prem): company-managed S3-compatible store (for example MinIO).
+- Local machine storage:
+  - Keep user-selected local folder for scraping/download.
+  - Treat local files as working cache, not source of truth.
+  - Agent syncs resume files and metadata to cloud; retries until confirmed.
+- Ownership and identity:
+  - Every uploaded resume links to `candidate_external_id`, `device_id`, and `user_id`.
+  - Candidate latest state remains in Postgres; blob content stays in object storage.
+
+### 7.2 Object key and metadata convention
+- Bucket/path convention:
+  - `resumes/{org_id}/{rank_applied_for}/{candidate_external_id}/{filename}`
+- Event linkage:
+  - `candidate_events.resume_storage_path` stores canonical object path.
+  - `candidate_events.resume_source` stores `local_only|cloud_synced|cloud_only`.
+  - `candidate_events.resume_checksum_sha256` enables dedupe and integrity checks.
+- Access pattern:
+  - Dashboard opens signed URL from cloud object path.
+  - If cloud object missing and local agent connected, UI can request local fallback stream.
+
+### 7.3 Security and governance for files
+- Storage bucket stays private; no public resume URLs.
+- Cloud API issues short-lived signed URLs only for authorized users.
+- RLS and API authorization must enforce org/user/device boundaries.
+- Audit log required for resume view/download/export actions.
+- Retention policy:
+  - Soft-delete metadata in DB first, then object lifecycle cleanup.
+  - Daily backup strategy for DB and storage inventory manifest.
+
 ## 8. API Contracts
 
 ### 8.1 Cloud API
@@ -332,6 +365,31 @@ Fields:
 ### Phase 5: Decommission local CSV/SQLite
 - Remove CSV write path after verification window.
 - Archive legacy migration tooling.
+
+### Phase 6: Resume storage canonicalization (multi-user)
+- Step 1: Introduce cloud object metadata fields
+  - Add/confirm columns:
+    - `resume_storage_path`
+    - `resume_source`
+    - `resume_checksum_sha256`
+    - `resume_uploaded_at`
+    - `resume_upload_status`
+- Step 2: Enable cloud upload in agent
+  - On successful local download, compute checksum and upload to storage.
+  - Emit idempotent upload event keyed by checksum + candidate + filename.
+- Step 3: Backfill historical local resumes
+  - Batch upload existing local resume corpus by rank folders.
+  - Skip duplicates by checksum and path existence.
+  - Emit migration report: attempted, uploaded, skipped, failed.
+- Step 4: Switch dashboard resume open path
+  - Cloud-signed URL first.
+  - Local-agent fallback only if cloud object absent and agent connected.
+- Step 5: Enforce canonical cloud copy for new events
+  - New candidate events should require `resume_storage_path` unless explicitly configured offline.
+  - Alert on prolonged `resume_upload_status=failed`.
+- Step 6: Operational freeze and verification
+  - 24-48h soak with upload success/error metrics and parity checks.
+  - Exit when storage sync lag and error rate stay within agreed threshold.
 
 ## 14. Testing and Validation
 - Unit:

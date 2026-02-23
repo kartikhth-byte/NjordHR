@@ -106,10 +106,19 @@
   - optional resume upload.
 - `M3-T8` Add reconnect + retry with idempotency for unstable network.
 - `M3-T9` Add local diagnostics endpoint and log bundle export.
+- `M3-T10` Add cloud resume upload pipeline:
+  - compute checksum
+  - upload to object storage
+  - write `resume_storage_path` and upload status.
+- `M3-T11` Add local upload queue persistence and replay on restart.
+- `M3-T12` Add offline mode support:
+  - download allowed without cloud
+  - deferred upload/sync once connectivity returns.
 
 ### Exit criteria
 - Agent can download to user-selected folder reliably.
 - Cloud receives job/event updates from agent.
+- Cloud resume uploads are idempotent and recover after restart/network loss.
 
 ---
 
@@ -129,10 +138,19 @@
 - `M4-T5` Route dashboard/search/history/export to cloud API.
 - `M4-T6` Add offline/agent-disconnected UX states and recovery prompts.
 - `M4-T7` Keep accessibility and workflow stepper behavior intact.
+- `M4-T8` Resume open strategy in dashboard:
+  - cloud signed URL primary
+  - local-agent fallback when cloud object unavailable.
+- `M4-T9` Add sync-state UI badges:
+  - `Local only`
+  - `Sync pending`
+  - `Synced`
+  - `Sync failed`.
 
 ### Exit criteria
 - User can choose local download folder in Settings.
 - Download works locally; dashboard/search remain online.
+- Resume open behavior is deterministic with explicit fallback and status visibility.
 
 ---
 
@@ -189,10 +207,17 @@
   - Supabase restore test
   - agent reconnect/recovery test.
 - `M6-T7` Final UAT and sign-off.
+- `M6-T8` Resume storage canonical cutover:
+  - require cloud object path for new candidate events (except explicit offline mode).
+- `M6-T9` Historical resume backfill completion:
+  - upload legacy local corpus
+  - zero unresolved critical upload failures.
+- `M6-T10` Retention and legal hold policy enforcement for resume blobs.
 
 ### Exit criteria
 - Legacy CSV/SQLite no longer required for operation.
 - Production SLO and security checks pass.
+- Canonical resume storage is centralized (cloud or approved company object store), with local cache optional.
 
 ---
 
