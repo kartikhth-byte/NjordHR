@@ -73,3 +73,38 @@ python3 -m unittest -v tests/test_migrate_legacy_csv.py
   - Operational settings include `Default Download Folder` and `Verified Resumes Folder` with an admin folder browser picker.
   - Additional operational settings now configurable: `seajob_login_url`, `seajob_dashboard_url`, `otp_window_seconds`, `registry_db_path`, `feedback_db_path`, `log_dir`.
   - Settings page includes a built-in `README` tab describing each setting, value source, and reset guidance.
+
+## Local Agent (M3-T1 to M3-T10 baseline)
+A local agent runtime is now available under `agent/` and can run independently from the main backend.
+
+### Run agent
+```bash
+python3 agent_server.py
+```
+
+Default bind:
+- `http://127.0.0.1:5051`
+
+Configurable with:
+- `NJORDHR_AGENT_HOST`
+- `NJORDHR_AGENT_PORT`
+
+### Agent endpoints
+- `GET /health`
+- `GET /settings`
+- `PUT /settings`
+- `PUT /settings/download-folder`
+- `POST /session/start`
+- `POST /session/verify-otp`
+- `POST /session/disconnect`
+- `GET /session/health`
+- `POST /jobs/download`
+- `GET /jobs/<job_id>`
+- `GET /jobs/<job_id>/stream`
+- `GET /diagnostics`
+- `GET /diagnostics/log-bundle`
+
+### Notes
+- Download jobs execute via local scraper and local filesystem.
+- Agent includes retry-safe cloud sync queue for job/log/event forwarding.
+- Resume cloud upload pipeline is queued and idempotent (requires `api_base_url`, device token, and `cloud_upload_resumes=true` in agent settings).

@@ -1,0 +1,2 @@
+"""NjordHR local agent package."""
+
