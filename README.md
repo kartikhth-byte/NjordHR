@@ -47,6 +47,42 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\uninstall_
 Default task name:
 - `NjordHRLocalStartup`
 
+## Installer Build Phase (Current)
+This repo now includes installer build scaffolding for both platforms.
+
+### macOS: build app bundle + unsigned pkg
+```bash
+./scripts/packaging/macos/build_app_bundle.sh
+./scripts/packaging/macos/build_pkg.sh
+```
+
+Outputs:
+- `build/macos/NjordHR.app`
+- `build/macos/NjordHR-unsigned.pkg`
+
+Install target path:
+- `/Applications/NjordHR`
+
+### Windows: portable zip + Inno Setup installer
+Portable ZIP:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\build_portable_zip.ps1
+```
+
+Inno installer (requires `iscc.exe`):
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\build_inno_installer.ps1
+```
+
+Outputs under:
+- `build/windows/`
+
+### Notes
+- Current installers are **unsigned** (development phase).
+- Next production step is code signing + notarization:
+  - macOS: signed/notarized pkg
+  - Windows: signed installer executable
+
 ## macOS Auto-Start on Login
 Install:
 ```bash
