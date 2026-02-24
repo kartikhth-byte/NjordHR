@@ -103,6 +103,8 @@
             const [activeTab, setActiveTab] = useState('download');
             const [toasts, setToasts] = useState([]);
             const [runtimeConfig, setRuntimeConfig] = useState(null);
+            const [isRuntimeRefreshing, setIsRuntimeRefreshing] = useState(false);
+            const [runtimeConfigRefreshedAt, setRuntimeConfigRefreshedAt] = useState(null);
             const [isOtpSending, setIsOtpSending] = useState(false);
             const [isOtpVerifying, setIsOtpVerifying] = useState(false);
             const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -396,14 +398,18 @@
             };
 
             const fetchRuntimeConfig = async () => {
+                setIsRuntimeRefreshing(true);
                 try {
                     const response = await fetch(`${API_BASE_URL}/config/runtime`);
                     const data = await response.json();
                     if (data && data.success) {
                         setRuntimeConfig(data);
+                        setRuntimeConfigRefreshedAt(new Date());
                     }
                 } catch (_error) {
                     // best-effort diagnostics only
+                } finally {
+                    setIsRuntimeRefreshing(false);
                 }
             };
             
@@ -2033,11 +2039,17 @@
                                                 <button
                                                     type="button"
                                                     onClick={fetchRuntimeConfig}
-                                                    className="text-xs px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
+                                                    disabled={isRuntimeRefreshing}
+                                                    className="text-xs px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
                                                 >
-                                                    Refresh Status
+                                                    {isRuntimeRefreshing ? "Refreshing..." : "Refresh Status"}
                                                 </button>
                                             </div>
+                                            {runtimeConfigRefreshedAt && (
+                                                <p className="text-[11px] text-gray-500">
+                                                    Last updated: {runtimeConfigRefreshedAt.toLocaleTimeString()}
+                                                </p>
+                                            )}
                                             {runtimeConfig && runtimeConfig.local_agent ? (
                                                 <div className="mt-2 text-xs space-y-2">
                                                     {(() => {
