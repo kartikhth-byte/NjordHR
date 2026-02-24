@@ -123,6 +123,12 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
 - `NJORDHR_SERVER_URL` (default `http://127.0.0.1:5000`)
 - `NJORDHR_ADMIN_TOKEN` (required for Admin Settings API/UI access)
 
+Setup Wizard installer URL overrides (optional):
+- `NJORDHR_MACOS_FULL_INSTALLER_URL`
+- `NJORDHR_MACOS_AGENT_INSTALLER_URL`
+- `NJORDHR_WINDOWS_FULL_INSTALLER_URL`
+- `NJORDHR_WINDOWS_AGENT_INSTALLER_URL`
+
 ## Supabase Migrations (Scaffold)
 - SQL migrations are under:
   - `supabase/migrations/001_initial_schema.sql`

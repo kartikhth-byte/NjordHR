@@ -174,6 +174,9 @@
             const [isSettingsSaving, setIsSettingsSaving] = useState(false);
             const [settingsLoaded, setSettingsLoaded] = useState(false);
             const [settingsSection, setSettingsSection] = useState('runtime');
+            const [setupManifest, setSetupManifest] = useState(null);
+            const [isSetupLoading, setIsSetupLoading] = useState(false);
+            const [setupMode, setSetupMode] = useState('cloud_local_agent');
             const [settingsForm, setSettingsForm] = useState({
                 default_download_folder: '',
                 verified_resumes_folder: 'Verified_Resumes',
@@ -230,6 +233,12 @@
                 || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:5000');
             const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Not Interested', 'Interview Scheduled', 'Offer Made', 'Hired', 'Rejected'];
             const WORKFLOW_STEPS = ['Connect', 'Download', 'Analyze', 'Review', 'Export'];
+            const detectedOS = (() => {
+                const ua = navigator.userAgent || '';
+                if (ua.includes('Windows')) return 'windows';
+                if (ua.includes('Mac')) return 'macos';
+                return 'unknown';
+            })();
 
             useEffect(() => {
                 fetchRankFolders();
@@ -246,6 +255,10 @@
                 }
                 if (activeTab === 'settings') {
                     fetchRuntimeConfig();
+                }
+                if (activeTab === 'setup') {
+                    fetchRuntimeConfig();
+                    fetchSetupManifest();
                 }
             }, [activeTab]);
 
@@ -417,6 +430,26 @@
                     }
                 } finally {
                     setIsRuntimeRefreshing(false);
+                }
+            };
+
+            const fetchSetupManifest = async () => {
+                setIsSetupLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/setup/manifest`);
+                    const data = await response.json();
+                    if (data && data.success) {
+                        setSetupManifest(data);
+                        if (data.recommended_mode) {
+                            setSetupMode(data.recommended_mode);
+                        }
+                    } else {
+                        handleSendMessage('error', 'Could not load setup manifest.');
+                    }
+                } catch (_error) {
+                    handleSendMessage('error', 'Setup manifest endpoint unavailable.');
+                } finally {
+                    setIsSetupLoading(false);
                 }
             };
             
@@ -2417,6 +2450,114 @@
                     </div>
                 );
             };
+
+            const SetupTabContent = () => {
+                const localAgent = runtimeConfig?.local_agent || {};
+                const agentHealth = localAgent.health || {};
+                const syncPending = Number(agentHealth?.sync?.pending ?? 0);
+                const backendOk = Boolean(runtimeConfig?.success);
+                const agentReachable = Boolean(localAgent?.reachable);
+                const modeLabel = runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only';
+                const installers = setupManifest?.installers || {};
+                const osInstallers = detectedOS === 'windows' ? installers.windows : installers.macos;
+
+                return (
+                    <div>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-2xl font-semibold">Setup Wizard</h2>
+                            <button
+                                onClick={() => {
+                                    fetchSetupManifest();
+                                    fetchRuntimeConfig(true);
+                                }}
+                                disabled={isSetupLoading || isRuntimeRefreshing}
+                                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                {isSetupLoading || isRuntimeRefreshing ? 'Refreshing...' : 'Refresh Checks'}
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+                            {[
+                                { id: 1, title: 'Detect OS', done: detectedOS !== 'unknown', detail: detectedOS === 'windows' ? 'Windows detected' : detectedOS === 'macos' ? 'macOS detected' : 'Unknown OS' },
+                                { id: 2, title: 'Install Runtime', done: backendOk, detail: backendOk ? 'Backend reachable' : 'Backend not reachable' },
+                                { id: 3, title: 'Install Agent', done: agentReachable, detail: agentReachable ? 'Agent reachable' : 'Agent not reachable' },
+                                { id: 4, title: 'Sync Healthy', done: agentReachable && syncPending === 0, detail: agentReachable ? `${syncPending} item(s) pending` : 'Waiting for agent' }
+                            ].map((step) => (
+                                <div key={step.id} className={`rounded-lg border p-3 ${step.done ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                                    <p className="text-xs text-gray-500">Step {step.id}</p>
+                                    <p className={`font-semibold ${step.done ? 'text-green-800' : 'text-gray-800'}`}>{step.title}</p>
+                                    <p className="text-xs text-gray-600 mt-1">{step.detail}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm font-semibold mb-2">1) Choose Mode</p>
+                            <div className="space-y-2 text-sm">
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        checked={setupMode === 'cloud_local_agent'}
+                                        onChange={() => setSetupMode('cloud_local_agent')}
+                                    />
+                                    <span>Cloud + Local Agent (recommended)</span>
+                                </label>
+                                <label className="flex items-center gap-2">
+                                    <input
+                                        type="radio"
+                                        checked={setupMode === 'cloud_only'}
+                                        onChange={() => setSetupMode('cloud_only')}
+                                    />
+                                    <span>Cloud only (advanced)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm font-semibold mb-2">2) Install on {detectedOS === 'windows' ? 'Windows' : detectedOS === 'macos' ? 'macOS' : 'this device'}</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="border rounded-md p-3">
+                                    <p className="font-medium text-sm">Full Installer (recommended)</p>
+                                    {osInstallers?.full ? (
+                                        <a href={osInstallers.full} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">Download installer</a>
+                                    ) : (
+                                        <p className="text-xs text-gray-600 mt-1">No hosted installer URL configured yet. Use local start script.</p>
+                                    )}
+                                </div>
+                                <div className="border rounded-md p-3">
+                                    <p className="font-medium text-sm">Agent Only (advanced)</p>
+                                    {osInstallers?.agent_only ? (
+                                        <a href={osInstallers.agent_only} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">Download agent-only installer</a>
+                                    ) : (
+                                        <p className="text-xs text-gray-600 mt-1">No hosted agent-only URL configured yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="mt-3 text-xs text-gray-600 space-y-1">
+                                <p>macOS local start: <code>./scripts/start_njordhr.sh</code></p>
+                                <p>Windows local start: <code>powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start_njordhr.ps1</code></p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <p className="text-sm font-semibold mb-2">3) Verify Working State</p>
+                            <div className="text-sm space-y-1">
+                                <p><span className="font-medium">Current mode:</span> {modeLabel}</p>
+                                <p><span className="font-medium">Backend:</span> {backendOk ? 'Reachable' : 'Not reachable'}</p>
+                                <p><span className="font-medium">Agent:</span> {agentReachable ? 'Reachable' : 'Not reachable'}</p>
+                                <p><span className="font-medium">Sync pending:</span> {syncPending}</p>
+                                {agentReachable && syncPending > 0 && (
+                                    <p className="text-yellow-700 text-xs">Keep app and agent running until sync reaches 0.</p>
+                                )}
+                                {agentReachable && syncPending === 0 && (
+                                    <p className="text-green-700 text-xs">Ready: install/setup complete.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
             
             return (
                 <>
@@ -2470,6 +2611,7 @@
                             <button onClick={() => setActiveTab('download')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'download' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Download</button>
                             <button onClick={() => setActiveTab('search')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'search' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>AI Search</button>
                             <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
+                            <button onClick={() => setActiveTab('setup')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'setup' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Setup</button>
                             <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>
                         </div>
                         <main className="bg-white p-8 rounded-xl shadow-lg">
@@ -2711,6 +2853,7 @@
                                 </div>
                             )}
                             {activeTab === 'dashboard' && DashboardTabContent()}
+                            {activeTab === 'setup' && SetupTabContent()}
                             {activeTab === 'settings' && SettingsTabContent()}
                         </main>
                     </div>

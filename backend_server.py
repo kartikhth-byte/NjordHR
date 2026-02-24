@@ -788,6 +788,38 @@ def runtime_config():
     })
 
 
+@app.route('/setup/manifest', methods=['GET'])
+def setup_manifest():
+    """Installer/setup metadata for the guided Setup tab."""
+    base_url = app_settings.server_url.rstrip('/')
+    return jsonify({
+        "success": True,
+        "recommended_mode": "cloud_local_agent",
+        "installers": {
+            "macos": {
+                "full": os.getenv("NJORDHR_MACOS_FULL_INSTALLER_URL", ""),
+                "agent_only": os.getenv("NJORDHR_MACOS_AGENT_INSTALLER_URL", ""),
+                "fallback_docs": f"{base_url}",
+            },
+            "windows": {
+                "full": os.getenv("NJORDHR_WINDOWS_FULL_INSTALLER_URL", ""),
+                "agent_only": os.getenv("NJORDHR_WINDOWS_AGENT_INSTALLER_URL", ""),
+                "fallback_docs": f"{base_url}",
+            }
+        },
+        "commands": {
+            "macos_full": "./scripts/packaging/macos/build_pkg.sh",
+            "windows_full": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\packaging\\windows\\build_inno_installer.ps1",
+            "macos_local_start": "./scripts/start_njordhr.sh",
+            "windows_local_start": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\windows\\start_njordhr.ps1",
+        },
+        "checks": {
+            "backend_runtime_url": f"{base_url}/config/runtime",
+            "agent_health_url": os.getenv("NJORDHR_AGENT_BASE_URL", "http://127.0.0.1:5051").rstrip('/') + "/health",
+        }
+    })
+
+
 @app.route('/api/agent/job-state', methods=['POST'])
 def ingest_agent_job_state():
     ok, reason = _require_agent_ingest_auth()
