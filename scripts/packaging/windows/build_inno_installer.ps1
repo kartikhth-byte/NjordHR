@@ -5,6 +5,7 @@ Param(
 $ErrorActionPreference = "Stop"
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 $BuildDir = Join-Path $ProjectDir "build\windows"
+$StageDir = Join-Path $BuildDir "inno_stage"
 $IssPath = Join-Path $BuildDir "NjordHR.iss"
 
 New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
@@ -16,7 +17,13 @@ if (-not $iscc) {
     exit 1
 }
 
-$escapedProject = $ProjectDir -replace "\\", "\\"
+if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
+New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
+
+Write-Host "[NjordHR] Preparing clean staging directory..."
+robocopy $ProjectDir $StageDir /E /NFL /NDL /NJH /NJS /NP /XD ".git" "__pycache__" ".pytest_cache" "build" "logs\runtime" | Out-Null
+
+$escapedStage = $StageDir -replace "\\", "\\"
 
 @"
 [Setup]
@@ -29,8 +36,7 @@ Compression=lzma
 SolidCompression=yes
 
 [Files]
-Source: "$escapedProject\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
-Source: "$escapedProject\.git\*"; DestDir: "{app}\.git"; Flags: skipifsourcedoesntexist recursesubdirs createallsubdirs
+Source: "$escapedStage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.bat"
@@ -44,4 +50,3 @@ Filename: "{app}\start_njordhr.bat"; Description: "Launch NjordHR"; Flags: nowai
 
 Write-Host "[NjordHR] Inno installer build complete. Check:"
 Write-Host "  $BuildDir"
-
