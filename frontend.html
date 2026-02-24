@@ -102,6 +102,7 @@
         function App() {
             const [activeTab, setActiveTab] = useState('download');
             const [toasts, setToasts] = useState([]);
+            const [runtimeConfig, setRuntimeConfig] = useState(null);
             const [isOtpSending, setIsOtpSending] = useState(false);
             const [isOtpVerifying, setIsOtpVerifying] = useState(false);
             const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -231,11 +232,18 @@
             useEffect(() => {
                 fetchRankFolders();
             }, [downloadLog]);
+
+            useEffect(() => {
+                fetchRuntimeConfig();
+            }, []);
             
             useEffect(() => {
                 if (activeTab === 'dashboard') {
                     fetchAvailableRanks();
                     fetchDashboardData({ resetPage: true });
+                }
+                if (activeTab === 'settings') {
+                    fetchRuntimeConfig();
                 }
             }, [activeTab]);
 
@@ -384,6 +392,18 @@
                     }
                 } catch (error) {
                     console.error("Could not fetch rank folders", error);
+                }
+            };
+
+            const fetchRuntimeConfig = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/config/runtime`);
+                    const data = await response.json();
+                    if (data && data.success) {
+                        setRuntimeConfig(data);
+                    }
+                } catch (_error) {
+                    // best-effort diagnostics only
                 }
             };
             
@@ -2007,6 +2027,59 @@
                                                 </label>
                                             ))}
                                         </div>
+                                        <div className="pt-2 border-t border-gray-100">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-sm font-medium text-gray-800">Local Agent Status</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={fetchRuntimeConfig}
+                                                    className="text-xs px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
+                                                >
+                                                    Refresh Status
+                                                </button>
+                                            </div>
+                                            {runtimeConfig && runtimeConfig.local_agent ? (
+                                                <div className="mt-2 text-xs space-y-1">
+                                                    <p>
+                                                        <span className="font-medium">Mode:</span>{" "}
+                                                        {runtimeConfig.feature_flags?.use_local_agent ? "Cloud + Local Agent" : "Cloud only"}
+                                                    </p>
+                                                    <p>
+                                                        <span className="font-medium">Agent URL:</span>{" "}
+                                                        {runtimeConfig.local_agent.base_url || "-"}
+                                                    </p>
+                                                    <p>
+                                                        <span className="font-medium">Reachable:</span>{" "}
+                                                        {runtimeConfig.local_agent.reachable ? "Yes" : "No"}
+                                                    </p>
+                                                    {runtimeConfig.local_agent.health && (
+                                                        <>
+                                                            <p>
+                                                                <span className="font-medium">Device ID:</span>{" "}
+                                                                {runtimeConfig.local_agent.health.device_id || "-"}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">Sync Queue Pending:</span>{" "}
+                                                                {runtimeConfig.local_agent.health.sync?.pending ?? "-"}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">Download Folder OK:</span>{" "}
+                                                                {runtimeConfig.local_agent.health.download_folder_ok ? "Yes" : "No"}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">Session:</span>{" "}
+                                                                {runtimeConfig.local_agent.health.session_health?.reason || "-"}
+                                                            </p>
+                                                        </>
+                                                    )}
+                                                    {runtimeConfig.local_agent.error && (
+                                                        <p className="text-red-600">{runtimeConfig.local_agent.error}</p>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p className="mt-2 text-xs text-gray-500">Runtime diagnostics unavailable.</p>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 
@@ -2312,7 +2385,16 @@
                                     <p className="text-xs text-gray-500 mt-1">Multi-Stage Retrieval + CSV Export + Dashboard</p>
                                 </div>
                              </div>
-                            <div className="text-sm text-gray-500">Phase 1: Core Engine</div>
+                            <div className="flex flex-col items-end gap-2">
+                                <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${
+                                    runtimeConfig?.feature_flags?.use_local_agent
+                                        ? 'bg-green-50 text-green-700 border-green-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}>
+                                    {runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only'}
+                                </span>
+                                <div className="text-sm text-gray-500">Phase 1: Core Engine</div>
+                            </div>
                         </header>
                         <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Workflow</p>
