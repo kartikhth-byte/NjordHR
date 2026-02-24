@@ -2,6 +2,7 @@
 
 ## One-Click Local Start (No Manual Terminals)
 - Double-click: `start_njordhr.command`
+- Windows double-click: `start_njordhr.bat`
 - Or run in terminal:
 ```bash
 ./scripts/start_njordhr.sh
@@ -17,6 +18,35 @@ Runtime artifacts:
 - Logs: `logs/runtime/`
 - Runtime port file: `logs/runtime/runtime.env`
 
+## Windows Local Start
+Run in PowerShell:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start_njordhr.ps1
+```
+
+Or double-click:
+- `start_njordhr.bat`
+
+Windows startup behavior:
+- Starts backend + local agent in background.
+- Auto-selects free local ports near `5050`/`5051`.
+- Updates agent `api_base_url` to active backend URL.
+- Opens browser to active backend URL (unless `-NoOpen` is passed).
+
+## Windows Auto-Start on Login (Task Scheduler)
+Install:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_startup_task.ps1
+```
+
+Uninstall:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\uninstall_startup_task.ps1
+```
+
+Default task name:
+- `NjordHRLocalStartup`
+
 ## macOS Auto-Start on Login
 Install:
 ```bash
@@ -30,6 +60,24 @@ Uninstall:
 
 LaunchAgent label:
 - `com.njordhr.local`
+
+## Local Storage Paths (Exact)
+Project-local runtime files (all OS):
+- Runtime logs: `<project>/logs/runtime/`
+- Runtime port map: `<project>/logs/runtime/runtime.env`
+- Backend ingest idempotency DB: `<project>/logs/agent_sync_ingest.sqlite3`
+- Backend ingest append-only logs: `<project>/logs/agent_job_state.jsonl`, `<project>/logs/agent_job_log.jsonl`, `<project>/logs/agent_candidate_event.jsonl`, `<project>/logs/agent_resume_upload.jsonl`
+
+Agent OS-specific config/state:
+- macOS config: `~/Library/Application Support/NjordHR/agent.json`
+- macOS state queue: `~/Library/Application Support/NjordHR/state/pending_sync_queue.json`
+- Windows config: `%APPDATA%\NjordHR\agent.json`
+- Windows state queue: `%APPDATA%\NjordHR\state\pending_sync_queue.json`
+
+Resume/download folders:
+- Default agent download folder: `~/Downloads/NjordHR` (macOS/Linux), `%USERPROFILE%\Downloads\NjordHR` (Windows)
+- Admin can override download folder in Settings.
+- Verified resumes folder is configurable in Admin Settings (`verified_resumes_folder`).
 
 ## Runtime Flags
 Copy `.env.example` to `.env` (or set env vars in your runtime) to control migration flags:
