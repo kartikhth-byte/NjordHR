@@ -809,7 +809,9 @@ def setup_manifest():
         },
         "commands": {
             "macos_full": "./scripts/packaging/macos/build_pkg.sh",
+            "macos_install_app": "./scripts/packaging/macos/install_app.sh",
             "windows_full": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\packaging\\windows\\build_inno_installer.ps1",
+            "windows_install_shortcuts": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\windows\\install_shortcuts.ps1",
             "macos_local_start": "./scripts/start_njordhr.sh",
             "windows_local_start": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\windows\\start_njordhr.ps1",
         },

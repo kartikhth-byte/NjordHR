@@ -54,6 +54,7 @@ This repo now includes installer build scaffolding for both platforms.
 ```bash
 ./scripts/packaging/macos/build_app_bundle.sh
 ./scripts/packaging/macos/build_pkg.sh
+./scripts/packaging/macos/install_app.sh
 ```
 
 Outputs:
@@ -76,6 +77,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\
 
 Outputs under:
 - `build/windows/`
+
+Install desktop/start menu shortcuts on Windows:
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_shortcuts.ps1
+```
 
 ### Notes
 - Current installers are **unsigned** (development phase).

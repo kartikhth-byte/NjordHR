@@ -2535,8 +2535,10 @@
                                 </div>
                             </div>
                             <div className="mt-3 text-xs text-gray-600 space-y-1">
-                                <p>macOS local start: <code>./scripts/start_njordhr.sh</code></p>
-                                <p>Windows local start: <code>powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\start_njordhr.ps1</code></p>
+                                <p>macOS install app icon: <code>{setupManifest?.commands?.macos_install_app || './scripts/packaging/macos/install_app.sh'}</code></p>
+                                <p>Windows install shortcuts: <code>{setupManifest?.commands?.windows_install_shortcuts || 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\windows\\install_shortcuts.ps1'}</code></p>
+                                <p>macOS local start: <code>{setupManifest?.commands?.macos_local_start || './scripts/start_njordhr.sh'}</code></p>
+                                <p>Windows local start: <code>{setupManifest?.commands?.windows_local_start || 'powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\windows\\start_njordhr.ps1'}</code></p>
                             </div>
                         </div>
 
