@@ -2039,7 +2039,35 @@
                                                 </button>
                                             </div>
                                             {runtimeConfig && runtimeConfig.local_agent ? (
-                                                <div className="mt-2 text-xs space-y-1">
+                                                <div className="mt-2 text-xs space-y-2">
+                                                    {(() => {
+                                                        const agent = runtimeConfig.local_agent || {};
+                                                        const health = agent.health || {};
+                                                        const pending = Number(health.sync?.pending ?? 0);
+                                                        const reachable = Boolean(agent.reachable);
+                                                        let statusLabel = "Healthy";
+                                                        let statusClass = "bg-green-50 text-green-700 border-green-200";
+                                                        let hint = "Agent is connected and sync is up to date.";
+                                                        if (!reachable) {
+                                                            statusLabel = "Disconnected";
+                                                            statusClass = "bg-red-50 text-red-700 border-red-200";
+                                                            hint = "Agent is not reachable. Start agent service and click Refresh Status.";
+                                                        } else if (pending > 20) {
+                                                            statusLabel = "Attention Needed";
+                                                            statusClass = "bg-yellow-50 text-yellow-700 border-yellow-200";
+                                                            hint = "Pending sync is high. Check cloud API URL/token in agent settings.";
+                                                        } else if (pending > 0) {
+                                                            statusLabel = "Sync In Progress";
+                                                            statusClass = "bg-blue-50 text-blue-700 border-blue-200";
+                                                            hint = "Agent is processing pending sync items.";
+                                                        }
+                                                        return (
+                                                            <div className={`rounded-md border px-2 py-1 ${statusClass}`}>
+                                                                <p className="font-semibold">{statusLabel}</p>
+                                                                <p className="mt-0.5">{hint}</p>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                     <p>
                                                         <span className="font-medium">Mode:</span>{" "}
                                                         {runtimeConfig.feature_flags?.use_local_agent ? "Cloud + Local Agent" : "Cloud only"}
@@ -2052,14 +2080,14 @@
                                                         <span className="font-medium">Reachable:</span>{" "}
                                                         {runtimeConfig.local_agent.reachable ? "Yes" : "No"}
                                                     </p>
-                                                    {runtimeConfig.local_agent.health && (
+                                                        {runtimeConfig.local_agent.health && (
                                                         <>
                                                             <p>
                                                                 <span className="font-medium">Device ID:</span>{" "}
                                                                 {runtimeConfig.local_agent.health.device_id || "-"}
                                                             </p>
                                                             <p>
-                                                                <span className="font-medium">Sync Queue Pending:</span>{" "}
+                                                                <span className="font-medium">Items waiting to sync:</span>{" "}
                                                                 {runtimeConfig.local_agent.health.sync?.pending ?? "-"}
                                                             </p>
                                                             <p>
