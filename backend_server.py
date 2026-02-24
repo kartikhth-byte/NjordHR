@@ -10,8 +10,10 @@ import json
 import zipfile
 import logging
 import threading
+from datetime import datetime
 from queue import Queue, Empty
 import requests
+import sqlite3
 
 # Dependency Check & Imports
 try:
@@ -134,6 +136,30 @@ def _require_admin():
     return True, ""
 
 
+def _agent_sync_token():
+    return os.getenv("NJORDHR_AGENT_SYNC_TOKEN", "").strip()
+
+
+def _require_agent_ingest_auth():
+    """
+    Optional auth for agent ingest endpoints.
+    - If NJORDHR_AGENT_SYNC_TOKEN is unset, allow requests (dev mode).
+    - If set, require bearer or X-Device-Token match.
+    """
+    expected = _agent_sync_token()
+    if not expected:
+        return True, ""
+
+    auth = request.headers.get("Authorization", "").strip()
+    bearer = ""
+    if auth.lower().startswith("bearer "):
+        bearer = auth.split(" ", 1)[1].strip()
+    device_token = request.headers.get("X-Device-Token", "").strip()
+    if bearer == expected or device_token == expected:
+        return True, ""
+    return False, "Unauthorized agent token."
+
+
 def _mask_secret(value):
     value = str(value or "").strip()
     if not value:
@@ -146,6 +172,73 @@ def _mask_secret(value):
 def _config_set_literal(parser, section, key, value):
     """Write literal values safely for ConfigParser interpolation mode."""
     parser.set(section, key, str(value).replace('%', '%%'))
+
+
+def _agent_sync_db_path():
+    base = _resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs")
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, "agent_sync_ingest.sqlite3")
+
+
+def _ensure_agent_sync_db():
+    db_path = _agent_sync_db_path()
+    conn = sqlite3.connect(db_path, timeout=10)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ingest_idempotency (
+                idempotency_key TEXT PRIMARY KEY,
+                endpoint TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path
+
+
+def _ingest_seen_idempotency(key):
+    if not key:
+        return False
+    db_path = _ensure_agent_sync_db()
+    conn = sqlite3.connect(db_path, timeout=10)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM ingest_idempotency WHERE idempotency_key = ?",
+            (key,),
+        ).fetchone()
+        return bool(row)
+    finally:
+        conn.close()
+
+
+def _ingest_store_idempotency(key, endpoint):
+    if not key:
+        return
+    db_path = _ensure_agent_sync_db()
+    conn = sqlite3.connect(db_path, timeout=10)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO ingest_idempotency(idempotency_key, endpoint, created_at) VALUES (?, ?, ?)",
+            (key, endpoint, datetime.utcnow().isoformat() + "Z"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _append_agent_sync_jsonl(kind, payload):
+    logs_dir = _resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    path = os.path.join(logs_dir, f"agent_{kind}.jsonl")
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "kind": kind,
+            "received_at": datetime.utcnow().isoformat() + "Z",
+            "payload": payload or {},
+        }) + "\n")
 
 
 def _settings_payload(include_plain_secrets=False):
@@ -683,12 +776,127 @@ def runtime_config():
             "key_hint": key_hint,
             "url_configured": bool(os.getenv("SUPABASE_URL", "").strip()),
         },
+        "agent_ingest_auth": {
+            "required": bool(_agent_sync_token()),
+        },
         "admin_settings_enabled": bool(_admin_token()),
         "local_agent": _agent_health_summary() if _use_local_agent() else {
             "configured": False,
             "reachable": False,
             "base_url": _local_agent_base_url(),
         },
+    })
+
+
+@app.route('/api/agent/job-state', methods=['POST'])
+def ingest_agent_job_state():
+    ok, reason = _require_agent_ingest_auth()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    idem_key = request.headers.get("X-Idempotency-Key", "").strip()
+    if idem_key and _ingest_seen_idempotency(idem_key):
+        return jsonify({"success": True, "duplicate": True})
+
+    payload = request.json if request.is_json else {}
+    _append_agent_sync_jsonl("job_state", payload or {})
+    _ingest_store_idempotency(idem_key, "/api/agent/job-state")
+    return jsonify({"success": True})
+
+
+@app.route('/api/agent/job-log', methods=['POST'])
+def ingest_agent_job_log():
+    ok, reason = _require_agent_ingest_auth()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    idem_key = request.headers.get("X-Idempotency-Key", "").strip()
+    if idem_key and _ingest_seen_idempotency(idem_key):
+        return jsonify({"success": True, "duplicate": True})
+
+    payload = request.json if request.is_json else {}
+    _append_agent_sync_jsonl("job_log", payload or {})
+    _ingest_store_idempotency(idem_key, "/api/agent/job-log")
+    return jsonify({"success": True})
+
+
+@app.route('/api/events/candidate', methods=['POST'])
+def ingest_agent_candidate_event():
+    ok, reason = _require_agent_ingest_auth()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    idem_key = request.headers.get("X-Idempotency-Key", "").strip()
+    if idem_key and _ingest_seen_idempotency(idem_key):
+        return jsonify({"success": True, "duplicate": True})
+
+    payload = request.json if request.is_json else {}
+    payload = payload or {}
+
+    event_type = str(payload.get("event_type", "")).strip() or "unknown"
+    filename = str(payload.get("filename", "")).strip()
+    rank = str(payload.get("rank_applied_for", "")).strip()
+    extracted_data = {
+        "name": str(payload.get("name", "")).strip(),
+        "present_rank": str(payload.get("present_rank", "")).strip(),
+        "email": str(payload.get("email", "")).strip(),
+        "country": str(payload.get("country", "")).strip(),
+        "mobile_no": str(payload.get("mobile_no", "")).strip(),
+    }
+
+    candidate_id = str(payload.get("candidate_external_id", "")).strip()
+    if not candidate_id and filename:
+        m = re.search(r"_(\d+)(?:_|\.)", filename)
+        if m:
+            candidate_id = m.group(1)
+
+    # Keep operational/download-only agent events out of dashboard data.
+    dashboard_event_types = {"initial_verification", "status_change", "note_added", "resume_updated"}
+    if event_type in dashboard_event_types and candidate_id and filename:
+        csv_manager.log_event(
+            candidate_id=candidate_id,
+            filename=filename,
+            event_type=event_type,
+            status=str(payload.get("status", "New")),
+            notes=str(payload.get("notes", "")),
+            rank_applied_for=rank,
+            search_ship_type=str(payload.get("search_ship_type", "")),
+            ai_prompt=str(payload.get("ai_search_prompt", "")),
+            ai_reason=str(payload.get("ai_match_reason", "")),
+            extracted_data=extracted_data,
+        )
+    else:
+        _append_agent_sync_jsonl("candidate_event", payload)
+
+    _ingest_store_idempotency(idem_key, "/api/events/candidate")
+    return jsonify({"success": True})
+
+
+@app.route('/api/agent/resume-upload', methods=['POST'])
+def ingest_agent_resume_upload():
+    ok, reason = _require_agent_ingest_auth()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    idem_key = request.headers.get("X-Idempotency-Key", "").strip()
+    if idem_key and _ingest_seen_idempotency(idem_key):
+        return jsonify({"success": True, "duplicate": True, "upload_status": "duplicate"})
+
+    # Placeholder for cloud-object upload integration.
+    metadata_raw = request.form.get("metadata", "{}")
+    try:
+        metadata = json.loads(metadata_raw) if metadata_raw else {}
+    except Exception:
+        metadata = {}
+    file_obj = request.files.get("file")
+    filename = file_obj.filename if file_obj else ""
+    _append_agent_sync_jsonl("resume_upload", {"filename": filename, "metadata": metadata})
+
+    _ingest_store_idempotency(idem_key, "/api/agent/resume-upload")
+    return jsonify({
+        "success": True,
+        "upload_status": "accepted",
+        "resume_storage_path": "",
     })
 
 

@@ -173,18 +173,21 @@ class CloudSyncClient:
         headers = self._headers()
         headers["X-Idempotency-Key"] = item["idempotency_key"]
 
-        if item["kind"] == "resume_upload":
-            meta = payload.get("metadata", {})
-            file_path = payload.get("file_path", "")
-            if not os.path.isfile(file_path):
-                return True, "file_missing_skip"
-            with open(file_path, "rb") as fh:
-                files = {"file": (os.path.basename(file_path), fh, "application/pdf")}
-                data = {"metadata": _json_dumps(meta)}
-                local_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
-                resp = requests.post(url, headers=local_headers, files=files, data=data, timeout=timeout)
-        else:
-            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        try:
+            if item["kind"] == "resume_upload":
+                meta = payload.get("metadata", {})
+                file_path = payload.get("file_path", "")
+                if not os.path.isfile(file_path):
+                    return True, "file_missing_skip"
+                with open(file_path, "rb") as fh:
+                    files = {"file": (os.path.basename(file_path), fh, "application/pdf")}
+                    data = {"metadata": _json_dumps(meta)}
+                    local_headers = {k: v for k, v in headers.items() if k != "Content-Type"}
+                    resp = requests.post(url, headers=local_headers, files=files, data=data, timeout=timeout)
+            else:
+                resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        except Exception as exc:
+            return False, f"request_error: {exc}"
         if resp.status_code >= 400:
             return False, f"{resp.status_code} {resp.text[:500]}"
         return True, ""
@@ -219,4 +222,3 @@ class CloudSyncClient:
                     head["last_error"] = err
                     head["next_retry_at"] = time.time() + backoff
                 self._save_pending()
-
