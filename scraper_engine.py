@@ -3,6 +3,7 @@ import base64
 import re
 import json
 import os
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -264,13 +265,28 @@ class Scraper:
                     continue
 
                 rank_slug = rank.replace(' ', '_').replace('/', '-')
-                pdf_filename = f"{rank_slug}_{candidate_id}.pdf"
+                rank_file = rank.replace(' ', '-').replace('/', '-')
+                ship_file = ship_type.replace(' ', '-').replace('/', '-')
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                pdf_filename = f"{rank_file}_{ship_file}_{candidate_id}_{timestamp}.pdf"
                 file_path = os.path.join(target_folder, pdf_filename)
 
-                if not force_redownload and os.path.exists(file_path):
-                    logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
-                    existing_ids.add(candidate_id)
-                    continue
+                if not force_redownload:
+                    existing_name_pattern = re.compile(
+                        rf"^{re.escape(rank_file)}_{re.escape(ship_file)}_{re.escape(candidate_id)}_\d{{4}}-\d{{2}}-\d{{2}}_\d{{2}}-\d{{2}}-\d{{2}}\.pdf$",
+                        re.IGNORECASE
+                    )
+                    legacy_name = f"{rank_slug}_{candidate_id}.pdf"
+                    already_downloaded = False
+                    if os.path.isdir(target_folder):
+                        for existing_name in os.listdir(target_folder):
+                            if existing_name_pattern.match(existing_name) or existing_name == legacy_name:
+                                already_downloaded = True
+                                break
+                    if already_downloaded:
+                        logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
+                        existing_ids.add(candidate_id)
+                        continue
 
                 logger.info(f"Processing new candidate ID: {candidate_id}")
                 
