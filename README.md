@@ -59,10 +59,16 @@ This repo now includes installer build scaffolding for both platforms.
 
 Outputs:
 - `build/macos/NjordHR.app`
-- `build/macos/NjordHR-unsigned.pkg`
+- `build/macos/NjordHR-<version>-unsigned.pkg`
+- `build/macos/NjordHR-unsigned.pkg` (latest alias)
 
 Installer target path:
 - `/Applications/NjordHR.app`
+
+Optional QA install verification:
+```bash
+./scripts/packaging/macos/qa_install_verify.sh
+```
 
 ### Windows: portable zip + Inno Setup installer
 Portable ZIP:
@@ -92,7 +98,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_sh
 ## End-User Install (Installer-first)
 End users should run installer files, not scripts:
 
-- macOS: `build/macos/NjordHR-unsigned.pkg`
+- macOS: latest installer file under `build/macos/`:
+  - `NjordHR-<version>-unsigned.pkg` (preferred)
+  - `NjordHR-unsigned.pkg` (latest alias)
   - Double-click pkg and complete install.
   - Open app from Applications: `NjordHR`.
 
