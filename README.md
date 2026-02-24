@@ -1,5 +1,36 @@
 # NjordHR
 
+## One-Click Local Start (No Manual Terminals)
+- Double-click: `start_njordhr.command`
+- Or run in terminal:
+```bash
+./scripts/start_njordhr.sh
+```
+
+What it does:
+- Starts backend and local agent (with duplicate-start protection).
+- Auto-selects free ports if defaults are occupied.
+- Auto-wires agent `api_base_url` to backend URL.
+- Opens browser to the active backend URL.
+
+Runtime artifacts:
+- Logs: `logs/runtime/`
+- Runtime port file: `logs/runtime/runtime.env`
+
+## macOS Auto-Start on Login
+Install:
+```bash
+./scripts/macos/install_launchagent.sh
+```
+
+Uninstall:
+```bash
+./scripts/macos/uninstall_launchagent.sh
+```
+
+LaunchAgent label:
+- `com.njordhr.local`
+
 ## Runtime Flags
 Copy `.env.example` to `.env` (or set env vars in your runtime) to control migration flags:
 - `USE_SUPABASE_DB` (default `false`)
