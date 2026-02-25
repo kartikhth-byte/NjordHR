@@ -129,7 +129,11 @@ def create_agent_app():
                 "job_id": job_id,
                 "rank_applied_for": rank_folder,
                 "device_id": settings.get("device_id", ""),
-                "candidate_external_id": re.search(r"_(\d+)_", filename).group(1) if re.search(r"_(\d+)_", filename) else "",
+                "candidate_external_id": (
+                    re.search(r"_(\d+)(?:_|\.)", filename).group(1)
+                    if re.search(r"_(\d+)(?:_|\.)", filename)
+                    else ""
+                ),
             })
             upload_rows.append({"filename": filename, **upload})
             sync_client.push_candidate_event({
@@ -333,4 +337,3 @@ def create_agent_app():
         return jsonify({"success": True})
 
     return app
-

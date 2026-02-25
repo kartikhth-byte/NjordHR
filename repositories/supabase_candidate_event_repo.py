@@ -126,11 +126,11 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
-                  ai_reason='', extracted_data=None):
+                  ai_reason='', extracted_data=None, resume_url=''):
         try:
             extracted_data = extracted_data or {}
             candidate_external_id = str(candidate_id)
-            resume_url = f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
+            resolved_resume_url = str(resume_url or "").strip() or f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
 
             self._upsert_candidate(
                 candidate_external_id,
@@ -148,7 +148,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
             self._insert_event({
                 "candidate_external_id": candidate_external_id,
                 "filename": filename,
-                "resume_url": resume_url,
+                "resume_url": resolved_resume_url,
                 "event_type": event_type,
                 "status": status,
                 "notes": notes,
@@ -230,7 +230,8 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
                 'email': latest.get('Email', ''),
                 'country': latest.get('Country', ''),
                 'mobile_no': latest.get('Mobile_No', '')
-            }
+            },
+            resume_url=latest.get('Resume_URL', '')
         )
 
     def log_note_added(self, candidate_id, notes):
@@ -253,7 +254,8 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
                 'email': latest.get('Email', ''),
                 'country': latest.get('Country', ''),
                 'mobile_no': latest.get('Mobile_No', '')
-            }
+            },
+            resume_url=latest.get('Resume_URL', '')
         )
 
     def get_rank_counts(self):

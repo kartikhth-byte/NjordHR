@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, send_file
+from flask import Flask, request, jsonify, send_from_directory, Response, send_file, redirect, has_request_context
 from flask_cors import CORS
 import csv
 import io
@@ -13,6 +13,7 @@ import threading
 from datetime import datetime
 from queue import Queue, Empty
 import requests
+from urllib.parse import quote
 import sqlite3
 
 # Dependency Check & Imports
@@ -359,13 +360,88 @@ def _agent_health_summary():
 
 
 def _build_runtime_resume_url(rank_applied_for, filename):
+    return _build_runtime_resume_url_from_stored(rank_applied_for, filename, "")
+
+
+def _storage_bucket_name():
+    return os.getenv("SUPABASE_RESUME_BUCKET", "resumes").strip() or "resumes"
+
+
+def _safe_storage_segment(value):
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
+    return cleaned.strip("._") or "unknown"
+
+
+def _supabase_storage_upload(file_bytes, object_path, content_type="application/pdf"):
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = resolve_supabase_api_key()
+    if not supabase_url or not supabase_key:
+        return None, "Supabase credentials not configured"
+
+    bucket = _storage_bucket_name()
+    endpoint = f"{supabase_url.rstrip('/')}/storage/v1/object/{bucket}/{object_path}"
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Content-Type": content_type,
+        "x-upsert": "true",
+    }
+    try:
+        resp = requests.post(endpoint, headers=headers, data=file_bytes, timeout=30)
+        if resp.status_code >= 400:
+            return None, f"Upload failed ({resp.status_code}): {resp.text[:300]}"
+        return f"storage://{bucket}/{object_path}", ""
+    except Exception as exc:
+        return None, str(exc)
+
+
+def _supabase_storage_signed_url(storage_url, expires_in=600):
+    if not storage_url or not storage_url.startswith("storage://"):
+        return "", "Invalid storage URL"
+
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = resolve_supabase_api_key()
+    if not supabase_url or not supabase_key:
+        return "", "Supabase credentials not configured"
+
+    raw = storage_url[len("storage://"):]
+    bucket, _, object_path = raw.partition("/")
+    if not bucket or not object_path:
+        return "", "Invalid storage path"
+
+    endpoint = f"{supabase_url.rstrip('/')}/storage/v1/object/sign/{bucket}/{object_path}"
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Content-Type": "application/json",
+    }
+    body = {"expiresIn": int(expires_in)}
+    try:
+        resp = requests.post(endpoint, headers=headers, json=body, timeout=20)
+        if resp.status_code >= 400:
+            return "", f"Sign failed ({resp.status_code}): {resp.text[:300]}"
+        payload = resp.json() if resp.text else {}
+        signed = payload.get("signedURL") or payload.get("signedUrl") or ""
+        if not signed:
+            return "", "Signed URL missing in response"
+        if signed.startswith("http://") or signed.startswith("https://"):
+            return signed, ""
+        return f"{supabase_url.rstrip('/')}/storage/v1{signed}", ""
+    except Exception as exc:
+        return "", str(exc)
+
+
+def _build_runtime_resume_url_from_stored(rank_applied_for, filename, stored_resume_url):
     rank = str(rank_applied_for or "").strip()
     name = str(filename or "").strip()
-    if not rank or not name:
-        return ""
+    stored = str(stored_resume_url or "").strip()
     # Prefer current request host to avoid stale hardcoded port in historical rows.
-    base = request.host_url.rstrip("/") if request else app_settings.server_url.rstrip("/")
-    return f"{base}/get_resume/{rank}/{name}"
+    base = request.host_url.rstrip("/") if has_request_context() else app_settings.server_url.rstrip("/")
+    if stored.startswith("storage://"):
+        return f"{base}/open_resume?storage_url={quote(stored, safe='')}&rank_folder={quote(rank, safe='')}&filename={quote(name, safe='')}"
+    if rank and name:
+        return f"{base}/open_resume?rank_folder={quote(rank, safe='')}&filename={quote(name, safe='')}"
+    return ""
 
 
 VALID_STATUSES = {
@@ -884,6 +960,9 @@ def ingest_agent_candidate_event():
         if m:
             candidate_id = m.group(1)
 
+    resume_storage_path = str(payload.get("resume_storage_path", "")).strip()
+    explicit_resume_url = resume_storage_path if resume_storage_path.startswith("storage://") else ""
+
     # Keep operational/download-only agent events out of dashboard data.
     dashboard_event_types = {"initial_verification", "status_change", "note_added", "resume_updated"}
     if event_type in dashboard_event_types and candidate_id and filename:
@@ -898,6 +977,7 @@ def ingest_agent_candidate_event():
             ai_prompt=str(payload.get("ai_search_prompt", "")),
             ai_reason=str(payload.get("ai_match_reason", "")),
             extracted_data=extracted_data,
+            resume_url=explicit_resume_url,
         )
     else:
         _append_agent_sync_jsonl("candidate_event", payload)
@@ -916,7 +996,7 @@ def ingest_agent_resume_upload():
     if idem_key and _ingest_seen_idempotency(idem_key):
         return jsonify({"success": True, "duplicate": True, "upload_status": "duplicate"})
 
-    # Placeholder for cloud-object upload integration.
+    # Upload PDF into private Supabase Storage bucket and return canonical storage URL.
     metadata_raw = request.form.get("metadata", "{}")
     try:
         metadata = json.loads(metadata_raw) if metadata_raw else {}
@@ -924,13 +1004,40 @@ def ingest_agent_resume_upload():
         metadata = {}
     file_obj = request.files.get("file")
     filename = file_obj.filename if file_obj else ""
-    _append_agent_sync_jsonl("resume_upload", {"filename": filename, "metadata": metadata})
+    candidate_id = _safe_storage_segment(metadata.get("candidate_external_id") or "unknown")
+    rank = _safe_storage_segment(metadata.get("rank_applied_for") or "unknown")
+    safe_name = _safe_storage_segment(filename or f"{candidate_id}.pdf")
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name = f"{safe_name}.pdf"
+    object_path = f"{rank}/{candidate_id}/{safe_name}"
+
+    if not file_obj:
+        return jsonify({"success": False, "message": "Missing file"}), 400
+
+    content = file_obj.read()
+    if not content:
+        return jsonify({"success": False, "message": "Empty file"}), 400
+
+    storage_url, error = _supabase_storage_upload(content, object_path)
+    _append_agent_sync_jsonl("resume_upload", {
+        "filename": filename,
+        "metadata": metadata,
+        "storage_url": storage_url,
+        "error": error,
+    })
 
     _ingest_store_idempotency(idem_key, "/api/agent/resume-upload")
+    if not storage_url:
+        return jsonify({
+            "success": False,
+            "upload_status": "failed",
+            "message": error or "Upload failed",
+            "resume_storage_path": "",
+        }), 500
     return jsonify({
         "success": True,
-        "upload_status": "accepted",
-        "resume_storage_path": "",
+        "upload_status": "uploaded",
+        "resume_storage_path": storage_url,
     })
 
 
@@ -1250,8 +1357,7 @@ def submit_feedback():
         print(f"[ERROR] Feedback submission failed: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route('/get_resume/<path:rank_folder>/<path:filename>')
-def get_resume(rank_folder, filename):
+def _serve_local_resume(rank_folder, filename):
     try:
         base_dir = os.path.abspath(settings['Default_Download_Folder'])
         full_path = _resolve_within_base(base_dir, rank_folder, filename)
@@ -1288,6 +1394,28 @@ def get_resume(rank_folder, filename):
         import traceback
         traceback.print_exc()
         return str(e), 500
+
+
+@app.route('/open_resume', methods=['GET'])
+def open_resume():
+    storage_url = str(request.args.get('storage_url', '')).strip()
+    rank_folder = str(request.args.get('rank_folder', '')).strip()
+    filename = str(request.args.get('filename', '')).strip()
+
+    if storage_url.startswith("storage://"):
+        signed, err = _supabase_storage_signed_url(storage_url, expires_in=900)
+        if signed:
+            return redirect(signed, code=302)
+        print(f"[RESUME] Signed URL fallback to local file: {err}")
+
+    if not rank_folder or not filename:
+        return "Missing resume path", 400
+    return _serve_local_resume(rank_folder, filename)
+
+
+@app.route('/get_resume/<path:rank_folder>/<path:filename>')
+def get_resume(rank_folder, filename):
+    return _serve_local_resume(rank_folder, filename)
 
 @app.route('/verify_resumes', methods=['POST'])
 def verify_resumes():
@@ -1339,6 +1467,19 @@ def verify_resumes():
 
                 candidate_history = csv_manager.get_candidate_history(candidate_id)
                 event_type = 'resume_updated' if candidate_history else 'initial_verification'
+                storage_url = ""
+                try:
+                    rank_seg = _safe_storage_segment(rank_folder)
+                    candidate_seg = _safe_storage_segment(candidate_id)
+                    file_seg = _safe_storage_segment(filename)
+                    object_path = f"{rank_seg}/{candidate_seg}/{file_seg}"
+                    with open(source_path, "rb") as fh:
+                        file_bytes = fh.read()
+                    storage_url, upload_err = _supabase_storage_upload(file_bytes, object_path)
+                    if not storage_url and upload_err:
+                        extraction_errors.append(f"{filename}: Cloud upload failed ({upload_err})")
+                except Exception as upload_exc:
+                    extraction_errors.append(f"{filename}: Cloud upload exception ({upload_exc})")
 
                 csv_ok = csv_manager.log_event(
                     candidate_id=candidate_id,
@@ -1350,7 +1491,8 @@ def verify_resumes():
                     search_ship_type=search_ship_type,
                     ai_prompt=ai_prompt,
                     ai_reason=ai_match_reason,
-                    extracted_data=resume_data
+                    extracted_data=resume_data,
+                    resume_url=storage_url,
                 )
 
                 if csv_ok:
@@ -1424,9 +1566,10 @@ def get_dashboard_data():
             })
         data = []
         for _, row in rows.iterrows():
-            runtime_resume_url = _build_runtime_resume_url(
+            runtime_resume_url = _build_runtime_resume_url_from_stored(
                 row.get('Rank_Applied_For', ''),
-                row.get('Filename', '')
+                row.get('Filename', ''),
+                row.get('Resume_URL', '')
             ) or row.get('Resume_URL', '')
             data.append({
                 "candidate_id": row.get('Candidate_ID', ''),

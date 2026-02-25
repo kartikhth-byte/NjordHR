@@ -280,6 +280,13 @@ Configurable with:
 - `POST /session/disconnect`
 - `GET /session/health`
 - `POST /jobs/download`
+
+### Shared Resume Access (Cloud Storage Canonical)
+- Verified resumes now attempt upload to Supabase Storage (private bucket, default `resumes`) and store canonical `Resume_URL` as `storage://<bucket>/<path>`.
+- Dashboard resume links route through backend `GET /open_resume`, which:
+  - issues short-lived signed URL when cloud storage URL exists;
+  - falls back to local `GET /get_resume/<rank>/<filename>` for legacy/local-only rows.
+- Agent upload endpoint `POST /api/agent/resume-upload` now performs real storage upload (instead of placeholder accept-only response).
 - `GET /jobs/<job_id>`
 - `GET /jobs/<job_id>/stream`
 - `GET /diagnostics`

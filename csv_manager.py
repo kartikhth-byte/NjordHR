@@ -51,16 +51,16 @@ class CSVManager:
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
-                  ai_reason='', extracted_data=None):
+                  ai_reason='', extracted_data=None, resume_url=''):
         """Append one event row to the single master CSV."""
         extracted_data = extracted_data or {}
         timestamp = datetime.utcnow().isoformat() + 'Z'
-        resume_url = f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
+        resolved_resume_url = str(resume_url or '').strip() or f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
 
         new_row = {
             'Candidate_ID': str(candidate_id),
             'Filename': filename,
-            'Resume_URL': resume_url,
+            'Resume_URL': resolved_resume_url,
             'Date_Added': timestamp,
             'Event_Type': event_type,
             'Status': status,
@@ -142,7 +142,8 @@ class CSVManager:
                 'email': latest.get('Email', ''),
                 'country': latest.get('Country', ''),
                 'mobile_no': latest.get('Mobile_No', '')
-            }
+            },
+            resume_url=latest.get('Resume_URL', '')
         )
 
     def log_note_added(self, candidate_id, notes):
@@ -166,7 +167,8 @@ class CSVManager:
                 'email': latest.get('Email', ''),
                 'country': latest.get('Country', ''),
                 'mobile_no': latest.get('Mobile_No', '')
-            }
+            },
+            resume_url=latest.get('Resume_URL', '')
         )
 
     def update_last_row_notes(self, candidate_id, new_notes):
