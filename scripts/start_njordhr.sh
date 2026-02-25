@@ -4,6 +4,12 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="$PROJECT_DIR/logs/runtime"
 mkdir -p "$RUNTIME_DIR"
+PYTHON_BIN="${NJORDHR_PYTHON_BIN:-python3}"
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "[NjordHR] Python runtime not found: $PYTHON_BIN"
+  exit 1
+fi
 
 LOCK_DIR="/tmp/njordhr-launch.lock"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -98,7 +104,7 @@ else
     export NJORDHR_PORT="$BACKEND_PORT"
     export NJORDHR_SERVER_URL="$BACKEND_URL"
     export USE_LOCAL_AGENT="${USE_LOCAL_AGENT:-true}"
-    nohup python3 backend_server.py >> "$RUNTIME_DIR/backend.out" 2>> "$RUNTIME_DIR/backend.err" &
+    nohup "$PYTHON_BIN" backend_server.py >> "$RUNTIME_DIR/backend.out" 2>> "$RUNTIME_DIR/backend.err" &
     echo $! > "$BACKEND_PID_FILE"
   )
   if ! wait_http "${BACKEND_URL}/config/runtime" 100; then
@@ -115,7 +121,7 @@ else
     cd "$PROJECT_DIR"
     export NJORDHR_AGENT_HOST="127.0.0.1"
     export NJORDHR_AGENT_PORT="$AGENT_PORT"
-    nohup python3 agent_server.py >> "$RUNTIME_DIR/agent.out" 2>> "$RUNTIME_DIR/agent.err" &
+    nohup "$PYTHON_BIN" agent_server.py >> "$RUNTIME_DIR/agent.out" 2>> "$RUNTIME_DIR/agent.err" &
     echo $! > "$AGENT_PID_FILE"
   )
   if ! wait_http "${AGENT_URL}/health" 50; then

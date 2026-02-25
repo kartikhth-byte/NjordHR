@@ -52,9 +52,15 @@ This repo now includes installer build scaffolding for both platforms.
 
 ### macOS: build app bundle + unsigned pkg
 ```bash
+# Default: self-contained runtime embedded in .app
 ./scripts/packaging/macos/build_app_bundle.sh
 ./scripts/packaging/macos/build_pkg.sh
 ./scripts/packaging/macos/install_app.sh
+```
+
+Optional toggle (dev-only, no embedded runtime):
+```bash
+NJORDHR_EMBED_RUNTIME=false ./scripts/packaging/macos/build_app_bundle.sh
 ```
 
 Outputs:
@@ -68,6 +74,13 @@ Installer target path:
 Optional QA install verification:
 ```bash
 ./scripts/packaging/macos/qa_install_verify.sh
+```
+
+If you had older dev pkg receipts, reset once before testing new installer location:
+```bash
+sudo pkgutil --forget com.njordhr.desktop || true
+sudo pkgutil --forget com.njordhr.desktop.appbundle || true
+sudo pkgutil --forget com.njordhr.desktop.localapp || true
 ```
 
 ### Windows: portable zip + Inno Setup installer
@@ -91,6 +104,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_sh
 
 ### Notes
 - Current installers are **unsigned** (development phase).
+- macOS app bundle is self-contained by default (`NJORDHR_EMBED_RUNTIME=true`) and ships Python runtime + dependencies.
 - Next production step is code signing + notarization:
   - macOS: signed/notarized pkg
   - Windows: signed installer executable
