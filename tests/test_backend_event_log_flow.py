@@ -258,6 +258,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("use_supabase_reads", data["feature_flags"])
 
     def test_download_stream_reports_error_when_session_missing(self):
+        self.client.post("/auth/login", json={"username": "admin", "password": "test-admin-token"})
         backend_server.scraper_session = None
         resp = self.client.get("/download_stream?rank=Chief_Officer&shipType=Bulk%20Carrier")
         self.assertEqual(resp.status_code, 200)
@@ -266,6 +267,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("Website session is not active or has expired", payload)
 
     def test_download_stream_emits_complete_event_for_valid_session(self):
+        self.client.post("/auth/login", json={"username": "admin", "password": "test-admin-token"})
         class DummySession:
             driver = object()
 

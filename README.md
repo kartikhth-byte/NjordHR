@@ -287,6 +287,37 @@ Configurable with:
   - issues short-lived signed URL when cloud storage URL exists;
   - falls back to local `GET /get_resume/<rank>/<filename>` for legacy/local-only rows.
 - Agent upload endpoint `POST /api/agent/resume-upload` now performs real storage upload (instead of placeholder accept-only response).
+
+### Full Backfill: Move Existing Verified Resumes to Cloud Storage
+Dry run:
+```bash
+python3 scripts/migrate_verified_resumes_to_supabase_storage.py \
+  --verified-folder /Users/kartikraghavan/Tools/NjordHR/Verified_Resumes
+```
+
+Apply:
+```bash
+python3 scripts/migrate_verified_resumes_to_supabase_storage.py \
+  --verified-folder /Users/kartikraghavan/Tools/NjordHR/Verified_Resumes \
+  --apply
+```
+
+Required env vars:
+- `SUPABASE_URL`
+- `SUPABASE_SECRET_KEY` (preferred) or `SUPABASE_SERVICE_ROLE_KEY`
+- Optional bucket override: `SUPABASE_RESUME_BUCKET` (default `resumes`)
+
+### Login Roles
+- `admin`: full access (Download, AI Search, Dashboard, Setup, Settings)
+- `recruiter`: restricted access (AI Search, Dashboard, Setup)
+
+Credential sources:
+- Admin username/password:
+  - `NJORDHR_ADMIN_USERNAME` / `NJORDHR_ADMIN_PASSWORD`, or
+  - `[Auth] admin_username` / `admin_password`, fallback to `NJORDHR_ADMIN_TOKEN`/`[Advanced].admin_token` for password.
+- Recruiter username/password:
+  - `NJORDHR_RECRUITER_USERNAME` / `NJORDHR_RECRUITER_PASSWORD`, or
+  - `[Auth] recruiter_username` / `recruiter_password`
 - `GET /jobs/<job_id>`
 - `GET /jobs/<job_id>/stream`
 - `GET /diagnostics`

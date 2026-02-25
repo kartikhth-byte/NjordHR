@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, send_file, redirect, has_request_context
+from flask import Flask, request, jsonify, send_from_directory, Response, send_file, redirect, has_request_context, session
 from flask_cors import CORS
 import csv
 import io
@@ -34,6 +34,7 @@ from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 # --- App Initialization ---
 app = Flask(__name__)
 CORS(app) 
+app.secret_key = os.getenv("NJORDHR_FLASK_SECRET", "njordhr-local-dev-secret-change-me")
 
 # --- Configuration ---
 app_settings = load_app_settings()
@@ -124,7 +125,48 @@ def _admin_token():
     return config.get("Advanced", "admin_token", fallback="").strip()
 
 
+def _auth_user_list():
+    auth_cfg = config["Auth"] if "Auth" in config else {}
+    admin_username = os.getenv("NJORDHR_ADMIN_USERNAME", auth_cfg.get("admin_username", "admin")).strip() or "admin"
+    admin_password = os.getenv("NJORDHR_ADMIN_PASSWORD", auth_cfg.get("admin_password", "")).strip() or _admin_token()
+    recruiter_username = os.getenv("NJORDHR_RECRUITER_USERNAME", auth_cfg.get("recruiter_username", "recruiter")).strip() or "recruiter"
+    recruiter_password = os.getenv("NJORDHR_RECRUITER_PASSWORD", auth_cfg.get("recruiter_password", "")).strip()
+
+    users = {}
+    if admin_password:
+        users[admin_username] = {"role": "admin", "password": admin_password}
+    if recruiter_password:
+        users[recruiter_username] = {"role": "recruiter", "password": recruiter_password}
+    return users
+
+
+def _session_role():
+    return str(session.get("role", "")).strip().lower()
+
+
+def _session_username():
+    return str(session.get("username", "")).strip()
+
+
+def _is_authenticated():
+    return _session_role() in {"admin", "recruiter"} and bool(_session_username())
+
+
+def _require_role(*allowed_roles):
+    if not _is_authenticated():
+        return False, "Not authenticated."
+    role = _session_role()
+    if role not in allowed_roles:
+        return False, "Insufficient permissions."
+    return True, ""
+
+
 def _require_admin():
+    ok, reason = _require_role("admin")
+    if ok:
+        return True, ""
+
+    # Legacy token fallback for automation/API compatibility.
     token = _admin_token()
     if not token:
         return False, "Admin token not configured. Set NJORDHR_ADMIN_TOKEN or [Advanced].admin_token."
@@ -474,9 +516,47 @@ def serve_app_asset(filename):
     except FileNotFoundError:
         return "Asset not found.", 404
 
+
+@app.route('/auth/me', methods=['GET'])
+def auth_me():
+    if not _is_authenticated():
+        return jsonify({"success": True, "authenticated": False, "user": None})
+    return jsonify({
+        "success": True,
+        "authenticated": True,
+        "user": {"username": _session_username(), "role": _session_role()},
+    })
+
+
+@app.route('/auth/login', methods=['POST'])
+def auth_login():
+    payload = request.json if request.is_json else {}
+    username = str((payload or {}).get("username", "")).strip()
+    password = str((payload or {}).get("password", "")).strip()
+    users = _auth_user_list()
+    record = users.get(username)
+    if not record or password != str(record.get("password", "")):
+        return jsonify({"success": False, "message": "Invalid username or password."}), 401
+    session["username"] = username
+    session["role"] = str(record.get("role", "")).strip().lower()
+    session.permanent = False
+    return jsonify({
+        "success": True,
+        "user": {"username": username, "role": session["role"]},
+    })
+
+
+@app.route('/auth/logout', methods=['POST'])
+def auth_logout():
+    session.clear()
+    return jsonify({"success": True})
+
 # --- API Endpoints ---
 @app.route('/start_session', methods=['POST'])
 def start_session():
+    ok, reason = _require_role("admin")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     data = request.json
     mobile_number = data.get('mobileNumber')
@@ -499,6 +579,9 @@ def start_session():
 
 @app.route('/verify_otp', methods=['POST'])
 def verify_otp():
+    ok, reason = _require_role("admin")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     data = request.json
     otp = data.get('otp')
@@ -534,6 +617,9 @@ def verify_otp():
 
 @app.route('/start_download', methods=['POST'])
 def start_download():
+    ok, reason = _require_role("admin")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     data = request.json
     if _use_local_agent():
@@ -587,6 +673,11 @@ def start_download():
 @app.route('/download_stream', methods=['GET'])
 def download_stream():
     """Stream download progress using Server-Sent Events."""
+    ok, reason = _require_role("admin")
+    if not ok:
+        def denied():
+            yield f"data: {json.dumps({'type': 'error', 'message': reason})}\n\n"
+        return Response(denied(), mimetype='text/event-stream')
     global scraper_session
 
     rank = request.args.get('rank', '').strip()
@@ -752,6 +843,9 @@ def download_stream():
 
 @app.route('/disconnect_session', methods=['POST'])
 def disconnect_session():
+    ok, reason = _require_role("admin")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     if _use_local_agent():
         try:

@@ -101,6 +101,11 @@
 
         function App() {
             const [activeTab, setActiveTab] = useState('download');
+            const [authChecking, setAuthChecking] = useState(true);
+            const [authUser, setAuthUser] = useState(null);
+            const [loginUsername, setLoginUsername] = useState('');
+            const [loginPassword, setLoginPassword] = useState('');
+            const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
             const [toasts, setToasts] = useState([]);
             const [runtimeConfig, setRuntimeConfig] = useState(null);
             const [isRuntimeRefreshing, setIsRuntimeRefreshing] = useState(false);
@@ -239,16 +244,80 @@
                 if (ua.includes('Mac')) return 'macos';
                 return 'unknown';
             })();
+            const role = authUser?.role || '';
+            const allowedTabs = role === 'admin'
+                ? ['download', 'search', 'dashboard', 'setup', 'settings']
+                : role === 'recruiter'
+                    ? ['search', 'dashboard', 'setup']
+                    : [];
+            const canAccessTab = (tab) => allowedTabs.includes(tab);
+
+            const fetchAuthMe = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/auth/me`);
+                    const data = await response.json();
+                    if (data.success && data.authenticated && data.user) {
+                        setAuthUser(data.user);
+                    } else {
+                        setAuthUser(null);
+                    }
+                } catch (_error) {
+                    setAuthUser(null);
+                } finally {
+                    setAuthChecking(false);
+                }
+            };
+
+            const handleLogin = async () => {
+                if (!loginUsername.trim() || !loginPassword.trim()) {
+                    handleSendMessage('error', 'Enter username and password');
+                    return;
+                }
+                setIsAuthSubmitting(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: loginUsername.trim(), password: loginPassword })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Login failed');
+                        return;
+                    }
+                    setAuthUser(data.user || null);
+                    setLoginPassword('');
+                    const nextRole = (data.user && data.user.role) || '';
+                    setActiveTab(nextRole === 'admin' ? 'download' : 'search');
+                    handleSendMessage('success', `Logged in as ${data.user?.role || 'user'}`);
+                } catch (_error) {
+                    handleSendMessage('error', 'Login request failed');
+                } finally {
+                    setIsAuthSubmitting(false);
+                }
+            };
+
+            const handleLogout = async () => {
+                try {
+                    await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
+                } catch (_error) {}
+                setAuthUser(null);
+                setLoginPassword('');
+                setActiveTab('download');
+                setSettingsLoaded(false);
+                setAdminSessionPassword('');
+            };
 
             useEffect(() => {
                 fetchRankFolders();
             }, [downloadLog]);
 
             useEffect(() => {
-                fetchRuntimeConfig();
+                fetchAuthMe();
             }, []);
             
             useEffect(() => {
+                if (!authUser) return;
                 if (activeTab === 'dashboard') {
                     fetchAvailableRanks();
                     fetchDashboardData({ resetPage: true });
@@ -260,7 +329,14 @@
                     fetchRuntimeConfig();
                     fetchSetupManifest();
                 }
-            }, [activeTab]);
+            }, [activeTab, authUser]);
+
+            useEffect(() => {
+                if (!authUser) return;
+                if (!canAccessTab(activeTab)) {
+                    setActiveTab(role === 'admin' ? 'download' : 'search');
+                }
+            }, [authUser, activeTab, role]);
 
             useEffect(() => {
                 fetchDashboardData({ resetPage: true });
@@ -1996,6 +2072,13 @@
             };
 
             const SettingsTabContent = () => {
+                if (role !== 'admin') {
+                    return (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                            Settings are available to admin users only.
+                        </div>
+                    );
+                }
                 const setField = (key, value) => setSettingsForm(prev => ({ ...prev, [key]: value }));
                 const sectionButtonClass = (id) => `px-4 py-2 text-sm font-medium rounded-md border ${settingsSection === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`;
 
@@ -2587,8 +2670,39 @@
                                     {runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only'}
                                 </span>
                                 <div className="text-sm text-gray-500">Phase 1: Core Engine</div>
+                                {authUser && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs px-2 py-1 rounded bg-slate-100 border border-slate-200 text-slate-700">
+                                            {authUser.username} ({authUser.role})
+                                        </span>
+                                        <button onClick={handleLogout} className="text-xs text-red-600 hover:underline">Logout</button>
+                                    </div>
+                                )}
                             </div>
                         </header>
+                        {authChecking && (
+                            <div className="bg-white p-8 rounded-xl shadow-lg text-center text-gray-600 mb-6">Checking login...</div>
+                        )}
+                        {!authChecking && !authUser && (
+                            <main className="bg-white p-8 rounded-xl shadow-lg max-w-lg mx-auto mb-6">
+                                <h2 className="text-2xl font-semibold mb-4">Login</h2>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                        <input value={loginUsername} onChange={e => setLoginUsername(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                        <input type="password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                    </div>
+                                    <button onClick={handleLogin} disabled={isAuthSubmitting} className="w-full bg-blue-600 text-white font-medium py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                                        {isAuthSubmitting ? 'Signing in...' : 'Sign In'}
+                                    </button>
+                                </div>
+                            </main>
+                        )}
+                        {!authChecking && authUser && (
+                        <>
                         <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4">
                             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Workflow</p>
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -2610,11 +2724,11 @@
                             </div>
                         </div>
                         <div className="flex border-b border-gray-300 mb-6">
-                            <button onClick={() => setActiveTab('download')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'download' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Download</button>
-                            <button onClick={() => setActiveTab('search')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'search' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>AI Search</button>
-                            <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>
-                            <button onClick={() => setActiveTab('setup')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'setup' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Setup</button>
-                            <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>
+                            {canAccessTab('download') && <button onClick={() => setActiveTab('download')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'download' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Download</button>}
+                            {canAccessTab('search') && <button onClick={() => setActiveTab('search')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'search' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>AI Search</button>}
+                            {canAccessTab('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>}
+                            {canAccessTab('setup') && <button onClick={() => setActiveTab('setup')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'setup' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Setup</button>}
+                            {canAccessTab('settings') && <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>}
                         </div>
                         <main className="bg-white p-8 rounded-xl shadow-lg">
                              {activeTab === 'download' && DownloadTabContent()}
@@ -2855,9 +2969,11 @@
                                 </div>
                             )}
                             {activeTab === 'dashboard' && DashboardTabContent()}
-                            {activeTab === 'setup' && SetupTabContent()}
-                            {activeTab === 'settings' && SettingsTabContent()}
+                             {activeTab === 'setup' && SetupTabContent()}
+                             {activeTab === 'settings' && SettingsTabContent()}
                         </main>
+                        </>
+                        )}
                     </div>
                 </div>
                 <div className="fixed top-4 right-4 z-50 space-y-2 w-full max-w-md" aria-live="polite" aria-atomic="false">
