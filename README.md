@@ -109,6 +109,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_sh
   - macOS: signed/notarized pkg
   - Windows: signed installer executable
 
+### Build Release Folder (Artifacts + Checksums + Manifest)
+After building platform installers, create a distribution-ready release bundle:
+
+```bash
+./scripts/packaging/create_release_bundle.sh
+```
+
+Optional version override:
+
+```bash
+./scripts/packaging/create_release_bundle.sh 2026.02.25.1300
+```
+
+Output:
+- `release/<version>/`
+- installer artifacts copied from `build/macos` and `build/windows` (if present)
+- `checksums.txt` (SHA256)
+- `manifest.json` (version, timestamp, file sizes, SHA256)
+
 ## End-User Install (Installer-first)
 End users should run installer files, not scripts:
 
