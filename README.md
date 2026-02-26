@@ -13,6 +13,13 @@ What it does:
 - Auto-selects free ports if defaults are occupied.
 - Auto-wires agent `api_base_url` to backend URL.
 - Opens browser to the active backend URL.
+- Runs backend/agent as background local services (they keep running after browser/app window is closed).
+- Auto-shutdown is enabled for launcher-started backend: when no UI tab/app heartbeat is present for ~75s, backend+agent stop automatically.
+
+Stop services:
+```bash
+./scripts/stop_njordhr.sh
+```
 
 Runtime artifacts:
 - Logs: `logs/runtime/`

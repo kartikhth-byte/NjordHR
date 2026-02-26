@@ -5,6 +5,7 @@ import types
 import zipfile
 import tempfile
 import unittest
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -150,6 +151,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
             "match_data": {},
             "ai_prompt": "prompt",
         })
+        with self.client.session_transaction() as sess:
+            sess["username"] = "recruiter"
+            sess["role"] = "recruiter"
 
         status_resp = self.client.post("/update_status", json={"candidate_id": "2001", "status": "Contacted"})
         self.assertEqual(status_resp.status_code, 200)
@@ -166,6 +170,144 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("initial_verification", event_types)
         self.assertIn("status_change", event_types)
         self.assertIn("note_added", event_types)
+
+    def test_status_transition_blocks_non_admin_revert_or_skip(self):
+        self._write_fake_resume("Chief_Officer_2101.pdf")
+        self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": ["Chief_Officer_2101.pdf"],
+            "match_data": {},
+            "ai_prompt": "prompt",
+        })
+        with self.client.session_transaction() as sess:
+            sess["username"] = "recruiter"
+            sess["role"] = "recruiter"
+        invalid_resp = self.client.post(
+            "/update_status",
+            json={"candidate_id": "2101", "status": "Mail Sent (handoff complete)"}
+        )
+        self.assertEqual(invalid_resp.status_code, 403)
+        self.assertFalse(invalid_resp.get_json()["success"])
+
+    def test_status_transition_admin_override_allowed(self):
+        self._write_fake_resume("Chief_Officer_2201.pdf")
+        self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": ["Chief_Officer_2201.pdf"],
+            "match_data": {},
+            "ai_prompt": "prompt",
+        })
+        with self.client.session_transaction() as sess:
+            sess["username"] = "admin"
+            sess["role"] = "admin"
+        resp = self.client.post(
+            "/update_status",
+            json={"candidate_id": "2201", "status": "Mail Sent (handoff complete)"}
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+
+    def test_dashboard_archive_split_and_rank_scope(self):
+        self._write_fake_resume("Chief_Officer_2601.pdf")
+        self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": ["Chief_Officer_2601.pdf"],
+            "match_data": {},
+            "ai_prompt": "prompt",
+        })
+        with self.client.session_transaction() as sess:
+            sess["username"] = "admin"
+            sess["role"] = "admin"
+        self.client.post("/update_status", json={"candidate_id": "2601", "status": "Mail Sent (handoff complete)"})
+
+        active_resp = self.client.get("/get_dashboard_data?view=master")
+        self.assertEqual(active_resp.status_code, 200)
+        active_data = active_resp.get_json().get("data", [])
+        self.assertFalse(any(str(row.get("candidate_id")) == "2601" for row in active_data))
+
+        archive_resp = self.client.get("/get_dashboard_data?view=archive")
+        self.assertEqual(archive_resp.status_code, 200)
+        archive_data = archive_resp.get_json().get("data", [])
+        self.assertTrue(any(str(row.get("candidate_id")) == "2601" for row in archive_data))
+
+        active_ranks = self.client.get("/get_available_ranks?scope=active").get_json().get("ranks", [])
+        archive_ranks = self.client.get("/get_available_ranks?scope=archive").get_json().get("ranks", [])
+        active_count = next((r["count"] for r in active_ranks if r["rank"] == self.rank), 0)
+        archive_count = next((r["count"] for r in archive_ranks if r["rank"] == self.rank), 0)
+        self.assertGreaterEqual(archive_count, 1)
+        self.assertGreaterEqual(active_count, 0)
+
+    def test_dashboard_archive_visible_to_admin_manager_recruiter(self):
+        self._write_fake_resume("Chief_Officer_2602.pdf")
+        with self.client.session_transaction() as sess:
+            sess["username"] = "admin"
+            sess["role"] = "admin"
+        self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": ["Chief_Officer_2602.pdf"],
+            "match_data": {},
+            "ai_prompt": "prompt",
+        })
+        self.client.post("/update_status", json={"candidate_id": "2602", "status": "Mail Sent (handoff complete)"})
+
+        for role in ("admin", "manager", "recruiter"):
+            with self.client.session_transaction() as sess:
+                sess["username"] = role
+                sess["role"] = role
+            archive_resp = self.client.get("/get_dashboard_data?view=archive")
+            self.assertEqual(archive_resp.status_code, 200)
+            archive_data = archive_resp.get_json().get("data", [])
+            self.assertTrue(any(str(row.get("candidate_id")) == "2602" for row in archive_data))
+            ranks_resp = self.client.get("/get_available_ranks?scope=archive")
+            self.assertEqual(ranks_resp.status_code, 200)
+
+    def test_session_health_idle_timeout_disconnects_scraper_session(self):
+        class FakeScraper:
+            def __init__(self):
+                self.driver = object()
+                self.quit_called = False
+
+            def quit(self):
+                self.quit_called = True
+
+        fake_scraper = FakeScraper()
+        backend_server.scraper_session = fake_scraper
+        backend_server.seajobs_last_activity_at = time.time() - 360
+
+        resp = self.client.get("/session_health")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body.get("success"))
+        self.assertFalse(body.get("connected"))
+        self.assertIn("inactivity", str(body.get("message", "")).lower())
+        self.assertTrue(fake_scraper.quit_called)
+        self.assertIsNone(backend_server.scraper_session)
+
+    def test_logout_disconnects_seajobs_session(self):
+        class FakeScraper:
+            def __init__(self):
+                self.driver = object()
+                self.quit_called = False
+
+            def quit(self):
+                self.quit_called = True
+
+        fake_scraper = FakeScraper()
+        backend_server.scraper_session = fake_scraper
+        backend_server.seajobs_last_activity_at = time.time()
+        with self.client.session_transaction() as sess:
+            sess["username"] = "admin"
+            sess["role"] = "admin"
+
+        logout_resp = self.client.post("/auth/logout")
+        self.assertEqual(logout_resp.status_code, 200)
+        self.assertTrue(logout_resp.get_json().get("success"))
+        self.assertTrue(fake_scraper.quit_called)
+        self.assertIsNone(backend_server.scraper_session)
+
+        me_resp = self.client.get("/auth/me")
+        self.assertEqual(me_resp.status_code, 200)
+        self.assertFalse(me_resp.get_json().get("authenticated"))
 
     def test_reverify_same_candidate_logs_resume_updated(self):
         resume = self._write_fake_resume("Chief_Officer_3001.pdf")
@@ -189,6 +331,56 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(len(candidate_rows), 2)
         self.assertEqual(candidate_rows.iloc[0]["Event_Type"], "initial_verification")
         self.assertEqual(candidate_rows.iloc[1]["Event_Type"], "resume_updated")
+
+    def test_reverify_new_filename_deletes_old_local_version(self):
+        old_name = "Chief_Officer_3301_2026-02-25_10-00-00.pdf"
+        new_name = "Chief_Officer_3301_2026-02-26_10-00-00.pdf"
+        self._write_fake_resume(old_name)
+        self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": [old_name],
+            "match_data": {},
+            "ai_prompt": "first",
+        })
+        self._write_fake_resume(new_name)
+        resp = self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": [new_name],
+            "match_data": {},
+            "ai_prompt": "second",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(resp.get_json().get("stale_versions_deleted"), 1)
+        self.assertFalse((self.rank_dir / old_name).exists())
+        self.assertTrue((self.rank_dir / new_name).exists())
+
+    def test_verify_resumes_requires_email_identifier(self):
+        def missing_email_extract(pdf_path, candidate_id=None, match_reason=""):
+            return {
+                "candidate_id": str(candidate_id or ""),
+                "resume": os.path.basename(pdf_path),
+                "name": "Test Candidate",
+                "present_rank": "Chief Officer",
+                "email": "",
+                "country": "India",
+                "mobile_no": "+911234567890",
+                "ai_match_reason": match_reason,
+                "extraction_status": "Success",
+            }
+
+        backend_server.resume_extractor.extract_resume_data = missing_email_extract
+        self._write_fake_resume("Chief_Officer_3401.pdf")
+        resp = self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": ["Chief_Officer_3401.pdf"],
+            "match_data": {},
+            "ai_prompt": "prompt",
+        })
+        self.assertEqual(resp.status_code, 500)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("Missing required email", " ".join(body.get("errors", [])))
 
     def test_export_zip_contains_selected_csv_and_resumes(self):
         self._write_fake_resume("Chief_Officer_4001.pdf")

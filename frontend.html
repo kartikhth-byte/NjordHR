@@ -155,6 +155,7 @@
             const [verifyStatus, setVerifyStatus] = useState('idle');
             
             // Dashboard state
+            const [dashboardSection, setDashboardSection] = useState('verified'); // verified | archive
             const [dashboardView, setDashboardView] = useState('master');
             const [dashboardRank, setDashboardRank] = useState('');
             const [availableRanks, setAvailableRanks] = useState([]);
@@ -174,11 +175,17 @@
             const [isDashboardDrawerOpen, setIsDashboardDrawerOpen] = useState(false);
             const [drawerCandidateId, setDrawerCandidateId] = useState('');
             const [drawerNoteSeed, setDrawerNoteSeed] = useState('');
+            const [pendingStatusById, setPendingStatusById] = useState({});
             const [adminSessionPassword, setAdminSessionPassword] = useState('');
             const [isSettingsLoading, setIsSettingsLoading] = useState(false);
             const [isSettingsSaving, setIsSettingsSaving] = useState(false);
             const [settingsLoaded, setSettingsLoaded] = useState(false);
             const [settingsSection, setSettingsSection] = useState('runtime');
+            const [usageLogs, setUsageLogs] = useState([]);
+            const [isUsageLogsLoading, setIsUsageLogsLoading] = useState(false);
+            const [adminUsers, setAdminUsers] = useState([]);
+            const [isAdminUsersLoading, setIsAdminUsersLoading] = useState(false);
+            const [userForm, setUserForm] = useState({ username: '', role: 'recruiter', password: '' });
             const [setupManifest, setSetupManifest] = useState(null);
             const [isSetupLoading, setIsSetupLoading] = useState(false);
             const [setupMode, setSetupMode] = useState('cloud_local_agent');
@@ -233,10 +240,22 @@
             const dashboardTableScrollRef = useRef(null);
             const drawerNoteInputRef = useRef(null);
             const adminPasswordInputRef = useRef(null);
+            const uiClientIdRef = useRef((() => {
+                try {
+                    const key = 'njordhr_ui_client_id';
+                    const existing = window.sessionStorage.getItem(key);
+                    if (existing) return existing;
+                    const generated = `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+                    window.sessionStorage.setItem(key, generated);
+                    return generated;
+                } catch (_err) {
+                    return `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+                }
+            })());
             
             const API_BASE_URL = window.NJORDHR_API_BASE_URL
                 || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:5000');
-            const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Not Interested', 'Interview Scheduled', 'Offer Made', 'Hired', 'Rejected'];
+            const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Mail Sent (handoff complete)', 'Not Interested'];
             const WORKFLOW_STEPS = ['Connect', 'Download', 'Analyze', 'Review', 'Export'];
             const detectedOS = (() => {
                 const ua = navigator.userAgent || '';
@@ -246,8 +265,10 @@
             })();
             const role = authUser?.role || '';
             const allowedTabs = role === 'admin'
-                ? ['download', 'search', 'dashboard', 'setup', 'settings']
-                : role === 'recruiter'
+                ? ['download', 'search', 'dashboard', 'setup', 'settings', 'logs']
+                : role === 'manager'
+                    ? ['download', 'search', 'dashboard', 'setup']
+                    : role === 'recruiter'
                     ? ['search', 'dashboard', 'setup']
                     : [];
             const canAccessTab = (tab) => allowedTabs.includes(tab);
@@ -315,6 +336,52 @@
             useEffect(() => {
                 fetchAuthMe();
             }, []);
+
+            useEffect(() => {
+                const clientId = uiClientIdRef.current;
+                const heartbeatUrl = `${API_BASE_URL}/client/heartbeat`;
+                const disconnectUrl = `${API_BASE_URL}/client/disconnect`;
+
+                const sendHeartbeat = () => {
+                    fetch(heartbeatUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ client_id: clientId }),
+                    }).catch(() => {});
+                };
+
+                const sendDisconnectBeacon = () => {
+                    try {
+                        const body = JSON.stringify({ client_id: clientId });
+                        if (navigator.sendBeacon) {
+                            const blob = new Blob([body], { type: 'application/json' });
+                            navigator.sendBeacon(disconnectUrl, blob);
+                            return;
+                        }
+                        fetch(disconnectUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body,
+                            keepalive: true,
+                        }).catch(() => {});
+                    } catch (_err) {}
+                };
+
+                sendHeartbeat();
+                const timer = setInterval(sendHeartbeat, 10000);
+                const onVisible = () => {
+                    if (!document.hidden) sendHeartbeat();
+                };
+                window.addEventListener('beforeunload', sendDisconnectBeacon);
+                document.addEventListener('visibilitychange', onVisible);
+
+                return () => {
+                    clearInterval(timer);
+                    window.removeEventListener('beforeunload', sendDisconnectBeacon);
+                    document.removeEventListener('visibilitychange', onVisible);
+                    sendDisconnectBeacon();
+                };
+            }, [API_BASE_URL]);
             
             useEffect(() => {
                 if (!authUser) return;
@@ -329,7 +396,15 @@
                     fetchRuntimeConfig();
                     fetchSetupManifest();
                 }
+                if (activeTab === 'logs' && role === 'admin') {
+                    loadUsageLogs();
+                }
             }, [activeTab, authUser]);
+
+            useEffect(() => {
+                if (activeTab !== 'dashboard') return;
+                fetchAvailableRanks();
+            }, [dashboardSection, activeTab]);
 
             useEffect(() => {
                 if (!authUser) return;
@@ -339,8 +414,15 @@
             }, [authUser, activeTab, role]);
 
             useEffect(() => {
+                if (role !== 'admin') return;
+                if (!settingsLoaded) return;
+                if (settingsSection !== 'user_password') return;
+                loadAdminUsers();
+            }, [role, settingsLoaded, settingsSection]);
+
+            useEffect(() => {
                 fetchDashboardData({ resetPage: true });
-            }, [dashboardView, dashboardRank]);
+            }, [dashboardSection, dashboardView, dashboardRank]);
             
             useEffect(() => {
                 filterAndSortData();
@@ -531,11 +613,14 @@
             
             const fetchAvailableRanks = async () => {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/get_available_ranks`);
+                    const scope = dashboardSection === 'archive' ? 'archive' : 'active';
+                    const response = await fetch(`${API_BASE_URL}/get_available_ranks?scope=${encodeURIComponent(scope)}`);
                     const data = await response.json();
                     if (data.success) {
                         setAvailableRanks(data.ranks);
-                        if (data.ranks.length > 0 && !dashboardRank) {
+                        if (data.ranks.length === 0) {
+                            setDashboardRank('');
+                        } else if (!dashboardRank || !data.ranks.some(r => r.rank === dashboardRank)) {
                             setDashboardRank(data.ranks[0].rank);
                         }
                     }
@@ -556,7 +641,10 @@
                     : 0;
                 setIsDashboardLoading(true);
                 try {
-                    let url = `${API_BASE_URL}/get_dashboard_data?view=${dashboardView}`;
+                    const backendView = dashboardSection === 'archive'
+                        ? (dashboardView === 'rank' ? 'archive_rank' : 'archive')
+                        : dashboardView;
+                    let url = `${API_BASE_URL}/get_dashboard_data?view=${backendView}`;
                     if (dashboardView === 'rank' && dashboardRank) {
                         url += `&rank_name=${dashboardRank}`;
                     }
@@ -590,14 +678,14 @@
             const loadAdminSettings = async () => {
                 const enteredPassword = ((adminPasswordInputRef.current && adminPasswordInputRef.current.value) || adminSessionPassword || '').trim();
                 if (!enteredPassword) {
-                    handleSendMessage('error', 'Enter admin password first');
+                    handleSendMessage('error', 'Enter settings password first');
                     return;
                 }
                 setIsSettingsLoading(true);
                 try {
                     const response = await fetch(`${API_BASE_URL}/admin/settings`, {
                         // Admin-authenticated fetch can request full secret values.
-                        // This is intentionally admin-only and never available without valid admin password.
+                        // This is intentionally admin-only and never available without valid settings password.
                         method: 'GET',
                         headers: { 'X-Admin-Token': enteredPassword }
                     });
@@ -667,9 +755,120 @@
                 }
             };
 
+            const loadAdminUsers = async () => {
+                if (!adminSessionPassword.trim()) {
+                    handleSendMessage('error', 'Enter settings password first');
+                    return;
+                }
+                setIsAdminUsersLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/users`, {
+                        headers: { 'X-Admin-Token': adminSessionPassword.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load users');
+                        return;
+                    }
+                    setAdminUsers(Array.isArray(data.users) ? data.users : []);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load users');
+                } finally {
+                    setIsAdminUsersLoading(false);
+                }
+            };
+
+            const saveAdminUser = async () => {
+                if (!adminSessionPassword.trim()) {
+                    handleSendMessage('error', 'Enter settings password first');
+                    return;
+                }
+                if (!userForm.username.trim() || !userForm.password.trim()) {
+                    handleSendMessage('error', 'Username and password are required');
+                    return;
+                }
+                if (userForm.password.trim().length < 8) {
+                    handleSendMessage('error', 'Password must be at least 8 characters');
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/users`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Admin-Token': adminSessionPassword.trim(),
+                        },
+                        body: JSON.stringify({
+                            username: userForm.username.trim(),
+                            role: userForm.role,
+                            password: userForm.password,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to save user');
+                        return;
+                    }
+                    handleSendMessage('success', data.message || 'User saved');
+                    setUserForm({ username: '', role: 'recruiter', password: '' });
+                    await loadAdminUsers();
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to save user');
+                }
+            };
+
+            const deleteAdminUser = async (username) => {
+                if (!adminSessionPassword.trim()) {
+                    handleSendMessage('error', 'Enter settings password first');
+                    return;
+                }
+                const target = String(username || '').trim();
+                if (!target) return;
+                if (!window.confirm(`Delete user "${target}"?`)) return;
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(target)}`, {
+                        method: 'DELETE',
+                        headers: { 'X-Admin-Token': adminSessionPassword.trim() },
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to delete user');
+                        return;
+                    }
+                    handleSendMessage('success', data.message || 'User deleted');
+                    await loadAdminUsers();
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to delete user');
+                }
+            };
+
+            const loadUsageLogs = async () => {
+                if (role !== 'admin') return;
+                if (!adminSessionPassword.trim()) {
+                    setUsageLogs([]);
+                    return;
+                }
+                setIsUsageLogsLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/admin/usage_logs?limit=300`, {
+                        headers: { 'X-Admin-Token': adminSessionPassword.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load usage logs');
+                        return;
+                    }
+                    setUsageLogs(Array.isArray(data.rows) ? data.rows : []);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load usage logs');
+                } finally {
+                    setIsUsageLogsLoading(false);
+                }
+            };
+
             const testSupabaseSettings = async () => {
                 if (!adminSessionPassword.trim()) {
-                    handleSendMessage('error', 'Enter admin password first');
+                    handleSendMessage('error', 'Enter settings password first');
                     return;
                 }
                 setIsSettingsSaving(true);
@@ -700,7 +899,7 @@
 
             const saveAdminSettings = async () => {
                 if (!adminSessionPassword.trim()) {
-                    handleSendMessage('error', 'Enter admin password first');
+                    handleSendMessage('error', 'Enter settings password first');
                     return;
                 }
                 setIsSettingsSaving(true);
@@ -730,7 +929,7 @@
 
             const loadFolderPickerPath = async (pathValue, targetKey) => {
                 if (!adminSessionPassword.trim()) {
-                    handleSendMessage('error', 'Enter admin password first');
+                    handleSendMessage('error', 'Enter settings password first');
                     return;
                 }
                 setFolderPicker(prev => ({ ...prev, open: true, loading: true, targetKey }));
@@ -780,7 +979,7 @@
 
             const changeAdminPassword = async () => {
                 if (!adminSessionPassword.trim()) {
-                    handleSendMessage('error', 'Enter current admin password first');
+                    handleSendMessage('error', 'Enter current settings password first');
                     return;
                 }
                 const currentPassword = (currentAdminPasswordInput || '').trim();
@@ -795,7 +994,7 @@
                     return;
                 }
                 if (newPassword.length < 8) {
-                    handleSendMessage('error', 'New admin password must be at least 8 characters');
+                    handleSendMessage('error', 'New settings password must be at least 8 characters');
                     return;
                 }
                 if (newPassword !== confirmPassword) {
@@ -818,7 +1017,7 @@
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        handleSendMessage('error', data.message || 'Failed to update admin password');
+                        handleSendMessage('error', data.message || 'Failed to update settings password');
                         return;
                     }
                     setAdminSessionPassword(newPassword);
@@ -831,7 +1030,7 @@
                     setShowGeneratedAdminPassword(false);
                     handleSendMessage('success', data.message || 'Admin password updated');
                 } catch (error) {
-                    handleSendMessage('error', 'Failed to update admin password');
+                    handleSendMessage('error', 'Failed to update settings password');
                 } finally {
                     setIsSettingsSaving(false);
                 }
@@ -863,7 +1062,7 @@
                 }
                 syncAdminPasswordFields(generated, generated);
                 setShowGeneratedAdminPassword(true);
-                handleSendMessage('success', 'Generated a strong admin password. Review and click Update.');
+                handleSendMessage('success', 'Generated a strong settings password. Review and click Update.');
             };
             
             const filterAndSortData = () => {
@@ -959,6 +1158,24 @@
                 }
             };
 
+            const getPendingStatus = (candidateId, fallbackStatus) => {
+                const id = String(candidateId);
+                return pendingStatusById[id] || fallbackStatus || 'New';
+            };
+
+            const setPendingStatus = (candidateId, status) => {
+                const id = String(candidateId);
+                setPendingStatusById(prev => ({ ...prev, [id]: status }));
+            };
+
+            const handleDashboardStatusUpdate = async (candidateId, currentStatus) => {
+                const nextStatus = getPendingStatus(candidateId, currentStatus);
+                if ((nextStatus || '') === (currentStatus || '')) {
+                    return;
+                }
+                await handleDashboardStatusChange(candidateId, nextStatus);
+            };
+
             const handleDashboardAddNotes = async (candidateId, notesInput = null) => {
                 const notes = (notesInput !== null ? notesInput : '').trim();
                 if (!notes) {
@@ -994,8 +1211,13 @@
             };
 
             const openDashboardDrawer = (candidateId) => {
-                setDrawerCandidateId(String(candidateId));
+                const id = String(candidateId);
+                setDrawerCandidateId(id);
                 setIsDashboardDrawerOpen(true);
+                const row = dashboardData.find(r => String(r.candidate_id) === id);
+                if (row) {
+                    setPendingStatus(id, row.status || 'New');
+                }
             };
 
             const closeDashboardDrawer = () => {
@@ -1679,7 +1901,23 @@
 
                 return (
                     <div>
-                        <h2 className="text-2xl font-semibold mb-6">Verified Candidates Dashboard</h2>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-2xl font-semibold">Candidates Dashboard</h2>
+                            <div className="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                                <button
+                                    onClick={() => setDashboardSection('verified')}
+                                    className={`px-3 py-1.5 text-sm font-medium ${dashboardSection === 'verified' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                >
+                                    Verified
+                                </button>
+                                <button
+                                    onClick={() => setDashboardSection('archive')}
+                                    className={`px-3 py-1.5 text-sm font-medium border-l border-gray-300 ${dashboardSection === 'archive' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                >
+                                    Archive
+                                </button>
+                            </div>
+                        </div>
                         
                         {/* View Selector */}
                         <div className="mb-6 flex items-center space-x-4">
@@ -1690,7 +1928,9 @@
                                     onChange={e => setDashboardView(e.target.value)}
                                     className="p-2 border border-gray-300 rounded-md"
                                 >
-                                    <option value="master">All Candidates (Master)</option>
+                                    <option value="master">
+                                        {dashboardSection === 'archive' ? 'All Archived Candidates' : 'All Active Candidates'}
+                                    </option>
                                     <option value="rank">By Rank</option>
                                 </select>
                             </div>
@@ -1777,8 +2017,17 @@
                         {/* Empty State */}
                         {!isDashboardLoading && dashboardData.length === 0 && (
                             <div className="text-center py-12 bg-gray-50 rounded-lg">
-                                <p className="text-gray-600 mb-2">No verified candidates yet.</p>
-                                <p className="text-sm text-gray-500">Use AI Search to find and verify candidates.</p>
+                                {dashboardSection === 'archive' ? (
+                                    <>
+                                        <p className="text-gray-600 mb-2">No archived candidates yet.</p>
+                                        <p className="text-sm text-gray-500">Candidates with status "Mail Sent (handoff complete)" or "Not Interested" appear here.</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-gray-600 mb-2">No verified candidates yet.</p>
+                                        <p className="text-sm text-gray-500">Use AI Search to find and verify candidates.</p>
+                                    </>
+                                )}
                             </div>
                         )}
                         
@@ -1896,15 +2145,24 @@
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
-                                                            <select
-                                                                value={row.status || 'New'}
-                                                                onChange={(e) => handleDashboardStatusChange(row.candidate_id, e.target.value)}
-                                                                className="p-1 border border-gray-300 rounded text-sm"
-                                                            >
-                                                                {STATUS_OPTIONS.map(status => (
-                                                                    <option key={status} value={status}>{status}</option>
-                                                                ))}
-                                                            </select>
+                                                            <div className="flex flex-col gap-2">
+                                                                <select
+                                                                    value={getPendingStatus(row.candidate_id, row.status || 'New')}
+                                                                    onChange={(e) => setPendingStatus(row.candidate_id, e.target.value)}
+                                                                    className="p-1 border border-gray-300 rounded text-sm"
+                                                                >
+                                                                    {STATUS_OPTIONS.map(status => (
+                                                                        <option key={status} value={status}>{status}</option>
+                                                                    ))}
+                                                                </select>
+                                                                <button
+                                                                    onClick={() => handleDashboardStatusUpdate(row.candidate_id, row.status || 'New')}
+                                                                    disabled={getPendingStatus(row.candidate_id, row.status || 'New') === (row.status || 'New')}
+                                                                    className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                                                                >
+                                                                    Update
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <div className="text-xs text-gray-600 mb-1 truncate-reason" title={row.notes || ''}>
@@ -2025,15 +2283,24 @@
 
                                         <div>
                                             <label className="block text-xs uppercase text-gray-500 mb-1">Status</label>
-                                            <select
-                                                value={drawerCandidate.status || 'New'}
-                                                onChange={(e) => handleDashboardStatusChange(drawerCandidate.candidate_id, e.target.value)}
-                                                className="w-full p-2 border border-gray-300 rounded text-sm"
-                                            >
-                                                {STATUS_OPTIONS.map(status => (
-                                                    <option key={status} value={status}>{status}</option>
-                                                ))}
-                                            </select>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={getPendingStatus(drawerCandidate.candidate_id, drawerCandidate.status || 'New')}
+                                                    onChange={(e) => setPendingStatus(drawerCandidate.candidate_id, e.target.value)}
+                                                    className="w-full p-2 border border-gray-300 rounded text-sm"
+                                                >
+                                                    {STATUS_OPTIONS.map(status => (
+                                                        <option key={status} value={status}>{status}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    onClick={() => handleDashboardStatusUpdate(drawerCandidate.candidate_id, drawerCandidate.status || 'New')}
+                                                    disabled={getPendingStatus(drawerCandidate.candidate_id, drawerCandidate.status || 'New') === (drawerCandidate.status || 'New')}
+                                                    className="bg-blue-600 text-white text-sm px-3 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                                                >
+                                                    Update
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div>
@@ -2087,12 +2354,12 @@
                         <h2 className="text-2xl font-semibold mb-6">Admin Settings</h2>
                         {!settingsLoaded ? (
                             <div className="max-w-lg bg-gray-50 border border-gray-200 rounded-lg p-5">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Admin Password</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Settings Password</label>
                                 <input
                                     type="password"
                                     ref={adminPasswordInputRef}
                                     defaultValue=""
-                                    placeholder="Enter admin password"
+                                    placeholder="Enter settings password"
                                     className="w-full p-2 border border-gray-300 rounded-md"
                                 />
                                 <button
@@ -2131,7 +2398,8 @@
                                     <button className={sectionButtonClass('runtime')} onClick={() => setSettingsSection('runtime')}>Runtime Flags</button>
                                     <button className={sectionButtonClass('operational')} onClick={() => setSettingsSection('operational')}>Operational Settings</button>
                                     <button className={sectionButtonClass('secrets')} onClick={() => setSettingsSection('secrets')}>Secrets</button>
-                                    <button className={sectionButtonClass('admin_password')} onClick={() => setSettingsSection('admin_password')}>Admin Password</button>
+                                    <button className={sectionButtonClass('user_password')} onClick={() => setSettingsSection('user_password')}>User Password</button>
+                                    <button className={sectionButtonClass('settings_password')} onClick={() => setSettingsSection('settings_password')}>Settings Password</button>
                                     <button className={sectionButtonClass('readme')} onClick={() => setSettingsSection('readme')}>README</button>
                                 </div>
 
@@ -2252,21 +2520,10 @@
                                 {settingsSection === 'operational' && (
                                     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
                                         <h3 className="font-semibold text-gray-900">Operational Settings</h3>
+                                        <p className="text-xs text-gray-600">
+                                            Cloud mode is active. Local folder paths are hidden from this UI.
+                                        </p>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Default Download Folder</label>
-                                                <div className="flex gap-2">
-                                                    <input value={settingsForm.default_download_folder} onChange={e => setField('default_download_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                                                    <button type="button" onClick={() => openFolderPicker('default_download_folder')} className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Browse</button>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Verified Resumes Folder</label>
-                                                <div className="flex gap-2">
-                                                    <input value={settingsForm.verified_resumes_folder} onChange={e => setField('verified_resumes_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                                                    <button type="button" onClick={() => openFolderPicker('verified_resumes_folder')} className="px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Browse</button>
-                                                </div>
-                                            </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL</label>
                                                 <input value={settingsForm.supabase_url} onChange={e => setField('supabase_url', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
@@ -2282,18 +2539,6 @@
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">OTP Window Seconds</label>
                                                 <input value={settingsForm.otp_window_seconds} onChange={e => setField('otp_window_seconds', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Registry DB Path</label>
-                                                <input value={settingsForm.registry_db_path} onChange={e => setField('registry_db_path', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Feedback DB Path</label>
-                                                <input value={settingsForm.feedback_db_path} onChange={e => setField('feedback_db_path', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Log Directory</label>
-                                                <input value={settingsForm.log_dir} onChange={e => setField('log_dir', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Pinecone Environment</label>
@@ -2351,27 +2596,120 @@
                                     </div>
                                 )}
 
-                                {settingsSection === 'admin_password' && (
+                                {settingsSection === 'user_password' && (
                                     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
-                                        <h3 className="font-semibold text-gray-900">Change Admin Password</h3>
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="font-semibold text-gray-900">User Password</h3>
+                                            <button
+                                                onClick={loadAdminUsers}
+                                                disabled={isAdminUsersLoading}
+                                                className="text-sm px-3 py-1 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-60"
+                                            >
+                                                {isAdminUsersLoading ? 'Refreshing...' : 'Refresh Users'}
+                                            </button>
+                                        </div>
+                                        <p className="text-xs text-gray-600">
+                                            Admin can create/edit users and assign roles (`admin`, `manager`, `recruiter`).
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                                <input
+                                                    type="text"
+                                                    value={userForm.username}
+                                                    onChange={e => setUserForm(prev => ({ ...prev, username: e.target.value }))}
+                                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                                    placeholder="e.g. recruiter1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                                <select
+                                                    value={userForm.role}
+                                                    onChange={e => setUserForm(prev => ({ ...prev, role: e.target.value }))}
+                                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                                >
+                                                    <option value="recruiter">recruiter</option>
+                                                    <option value="manager">manager</option>
+                                                    <option value="admin">admin</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                                <input
+                                                    type="password"
+                                                    value={userForm.password}
+                                                    onChange={e => setUserForm(prev => ({ ...prev, password: e.target.value }))}
+                                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                                    placeholder="At least 8 characters"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <button
+                                                onClick={saveAdminUser}
+                                                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                                            >
+                                                Save User
+                                            </button>
+                                        </div>
+                                        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                                            <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-3 py-2 text-left">Username</th>
+                                                        <th className="px-3 py-2 text-left">Role</th>
+                                                        <th className="px-3 py-2 text-left">Password</th>
+                                                        <th className="px-3 py-2 text-left">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-200 bg-white">
+                                                    {adminUsers.length === 0 ? (
+                                                        <tr>
+                                                            <td className="px-3 py-3 text-gray-500" colSpan="4">No users configured in [Users].</td>
+                                                        </tr>
+                                                    ) : adminUsers.map((u) => (
+                                                        <tr key={`${u.username}-${u.role}`}>
+                                                            <td className="px-3 py-2">{u.username}</td>
+                                                            <td className="px-3 py-2">{u.role}</td>
+                                                            <td className="px-3 py-2 text-gray-500">{u.password_masked || '********'}</td>
+                                                            <td className="px-3 py-2">
+                                                                <button
+                                                                    onClick={() => deleteAdminUser(u.username)}
+                                                                    className="text-red-600 hover:underline"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {settingsSection === 'settings_password' && (
+                                    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+                                        <h3 className="font-semibold text-gray-900">Change Settings Password</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="md:col-span-2">
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Current Admin Password</label>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Current Settings Password</label>
                                                 <input
                                                     type="password"
                                                     value={currentAdminPasswordInput}
                                                     onChange={e => setCurrentAdminPasswordInput(e.target.value)}
                                                     className="w-full p-2 border border-gray-300 rounded-md"
-                                                    placeholder="Enter current admin password"
+                                                    placeholder="Enter current settings password"
                                                 />
                                                 {currentAdminPasswordInput.trim().length > 0 && (
                                                     <p className={`mt-1 text-xs ${currentAdminPasswordInput.trim() === adminSessionPassword.trim() ? 'text-green-600' : 'text-red-600'}`}>
-                                                        {currentAdminPasswordInput.trim() === adminSessionPassword.trim() ? 'Password matches current admin session' : 'Password does not match current admin session'}
+                                                        {currentAdminPasswordInput.trim() === adminSessionPassword.trim() ? 'Password matches current settings session' : 'Password does not match current settings session'}
                                                     </p>
                                                 )}
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">New Admin Password</label>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">New Settings Password</label>
                                                 <input
                                                     type={showGeneratedAdminPassword ? 'text' : 'password'}
                                                     value={newAdminPasswordInput}
@@ -2403,7 +2741,7 @@
                                                 {showGeneratedAdminPassword ? 'Hide Password' : 'Show Password'}
                                             </button>
                                             <button onClick={changeAdminPassword} disabled={isSettingsSaving} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
-                                                {isSettingsSaving ? 'Updating...' : 'Update Admin Password'}
+                                                {isSettingsSaving ? 'Updating...' : 'Update Settings Password'}
                                             </button>
                                         </div>
                                     </div>
@@ -2427,15 +2765,11 @@
 
                                         <div>
                                             <p className="font-semibold text-gray-900">Operational Settings</p>
-                                            <p>`default_download_folder`: Folder where downloaded resumes are stored. Source: local machine directory path chosen by admin. Reset: choose a new folder via Browse.</p>
-                                            <p>`verified_resumes_folder`: Folder where verification CSV/event data is stored. Source: local path or project-relative folder. Reset: set to `Verified_Resumes` or browse a new folder.</p>
+                                            <p>`default_download_folder`, `verified_resumes_folder`, `registry_db_path`, `feedback_db_path`, `log_dir`: legacy/local fields kept for backward compatibility and hidden in cloud-first UI.</p>
                                             <p>`supabase_url`: Your Supabase project URL (`https://&lt;project-ref&gt;.supabase.co`). Source: Supabase dashboard project URL.</p>
                                             <p>`seajob_login_url`: SeaJob login URL used by scraper. Default should remain `http://seajob.net/seajob_login.php` unless SeaJob changes.</p>
                                             <p>`seajob_dashboard_url`: SeaJob dashboard URL used post-login. Default should remain `http://seajob.net/company/dashboard.php` unless SeaJob changes.</p>
                                             <p>`otp_window_seconds`: Allowed OTP entry window before considering session invalid. Source: observed SeaJob OTP behavior. Reset: recommended 120.</p>
-                                            <p>`registry_db_path`: SQLite path for analyzer file-index registry. Reset: `registry.db`.</p>
-                                            <p>`feedback_db_path`: SQLite path for feedback-learning events. Reset: `feedback.db`.</p>
-                                            <p>`log_dir`: Directory where download session logs are written. Reset: `logs`.</p>
                                             <p>`pinecone_environment`: Pinecone deployment environment/region (for your selected SDK pattern). Source: Pinecone project settings.</p>
                                             <p>`pinecone_index_name`: Pinecone index name used for vector retrieval. Source: Pinecone index list.</p>
                                             <p>`embedding_model_name`: Embedding model used for retrieval vectors. Source: model provider docs/availability.</p>
@@ -2453,8 +2787,8 @@
                                         </div>
 
                                         <div>
-                                            <p className="font-semibold text-gray-900">Admin Password</p>
-                                            <p>Use the Admin Password tab to set a new password manually or generate a strong password. After update, re-auth with the new password.</p>
+                                            <p className="font-semibold text-gray-900">Settings Password</p>
+                                            <p>Use the Settings Password tab to set a new password manually or generate a strong password. After update, re-auth with the new password.</p>
                                         </div>
                                     </div>
                                 )}
@@ -2530,6 +2864,67 @@
                                 )}
                             </div>
                         )}
+                    </div>
+                );
+            };
+
+            const LogsTabContent = () => {
+                if (role !== 'admin') {
+                    return (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                            Usage logs are available to admin users only.
+                        </div>
+                    );
+                }
+                return (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-semibold">Usage Logs</h2>
+                            <button
+                                onClick={loadUsageLogs}
+                                disabled={isUsageLogsLoading || !adminSessionPassword.trim()}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                                {isUsageLogsLoading ? 'Refreshing...' : 'Refresh Logs'}
+                            </button>
+                        </div>
+                        {!adminSessionPassword.trim() && (
+                            <p className="text-sm text-gray-600">
+                                Load admin settings once in the Settings tab to unlock log viewing.
+                            </p>
+                        )}
+                        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left">Date/Time</th>
+                                        <th className="px-3 py-2 text-left">User</th>
+                                        <th className="px-3 py-2 text-left">Role</th>
+                                        <th className="px-3 py-2 text-left">Action</th>
+                                        <th className="px-3 py-2 text-left">Summary</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {usageLogs.length === 0 ? (
+                                        <tr>
+                                            <td className="px-3 py-4 text-gray-500" colSpan="5">
+                                                No usage logs available.
+                                            </td>
+                                        </tr>
+                                    ) : usageLogs.map((row, idx) => (
+                                        <tr key={`${row.timestamp || 'ts'}-${idx}`}>
+                                            <td className="px-3 py-2 text-gray-600">
+                                                {row.timestamp ? new Date(row.timestamp).toLocaleString() : '-'}
+                                            </td>
+                                            <td className="px-3 py-2">{row.username || '-'}</td>
+                                            <td className="px-3 py-2">{row.role || '-'}</td>
+                                            <td className="px-3 py-2">{row.action || '-'}</td>
+                                            <td className="px-3 py-2 text-gray-700">{row.summary || '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 );
             };
@@ -2729,6 +3124,7 @@
                             {canAccessTab('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>}
                             {canAccessTab('setup') && <button onClick={() => setActiveTab('setup')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'setup' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Setup</button>}
                             {canAccessTab('settings') && <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>}
+                            {canAccessTab('logs') && <button onClick={() => setActiveTab('logs')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'logs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Logs</button>}
                         </div>
                         <main className="bg-white p-8 rounded-xl shadow-lg">
                              {activeTab === 'download' && DownloadTabContent()}
@@ -2968,9 +3364,10 @@
                                     )}
                                 </div>
                             )}
-                            {activeTab === 'dashboard' && DashboardTabContent()}
+                             {activeTab === 'dashboard' && DashboardTabContent()}
                              {activeTab === 'setup' && SetupTabContent()}
                              {activeTab === 'settings' && SettingsTabContent()}
+                             {activeTab === 'logs' && LogsTabContent()}
                         </main>
                         </>
                         )}

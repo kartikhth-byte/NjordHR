@@ -334,6 +334,11 @@ def create_agent_app():
             scraper_session["scraper"] = None
         if scraper:
             scraper.quit()
-        return jsonify({"success": True})
+        shutdown_fn = request.environ.get("werkzeug.server.shutdown")
+        if shutdown_fn:
+            threading.Thread(target=lambda: (time.sleep(0.2), shutdown_fn()), daemon=True).start()
+        else:
+            threading.Thread(target=lambda: (time.sleep(0.2), os._exit(0)), daemon=True).start()
+        return jsonify({"success": True, "message": "Agent shutting down"})
 
     return app

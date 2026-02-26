@@ -15,6 +15,7 @@ from queue import Queue, Empty
 import requests
 from urllib.parse import quote
 import sqlite3
+import time
 
 # Dependency Check & Imports
 try:
@@ -45,6 +46,12 @@ feature_flags = app_settings.feature_flags
 
 # --- Global State ---
 scraper_session = None
+seajobs_last_activity_at = None
+ui_client_heartbeats = {}
+ui_client_lock = threading.Lock()
+ui_client_seen_once = False
+auto_shutdown_started = False
+auto_shutdown_in_progress = False
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
@@ -118,6 +125,136 @@ def _resolve_runtime_path(raw_path, fallback_name):
     return os.path.abspath(os.path.join(PROJECT_ROOT, candidate))
 
 
+def _ui_idle_autoshutdown_enabled():
+    return _env_bool("NJORDHR_AUTO_SHUTDOWN_ON_UI_IDLE", default=False)
+
+
+def _ui_idle_shutdown_seconds():
+    raw = os.getenv("NJORDHR_UI_IDLE_SHUTDOWN_SECONDS", "75")
+    try:
+        value = int(str(raw).strip())
+    except Exception:
+        value = 75
+    return max(15, value)
+
+
+def _ui_heartbeat_ttl_seconds():
+    return max(15, _ui_idle_shutdown_seconds())
+
+
+def _record_ui_heartbeat(client_id):
+    global ui_client_seen_once
+    cid = str(client_id or "").strip()
+    if not cid:
+        return
+    with ui_client_lock:
+        ui_client_heartbeats[cid] = time.time()
+        ui_client_seen_once = True
+
+
+def _drop_ui_client(client_id):
+    cid = str(client_id or "").strip()
+    if not cid:
+        return
+    with ui_client_lock:
+        ui_client_heartbeats.pop(cid, None)
+
+
+def _active_ui_client_count():
+    now = time.time()
+    ttl = _ui_heartbeat_ttl_seconds()
+    with ui_client_lock:
+        stale = [cid for cid, ts in ui_client_heartbeats.items() if (now - ts) > ttl]
+        for cid in stale:
+            ui_client_heartbeats.pop(cid, None)
+        return len(ui_client_heartbeats)
+
+
+def _start_ui_idle_shutdown_monitor():
+    global auto_shutdown_started, auto_shutdown_in_progress
+    if auto_shutdown_started or not _ui_idle_autoshutdown_enabled():
+        return
+    auto_shutdown_started = True
+
+    def _worker():
+        idle_seconds = _ui_idle_shutdown_seconds()
+        # Wait for UI to initialize/open.
+        time.sleep(15)
+        while True:
+            time.sleep(5)
+            if auto_shutdown_in_progress:
+                return
+            if not ui_client_seen_once:
+                continue
+            if _active_ui_client_count() > 0:
+                continue
+            auto_shutdown_in_progress = True
+            print(f"[AUTOSHUTDOWN] No active UI clients for {idle_seconds}s. Stopping services.")
+            _disconnect_seajobs_best_effort()
+            if _use_local_agent():
+                try:
+                    _agent_request("POST", "/shutdown", timeout=10)
+                except Exception:
+                    pass
+            os._exit(0)
+
+    t = threading.Thread(target=_worker, daemon=True, name="njordhr-ui-idle-shutdown")
+    t.start()
+
+
+def _seajobs_idle_timeout_seconds():
+    return max(0, _int_setting("Advanced", "seajobs_idle_timeout_seconds", 300))
+
+
+def _touch_seajobs_activity():
+    global seajobs_last_activity_at
+    seajobs_last_activity_at = time.time()
+
+
+def _clear_seajobs_activity():
+    global seajobs_last_activity_at
+    seajobs_last_activity_at = None
+
+
+def _current_seajobs_idle_seconds():
+    if seajobs_last_activity_at is None:
+        return None
+    return max(0, int(time.time() - seajobs_last_activity_at))
+
+
+def _disconnect_seajobs_best_effort():
+    global scraper_session
+    try:
+        if _use_local_agent():
+            _agent_request("POST", "/session/disconnect", timeout=20)
+        else:
+            if scraper_session:
+                scraper_session.quit()
+            scraper_session = None
+    except Exception:
+        return False
+    finally:
+        _clear_seajobs_activity()
+    return True
+
+
+def _enforce_seajobs_idle_timeout():
+    timeout_seconds = _seajobs_idle_timeout_seconds()
+    if timeout_seconds <= 0:
+        return None
+    idle_seconds = _current_seajobs_idle_seconds()
+    if idle_seconds is None or idle_seconds < timeout_seconds:
+        return None
+    _disconnect_seajobs_best_effort()
+    timeout_minutes = max(1, timeout_seconds // 60)
+    return {
+        "timed_out": True,
+        "idle_seconds": idle_seconds,
+        "timeout_seconds": timeout_seconds,
+        "message": f"SeaJobs session disconnected after {timeout_minutes} minute(s) of inactivity."
+    }
+
+
 def _admin_token():
     token = os.getenv("NJORDHR_ADMIN_TOKEN", "").strip()
     if token:
@@ -129,14 +266,34 @@ def _auth_user_list():
     auth_cfg = config["Auth"] if "Auth" in config else {}
     admin_username = os.getenv("NJORDHR_ADMIN_USERNAME", auth_cfg.get("admin_username", "admin")).strip() or "admin"
     admin_password = os.getenv("NJORDHR_ADMIN_PASSWORD", auth_cfg.get("admin_password", "")).strip() or _admin_token()
+    manager_username = os.getenv("NJORDHR_MANAGER_USERNAME", auth_cfg.get("manager_username", "manager")).strip() or "manager"
+    manager_password = os.getenv("NJORDHR_MANAGER_PASSWORD", auth_cfg.get("manager_password", "")).strip()
     recruiter_username = os.getenv("NJORDHR_RECRUITER_USERNAME", auth_cfg.get("recruiter_username", "recruiter")).strip() or "recruiter"
     recruiter_password = os.getenv("NJORDHR_RECRUITER_PASSWORD", auth_cfg.get("recruiter_password", "")).strip()
 
     users = {}
     if admin_password:
         users[admin_username] = {"role": "admin", "password": admin_password}
+    if manager_password:
+        users[manager_username] = {"role": "manager", "password": manager_password}
     if recruiter_password:
         users[recruiter_username] = {"role": "recruiter", "password": recruiter_password}
+
+    if "Users" in config:
+        for username, packed in config["Users"].items():
+            u = str(username or "").strip()
+            if not u:
+                continue
+            raw = str(packed or "")
+            if "|" in raw:
+                role, pwd = raw.split("|", 1)
+            else:
+                role, pwd = "recruiter", raw
+            role = str(role or "").strip().lower()
+            pwd = str(pwd or "").strip()
+            if role not in {"admin", "manager", "recruiter"} or not pwd:
+                continue
+            users[u] = {"role": role, "password": pwd}
     return users
 
 
@@ -149,7 +306,7 @@ def _session_username():
 
 
 def _is_authenticated():
-    return _session_role() in {"admin", "recruiter"} and bool(_session_username())
+    return _session_role() in {"admin", "manager", "recruiter"} and bool(_session_username())
 
 
 def _require_role(*allowed_roles):
@@ -282,6 +439,56 @@ def _append_agent_sync_jsonl(kind, payload):
             "received_at": datetime.utcnow().isoformat() + "Z",
             "payload": payload or {},
         }) + "\n")
+
+
+def _usage_log_path():
+    logs_dir = _resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    return os.path.join(logs_dir, "usage_audit.jsonl")
+
+
+def _log_usage(action, summary="", extra=None):
+    try:
+        row = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "username": _session_username() or "anonymous",
+            "role": _session_role() or "anonymous",
+            "action": str(action or "").strip(),
+            "summary": str(summary or "").strip(),
+            "endpoint": request.path if has_request_context() else "",
+            "method": request.method if has_request_context() else "",
+            "remote_addr": request.remote_addr if has_request_context() else "",
+            "extra": extra or {},
+        }
+        with open(_usage_log_path(), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except Exception:
+        pass
+
+
+def _read_usage_logs(limit=200):
+    path = _usage_log_path()
+    if not os.path.isfile(path):
+        return []
+    rows = []
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                rows.append(json.loads(raw))
+            except Exception:
+                continue
+    if limit > 0:
+        rows = rows[-limit:]
+    rows.reverse()
+    return rows
+
+
+def _normalize_user_role(value):
+    role = str(value or "").strip().lower()
+    return role if role in {"admin", "manager", "recruiter"} else ""
 
 
 def _settings_payload(include_plain_secrets=False):
@@ -491,11 +698,108 @@ VALID_STATUSES = {
     'Contacted',
     'Interested',
     'Not Interested',
-    'Interview Scheduled',
-    'Offer Made',
-    'Hired',
-    'Rejected'
+    'Mail Sent (handoff complete)',
 }
+
+STATUS_TRANSITIONS = {
+    'New': {'Contacted'},
+    'Contacted': {'Interested', 'Not Interested'},
+    'Interested': {'Mail Sent (handoff complete)'},
+    'Mail Sent (handoff complete)': set(),
+    'Not Interested': set(),
+}
+
+ARCHIVE_STATUSES = {
+    'Mail Sent (handoff complete)',
+    'Not Interested',
+}
+
+
+def _normalize_email(value):
+    return str(value or "").strip().lower()
+
+
+def _validate_status_transition(current_status, next_status):
+    current = str(current_status or "New").strip() or "New"
+    nxt = str(next_status or "").strip()
+    if not nxt:
+        return False, "Invalid status value", False
+    if nxt == current:
+        return True, "", False
+    allowed = STATUS_TRANSITIONS.get(current, set())
+    if nxt in allowed:
+        return True, "", False
+    if _session_role() == "admin":
+        return True, "", True
+    return False, f"Invalid transition from '{current}' to '{nxt}'. Admin role required for overrides.", False
+
+
+def _ensure_candidate_identifiers_consistent(candidate_id, email, rank_name=""):
+    """
+    Enforce mandatory ingest identifiers and prevent id/email collision merges.
+    """
+    cid = str(candidate_id or "").strip()
+    normalized_email = _normalize_email(email)
+    if not cid or not normalized_email:
+        return False, "Missing required identifiers: candidate_id and email", False
+
+    latest = csv_manager.get_latest_status_per_candidate(rank_name=rank_name)
+    if latest.empty:
+        return True, "", False
+
+    latest = latest.copy()
+    latest["Candidate_ID"] = latest["Candidate_ID"].astype(str).str.strip()
+    latest["__email_norm"] = latest["Email"].astype(str).str.strip().str.lower()
+
+    id_rows = latest[latest["Candidate_ID"] == cid]
+    pair_rows = latest[
+        (latest["Candidate_ID"] == cid) &
+        (latest["__email_norm"] == normalized_email)
+    ]
+
+    if not id_rows.empty:
+        existing_email = _normalize_email(id_rows.iloc[0].get("Email", ""))
+        if existing_email and existing_email != normalized_email:
+            return False, (
+                f"Identifier mismatch for candidate_id={cid}: "
+                f"existing email '{existing_email}' does not match '{normalized_email}'"
+            ), False
+
+    existing = not id_rows.empty or not pair_rows.empty
+    return True, "", existing
+
+
+def _delete_older_candidate_resume_versions(rank_folder, candidate_id, keep_filename):
+    """
+    Keep only the latest local downloaded resume version for a candidate within the rank folder.
+    """
+    deleted = []
+    rank = str(rank_folder or "").strip()
+    cid = str(candidate_id or "").strip()
+    keep_name = str(keep_filename or "").strip()
+    if not rank or not cid:
+        return deleted
+
+    source_base_dir = os.path.abspath(settings['Default_Download_Folder'])
+    source_folder = _resolve_within_base(source_base_dir, rank)
+    if not os.path.isdir(source_folder):
+        return deleted
+
+    for name in os.listdir(source_folder):
+        if name == keep_name:
+            continue
+        if not name.lower().endswith(".pdf") or not _is_safe_name(name):
+            continue
+        if _extract_candidate_id_from_filename(name) != cid:
+            continue
+        try:
+            stale_path = _resolve_within_base(source_folder, name)
+            if os.path.isfile(stale_path):
+                os.remove(stale_path)
+                deleted.append(name)
+        except Exception as exc:
+            print(f"[VERIFY] Failed deleting stale resume version {name}: {exc}")
+    return deleted
 
 # --- NEW: Serve the Frontend ---
 @app.route('/')
@@ -536,10 +840,12 @@ def auth_login():
     users = _auth_user_list()
     record = users.get(username)
     if not record or password != str(record.get("password", "")):
+        _log_usage("login_failed", f"Login failed for username={username}")
         return jsonify({"success": False, "message": "Invalid username or password."}), 401
     session["username"] = username
     session["role"] = str(record.get("role", "")).strip().lower()
     session.permanent = False
+    _log_usage("login", f"User logged in as {session['role']}")
     return jsonify({
         "success": True,
         "user": {"username": username, "role": session["role"]},
@@ -548,26 +854,53 @@ def auth_login():
 
 @app.route('/auth/logout', methods=['POST'])
 def auth_logout():
+    _disconnect_seajobs_best_effort()
+    _log_usage("logout", "User logged out")
     session.clear()
+    return jsonify({"success": True})
+
+
+@app.route('/client/heartbeat', methods=['POST'])
+def client_heartbeat():
+    payload = request.json if request.is_json else {}
+    client_id = str((payload or {}).get("client_id", "")).strip() or request.headers.get("X-Client-Id", "").strip()
+    if not client_id:
+        return jsonify({"success": False, "message": "client_id is required"}), 400
+    _record_ui_heartbeat(client_id)
+    return jsonify({"success": True})
+
+
+@app.route('/client/disconnect', methods=['POST'])
+def client_disconnect():
+    payload = request.json if request.is_json else {}
+    client_id = str((payload or {}).get("client_id", "")).strip() or request.headers.get("X-Client-Id", "").strip()
+    if not client_id:
+        return jsonify({"success": False, "message": "client_id is required"}), 400
+    _drop_ui_client(client_id)
     return jsonify({"success": True})
 
 # --- API Endpoints ---
 @app.route('/start_session', methods=['POST'])
 def start_session():
-    ok, reason = _require_role("admin")
+    ok, reason = _require_role("admin", "manager")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     data = request.json
     mobile_number = data.get('mobileNumber')
+    _log_usage("session_start", f"Start session requested for mobile={mobile_number}")
     if _use_local_agent():
         try:
             resp = _agent_request("POST", "/session/start", json_body={"mobile_number": mobile_number}, timeout=60)
-            return jsonify(resp.json()), resp.status_code
+            payload = resp.json()
+            if payload.get("success"):
+                _touch_seajobs_activity()
+            return jsonify(payload), resp.status_code
         except Exception as exc:
             return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
 
     if scraper_session: scraper_session.quit()
+    _clear_seajobs_activity()
     scraper_session = Scraper(
         settings['Default_Download_Folder'],
         otp_window_seconds=_int_setting("Advanced", "otp_window_seconds", 120),
@@ -575,21 +908,38 @@ def start_session():
         dashboard_url=_advanced_value("seajob_dashboard_url", "http://seajob.net/company/dashboard.php"),
     )
     result = scraper_session.start_session(creds['Username'], creds['Password'], mobile_number)
+    if result.get("success"):
+        _touch_seajobs_activity()
     return jsonify(result)
 
 @app.route('/verify_otp', methods=['POST'])
 def verify_otp():
-    ok, reason = _require_role("admin")
+    ok, reason = _require_role("admin", "manager")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     data = request.json
     otp = data.get('otp')
+    _log_usage("otp_verify", "OTP verification requested")
+    timeout_info = _enforce_seajobs_idle_timeout()
+    if timeout_info:
+        return jsonify({
+            "success": False,
+            "message": timeout_info["message"],
+            "session_health": {
+                "active": False,
+                "valid": False,
+                "otp_pending": False,
+                "otp_expired": True,
+                "reason": "Idle timeout reached"
+            }
+        })
     if _use_local_agent():
         try:
             resp = _agent_request("POST", "/session/verify-otp", json_body={"otp": otp}, timeout=60)
             login_result = resp.json()
             if login_result.get("success"):
+                _touch_seajobs_activity()
                 try:
                     ranks_str = config.get('Ranks', 'rank_options', fallback='').strip()
                     ship_types_str = config.get('ShipTypes', 'ship_type_options', fallback='').strip()
@@ -606,6 +956,7 @@ def verify_otp():
     
     login_result = scraper_session.verify_otp(otp)
     if login_result["success"]:
+        _touch_seajobs_activity()
         try:
             ranks_str = config.get('Ranks', 'rank_options', fallback='').strip()
             ship_types_str = config.get('ShipTypes', 'ship_type_options', fallback='').strip()
@@ -617,11 +968,14 @@ def verify_otp():
 
 @app.route('/start_download', methods=['POST'])
 def start_download():
-    ok, reason = _require_role("admin")
+    ok, reason = _require_role("admin", "manager")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     global scraper_session
     data = request.json
+    timeout_info = _enforce_seajobs_idle_timeout()
+    if timeout_info:
+        return jsonify({"success": False, "message": timeout_info["message"]}), 400
     if _use_local_agent():
         try:
             resp = _agent_request(
@@ -636,6 +990,7 @@ def start_download():
             )
             payload = resp.json()
             if payload.get("success"):
+                _touch_seajobs_activity()
                 payload.setdefault("message", "Download job queued in local agent.")
             return jsonify(payload), resp.status_code
         except Exception as exc:
@@ -665,6 +1020,7 @@ def start_download():
         data['forceRedownload'], 
         logger
     )
+    _log_usage("download_start", f"Download started for rank={data.get('rank', '')}, ship_type={data.get('shipType', '')}")
     
     result['log_file'] = log_filepath
     return jsonify(result)
@@ -673,7 +1029,7 @@ def start_download():
 @app.route('/download_stream', methods=['GET'])
 def download_stream():
     """Stream download progress using Server-Sent Events."""
-    ok, reason = _require_role("admin")
+    ok, reason = _require_role("admin", "manager")
     if not ok:
         def denied():
             yield f"data: {json.dumps({'type': 'error', 'message': reason})}\n\n"
@@ -684,6 +1040,11 @@ def download_stream():
     ship_type = request.args.get('shipType', '').strip()
     force_redownload_raw = request.args.get('forceRedownload', 'false').strip().lower()
     force_redownload = force_redownload_raw in {'1', 'true', 'yes', 'on'}
+    timeout_info = _enforce_seajobs_idle_timeout()
+    if timeout_info:
+        def idle_timed_out():
+            yield f"data: {json.dumps({'type': 'error', 'message': timeout_info['message']})}\n\n"
+        return Response(idle_timed_out(), mimetype='text/event-stream')
 
     if _use_local_agent():
         def generate_agent():
@@ -707,6 +1068,7 @@ def download_stream():
                     msg = create_payload.get("message", "Failed to start local agent job")
                     yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
                     return
+                _touch_seajobs_activity()
                 job_id = str(create_payload.get("job_id", "")).strip()
                 if not job_id:
                     yield f"data: {json.dumps({'type': 'error', 'message': 'Local agent did not return job_id'})}\n\n"
@@ -843,33 +1205,46 @@ def download_stream():
 
 @app.route('/disconnect_session', methods=['POST'])
 def disconnect_session():
-    ok, reason = _require_role("admin")
+    ok, reason = _require_role("admin", "manager")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     global scraper_session
-    if _use_local_agent():
-        try:
-            resp = _agent_request("POST", "/session/disconnect", timeout=20)
-            return jsonify(resp.json()), resp.status_code
-        except Exception as exc:
-            return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
-
-    if scraper_session:
-        scraper_session.quit()
-        scraper_session = None
-    return jsonify({"success": True, "message": "Session disconnected successfully."})
+    _log_usage("session_disconnect", "Disconnect session requested")
+    success = _disconnect_seajobs_best_effort()
+    if success:
+        return jsonify({"success": True, "message": "Session disconnected successfully."})
+    return jsonify({"success": False, "message": "Session disconnect failed."}), 502
 
 
 @app.route('/session_health', methods=['GET'])
 def session_health():
     """Return current scraper session health for OTP/session timeout handling."""
     global scraper_session
+    timeout_info = _enforce_seajobs_idle_timeout()
+    if timeout_info:
+        return jsonify({
+            "success": True,
+            "connected": False,
+            "idle_timeout_seconds": _seajobs_idle_timeout_seconds(),
+            "idle_seconds": timeout_info["idle_seconds"],
+            "health": {
+                "active": False,
+                "valid": False,
+                "otp_pending": False,
+                "otp_expired": True,
+                "reason": "Idle timeout reached"
+            },
+            "message": timeout_info["message"]
+        })
+
     if _use_local_agent():
         try:
             resp = _agent_request("GET", "/session/health", timeout=15)
             payload = resp.json()
             if isinstance(payload, dict):
                 payload.setdefault("connected", bool((payload.get("health") or {}).get("active")))
+                payload.setdefault("idle_timeout_seconds", _seajobs_idle_timeout_seconds())
+                payload.setdefault("idle_seconds", _current_seajobs_idle_seconds() or 0)
             return jsonify(payload), resp.status_code
         except Exception as exc:
             return jsonify({
@@ -888,6 +1263,8 @@ def session_health():
         return jsonify({
             "success": True,
             "connected": False,
+            "idle_timeout_seconds": _seajobs_idle_timeout_seconds(),
+            "idle_seconds": _current_seajobs_idle_seconds() or 0,
             "health": {
                 "active": False,
                 "valid": False,
@@ -902,12 +1279,16 @@ def session_health():
         return jsonify({
             "success": True,
             "connected": bool(scraper_session and scraper_session.driver),
+            "idle_timeout_seconds": _seajobs_idle_timeout_seconds(),
+            "idle_seconds": _current_seajobs_idle_seconds() or 0,
             "health": health
         })
 
     return jsonify({
         "success": True,
         "connected": bool(scraper_session and scraper_session.driver),
+        "idle_timeout_seconds": _seajobs_idle_timeout_seconds(),
+        "idle_seconds": _current_seajobs_idle_seconds() or 0,
         "health": {
             "active": bool(scraper_session and scraper_session.driver),
             "valid": bool(scraper_session and scraper_session.driver),
@@ -940,6 +1321,11 @@ def runtime_config():
         },
         "persistence_backend": _current_repo_backend(),
         "server_url": app_settings.server_url,
+        "ui_auto_shutdown": {
+            "enabled": _ui_idle_autoshutdown_enabled(),
+            "idle_seconds": _ui_idle_shutdown_seconds(),
+            "active_clients": _active_ui_client_count(),
+        },
         "verified_resumes_dir": VERIFIED_RESUMES_DIR,
         "supabase_auth": {
             "key_source": key_source,
@@ -1043,7 +1429,7 @@ def ingest_agent_candidate_event():
     extracted_data = {
         "name": str(payload.get("name", "")).strip(),
         "present_rank": str(payload.get("present_rank", "")).strip(),
-        "email": str(payload.get("email", "")).strip(),
+        "email": _normalize_email(payload.get("email", "")),
         "country": str(payload.get("country", "")).strip(),
         "mobile_no": str(payload.get("mobile_no", "")).strip(),
     }
@@ -1059,12 +1445,21 @@ def ingest_agent_candidate_event():
 
     # Keep operational/download-only agent events out of dashboard data.
     dashboard_event_types = {"initial_verification", "status_change", "note_added", "resume_updated"}
+    if event_type in {"initial_verification", "resume_updated"} and (
+        not candidate_id or not extracted_data["email"]
+    ):
+        return jsonify({
+            "success": False,
+            "message": "candidate_external_id and email are required for resume ingest events"
+        }), 400
+
     if event_type in dashboard_event_types and candidate_id and filename:
         csv_manager.log_event(
             candidate_id=candidate_id,
             filename=filename,
             event_type=event_type,
             status=str(payload.get("status", "New")),
+            admin_override=bool(payload.get("admin_override", False)),
             notes=str(payload.get("notes", "")),
             rank_applied_for=rank,
             search_ship_type=str(payload.get("search_ship_type", "")),
@@ -1334,9 +1729,9 @@ def change_admin_password():
     confirm_password = str(data.get("confirm_admin_password", "")).strip()
 
     if not new_password:
-        return jsonify({"success": False, "message": "New admin password is required"}), 400
+        return jsonify({"success": False, "message": "New settings password is required"}), 400
     if len(new_password) < 8:
-        return jsonify({"success": False, "message": "Admin password must be at least 8 characters"}), 400
+        return jsonify({"success": False, "message": "Settings password must be at least 8 characters"}), 400
     if new_password != confirm_password:
         return jsonify({"success": False, "message": "Password confirmation does not match"}), 400
 
@@ -1352,7 +1747,94 @@ def change_admin_password():
     app_settings = load_app_settings()
     config = app_settings.config
 
-    return jsonify({"success": True, "message": "Admin password updated successfully."})
+    return jsonify({"success": True, "message": "Settings password updated successfully."})
+
+
+@app.route('/admin/users', methods=['GET'])
+def admin_list_users():
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+    users = _auth_user_list()
+    data = []
+    for username, record in sorted(users.items(), key=lambda item: item[0].lower()):
+        data.append({
+            "username": username,
+            "role": str(record.get("role", "")).strip().lower(),
+            "password_masked": "*" * max(8, len(str(record.get("password", "")))),
+        })
+    return jsonify({"success": True, "users": data})
+
+
+@app.route('/admin/users', methods=['POST'])
+def admin_upsert_user():
+    global app_settings, config
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+
+    payload = request.json if request.is_json else {}
+    username = str((payload or {}).get("username", "")).strip()
+    password = str((payload or {}).get("password", "")).strip()
+    role = _normalize_user_role((payload or {}).get("role", ""))
+    if not username:
+        return jsonify({"success": False, "message": "username is required"}), 400
+    if not re.match(r"^[A-Za-z0-9._-]{3,64}$", username):
+        return jsonify({"success": False, "message": "username must be 3-64 chars: letters, numbers, dot, underscore, hyphen"}), 400
+    if not password or len(password) < 8:
+        return jsonify({"success": False, "message": "password must be at least 8 characters"}), 400
+    if not role:
+        return jsonify({"success": False, "message": "role must be one of: admin, manager, recruiter"}), 400
+
+    if "Users" not in config:
+        config["Users"] = {}
+    _config_set_literal(config, "Users", username, f"{role}|{password}")
+
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+
+    app_settings = load_app_settings()
+    config = app_settings.config
+    _log_usage("user_upsert", f"User saved: username={username}, role={role}")
+    return jsonify({"success": True, "message": "User saved successfully."})
+
+
+@app.route('/admin/users/<username>', methods=['DELETE'])
+def admin_delete_user(username):
+    global app_settings, config
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+    username = str(username or "").strip()
+    if not username:
+        return jsonify({"success": False, "message": "username is required"}), 400
+    if "Users" not in config or username not in config["Users"]:
+        return jsonify({"success": False, "message": "User not found in config [Users]"}), 404
+
+    config.remove_option("Users", username)
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+
+    app_settings = load_app_settings()
+    config = app_settings.config
+    _log_usage("user_delete", f"User deleted: username={username}")
+    return jsonify({"success": True, "message": "User deleted successfully."})
+
+
+@app.route('/admin/usage_logs', methods=['GET'])
+def admin_usage_logs():
+    ok, reason = _require_admin()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 401
+    try:
+        limit = int(str(request.args.get("limit", "200")).strip())
+    except Exception:
+        limit = 200
+    limit = max(1, min(limit, 1000))
+    rows = _read_usage_logs(limit=limit)
+    return jsonify({"success": True, "rows": rows, "count": len(rows)})
 
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
@@ -1371,6 +1853,7 @@ def analyze_stream():
     """Stream analysis progress using Server-Sent Events"""
     prompt = request.args.get('prompt')
     rank_folder = request.args.get('rank_folder')
+    _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
 
     def generate():
         try:
@@ -1418,6 +1901,11 @@ def analyze():
         
         analyzer = Analyzer(creds['Gemini_API_Key'])
         result = analyzer.run_analysis(rank_folder, prompt)
+        _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
+            "success": bool(result.get("success")),
+            "verified_matches": len(result.get("verified_matches", [])),
+            "uncertain_matches": len(result.get("uncertain_matches", [])),
+        })
         
         print(f"[BACKEND] Analysis complete. Success: {result.get('success')}")
         return jsonify(result)
@@ -1539,6 +2027,7 @@ def verify_resumes():
     try:
         processed_files = 0
         csv_exports = 0
+        stale_versions_deleted = 0
         extraction_errors = []
         
         for filename in filenames:
@@ -1558,9 +2047,21 @@ def verify_resumes():
                     candidate_id=candidate_id,
                     match_reason=ai_match_reason
                 )
+                extracted_email = _normalize_email(resume_data.get("email", ""))
+                if not extracted_email:
+                    extraction_errors.append(f"{filename}: Missing required email in extracted resume data")
+                    continue
 
-                candidate_history = csv_manager.get_candidate_history(candidate_id)
-                event_type = 'resume_updated' if candidate_history else 'initial_verification'
+                identifiers_ok, identifier_error, already_exists = _ensure_candidate_identifiers_consistent(
+                    candidate_id=candidate_id,
+                    email=extracted_email,
+                    rank_name=rank_folder,
+                )
+                if not identifiers_ok:
+                    extraction_errors.append(f"{filename}: {identifier_error}")
+                    continue
+
+                event_type = 'resume_updated' if already_exists else 'initial_verification'
                 storage_url = ""
                 try:
                     rank_seg = _safe_storage_segment(rank_folder)
@@ -1592,6 +2093,13 @@ def verify_resumes():
                 if csv_ok:
                     csv_exports += 1
                     print(f"[VERIFY] Event logged for {filename}")
+                    if event_type == 'resume_updated':
+                        deleted_files = _delete_older_candidate_resume_versions(
+                            rank_folder=rank_folder,
+                            candidate_id=candidate_id,
+                            keep_filename=filename,
+                        )
+                        stale_versions_deleted += len(deleted_files)
                 else:
                     extraction_errors.append(f"{filename}: CSV event logging failed")
 
@@ -1605,6 +2113,8 @@ def verify_resumes():
         # Prepare response message
         message = f"Successfully processed {processed_files} file(s). "
         message += f"Logged {csv_exports} event(s) to master CSV."
+        if stale_versions_deleted:
+            message += f" Deleted {stale_versions_deleted} older local resume version(s)."
         
         if extraction_errors:
             message += f" Warnings: {len(extraction_errors)} file(s) had extraction issues."
@@ -1613,11 +2123,18 @@ def verify_resumes():
         csv_stats = csv_manager.get_csv_stats()
         
         success = csv_exports > 0
+        _log_usage("verify_resumes", f"Verified resumes for rank_folder={rank_folder}", {
+            "processed": processed_files,
+            "csv_exports": csv_exports,
+            "stale_versions_deleted": stale_versions_deleted,
+            "warnings": len(extraction_errors),
+        })
         return jsonify({
             "success": success,
             "message": message,
             "processed": processed_files,
             "csv_exports": csv_exports,
+            "stale_versions_deleted": stale_versions_deleted,
             "errors": extraction_errors,
             "csv_stats": csv_stats,
             "persistence_backend": _current_repo_backend(),
@@ -1633,22 +2150,33 @@ def verify_resumes():
 def get_dashboard_data():
     """Fetch CSV data for dashboard display"""
     try:
-        view_type = request.args.get('view', 'master')  # 'master' or 'rank'
+        ok, reason = _require_role("admin", "manager", "recruiter")
+        if not ok:
+            return jsonify({"success": False, "message": reason}), 403
+        view_type = request.args.get('view', 'master')  # master, rank, archive, archive_rank
         rank_name = request.args.get('rank_name', '')
-        
-        if view_type not in ('master', 'rank'):
+
+        if view_type not in ('master', 'rank', 'archive', 'archive_rank'):
             return jsonify({"success": False, "message": "Invalid view type or missing rank_name"}), 400
-        if view_type == 'rank' and not rank_name:
+        if view_type in ('rank', 'archive_rank') and not rank_name:
             return jsonify({
                 "success": True,
-                "view": "rank",
+                "view": view_type,
                 "rank_name": "",
                 "total_count": 0,
                 "data": [],
                 "message": "No rank selected"
             })
 
-        rows = csv_manager.get_latest_status_per_candidate(rank_name if view_type == 'rank' else '')
+        rows = csv_manager.get_latest_status_per_candidate(rank_name if view_type in ('rank', 'archive_rank') else '')
+
+        # Split dashboard into active pipeline (default) vs archived candidates.
+        if not rows.empty:
+            status_series = rows['Status'].astype(str).str.strip()
+            if view_type in ('archive', 'archive_rank'):
+                rows = rows[status_series.isin(ARCHIVE_STATUSES)]
+            else:
+                rows = rows[~status_series.isin(ARCHIVE_STATUSES)]
 
         if rows.empty:
             return jsonify({
@@ -1701,9 +2229,38 @@ def get_dashboard_data():
 def get_available_ranks():
     """Get list of ranks from master CSV latest-candidate view."""
     try:
-        rank_counts = csv_manager.get_rank_counts()
+        ok, reason = _require_role("admin", "manager", "recruiter")
+        if not ok:
+            return jsonify({"success": False, "message": reason}), 403
+        scope = str(request.args.get('scope', 'active')).strip().lower()  # active|archive|all
+        latest_rows = csv_manager.get_latest_status_per_candidate()
+        if latest_rows.empty:
+            return jsonify({"success": True, "ranks": []})
+
+        if scope == 'archive':
+            latest_rows = latest_rows[latest_rows['Status'].astype(str).str.strip().isin(ARCHIVE_STATUSES)]
+        elif scope == 'active':
+            latest_rows = latest_rows[~latest_rows['Status'].astype(str).str.strip().isin(ARCHIVE_STATUSES)]
+        elif scope != 'all':
+            return jsonify({"success": False, "message": "Invalid scope"}), 400
+
+        if latest_rows.empty:
+            return jsonify({"success": True, "ranks": []})
+
+        rank_counts = (
+            latest_rows['Rank_Applied_For']
+            .astype(str)
+            .str.strip()
+        )
+        rank_counts = rank_counts[rank_counts != '']
+        rank_counts = (
+            rank_counts
+            .value_counts()
+            .reset_index()
+        )
+        rank_counts.columns = ['Rank_Applied_For', 'count']
         ranks = []
-        for row in rank_counts:
+        for _, row in rank_counts.iterrows():
             rank_name = row.get('Rank_Applied_For', '')
             if rank_name:
                 ranks.append({
@@ -1740,6 +2297,9 @@ def get_candidate_history(candidate_id):
 @app.route('/update_status', methods=['POST'])
 def update_status():
     """Append a status_change event for a candidate."""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     try:
         data = request.json or {}
         candidate_id = str(data.get('candidate_id', '')).strip()
@@ -1750,10 +2310,22 @@ def update_status():
         if status not in VALID_STATUSES:
             return jsonify({"success": False, "message": "Invalid status value"}), 400
 
-        ok = csv_manager.log_status_change(candidate_id, status)
+        history = csv_manager.get_candidate_history(candidate_id)
+        if not history:
+            return jsonify({"success": False, "message": "Candidate not found"}), 404
+        latest = history[-1]
+        transition_ok, transition_error, admin_override = _validate_status_transition(
+            current_status=latest.get("Status", "New"),
+            next_status=status,
+        )
+        if not transition_ok:
+            return jsonify({"success": False, "message": transition_error}), 403
+
+        ok = csv_manager.log_status_change(candidate_id, status, admin_override=admin_override)
         if not ok:
             return jsonify({"success": False, "message": "Candidate not found"}), 404
 
+        _log_usage("status_update", f"Status updated for candidate_id={candidate_id} to {status}")
         return jsonify({"success": True, "message": "Status updated"})
     except Exception as e:
         print(f"[ERROR] Status update failed: {e}")
@@ -1777,6 +2349,7 @@ def add_notes():
         if not ok:
             return jsonify({"success": False, "message": "Candidate not found"}), 404
 
+        _log_usage("note_add", f"Note added for candidate_id={candidate_id}", {"length": len(notes)})
         return jsonify({"success": True, "message": "Notes added"})
     except Exception as e:
         print(f"[ERROR] Add notes failed: {e}")
@@ -1850,6 +2423,11 @@ def export_resumes():
         missing_preview = missing_files[:20]
         response.headers['X-Missing-Files-Preview'] = json.dumps(missing_preview)
         response.headers['X-Missing-Files-Truncated'] = str(max(0, len(missing_files) - len(missing_preview)))
+        _log_usage("export_resumes", "Resume export completed", {
+            "selected": len(selected),
+            "included_files": added_files,
+            "missing_files": len(missing_files),
+        })
         return response
 
     except Exception as e:
@@ -1858,6 +2436,7 @@ def export_resumes():
 
 
 if __name__ == '__main__':
+    _start_ui_idle_shutdown_monitor()
     os.makedirs(settings['Default_Download_Folder'], exist_ok=True)
     os.makedirs(_resolve_runtime_path(_advanced_value("log_dir", "logs"), "logs"), exist_ok=True)
     server_port = int(os.getenv("NJORDHR_PORT", "5000"))

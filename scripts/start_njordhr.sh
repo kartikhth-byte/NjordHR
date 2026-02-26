@@ -104,6 +104,8 @@ else
     export NJORDHR_PORT="$BACKEND_PORT"
     export NJORDHR_SERVER_URL="$BACKEND_URL"
     export USE_LOCAL_AGENT="${USE_LOCAL_AGENT:-true}"
+    export NJORDHR_AUTO_SHUTDOWN_ON_UI_IDLE="${NJORDHR_AUTO_SHUTDOWN_ON_UI_IDLE:-true}"
+    export NJORDHR_UI_IDLE_SHUTDOWN_SECONDS="${NJORDHR_UI_IDLE_SHUTDOWN_SECONDS:-75}"
     nohup "$PYTHON_BIN" backend_server.py >> "$RUNTIME_DIR/backend.out" 2>> "$RUNTIME_DIR/backend.err" &
     echo $! > "$BACKEND_PID_FILE"
   )
