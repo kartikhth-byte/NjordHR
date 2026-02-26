@@ -1,6 +1,11 @@
 import tempfile
 import unittest
 from pathlib import Path
+import sys
+
+existing = sys.modules.get("scraper_engine")
+if existing is not None and not hasattr(getattr(existing, "Scraper", object), "_candidate_file_exists"):
+    del sys.modules["scraper_engine"]
 
 from scraper_engine import Scraper
 
@@ -48,4 +53,3 @@ class ScraperEngineDedupeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

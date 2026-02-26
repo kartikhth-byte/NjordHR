@@ -68,6 +68,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         ai_reason='',
         extracted_data=None,
         resume_url='',
+        admin_override=False,
         idempotency_key=None
     ):
         event_payload = {
@@ -82,6 +83,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
             "ai_reason": ai_reason,
             "extracted_data": extracted_data or {},
             "resume_url": resume_url,
+            "admin_override": bool(admin_override),
         }
         key = idempotency_key or self._canonical_event_key(event_payload)
         if self._has_key(key):
@@ -100,6 +102,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
             ai_reason=ai_reason,
             extracted_data=extracted_data,
             resume_url=resume_url,
+            admin_override=admin_override,
         )
         if not primary_ok:
             return False
@@ -118,6 +121,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
             ai_reason=ai_reason,
             extracted_data=extracted_data,
             resume_url=resume_url,
+            admin_override=admin_override,
         )
         if not secondary_ok:
             print(f"[DUAL-WRITE] Secondary write failed for key={key}")

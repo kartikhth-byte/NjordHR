@@ -51,7 +51,7 @@ class CSVManager:
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
-                  ai_reason='', extracted_data=None, resume_url=''):
+                  ai_reason='', extracted_data=None, resume_url='', admin_override=False):
         """Append one event row to the single master CSV."""
         extracted_data = extracted_data or {}
         timestamp = datetime.utcnow().isoformat() + 'Z'
@@ -121,7 +121,7 @@ class CSVManager:
         latest = candidate_rows.sort_values('Date_Added').tail(1)
         return latest.iloc[0].to_dict()
 
-    def log_status_change(self, candidate_id, status):
+    def log_status_change(self, candidate_id, status, admin_override=False):
         """Log a status_change event using latest known candidate fields."""
         latest = self.get_latest_candidate_row(candidate_id)
         if not latest:

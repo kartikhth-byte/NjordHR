@@ -126,7 +126,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
-                  ai_reason='', extracted_data=None, resume_url=''):
+                  ai_reason='', extracted_data=None, resume_url='', admin_override=False):
         try:
             extracted_data = extracted_data or {}
             candidate_external_id = str(candidate_id)
@@ -151,6 +151,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
                 "resume_url": resolved_resume_url,
                 "event_type": event_type,
                 "status": status,
+                "admin_override": bool(admin_override),
                 "notes": notes,
                 "rank_applied_for": rank_applied_for,
                 "search_ship_type": search_ship_type,
@@ -210,7 +211,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
             return None
         return rows.iloc[0].to_dict()
 
-    def log_status_change(self, candidate_id, status):
+    def log_status_change(self, candidate_id, status, admin_override=False):
         latest = self._get_latest_candidate_row(candidate_id)
         if not latest:
             return False
@@ -219,6 +220,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
             filename=latest.get('Filename', ''),
             event_type='status_change',
             status=status,
+            admin_override=admin_override,
             notes=latest.get('Notes', ''),
             rank_applied_for=latest.get('Rank_Applied_For', ''),
             search_ship_type=latest.get('Search_Ship_Type', ''),
