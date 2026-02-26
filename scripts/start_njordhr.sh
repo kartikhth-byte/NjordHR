@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME_DIR="$PROJECT_DIR/logs/runtime"
+RUNTIME_DIR="${NJORDHR_RUNTIME_DIR:-$PROJECT_DIR/logs/runtime}"
 mkdir -p "$RUNTIME_DIR"
 PYTHON_BIN="${NJORDHR_PYTHON_BIN:-python3}"
 

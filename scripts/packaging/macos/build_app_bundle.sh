@@ -21,12 +21,84 @@ trap 'rm -f "$TMP_SCPT"' EXIT
 
 cat > "$TMP_SCPT" <<EOF
 on run
-  do shell script quoted form of POSIX path of "${RUN_SCRIPT}"
+  «event sysoexec» quoted form of POSIX path of "${RUN_SCRIPT}"
 end run
 EOF
 
 rm -rf "$APP_DIR"
 osacompile -o "$APP_DIR" "$TMP_SCPT"
+
+/usr/bin/python3 - "$APP_DIR/Contents/Resources/applet.icns" <<'PY'
+from PIL import Image, ImageDraw
+import math
+import sys
+
+out = sys.argv[1]
+
+# Brand palette
+orange = (245, 124, 0, 255)
+navy = (7, 33, 84, 255)
+
+size = 1024
+img = Image.new("RGBA", (size, size), orange)
+draw = ImageDraw.Draw(img)
+
+cx, cy = size // 2, size // 2
+
+# Anchor proportions
+stroke = int(size * 0.085)
+shaft_top = int(size * 0.18)
+shaft_bottom = int(size * 0.70)
+crossbar_y = int(size * 0.37)
+crossbar_half = int(size * 0.16)
+ring_r_outer = int(size * 0.12)
+ring_r_inner = int(size * 0.065)
+arc_bbox = (
+    int(size * 0.23),
+    int(size * 0.42),
+    int(size * 0.77),
+    int(size * 0.94),
+)
+
+# Shaft
+draw.line((cx, shaft_top, cx, shaft_bottom), fill=navy, width=stroke)
+
+# Crossbar
+draw.line((cx - crossbar_half, crossbar_y, cx + crossbar_half, crossbar_y), fill=navy, width=stroke)
+
+# Top ring
+draw.ellipse(
+    (cx - ring_r_outer, shaft_top - ring_r_outer, cx + ring_r_outer, shaft_top + ring_r_outer),
+    fill=navy
+)
+draw.ellipse(
+    (cx - ring_r_inner, shaft_top - ring_r_inner, cx + ring_r_inner, shaft_top + ring_r_inner),
+    fill=orange
+)
+
+# Bottom arc
+draw.arc(arc_bbox, start=205, end=-25, fill=navy, width=stroke)
+
+# Flukes (triangles)
+left_tip = (int(size * 0.23), int(size * 0.83))
+left_inner = (int(size * 0.39), int(size * 0.75))
+left_base = (int(size * 0.33), int(size * 0.89))
+draw.polygon([left_tip, left_inner, left_base], fill=navy)
+
+right_tip = (int(size * 0.77), int(size * 0.83))
+right_inner = (int(size * 0.61), int(size * 0.75))
+right_base = (int(size * 0.67), int(size * 0.89))
+draw.polygon([right_tip, right_inner, right_base], fill=navy)
+
+# Crown join at bottom shaft
+draw.ellipse((cx - stroke // 2, shaft_bottom - stroke // 2, cx + stroke // 2, shaft_bottom + stroke // 2), fill=navy)
+
+img.save(
+    out,
+    format="ICNS",
+    sizes=[(16, 16), (32, 32), (64, 64), (128, 128), (256, 256), (512, 512), (1024, 1024)],
+)
+PY
 
 mkdir -p "$PAYLOAD_DIR"
 
@@ -57,6 +129,74 @@ cat > "$RUN_SCRIPT" <<'EOF'
 set -euo pipefail
 APP_RES_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$APP_RES_DIR/app"
+APP_SUPPORT_DIR="${HOME}/Library/Application Support/NjordHR"
+RUNTIME_DIR="${APP_SUPPORT_DIR}/runtime"
+CONFIG_PATH="${APP_SUPPORT_DIR}/config.ini"
+DEFAULT_DOWNLOAD_DIR="${HOME}/Documents/NjordHR/Downloads"
+DEFAULT_VERIFIED_DIR="${APP_SUPPORT_DIR}/Verified_Resumes"
+DEFAULT_LOG_DIR="${APP_SUPPORT_DIR}/logs"
+
+mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR"
+
+if [[ ! -f "$CONFIG_PATH" && -f "$PROJECT_DIR/config.ini" ]]; then
+  cp "$PROJECT_DIR/config.ini" "$CONFIG_PATH"
+fi
+
+if [[ -f "$CONFIG_PATH" ]]; then
+  /usr/bin/python3 - "$CONFIG_PATH" "$PROJECT_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR" <<'PY'
+import configparser
+import os
+import sys
+
+cfg_path, project_dir, download_dir, verified_dir, log_dir = sys.argv[1:6]
+project_dir = os.path.abspath(project_dir)
+
+cfg = configparser.ConfigParser()
+cfg.read(cfg_path)
+
+if "Settings" not in cfg:
+    cfg["Settings"] = {}
+if "Advanced" not in cfg:
+    cfg["Advanced"] = {}
+
+def _norm(v):
+    return os.path.abspath(os.path.expanduser((v or "").strip())) if (v or "").strip() else ""
+
+def _is_bundle_or_relative_path(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        return True
+    expanded = os.path.expanduser(raw)
+    if not os.path.isabs(expanded):
+        return True
+    abs_path = os.path.abspath(expanded)
+    if abs_path.startswith(project_dir):
+        return True
+    if "/Applications/NjordHR.app/" in abs_path:
+        return True
+    if "/build/macos/NjordHR.app/" in abs_path:
+        return True
+    return False
+
+current_download = cfg["Settings"].get("default_download_folder", "")
+if _is_bundle_or_relative_path(current_download):
+    cfg["Settings"]["default_download_folder"] = _norm(download_dir)
+
+current_verified = cfg["Settings"].get("additional_local_folder", "")
+if _is_bundle_or_relative_path(current_verified):
+    cfg["Settings"]["additional_local_folder"] = _norm(verified_dir)
+
+current_log_dir = cfg["Advanced"].get("log_dir", "")
+if _is_bundle_or_relative_path(current_log_dir):
+    cfg["Advanced"]["log_dir"] = _norm(log_dir)
+
+with open(cfg_path, "w", encoding="utf-8") as fh:
+    cfg.write(fh)
+PY
+fi
+
+export NJORDHR_CONFIG_PATH="$CONFIG_PATH"
+export NJORDHR_RUNTIME_DIR="$RUNTIME_DIR"
 
 if [[ -x "$APP_RES_DIR/runtime/bin/python3" ]]; then
   export NJORDHR_PYTHON_BIN="$APP_RES_DIR/runtime/bin/python3"
@@ -84,4 +224,3 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
 else
   echo "[NjordHR] Embedded runtime: disabled"
 fi
-
