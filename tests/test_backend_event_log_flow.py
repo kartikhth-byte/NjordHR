@@ -87,6 +87,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
             backend_server.config.write(fh)
         os.environ["NJORDHR_CONFIG_PATH"] = self.temp_config_path
         self.client = backend_server.app.test_client()
+        with self.client.session_transaction() as sess:
+            sess["username"] = "admin"
+            sess["role"] = "admin"
 
     def tearDown(self):
         backend_server.scraper_session = None
@@ -449,6 +452,17 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("use_supabase_db", data["feature_flags"])
         self.assertIn("use_supabase_reads", data["feature_flags"])
 
+    def test_sensitive_endpoints_require_authentication(self):
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        verify_resp = self.client.post("/verify_resumes", json={"rank_folder": "X", "filenames": []})
+        self.assertEqual(verify_resp.status_code, 403)
+        self.assertFalse(verify_resp.get_json()["success"])
+
+        resume_resp = self.client.get("/get_resume/Chief_Officer/Chief_Officer_9999.pdf")
+        self.assertEqual(resume_resp.status_code, 403)
+
     def test_download_stream_reports_error_when_session_missing(self):
         self.client.post("/auth/login", json={"username": "admin", "password": "test-admin-token"})
         backend_server.scraper_session = None
@@ -486,6 +500,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn('"success": true', payload.lower())
 
     def test_admin_settings_requires_token(self):
+        with self.client.session_transaction() as sess:
+            sess.clear()
         resp = self.client.get("/admin/settings")
         self.assertEqual(resp.status_code, 401)
         self.assertFalse(resp.get_json()["success"])

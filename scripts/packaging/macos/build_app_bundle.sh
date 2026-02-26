@@ -107,11 +107,21 @@ mkdir -p "$PAYLOAD_DIR"
 echo "[NjordHR] Copying app payload..."
 rsync -a \
   --exclude ".git" \
+  --exclude ".env" \
+  --exclude ".env.*" \
+  --exclude "config.ini" \
   --exclude "__pycache__" \
   --exclude ".pytest_cache" \
   --exclude ".pycache_tmp" \
   --exclude "build" \
+  --exclude "release" \
+  --exclude "Verified_Resumes" \
+  --exclude "logs" \
   --exclude "logs/runtime" \
+  --exclude "*.db" \
+  --exclude "*.sqlite" \
+  --exclude "*.sqlite3" \
+  --exclude "*.csv" \
   --exclude "*.db-journal" \
   --exclude "Backup_*" \
   --exclude "AI_Search_Results" \
@@ -140,8 +150,12 @@ DEFAULT_LOG_DIR="${APP_SUPPORT_DIR}/logs"
 
 mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR"
 
-if [[ ! -f "$CONFIG_PATH" && -f "$PROJECT_DIR/config.ini" ]]; then
-  cp "$PROJECT_DIR/config.ini" "$CONFIG_PATH"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  if [[ -f "$PROJECT_DIR/config.ini" ]]; then
+    cp "$PROJECT_DIR/config.ini" "$CONFIG_PATH"
+  elif [[ -f "$PROJECT_DIR/config.example.ini" ]]; then
+    cp "$PROJECT_DIR/config.example.ini" "$CONFIG_PATH"
+  fi
 fi
 
 if [[ -f "$CONFIG_PATH" ]]; then
@@ -160,6 +174,8 @@ if "Settings" not in cfg:
     cfg["Settings"] = {}
 if "Advanced" not in cfg:
     cfg["Advanced"] = {}
+if "Credentials" not in cfg:
+    cfg["Credentials"] = {}
 
 def _norm(v):
     return os.path.abspath(os.path.expanduser((v or "").strip())) if (v or "").strip() else ""
@@ -167,6 +183,9 @@ def _norm(v):
 def _is_bundle_or_relative_path(raw):
     raw = (raw or "").strip()
     if not raw:
+        return True
+    lowered = raw.lower()
+    if "change_me" in lowered or "your_" in lowered or "/absolute/path/" in lowered:
         return True
     expanded = os.path.expanduser(raw)
     if not os.path.isabs(expanded):

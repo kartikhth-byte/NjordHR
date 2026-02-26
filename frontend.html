@@ -309,7 +309,7 @@
                     setAuthUser(data.user || null);
                     setLoginPassword('');
                     const nextRole = (data.user && data.user.role) || '';
-                    setActiveTab(nextRole === 'admin' ? 'download' : 'search');
+                    setActiveTab((nextRole === 'admin' || nextRole === 'manager') ? 'download' : 'search');
                     handleSendMessage('success', `Logged in as ${data.user?.role || 'user'}`);
                 } catch (_error) {
                     handleSendMessage('error', 'Login request failed');
@@ -409,7 +409,7 @@
             useEffect(() => {
                 if (!authUser) return;
                 if (!canAccessTab(activeTab)) {
-                    setActiveTab(role === 'admin' ? 'download' : 'search');
+                    setActiveTab((role === 'admin' || role === 'manager') ? 'download' : 'search');
                 }
             }, [authUser, activeTab, role]);
 

@@ -32,6 +32,56 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   source "$PROJECT_DIR/.env"
 fi
 
+CONFIG_PATH="${NJORDHR_CONFIG_PATH:-$PROJECT_DIR/config.ini}"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  if [[ -f "$PROJECT_DIR/config.example.ini" ]]; then
+    mkdir -p "$(dirname "$CONFIG_PATH")"
+    cp "$PROJECT_DIR/config.example.ini" "$CONFIG_PATH"
+    echo "[NjordHR] Created config from template at: $CONFIG_PATH"
+  else
+    echo "[NjordHR] Missing config: $CONFIG_PATH"
+    exit 1
+  fi
+fi
+export NJORDHR_CONFIG_PATH="$CONFIG_PATH"
+"$PYTHON_BIN" - "$CONFIG_PATH" "$HOME/Documents/NjordHR/Downloads" "$PROJECT_DIR/Verified_Resumes" "$PROJECT_DIR/logs" <<'PY'
+import configparser
+import os
+import sys
+
+cfg_path, default_download, default_verified, default_log = sys.argv[1:5]
+cfg = configparser.ConfigParser()
+cfg.read(cfg_path)
+
+if "Credentials" not in cfg:
+    cfg["Credentials"] = {}
+if "Settings" not in cfg:
+    cfg["Settings"] = {}
+if "Advanced" not in cfg:
+    cfg["Advanced"] = {}
+
+def is_placeholder(raw):
+    v = (raw or "").strip().lower()
+    if not v:
+        return True
+    if "change_me" in v or "your_" in v or "/absolute/path/" in v:
+        return True
+    return False
+
+def norm(path):
+    return os.path.abspath(os.path.expanduser(path))
+
+if is_placeholder(cfg["Settings"].get("Default_Download_Folder", "")):
+    cfg["Settings"]["Default_Download_Folder"] = norm(default_download)
+if is_placeholder(cfg["Settings"].get("Additional_Local_Folder", "")):
+    cfg["Settings"]["Additional_Local_Folder"] = norm(default_verified)
+if is_placeholder(cfg["Advanced"].get("log_dir", "")):
+    cfg["Advanced"]["log_dir"] = norm(default_log)
+
+with open(cfg_path, "w", encoding="utf-8") as fh:
+    cfg.write(fh)
+PY
+
 is_listening() {
   local port="$1"
   lsof -n -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1

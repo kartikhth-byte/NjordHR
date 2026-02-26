@@ -21,7 +21,9 @@ if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
 New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
 
 Write-Host "[NjordHR] Preparing clean staging directory..."
-robocopy $ProjectDir $StageDir /E /NFL /NDL /NJH /NJS /NP /XD ".git" "__pycache__" ".pytest_cache" "build" "logs\runtime" | Out-Null
+robocopy $ProjectDir $StageDir /E /NFL /NDL /NJH /NJS /NP `
+    /XD ".git" "__pycache__" ".pytest_cache" "build" "release" "Verified_Resumes" "logs" "AI_Search_Results" `
+    /XF ".env" ".env.*" "config.ini" "*.db" "*.db-journal" "*.sqlite" "*.sqlite3" "*.csv" | Out-Null
 
 $escapedStage = $StageDir -replace "\\", "\\"
 
@@ -29,7 +31,7 @@ $escapedStage = $StageDir -replace "\\", "\\"
 [Setup]
 AppName=NjordHR
 AppVersion=$AppVersion
-DefaultDirName={autopf}\NjordHR
+DefaultDirName={localappdata}\NjordHR
 DefaultGroupName=NjordHR
 OutputBaseFilename=NjordHR-$AppVersion-setup
 Compression=lzma

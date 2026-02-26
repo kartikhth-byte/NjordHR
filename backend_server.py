@@ -10,6 +10,7 @@ import json
 import zipfile
 import logging
 import threading
+import secrets
 from datetime import datetime
 from queue import Queue, Empty
 import requests
@@ -35,7 +36,7 @@ from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 # --- App Initialization ---
 app = Flask(__name__)
 CORS(app) 
-app.secret_key = os.getenv("NJORDHR_FLASK_SECRET", "njordhr-local-dev-secret-change-me")
+app.secret_key = os.getenv("NJORDHR_FLASK_SECRET", "").strip() or secrets.token_hex(32)
 
 # --- Configuration ---
 app_settings = load_app_settings()
@@ -657,6 +658,12 @@ def _supabase_storage_signed_url(storage_url, expires_in=600):
     bucket, _, object_path = raw.partition("/")
     if not bucket or not object_path:
         return "", "Invalid storage path"
+    if bucket != _storage_bucket_name():
+        return "", "Invalid storage bucket"
+    if ".." in object_path:
+        return "", "Invalid storage object path"
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", object_path):
+        return "", "Invalid storage object path"
 
     endpoint = f"{supabase_url.rstrip('/')}/storage/v1/object/sign/{bucket}/{object_path}"
     headers = {
@@ -1302,6 +1309,19 @@ def session_health():
 @app.route('/config/runtime', methods=['GET'])
 def runtime_config():
     """Expose safe runtime mode information for diagnostics/UI."""
+    if not _is_authenticated():
+        return jsonify({
+            "success": True,
+            "feature_flags": {
+                "use_local_agent": bool(feature_flags.use_local_agent),
+            },
+            "ui_auto_shutdown": {
+                "enabled": _ui_idle_autoshutdown_enabled(),
+                "idle_seconds": _ui_idle_shutdown_seconds(),
+                "active_clients": _active_ui_client_count(),
+            },
+        })
+
     key_source = "none"
     if os.getenv("SUPABASE_SECRET_KEY", "").strip():
         key_source = "secret"
@@ -1838,6 +1858,9 @@ def admin_usage_logs():
 
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     base_folder = settings['Default_Download_Folder']
     if not os.path.isdir(base_folder):
         return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
@@ -1851,6 +1874,11 @@ def get_rank_folders():
 @app.route('/analyze_stream', methods=['GET'])
 def analyze_stream():
     """Stream analysis progress using Server-Sent Events"""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        def denied():
+            yield f"data: {json.dumps({'type': 'error', 'message': reason})}\n\n"
+        return Response(denied(), mimetype='text/event-stream')
     prompt = request.args.get('prompt')
     rank_folder = request.args.get('rank_folder')
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
@@ -1884,6 +1912,9 @@ def analyze_stream():
 @app.route('/analyze', methods=['POST'])
 def analyze():
     """Non-streaming endpoint for backward compatibility"""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     try:
         data = request.json
         prompt = data.get('prompt')
@@ -1919,6 +1950,9 @@ def analyze():
 @app.route('/submit_feedback', methods=['POST'])
 def submit_feedback():
     """Store user feedback for learning"""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     try:
         data = request.json
         
@@ -1980,6 +2014,9 @@ def _serve_local_resume(rank_folder, filename):
 
 @app.route('/open_resume', methods=['GET'])
 def open_resume():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return reason, 403
     storage_url = str(request.args.get('storage_url', '')).strip()
     rank_folder = str(request.args.get('rank_folder', '')).strip()
     filename = str(request.args.get('filename', '')).strip()
@@ -1997,11 +2034,17 @@ def open_resume():
 
 @app.route('/get_resume/<path:rank_folder>/<path:filename>')
 def get_resume(rank_folder, filename):
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return reason, 403
     return _serve_local_resume(rank_folder, filename)
 
 @app.route('/verify_resumes', methods=['POST'])
 def verify_resumes():
     """Verify resumes by logging initial verification events to master CSV."""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     data = request.json
     rank_folder = data.get('rank_folder')
     filenames = data.get('filenames')
@@ -2281,6 +2324,9 @@ def get_available_ranks():
 @app.route('/get_candidate_history/<candidate_id>', methods=['GET'])
 def get_candidate_history(candidate_id):
     """Return full event log for one candidate."""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     try:
         history = csv_manager.get_candidate_history(candidate_id)
         return jsonify({
@@ -2335,6 +2381,9 @@ def update_status():
 @app.route('/add_notes', methods=['POST'])
 def add_notes():
     """Append a note_added event for a candidate."""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     try:
         data = request.json or {}
         candidate_id = str(data.get('candidate_id', '')).strip()
@@ -2359,6 +2408,9 @@ def add_notes():
 @app.route('/export_resumes', methods=['POST'])
 def export_resumes():
     """Export selected candidates as ZIP (PDFs + CSV snapshot)."""
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
     try:
         data = request.json or {}
         candidate_ids = data.get('candidate_ids', [])
