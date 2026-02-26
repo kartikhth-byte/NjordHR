@@ -3,7 +3,6 @@ import base64
 import re
 import json
 import os
-from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -204,6 +203,32 @@ class Scraper:
             return True
         except Exception: return False
 
+    def _candidate_file_exists(self, target_folder, rank, ship_type, candidate_id):
+        """
+        Detect existing resume files for a candidate across both naming schemes:
+        1) Current: {rank_slug}_{candidate_id}.pdf
+        2) Legacy: {rank-file}_{ship-file}_{candidate_id}_{YYYY-MM-DD}_{HH-MM-SS}.pdf
+        """
+        rank_slug = rank.replace(' ', '_').replace('/', '-')
+        current_name = f"{rank_slug}_{candidate_id}.pdf"
+        current_path = os.path.join(target_folder, current_name)
+        if os.path.exists(current_path):
+            return True
+
+        if not os.path.isdir(target_folder):
+            return False
+
+        rank_file = rank.replace(' ', '-').replace('/', '-')
+        ship_file = ship_type.replace(' ', '-').replace('/', '-')
+        legacy_pattern = re.compile(
+            rf"^{re.escape(rank_file)}_{re.escape(ship_file)}_{re.escape(str(candidate_id))}_\d{{4}}-\d{{2}}-\d{{2}}_\d{{2}}-\d{{2}}-\d{{2}}\.pdf$",
+            re.IGNORECASE,
+        )
+        for existing_name in os.listdir(target_folder):
+            if legacy_pattern.match(existing_name):
+                return True
+        return False
+
     def _sanitize_resume_page_before_pdf(self):
         """Remove known portal header/footer strings before PDF capture."""
         script = """
@@ -265,28 +290,11 @@ class Scraper:
                     continue
 
                 rank_slug = rank.replace(' ', '_').replace('/', '-')
-                rank_file = rank.replace(' ', '-').replace('/', '-')
-                ship_file = ship_type.replace(' ', '-').replace('/', '-')
-                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                pdf_filename = f"{rank_file}_{ship_file}_{candidate_id}_{timestamp}.pdf"
-                file_path = os.path.join(target_folder, pdf_filename)
-
-                if not force_redownload:
-                    existing_name_pattern = re.compile(
-                        rf"^{re.escape(rank_file)}_{re.escape(ship_file)}_{re.escape(candidate_id)}_\d{{4}}-\d{{2}}-\d{{2}}_\d{{2}}-\d{{2}}-\d{{2}}\.pdf$",
-                        re.IGNORECASE
-                    )
-                    legacy_name = f"{rank_slug}_{candidate_id}.pdf"
-                    already_downloaded = False
-                    if os.path.isdir(target_folder):
-                        for existing_name in os.listdir(target_folder):
-                            if existing_name_pattern.match(existing_name) or existing_name == legacy_name:
-                                already_downloaded = True
-                                break
-                    if already_downloaded:
-                        logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
-                        existing_ids.add(candidate_id)
-                        continue
+                pdf_filename = f"{rank_slug}_{candidate_id}.pdf"
+                if not force_redownload and self._candidate_file_exists(target_folder, rank, ship_type, candidate_id):
+                    logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
+                    existing_ids.add(candidate_id)
+                    continue
 
                 logger.info(f"Processing new candidate ID: {candidate_id}")
                 
