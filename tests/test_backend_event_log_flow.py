@@ -6,6 +6,7 @@ import zipfile
 import tempfile
 import unittest
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -79,6 +80,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         backend_server.resume_extractor.extract_resume_data = fake_extract
         backend_server.scraper_session = None
+        backend_server.seajobs_last_activity_at = None
+        self.prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=False)
         self.prev_admin_token = os.environ.get("NJORDHR_ADMIN_TOKEN")
         os.environ["NJORDHR_ADMIN_TOKEN"] = "test-admin-token"
         self.prev_config_path = os.environ.get("NJORDHR_CONFIG_PATH")
@@ -93,6 +97,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
     def tearDown(self):
         backend_server.scraper_session = None
+        backend_server.seajobs_last_activity_at = None
+        backend_server.feature_flags = self.prev_feature_flags
         if self.prev_admin_token is None:
             os.environ.pop("NJORDHR_ADMIN_TOKEN", None)
         else:
