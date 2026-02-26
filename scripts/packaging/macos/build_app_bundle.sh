@@ -21,7 +21,9 @@ trap 'rm -f "$TMP_SCPT"' EXIT
 
 cat > "$TMP_SCPT" <<EOF
 on run
-  «event sysoexec» quoted form of POSIX path of "${RUN_SCRIPT}"
+  set appBundlePath to POSIX path of (path to me)
+  set launcherPath to appBundlePath & "Contents/Resources/run_njordhr.sh"
+  «event sysoexec» quoted form of launcherPath
 end run
 EOF
 
