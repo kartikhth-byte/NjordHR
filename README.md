@@ -22,8 +22,8 @@ Stop services:
 ```
 
 Runtime artifacts:
-- Logs: `logs/runtime/`
-- Runtime port file: `logs/runtime/runtime.env`
+- Logs: `~/Library/Application Support/NjordHR/runtime/` (packaged app)
+- Runtime port file: `~/Library/Application Support/NjordHR/runtime/runtime.env` (packaged app)
 
 ## Windows Local Start
 Run in PowerShell:
@@ -164,12 +164,23 @@ Uninstall:
 LaunchAgent label:
 - `com.njordhr.local`
 
+## macOS Uninstall (App + optional data cleanup)
+Uninstall app and stop services:
+```bash
+./scripts/packaging/macos/uninstall_app.sh
+```
+
+Uninstall app and delete local NjordHR data:
+```bash
+./scripts/packaging/macos/uninstall_app.sh --remove-data
+```
+
 ## Local Storage Paths (Exact)
-Project-local runtime files (all OS):
-- Runtime logs: `<project>/logs/runtime/`
-- Runtime port map: `<project>/logs/runtime/runtime.env`
-- Backend ingest idempotency DB: `<project>/logs/agent_sync_ingest.sqlite3`
-- Backend ingest append-only logs: `<project>/logs/agent_job_state.jsonl`, `<project>/logs/agent_job_log.jsonl`, `<project>/logs/agent_candidate_event.jsonl`, `<project>/logs/agent_resume_upload.jsonl`
+Packaged-app runtime files (macOS):
+- Runtime logs: `~/Library/Application Support/NjordHR/runtime/`
+- Runtime port map: `~/Library/Application Support/NjordHR/runtime/runtime.env`
+- Backend ingest idempotency DB: `~/Library/Application Support/NjordHR/logs/agent_sync_ingest.sqlite3`
+- Backend ingest append-only logs: `~/Library/Application Support/NjordHR/logs/agent_job_state.jsonl`, `~/Library/Application Support/NjordHR/logs/agent_job_log.jsonl`, `~/Library/Application Support/NjordHR/logs/agent_candidate_event.jsonl`, `~/Library/Application Support/NjordHR/logs/agent_resume_upload.jsonl`
 
 Agent OS-specific config/state:
 - macOS config: `~/Library/Application Support/NjordHR/agent.json`
