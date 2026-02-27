@@ -559,6 +559,87 @@ class BackendEventLogFlowTests(unittest.TestCase):
         body = resp.get_json()
         self.assertFalse(body["success"])
 
+    def _write_runtime_config(self):
+        with open(self.temp_config_path, "w", encoding="utf-8") as fh:
+            backend_server.config.write(fh)
+
+    def _reset_users_for_bootstrap(self):
+        if "Users" in backend_server.config:
+            backend_server.config.remove_section("Users")
+        if "Auth" not in backend_server.config:
+            backend_server.config["Auth"] = {}
+        if "Advanced" not in backend_server.config:
+            backend_server.config["Advanced"] = {}
+        for key in (
+            "admin_password",
+            "manager_password",
+            "recruiter_password",
+            "admin_username",
+            "manager_username",
+            "recruiter_username",
+        ):
+            backend_server.config["Auth"][key] = ""
+        backend_server.config["Advanced"]["admin_token"] = ""
+        self._write_runtime_config()
+
+    def test_bootstrap_status_required_when_no_valid_users(self):
+        self._reset_users_for_bootstrap()
+        old_token = os.environ.pop("NJORDHR_ADMIN_TOKEN", None)
+        try:
+            resp = self.client.get("/auth/bootstrap_status")
+            self.assertEqual(resp.status_code, 200)
+            body = resp.get_json()
+            self.assertTrue(body["success"])
+            self.assertTrue(body["bootstrap_required"])
+            self.assertIn(body.get("reason"), {"no_users", "placeholder_only"})
+        finally:
+            if old_token is not None:
+                os.environ["NJORDHR_ADMIN_TOKEN"] = old_token
+
+    def test_login_blocked_until_bootstrap(self):
+        self._reset_users_for_bootstrap()
+        old_token = os.environ.pop("NJORDHR_ADMIN_TOKEN", None)
+        try:
+            resp = self.client.post("/auth/login", json={"username": "admin", "password": "anything"})
+            self.assertEqual(resp.status_code, 403)
+            body = resp.get_json()
+            self.assertFalse(body["success"])
+            self.assertIn("bootstrap", body.get("message", "").lower())
+        finally:
+            if old_token is not None:
+                os.environ["NJORDHR_ADMIN_TOKEN"] = old_token
+
+    def test_bootstrap_creates_admin_once_and_enables_login(self):
+        self._reset_users_for_bootstrap()
+        old_token = os.environ.pop("NJORDHR_ADMIN_TOKEN", None)
+        try:
+            bootstrap = self.client.post("/auth/bootstrap", json={
+                "admin_username": "firstadmin",
+                "admin_password": "StrongPass123!",
+                "confirm_password": "StrongPass123!",
+            })
+            self.assertEqual(bootstrap.status_code, 200)
+            body = bootstrap.get_json()
+            self.assertTrue(body["success"])
+            self.assertEqual(body["user"]["username"], "firstadmin")
+            self.assertEqual(body["user"]["role"], "admin")
+
+            second = self.client.post("/auth/bootstrap", json={
+                "admin_username": "another",
+                "admin_password": "StrongPass123!",
+                "confirm_password": "StrongPass123!",
+            })
+            self.assertEqual(second.status_code, 409)
+            self.assertFalse(second.get_json()["success"])
+
+            self.client.post("/auth/logout")
+            login = self.client.post("/auth/login", json={"username": "firstadmin", "password": "StrongPass123!"})
+            self.assertEqual(login.status_code, 200)
+            self.assertTrue(login.get_json()["success"])
+        finally:
+            if old_token is not None:
+                os.environ["NJORDHR_ADMIN_TOKEN"] = old_token
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,6 +106,12 @@
             const [loginUsername, setLoginUsername] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+            const [bootstrapChecking, setBootstrapChecking] = useState(true);
+            const [bootstrapRequired, setBootstrapRequired] = useState(false);
+            const [bootstrapReason, setBootstrapReason] = useState('');
+            const [bootstrapUsername, setBootstrapUsername] = useState('admin');
+            const [bootstrapPassword, setBootstrapPassword] = useState('');
+            const [bootstrapConfirmPassword, setBootstrapConfirmPassword] = useState('');
             const [toasts, setToasts] = useState([]);
             const [runtimeConfig, setRuntimeConfig] = useState(null);
             const [isRuntimeRefreshing, setIsRuntimeRefreshing] = useState(false);
@@ -289,6 +295,24 @@
                 }
             };
 
+            const fetchBootstrapStatus = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/auth/bootstrap_status`);
+                    const data = await response.json();
+                    if (data.success) {
+                        const needed = Boolean(data.bootstrap_required);
+                        setBootstrapRequired(needed);
+                        setBootstrapReason(data.reason || '');
+                        return needed;
+                    }
+                    return false;
+                } catch (_error) {
+                    return false;
+                } finally {
+                    setBootstrapChecking(false);
+                }
+            };
+
             const handleLogin = async () => {
                 if (!loginUsername.trim() || !loginPassword.trim()) {
                     handleSendMessage('error', 'Enter username and password');
@@ -303,6 +327,10 @@
                     });
                     const data = await response.json();
                     if (!data.success) {
+                        if (response.status === 403 && String(data.message || '').toLowerCase().includes('bootstrap')) {
+                            setBootstrapRequired(true);
+                            setBootstrapReason('bootstrap_required');
+                        }
                         handleSendMessage('error', data.message || 'Login failed');
                         return;
                     }
@@ -313,6 +341,53 @@
                     handleSendMessage('success', `Logged in as ${data.user?.role || 'user'}`);
                 } catch (_error) {
                     handleSendMessage('error', 'Login request failed');
+                } finally {
+                    setIsAuthSubmitting(false);
+                }
+            };
+
+            const handleBootstrapCreate = async () => {
+                if (!bootstrapUsername.trim()) {
+                    handleSendMessage('error', 'Enter admin username');
+                    return;
+                }
+                if (!bootstrapPassword.trim() || bootstrapPassword.length < 8) {
+                    handleSendMessage('error', 'Admin password must be at least 8 characters');
+                    return;
+                }
+                if (bootstrapPassword !== bootstrapConfirmPassword) {
+                    handleSendMessage('error', 'Password confirmation does not match');
+                    return;
+                }
+
+                setIsAuthSubmitting(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/auth/bootstrap`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            admin_username: bootstrapUsername.trim(),
+                            admin_password: bootstrapPassword,
+                            confirm_password: bootstrapConfirmPassword,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Bootstrap failed');
+                        return;
+                    }
+                    setBootstrapRequired(false);
+                    setBootstrapReason('');
+                    setBootstrapPassword('');
+                    setBootstrapConfirmPassword('');
+                    setLoginUsername(bootstrapUsername.trim());
+                    if (data.user) {
+                        setAuthUser(data.user);
+                        setActiveTab('download');
+                    }
+                    handleSendMessage('success', data.message || 'Admin account created.');
+                } catch (_error) {
+                    handleSendMessage('error', 'Bootstrap setup failed');
                 } finally {
                     setIsAuthSubmitting(false);
                 }
@@ -334,7 +409,16 @@
             }, [downloadLog]);
 
             useEffect(() => {
-                fetchAuthMe();
+                const initAuth = async () => {
+                    const needed = await fetchBootstrapStatus();
+                    if (needed) {
+                        setAuthUser(null);
+                        setAuthChecking(false);
+                        return;
+                    }
+                    await fetchAuthMe();
+                };
+                initAuth();
             }, []);
 
             useEffect(() => {
@@ -3075,10 +3159,38 @@
                                 )}
                             </div>
                         </header>
-                        {authChecking && (
+                        {(authChecking || bootstrapChecking) && (
                             <div className="bg-white p-8 rounded-xl shadow-lg text-center text-gray-600 mb-6">Checking login...</div>
                         )}
-                        {!authChecking && !authUser && (
+                        {!authChecking && !bootstrapChecking && !authUser && bootstrapRequired && (
+                            <main className="bg-white p-8 rounded-xl shadow-lg max-w-lg mx-auto mb-6">
+                                <h2 className="text-2xl font-semibold mb-4">Create Admin Account</h2>
+                                <p className="text-sm text-gray-600 mb-4">
+                                    First-time setup is required before users can sign in.
+                                </p>
+                                {bootstrapReason && (
+                                    <p className="text-xs text-gray-500 mb-4">Reason: {bootstrapReason}</p>
+                                )}
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Admin Username</label>
+                                        <input value={bootstrapUsername} onChange={e => setBootstrapUsername(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Admin Password</label>
+                                        <input type="password" value={bootstrapPassword} onChange={e => setBootstrapPassword(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                                        <input type="password" value={bootstrapConfirmPassword} onChange={e => setBootstrapConfirmPassword(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                    </div>
+                                    <button onClick={handleBootstrapCreate} disabled={isAuthSubmitting} className="w-full bg-blue-600 text-white font-medium py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                                        {isAuthSubmitting ? 'Creating admin...' : 'Create Admin Account'}
+                                    </button>
+                                </div>
+                            </main>
+                        )}
+                        {!authChecking && !bootstrapChecking && !authUser && !bootstrapRequired && (
                             <main className="bg-white p-8 rounded-xl shadow-lg max-w-lg mx-auto mb-6">
                                 <h2 className="text-2xl font-semibold mb-4">Login</h2>
                                 <div className="space-y-4">

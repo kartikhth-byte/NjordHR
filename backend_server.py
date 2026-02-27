@@ -298,7 +298,23 @@ def _admin_token():
     return config.get("Advanced", "admin_token", fallback="").strip()
 
 
-def _auth_user_list():
+def _is_placeholder_password(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return True
+    upper = raw.upper()
+    if upper in {"CHANGE_ME", "PASSWORD", "ADMIN", "REPLACE_ME"}:
+        return True
+    if upper.startswith("CHANGE_ME") or upper.startswith("YOUR_"):
+        return True
+    if "<" in raw or ">" in raw:
+        return True
+    if "replace-with-" in raw.lower():
+        return True
+    return False
+
+
+def _auth_user_list(include_placeholder_passwords=False):
     auth_cfg = config["Auth"] if "Auth" in config else {}
     admin_username = os.getenv("NJORDHR_ADMIN_USERNAME", auth_cfg.get("admin_username", "admin")).strip() or "admin"
     admin_password = os.getenv("NJORDHR_ADMIN_PASSWORD", auth_cfg.get("admin_password", "")).strip() or _admin_token()
@@ -308,11 +324,11 @@ def _auth_user_list():
     recruiter_password = os.getenv("NJORDHR_RECRUITER_PASSWORD", auth_cfg.get("recruiter_password", "")).strip()
 
     users = {}
-    if admin_password:
+    if admin_password and (include_placeholder_passwords or not _is_placeholder_password(admin_password)):
         users[admin_username] = {"role": "admin", "password": admin_password}
-    if manager_password:
+    if manager_password and (include_placeholder_passwords or not _is_placeholder_password(manager_password)):
         users[manager_username] = {"role": "manager", "password": manager_password}
-    if recruiter_password:
+    if recruiter_password and (include_placeholder_passwords or not _is_placeholder_password(recruiter_password)):
         users[recruiter_username] = {"role": "recruiter", "password": recruiter_password}
 
     if "Users" in config:
@@ -329,8 +345,42 @@ def _auth_user_list():
             pwd = str(pwd or "").strip()
             if role not in {"admin", "manager", "recruiter"} or not pwd:
                 continue
+            if not include_placeholder_passwords and _is_placeholder_password(pwd):
+                continue
             users[u] = {"role": role, "password": pwd}
     return users
+
+
+def _bootstrap_status():
+    users_with_placeholders = _auth_user_list(include_placeholder_passwords=True)
+    users = _auth_user_list(include_placeholder_passwords=False)
+    if users:
+        return {
+            "bootstrap_required": False,
+            "bootstrap_completed": True,
+            "reason": "configured",
+            "valid_user_count": len(users),
+        }
+    if users_with_placeholders:
+        return {
+            "bootstrap_required": True,
+            "bootstrap_completed": False,
+            "reason": "placeholder_only",
+            "valid_user_count": 0,
+        }
+    return {
+        "bootstrap_required": True,
+        "bootstrap_completed": False,
+        "reason": "no_users",
+        "valid_user_count": 0,
+    }
+
+
+def _is_local_request():
+    remote = str(request.remote_addr or "").strip()
+    if not remote:
+        return True
+    return remote in {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 
 
 def _session_role():
@@ -874,8 +924,81 @@ def auth_me():
     })
 
 
+@app.route('/auth/bootstrap_status', methods=['GET'])
+def auth_bootstrap_status():
+    status = _bootstrap_status()
+    return jsonify({
+        "success": True,
+        "bootstrap_required": bool(status.get("bootstrap_required")),
+        "bootstrap_completed": bool(status.get("bootstrap_completed")),
+        "reason": status.get("reason", ""),
+    })
+
+
+@app.route('/auth/bootstrap', methods=['POST'])
+def auth_bootstrap():
+    global app_settings, config, creds, settings
+    status = _bootstrap_status()
+    if not status.get("bootstrap_required"):
+        return jsonify({"success": False, "message": "Bootstrap already completed."}), 409
+    if not _is_local_request():
+        return jsonify({"success": False, "message": "Bootstrap is allowed only from local host."}), 403
+
+    payload = request.json if request.is_json else {}
+    admin_username = str((payload or {}).get("admin_username", "")).strip()
+    admin_password = str((payload or {}).get("admin_password", "")).strip()
+    confirm_password = str((payload or {}).get("confirm_password", "")).strip()
+
+    if not re.match(r"^[A-Za-z0-9._-]{3,64}$", admin_username):
+        _log_usage("bootstrap_failed", "Invalid bootstrap username format")
+        return jsonify({"success": False, "message": "admin_username must be 3-64 chars: letters, numbers, dot, underscore, hyphen"}), 400
+    if not admin_password or len(admin_password) < 8:
+        _log_usage("bootstrap_failed", "Bootstrap password too short")
+        return jsonify({"success": False, "message": "admin_password must be at least 8 characters"}), 400
+    if admin_password != confirm_password:
+        _log_usage("bootstrap_failed", "Bootstrap password confirmation mismatch")
+        return jsonify({"success": False, "message": "Password confirmation does not match"}), 400
+    if _is_placeholder_password(admin_password):
+        _log_usage("bootstrap_failed", "Bootstrap password rejected as placeholder")
+        return jsonify({"success": False, "message": "Choose a real password, not a placeholder value"}), 400
+
+    if "Users" not in config:
+        config["Users"] = {}
+    _config_set_literal(config, "Users", admin_username, f"admin|{admin_password}")
+
+    if "Auth" not in config:
+        config["Auth"] = {}
+    _config_set_literal(config, "Auth", "admin_username", admin_username)
+    _config_set_literal(config, "Auth", "admin_password", "")
+    _config_set_literal(config, "Auth", "manager_password", "")
+    _config_set_literal(config, "Auth", "recruiter_password", "")
+
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+
+    app_settings = load_app_settings()
+    config = app_settings.config
+    creds = app_settings.credentials
+    settings = app_settings.settings
+    _refresh_runtime_managers()
+
+    session["username"] = admin_username
+    session["role"] = "admin"
+    session.permanent = False
+    _log_usage("bootstrap_success", f"Bootstrap admin created: username={admin_username}")
+    return jsonify({
+        "success": True,
+        "message": "Admin account created.",
+        "user": {"username": admin_username, "role": "admin"},
+    })
+
+
 @app.route('/auth/login', methods=['POST'])
 def auth_login():
+    status = _bootstrap_status()
+    if status.get("bootstrap_required"):
+        return jsonify({"success": False, "message": "Bootstrap setup required. Create admin account first."}), 403
     payload = request.json if request.is_json else {}
     username = str((payload or {}).get("username", "")).strip()
     password = str((payload or {}).get("password", "")).strip()
