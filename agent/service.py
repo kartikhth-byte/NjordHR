@@ -19,6 +19,7 @@ from .cloud_sync import CloudSyncClient
 from .config_store import AgentConfigStore
 from .filesystem import ensure_writable_folder
 from .job_queue import AgentJobQueue
+from .updater import AgentUpdater
 
 
 def create_agent_app():
@@ -31,6 +32,7 @@ def create_agent_app():
     settings_store = AgentConfigStore()
     sync_client = CloudSyncClient(settings_store, os.path.join(settings_store.base_dir, "state"))
     sync_client.start()
+    updater = AgentUpdater(settings_store, agent_version=os.getenv("NJORDHR_AGENT_VERSION", "0.1.0"))
 
     session_lock = threading.RLock()
     scraper_session = {"scraper": None}
@@ -176,7 +178,7 @@ def create_agent_app():
         return jsonify({
             "success": True,
             "status": "ok",
-            "agent_version": "0.1.0",
+            "agent_version": updater.agent_version,
             "device_id": cfg.get("device_id", ""),
             "download_folder_ok": ok,
             "download_folder_message": msg,
@@ -324,6 +326,30 @@ def create_agent_app():
             as_attachment=True,
             download_name=f"njordhr_agent_diagnostics_{stamp}.zip",
         )
+
+    @app.route("/updates/check", methods=["GET"])
+    def updates_check():
+        timeout = int(request.args.get("timeout", "20"))
+        return jsonify(updater.check(timeout=timeout))
+
+    @app.route("/updates/download", methods=["POST"])
+    def updates_download():
+        payload = request.json or {}
+        artifact_url = str(payload.get("artifact_url", "")).strip()
+        expected_sha = str(payload.get("expected_sha256", "")).strip().lower()
+        timeout = int(payload.get("timeout", 120))
+        result = updater.download(artifact_url=artifact_url, expected_sha256=expected_sha, timeout=timeout)
+        code = 200 if result.get("success") else 400
+        return jsonify(result), code
+
+    @app.route("/updates/verify", methods=["POST"])
+    def updates_verify():
+        payload = request.json or {}
+        local_path = str(payload.get("local_path", "")).strip()
+        expected_sha = str(payload.get("expected_sha256", "")).strip().lower()
+        result = updater.verify(local_path=local_path, expected_sha256=expected_sha)
+        code = 200 if result.get("success") else 400
+        return jsonify(result), code
 
     @app.route("/shutdown", methods=["POST"])
     def shutdown():

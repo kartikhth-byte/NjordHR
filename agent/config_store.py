@@ -14,6 +14,7 @@ DEFAULTS = {
     "auto_start": False,
     "cloud_sync_enabled": True,
     "cloud_upload_resumes": False,
+    "update_manifest_url": "",
     "log_level": "INFO",
 }
 
@@ -89,4 +90,3 @@ class AgentConfigStore:
             self._config = self._merge_defaults(self._config)
             self.save()
             return deepcopy(self._config)
-
