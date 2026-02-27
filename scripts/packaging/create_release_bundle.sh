@@ -70,10 +70,19 @@ for name in sorted(os.listdir(release_dir)):
         continue
     with open(path, "rb") as fh:
         sha256 = hashlib.sha256(fh.read()).hexdigest()
+    sig_path = f"{path}.sig"
+    signature = ""
+    if os.path.isfile(sig_path):
+        try:
+            with open(sig_path, "r", encoding="utf-8") as sfh:
+                signature = sfh.read().strip()
+        except Exception:
+            signature = ""
     artifacts.append({
         "name": name,
         "size_bytes": os.path.getsize(path),
         "sha256": sha256,
+        "signature": signature,
     })
 
 manifest = {

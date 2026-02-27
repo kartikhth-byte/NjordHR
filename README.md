@@ -135,6 +135,14 @@ Output:
 - `checksums.txt` (SHA256)
 - `manifest.json` (version, timestamp, file sizes, SHA256)
 
+Update manifest service (`M5-T4`) is exposed by backend:
+- `GET /updates/manifest?channel=stable&platform=macos|windows|all[&version=<v>]`
+- `GET /releases/<version>/<artifact>`
+
+Optional env overrides:
+- `NJORDHR_RELEASE_DIR` (default: `<project>/release`)
+- `NJORDHR_UPDATE_BASE_URL` (default: `<server_url>/releases`)
+
 ## End-User Install (Installer-first)
 End users should run installer files, not scripts:
 

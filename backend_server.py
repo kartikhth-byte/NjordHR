@@ -17,6 +17,7 @@ import requests
 from urllib.parse import quote
 import sqlite3
 import time
+from pathlib import Path
 
 # Dependency Check & Imports
 try:
@@ -124,6 +125,40 @@ def _resolve_runtime_path(raw_path, fallback_name):
     if os.path.isabs(candidate):
         return os.path.abspath(candidate)
     return os.path.abspath(os.path.join(PROJECT_ROOT, candidate))
+
+
+def _release_root_dir():
+    raw = os.getenv("NJORDHR_RELEASE_DIR", "").strip()
+    if raw:
+        return Path(os.path.abspath(os.path.expanduser(raw)))
+    return Path(PROJECT_ROOT) / "release"
+
+
+def _release_public_base_url():
+    return os.getenv("NJORDHR_UPDATE_BASE_URL", "").strip().rstrip("/") or f"{app_settings.server_url.rstrip('/')}/releases"
+
+
+def _iter_release_versions(root: Path):
+    if not root.exists() or not root.is_dir():
+        return []
+    out = []
+    for child in root.iterdir():
+        if not child.is_dir():
+            continue
+        if (child / "manifest.json").exists():
+            out.append(child.name)
+    return sorted(out, reverse=True)
+
+
+def _platform_from_filename(name: str):
+    n = str(name or "").lower()
+    if n.endswith(".pkg"):
+        return "macos"
+    if n.endswith("-setup.exe") or n.endswith(".msi"):
+        return "windows"
+    if n.endswith("-portable.zip") or (n.endswith(".zip") and "windows" in n):
+        return "windows"
+    return "all"
 
 
 def _ui_idle_autoshutdown_enabled():
@@ -1396,6 +1431,93 @@ def setup_manifest():
             "agent_health_url": os.getenv("NJORDHR_AGENT_BASE_URL", "http://127.0.0.1:5051").rstrip('/') + "/health",
         }
     })
+
+
+@app.route('/updates/manifest', methods=['GET'])
+def updates_manifest():
+    """
+    Update manifest service (M5-T4).
+    Query params:
+      - channel (currently accepted, default: stable)
+      - platform: macos|windows|all (default: all)
+      - version: specific version folder (optional)
+    """
+    channel = str(request.args.get("channel", "stable")).strip().lower() or "stable"
+    platform = str(request.args.get("platform", "all")).strip().lower() or "all"
+    requested_version = str(request.args.get("version", "")).strip()
+
+    if platform not in {"all", "macos", "windows"}:
+        return jsonify({"success": False, "message": "Invalid platform. Use all|macos|windows."}), 400
+    if channel not in {"stable"}:
+        return jsonify({"success": False, "message": "Unsupported channel."}), 400
+
+    root = _release_root_dir()
+    versions = _iter_release_versions(root)
+    if not versions:
+        return jsonify({"success": False, "message": "No release manifests available.", "channel": channel}), 404
+
+    version = requested_version or versions[0]
+    if version not in versions:
+        return jsonify({"success": False, "message": f"Version not found: {version}"}), 404
+
+    manifest_path = root / version / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Invalid manifest.json for {version}: {exc}"}), 500
+
+    base_url = _release_public_base_url()
+    raw_artifacts = manifest.get("artifacts", []) if isinstance(manifest, dict) else []
+    normalized_artifacts = []
+    for item in raw_artifacts:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        if not name or not _is_safe_name(name):
+            continue
+        item_platform = _platform_from_filename(name)
+        if platform != "all" and item_platform not in {platform, "all"}:
+            continue
+        sig_name = f"{name}.sig"
+        sig_path = root / version / sig_name
+        normalized_artifacts.append({
+            "name": name,
+            "platform": item_platform,
+            "size_bytes": int(item.get("size_bytes", 0) or 0),
+            "sha256": str(item.get("sha256", "")).strip(),
+            "url": f"{base_url}/{quote(version, safe='')}/{quote(name, safe='')}",
+            "signature_url": f"{base_url}/{quote(version, safe='')}/{quote(sig_name, safe='')}" if sig_path.exists() else "",
+            "signature": str(item.get("signature", "")).strip(),
+        })
+
+    return jsonify({
+        "success": True,
+        "channel": channel,
+        "version": version,
+        "created_at_utc": manifest.get("created_at_utc", ""),
+        "artifact_count": len(normalized_artifacts),
+        "artifacts": normalized_artifacts,
+    })
+
+
+@app.route('/releases/<version>/<path:filename>', methods=['GET'])
+def download_release_artifact(version, filename):
+    """Serve release artifacts referenced by /updates/manifest."""
+    version = str(version or "").strip()
+    filename = str(filename or "").strip()
+    if not _is_safe_name(version) or not _is_safe_name(filename):
+        return jsonify({"success": False, "message": "Invalid artifact path."}), 400
+
+    root = _release_root_dir()
+    target_dir = root / version
+    if not target_dir.exists() or not target_dir.is_dir():
+        return jsonify({"success": False, "message": "Release version not found."}), 404
+
+    artifact_path = target_dir / filename
+    if not artifact_path.exists() or not artifact_path.is_file():
+        return jsonify({"success": False, "message": "Artifact not found."}), 404
+
+    return send_from_directory(str(target_dir), filename, as_attachment=True)
 
 
 @app.route('/api/agent/job-state', methods=['POST'])
