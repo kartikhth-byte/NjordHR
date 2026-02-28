@@ -64,7 +64,8 @@ def main() -> int:
         print("[ERROR] SUPABASE_DB_URL is required (or SUPABASE_DB_USER/PASSWORD/HOST/PORT/NAME).")
         return 2
 
-    pwd_hash = generate_password_hash(password)
+    hash_method = os.getenv("NJORDHR_PASSWORD_HASH_METHOD", "pbkdf2:sha256:600000").strip() or "pbkdf2:sha256:600000"
+    pwd_hash = generate_password_hash(password, method=hash_method)
     email = f"{username}@local.njordhr"
 
     # Use psql so we don't add a new Python DB dependency for installers/users.

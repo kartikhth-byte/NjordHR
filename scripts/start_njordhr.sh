@@ -32,6 +32,28 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   source "$PROJECT_DIR/.env"
 fi
 
+# Load persisted runtime overrides (cloud mode, Supabase keys, auth mode, etc.).
+if [[ -f "$RUNTIME_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$RUNTIME_ENV_FILE"
+fi
+
+# Provisioning support: seed missing runtime keys from bundled defaults when present.
+if [[ -f "$PROJECT_DIR/default_runtime.env" ]]; then
+  touch "$RUNTIME_ENV_FILE"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    [[ "$line" == \#* ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    if ! grep -qE "^${key}=" "$RUNTIME_ENV_FILE"; then
+      echo "${key}=${value}" >> "$RUNTIME_ENV_FILE"
+    fi
+  done < "$PROJECT_DIR/default_runtime.env"
+  # shellcheck disable=SC1090
+  source "$RUNTIME_ENV_FILE"
+fi
+
 CONFIG_PATH="${NJORDHR_CONFIG_PATH:-$PROJECT_DIR/config.ini}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
   if [[ -f "$PROJECT_DIR/config.example.ini" ]]; then
@@ -140,10 +162,39 @@ fi
 BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 AGENT_URL="http://127.0.0.1:${AGENT_PORT}"
 
-echo "NJORDHR_BACKEND_PORT=$BACKEND_PORT" > "$RUNTIME_ENV_FILE"
-echo "NJORDHR_AGENT_RUNTIME_PORT=$AGENT_PORT" >> "$RUNTIME_ENV_FILE"
-echo "NJORDHR_SERVER_URL=$BACKEND_URL" >> "$RUNTIME_ENV_FILE"
-echo "NJORDHR_AGENT_URL=$AGENT_URL" >> "$RUNTIME_ENV_FILE"
+set_runtime_env() {
+  local key="$1"
+  local value="$2"
+  touch "$RUNTIME_ENV_FILE"
+  "$PYTHON_BIN" - "$RUNTIME_ENV_FILE" "$key" "$value" <<'PY'
+import os
+import sys
+
+path, key, value = sys.argv[1:4]
+lines = []
+if os.path.exists(path):
+    with open(path, "r", encoding="utf-8") as fh:
+        lines = [ln.rstrip("\n") for ln in fh]
+
+updated = False
+for i, line in enumerate(lines):
+    if line.startswith(f"{key}="):
+        lines[i] = f"{key}={value}"
+        updated = True
+        break
+if not updated:
+    lines.append(f"{key}={value}")
+
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write("\n".join(lines).rstrip("\n") + "\n")
+PY
+}
+
+set_runtime_env "NJORDHR_BACKEND_PORT" "$BACKEND_PORT"
+set_runtime_env "NJORDHR_AGENT_RUNTIME_PORT" "$AGENT_PORT"
+set_runtime_env "NJORDHR_SERVER_URL" "$BACKEND_URL"
+set_runtime_env "NJORDHR_AGENT_URL" "$AGENT_URL"
+set_runtime_env "NJORDHR_PASSWORD_HASH_METHOD" "${NJORDHR_PASSWORD_HASH_METHOD:-pbkdf2:sha256:600000}"
 
 if wait_http "${BACKEND_URL}/config/runtime" 1; then
   echo "[NjordHR] Backend already running at ${BACKEND_URL}"

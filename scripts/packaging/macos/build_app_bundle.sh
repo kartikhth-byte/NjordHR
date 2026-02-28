@@ -10,6 +10,7 @@ EMBED_RUNTIME="${NJORDHR_EMBED_RUNTIME:-true}"
 PAYLOAD_DIR="$APP_DIR/Contents/Resources/app"
 RUNTIME_DIR="$APP_DIR/Contents/Resources/runtime"
 RUN_SCRIPT="$APP_DIR/Contents/Resources/run_njordhr.sh"
+DEFAULT_RUNTIME_ENV="$PAYLOAD_DIR/default_runtime.env"
 
 command -v osacompile >/dev/null 2>&1 || { echo "osacompile not found."; exit 1; }
 command -v rsync >/dev/null 2>&1 || { echo "rsync not found."; exit 1; }
@@ -127,6 +128,26 @@ rsync -a \
   --exclude "AI_Search_Results" \
   --exclude "NjordHR.bbprojectd" \
   "$PROJECT_DIR/" "$PAYLOAD_DIR/"
+
+# Build-time provisioning for seamless first-run in internal deployments.
+# Set these env vars before running build_app_bundle.sh:
+#   NJORDHR_DEFAULT_SUPABASE_URL
+#   NJORDHR_DEFAULT_SUPABASE_SECRET_KEY
+#   NJORDHR_DEFAULT_AUTH_MODE (default: cloud)
+#   NJORDHR_DEFAULT_USE_SUPABASE_DB (default: true)
+#   NJORDHR_DEFAULT_USE_SUPABASE_READS (default: true)
+#   NJORDHR_DEFAULT_USE_DUAL_WRITE (default: false)
+#   NJORDHR_DEFAULT_USE_LOCAL_AGENT (default: true)
+cat > "$DEFAULT_RUNTIME_ENV" <<EOF
+USE_SUPABASE_DB=${NJORDHR_DEFAULT_USE_SUPABASE_DB:-true}
+USE_SUPABASE_READS=${NJORDHR_DEFAULT_USE_SUPABASE_READS:-true}
+USE_DUAL_WRITE=${NJORDHR_DEFAULT_USE_DUAL_WRITE:-false}
+USE_LOCAL_AGENT=${NJORDHR_DEFAULT_USE_LOCAL_AGENT:-true}
+NJORDHR_AUTH_MODE=${NJORDHR_DEFAULT_AUTH_MODE:-cloud}
+NJORDHR_PASSWORD_HASH_METHOD=${NJORDHR_DEFAULT_PASSWORD_HASH_METHOD:-pbkdf2:sha256:600000}
+SUPABASE_URL=${NJORDHR_DEFAULT_SUPABASE_URL:-}
+SUPABASE_SECRET_KEY=${NJORDHR_DEFAULT_SUPABASE_SECRET_KEY:-}
+EOF
 
 if [[ "$EMBED_RUNTIME" == "true" ]]; then
   echo "[NjordHR] Building embedded Python runtime (this may take a few minutes)..."

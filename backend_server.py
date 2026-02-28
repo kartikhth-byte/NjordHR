@@ -484,6 +484,27 @@ def _cloud_auth_required():
     return bool(getattr(feature_flags, "use_supabase_db", False)) or _auth_mode_preference() == "cloud"
 
 
+def _password_hash_method():
+    # Use PBKDF2 by default for compatibility with Python builds lacking hashlib.scrypt.
+    return os.getenv("NJORDHR_PASSWORD_HASH_METHOD", "pbkdf2:sha256:600000").strip() or "pbkdf2:sha256:600000"
+
+
+def _hash_password(password):
+    return generate_password_hash(password, method=_password_hash_method())
+
+
+def _check_password(stored_hash, password):
+    try:
+        return bool(check_password_hash(stored_hash, password))
+    except Exception as exc:
+        # Common on older Python runtimes when stored hash uses scrypt.
+        msg = str(exc).lower()
+        if "scrypt" in msg or "hashlib" in msg:
+            print(f"[AUTH] Unsupported password hash method in runtime: {exc}")
+            return False
+        raise
+
+
 def _supabase_auth_endpoint():
     supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     supabase_key = resolve_supabase_api_key()
@@ -593,7 +614,7 @@ def _auth_verify_user(username, password):
         return None
     if _auth_mode() == "cloud":
         stored_hash = str(record.get("password_hash", "")).strip()
-        if stored_hash and check_password_hash(stored_hash, password):
+        if stored_hash and _check_password(stored_hash, password):
             return {"username": username, "role": record.get("role", "")}
         return None
     if password == str(record.get("password", "")):
@@ -603,7 +624,7 @@ def _auth_verify_user(username, password):
 
 def _auth_upsert_user(username, role, password):
     if _auth_mode() == "cloud":
-        password_hash = generate_password_hash(password)
+        password_hash = _hash_password(password)
         email = f"{username}@njordhr.local"
         body = [{
             "username": username,
