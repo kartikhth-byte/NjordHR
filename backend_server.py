@@ -18,6 +18,7 @@ from urllib.parse import quote
 import sqlite3
 import time
 from pathlib import Path
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Dependency Check & Imports
 try:
@@ -54,6 +55,7 @@ ui_client_lock = threading.Lock()
 ui_client_seen_once = False
 auto_shutdown_started = False
 auto_shutdown_in_progress = False
+cloud_auth_state_cache = {"ts": 0, "mode": "local", "reason": "not_checked"}
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
@@ -314,7 +316,7 @@ def _is_placeholder_password(value):
     return False
 
 
-def _auth_user_list(include_placeholder_passwords=False):
+def _auth_user_list_local(include_placeholder_passwords=False):
     auth_cfg = config["Auth"] if "Auth" in config else {}
     admin_username = os.getenv("NJORDHR_ADMIN_USERNAME", auth_cfg.get("admin_username", "admin")).strip() or "admin"
     admin_password = os.getenv("NJORDHR_ADMIN_PASSWORD", auth_cfg.get("admin_password", "")).strip() or _admin_token()
@@ -351,7 +353,183 @@ def _auth_user_list(include_placeholder_passwords=False):
     return users
 
 
+def _auth_mode_preference():
+    raw = os.getenv("NJORDHR_AUTH_MODE", "auto").strip().lower()
+    if raw in {"cloud", "local", "auto"}:
+        return raw
+    return "auto"
+
+
+def _supabase_auth_endpoint():
+    supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_key = resolve_supabase_api_key()
+    if not supabase_url or not supabase_key:
+        return "", {}
+    headers = {
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Content-Type": "application/json",
+    }
+    return f"{supabase_url}/rest/v1/users", headers
+
+
+def _supabase_users_request(method="GET", params=None, json_body=None, timeout=12):
+    endpoint, headers = _supabase_auth_endpoint()
+    if not endpoint:
+        raise RuntimeError("Supabase auth config missing")
+    resp = requests.request(
+        method=method,
+        url=endpoint,
+        headers=headers,
+        params=params or {},
+        json=json_body,
+        timeout=timeout,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Supabase users request failed {resp.status_code}: {resp.text}")
+    if not resp.text:
+        return []
+    try:
+        return resp.json()
+    except Exception:
+        return []
+
+
+def _cloud_auth_state(force_refresh=False):
+    now = time.time()
+    ttl = 20
+    if not force_refresh and (now - cloud_auth_state_cache.get("ts", 0)) < ttl:
+        return dict(cloud_auth_state_cache)
+
+    mode = "local"
+    reason = "forced_local"
+    pref = _auth_mode_preference()
+    if pref == "local":
+        mode, reason = "local", "forced_local"
+    else:
+        try:
+            if not bool(getattr(feature_flags, "use_supabase_db", False)) and pref != "cloud":
+                mode, reason = "local", "supabase_db_disabled"
+            else:
+                _supabase_users_request(
+                    method="GET",
+                    params={"select": "id,username,password_hash,role,is_active", "limit": "1"},
+                    timeout=8,
+                )
+                mode, reason = "cloud", "ok"
+        except Exception as exc:
+            mode = "local"
+            reason = f"cloud_unavailable:{exc}"
+            if pref == "cloud":
+                # cloud explicitly requested but unavailable -> still fallback to local for survivability
+                mode = "local"
+    cloud_auth_state_cache.update({"ts": now, "mode": mode, "reason": reason})
+    return dict(cloud_auth_state_cache)
+
+
+def _auth_mode():
+    return _cloud_auth_state(force_refresh=False).get("mode", "local")
+
+
+def _auth_user_list_cloud(include_placeholder_passwords=False):
+    rows = _supabase_users_request(
+        method="GET",
+        params={"select": "id,username,password_hash,role,is_active,email"},
+        timeout=12,
+    )
+    users = {}
+    for row in rows or []:
+        username = str(row.get("username", "")).strip()
+        role = str(row.get("role", "")).strip().lower()
+        password_hash = str(row.get("password_hash", "")).strip()
+        is_active = row.get("is_active", True)
+        if not username or role not in {"admin", "manager", "recruiter"} or not password_hash or not is_active:
+            continue
+        if not include_placeholder_passwords and _is_placeholder_password(password_hash):
+            continue
+        users[username] = {
+            "id": row.get("id"),
+            "email": row.get("email", ""),
+            "role": role,
+            "password_hash": password_hash,
+        }
+    return users
+
+
+def _auth_user_list(include_placeholder_passwords=False):
+    if _auth_mode() == "cloud":
+        try:
+            return _auth_user_list_cloud(include_placeholder_passwords=include_placeholder_passwords)
+        except Exception as exc:
+            print(f"[AUTH] Cloud auth list failed, using local fallback: {exc}")
+            _cloud_auth_state(force_refresh=True)
+    return _auth_user_list_local(include_placeholder_passwords=include_placeholder_passwords)
+
+
+def _auth_verify_user(username, password):
+    users = _auth_user_list(include_placeholder_passwords=False)
+    record = users.get(username)
+    if not record:
+        return None
+    if _auth_mode() == "cloud":
+        stored_hash = str(record.get("password_hash", "")).strip()
+        if stored_hash and check_password_hash(stored_hash, password):
+            return {"username": username, "role": record.get("role", "")}
+        return None
+    if password == str(record.get("password", "")):
+        return {"username": username, "role": record.get("role", "")}
+    return None
+
+
+def _auth_upsert_user(username, role, password):
+    if _auth_mode() == "cloud":
+        password_hash = generate_password_hash(password)
+        email = f"{username}@njordhr.local"
+        body = [{
+            "username": username,
+            "email": email,
+            "role": role,
+            "password_hash": password_hash,
+            "is_active": True,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }]
+        _supabase_users_request(
+            method="POST",
+            params={"on_conflict": "username"},
+            json_body=body,
+            timeout=12,
+        )
+        return True
+
+    if "Users" not in config:
+        config["Users"] = {}
+    _config_set_literal(config, "Users", username, f"{role}|{password}")
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+    return True
+
+
+def _auth_delete_user(username):
+    if _auth_mode() == "cloud":
+        _supabase_users_request(
+            method="DELETE",
+            params={"username": f"eq.{username}"},
+            timeout=12,
+        )
+        return True
+    if "Users" not in config or username not in config["Users"]:
+        return False
+    config.remove_option("Users", username)
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
+    return True
+
+
 def _bootstrap_status():
+    cloud_state = _cloud_auth_state(force_refresh=False)
+    using_cloud = cloud_state.get("mode") == "cloud"
     users_with_placeholders = _auth_user_list(include_placeholder_passwords=True)
     users = _auth_user_list(include_placeholder_passwords=False)
     if users:
@@ -360,6 +538,15 @@ def _bootstrap_status():
             "bootstrap_completed": True,
             "reason": "configured",
             "valid_user_count": len(users),
+            "auth_mode": "cloud" if using_cloud else "local",
+        }
+    if using_cloud:
+        return {
+            "bootstrap_required": False,
+            "bootstrap_completed": False,
+            "reason": "cloud_auth_available_no_users",
+            "valid_user_count": 0,
+            "auth_mode": "cloud",
         }
     if users_with_placeholders:
         return {
@@ -367,12 +554,14 @@ def _bootstrap_status():
             "bootstrap_completed": False,
             "reason": "placeholder_only",
             "valid_user_count": 0,
+            "auth_mode": "local",
         }
     return {
         "bootstrap_required": True,
         "bootstrap_completed": False,
         "reason": "no_users",
         "valid_user_count": 0,
+        "auth_mode": "local",
     }
 
 
@@ -932,6 +1121,7 @@ def auth_bootstrap_status():
         "bootstrap_required": bool(status.get("bootstrap_required")),
         "bootstrap_completed": bool(status.get("bootstrap_completed")),
         "reason": status.get("reason", ""),
+        "auth_mode": status.get("auth_mode", _auth_mode()),
     })
 
 
@@ -941,6 +1131,8 @@ def auth_bootstrap():
     status = _bootstrap_status()
     if not status.get("bootstrap_required"):
         return jsonify({"success": False, "message": "Bootstrap already completed."}), 409
+    if status.get("auth_mode") == "cloud":
+        return jsonify({"success": False, "message": "Cloud auth is enabled. Bootstrap fallback is not required."}), 409
     if not _is_local_request():
         return jsonify({"success": False, "message": "Bootstrap is allowed only from local host."}), 403
 
@@ -962,9 +1154,7 @@ def auth_bootstrap():
         _log_usage("bootstrap_failed", "Bootstrap password rejected as placeholder")
         return jsonify({"success": False, "message": "Choose a real password, not a placeholder value"}), 400
 
-    if "Users" not in config:
-        config["Users"] = {}
-    _config_set_literal(config, "Users", admin_username, f"admin|{admin_password}")
+    _auth_upsert_user(admin_username, "admin", admin_password)
 
     if "Auth" not in config:
         config["Auth"] = {}
@@ -999,12 +1189,13 @@ def auth_login():
     status = _bootstrap_status()
     if status.get("bootstrap_required"):
         return jsonify({"success": False, "message": "Bootstrap setup required. Create admin account first."}), 403
+    if status.get("auth_mode") == "cloud" and status.get("reason") == "cloud_auth_available_no_users":
+        return jsonify({"success": False, "message": "Cloud auth is enabled but no users are configured yet. Create users from an existing admin account or seed the first admin in Supabase."}), 403
     payload = request.json if request.is_json else {}
     username = str((payload or {}).get("username", "")).strip()
     password = str((payload or {}).get("password", "")).strip()
-    users = _auth_user_list()
-    record = users.get(username)
-    if not record or password != str(record.get("password", "")):
+    record = _auth_verify_user(username, password)
+    if not record:
         _log_usage("login_failed", f"Login failed for username={username}")
         return jsonify({"success": False, "message": "Invalid username or password."}), 401
     session["username"] = username
@@ -1514,6 +1705,7 @@ def runtime_config():
             "required": bool(_agent_sync_token()),
         },
         "admin_settings_enabled": bool(_admin_token()),
+        "auth_backend": _cloud_auth_state(force_refresh=False),
         "local_agent": _agent_health_summary() if _use_local_agent() else {
             "configured": False,
             "reachable": False,
@@ -2020,15 +2212,22 @@ def admin_list_users():
     ok, reason = _require_admin()
     if not ok:
         return jsonify({"success": False, "message": reason}), 401
-    users = _auth_user_list()
+    try:
+        users = _auth_user_list()
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Failed to load users: {exc}"}), 500
     data = []
     for username, record in sorted(users.items(), key=lambda item: item[0].lower()):
+        if _auth_mode() == "cloud":
+            masked = "********"
+        else:
+            masked = "*" * max(8, len(str(record.get("password", ""))))
         data.append({
             "username": username,
             "role": str(record.get("role", "")).strip().lower(),
-            "password_masked": "*" * max(8, len(str(record.get("password", "")))),
+            "password_masked": masked,
         })
-    return jsonify({"success": True, "users": data})
+    return jsonify({"success": True, "users": data, "auth_mode": _auth_mode()})
 
 
 @app.route('/admin/users', methods=['POST'])
@@ -2051,16 +2250,13 @@ def admin_upsert_user():
     if not role:
         return jsonify({"success": False, "message": "role must be one of: admin, manager, recruiter"}), 400
 
-    if "Users" not in config:
-        config["Users"] = {}
-    _config_set_literal(config, "Users", username, f"{role}|{password}")
-
-    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
-    with open(config_path, "w", encoding="utf-8") as fh:
-        config.write(fh)
-
-    app_settings = load_app_settings()
-    config = app_settings.config
+    try:
+        _auth_upsert_user(username, role, password)
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Failed to save user: {exc}"}), 500
+    if _auth_mode() == "local":
+        app_settings = load_app_settings()
+        config = app_settings.config
     _log_usage("user_upsert", f"User saved: username={username}, role={role}")
     return jsonify({"success": True, "message": "User saved successfully."})
 
@@ -2074,16 +2270,19 @@ def admin_delete_user(username):
     username = str(username or "").strip()
     if not username:
         return jsonify({"success": False, "message": "username is required"}), 400
-    if "Users" not in config or username not in config["Users"]:
-        return jsonify({"success": False, "message": "User not found in config [Users]"}), 404
-
-    config.remove_option("Users", username)
-    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
-    with open(config_path, "w", encoding="utf-8") as fh:
-        config.write(fh)
-
-    app_settings = load_app_settings()
-    config = app_settings.config
+    try:
+        users = _auth_user_list()
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Failed to load users: {exc}"}), 500
+    if username not in users:
+        return jsonify({"success": False, "message": "User not found"}), 404
+    try:
+        _auth_delete_user(username)
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Failed to delete user: {exc}"}), 500
+    if _auth_mode() == "local":
+        app_settings = load_app_settings()
+        config = app_settings.config
     _log_usage("user_delete", f"User deleted: username={username}")
     return jsonify({"success": True, "message": "User deleted successfully."})
 

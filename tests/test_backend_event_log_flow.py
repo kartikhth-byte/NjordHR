@@ -8,8 +8,10 @@ import unittest
 import time
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
+from werkzeug.security import generate_password_hash
 
 
 def _stub_external_modules():
@@ -639,6 +641,45 @@ class BackendEventLogFlowTests(unittest.TestCase):
         finally:
             if old_token is not None:
                 os.environ["NJORDHR_ADMIN_TOKEN"] = old_token
+
+    def test_cloud_auth_login_uses_password_hash(self):
+        with patch.object(
+            backend_server,
+            "_cloud_auth_state",
+            return_value={"ts": time.time(), "mode": "cloud", "reason": "ok"},
+        ), patch.object(
+            backend_server,
+            "_auth_user_list_cloud",
+            return_value={
+                "cloudadmin": {
+                    "role": "admin",
+                    "password_hash": generate_password_hash("SecretPass123!"),
+                    "id": "x",
+                    "email": "cloudadmin@njordhr.local",
+                }
+            },
+        ):
+            resp = self.client.post("/auth/login", json={"username": "cloudadmin", "password": "SecretPass123!"})
+            self.assertEqual(resp.status_code, 200)
+            body = resp.get_json()
+            self.assertTrue(body["success"])
+            self.assertEqual(body["user"]["role"], "admin")
+
+    def test_cloud_auth_no_users_returns_actionable_login_message(self):
+        with patch.object(
+            backend_server,
+            "_cloud_auth_state",
+            return_value={"ts": time.time(), "mode": "cloud", "reason": "ok"},
+        ), patch.object(
+            backend_server,
+            "_auth_user_list_cloud",
+            return_value={},
+        ):
+            resp = self.client.post("/auth/login", json={"username": "admin", "password": "x"})
+            self.assertEqual(resp.status_code, 403)
+            body = resp.get_json()
+            self.assertFalse(body["success"])
+            self.assertIn("no users are configured", body["message"].lower())
 
 
 if __name__ == "__main__":
