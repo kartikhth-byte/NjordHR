@@ -84,7 +84,14 @@ class BackendEventLogFlowTests(unittest.TestCase):
         backend_server.scraper_session = None
         backend_server.seajobs_last_activity_at = None
         self.prev_feature_flags = backend_server.feature_flags
-        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=False)
+        backend_server.feature_flags = replace(
+            backend_server.feature_flags,
+            use_supabase_db=False,
+            use_dual_write=False,
+            use_supabase_reads=False,
+            use_local_agent=False,
+            use_cloud_export=False,
+        )
         self.prev_admin_token = os.environ.get("NJORDHR_ADMIN_TOKEN")
         os.environ["NJORDHR_ADMIN_TOKEN"] = "test-admin-token"
         self.prev_config_path = os.environ.get("NJORDHR_CONFIG_PATH")
@@ -110,6 +117,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         else:
             os.environ["NJORDHR_CONFIG_PATH"] = self.prev_config_path
         self.temp_dir.cleanup()
+        backend_server.cloud_auth_state_cache.update({"ts": 0, "mode": "local", "reason": "not_checked"})
 
     def _write_fake_resume(self, filename):
         path = self.rank_dir / filename
@@ -523,6 +531,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
                     "use_supabase_db": True,
                     "use_dual_write": True,
                     "use_supabase_reads": False,
+                    "supabase_url": "https://example.supabase.co",
+                    "supabase_secret_key": "sb_secret_test",
                     "min_similarity_score": "0.31",
                 }
             },
@@ -557,6 +567,26 @@ class BackendEventLogFlowTests(unittest.TestCase):
             headers={"X-Admin-Token": "test-admin-token"},
             json={"settings": {"otp_window_seconds": "10"}},
         )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_cloud_auth_unavailable_returns_503_instead_of_local_fallback(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_supabase_db=True)
+        backend_server.cloud_auth_state_cache.update({"ts": 0, "mode": "local", "reason": "not_checked"})
+        with patch("backend_server._supabase_users_request", side_effect=RuntimeError("network down")):
+            resp = self.client.post("/auth/login", json={"username": "admin", "password": "x"})
+        self.assertEqual(resp.status_code, 503)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("Cloud auth unavailable", body["message"])
+
+    def test_get_resume_disabled_in_cloud_mode(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_supabase_db=True)
+        resp = self.client.get("/get_resume/Chief_Officer/Chief_Officer_9999.pdf")
+        self.assertEqual(resp.status_code, 410)
+
+    def test_open_resume_requires_storage_url_in_cloud_mode(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_supabase_db=True)
+        resp = self.client.get("/open_resume?rank_folder=Chief_Officer&filename=Chief_Officer_9999.pdf")
         self.assertEqual(resp.status_code, 400)
         body = resp.get_json()
         self.assertFalse(body["success"])

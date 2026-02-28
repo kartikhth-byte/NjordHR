@@ -95,6 +95,7 @@ def _refresh_runtime_managers():
         use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
         use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
     )
+    _load_runtime_secrets_from_cloud()
     VERIFIED_RESUMES_DIR = _resolve_verified_resumes_dir()
     os.makedirs(VERIFIED_RESUMES_DIR, exist_ok=True)
     csv_manager = build_candidate_event_repo(
@@ -110,6 +111,121 @@ def _refresh_runtime_managers():
 
 def _advanced_value(name, fallback=""):
     return config.get("Advanced", name, fallback=fallback)
+
+
+def _credential_value(config_key, env_name, fallback=""):
+    env_value = os.getenv(env_name, "").strip()
+    if env_value:
+        return env_value
+    return creds.get(config_key, fallback=fallback)
+
+
+def _seajob_username():
+    return _credential_value("Username", "SEAJOB_USERNAME", "")
+
+
+def _seajob_password():
+    return _credential_value("Password", "SEAJOB_PASSWORD", "")
+
+
+def _gemini_api_key():
+    return _credential_value("Gemini_API_Key", "GEMINI_API_KEY", "")
+
+
+def _pinecone_api_key():
+    return _credential_value("Pinecone_API_Key", "PINECONE_API_KEY", "")
+
+
+def _supabase_runtime_config_endpoint():
+    supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_key = resolve_supabase_api_key()
+    if not supabase_url or not supabase_key:
+        return "", {}
+    return (
+        f"{supabase_url}/rest/v1/app_runtime_config",
+        {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+        },
+    )
+
+
+def _supabase_runtime_config_get():
+    endpoint, headers = _supabase_runtime_config_endpoint()
+    if not endpoint:
+        return {}
+    try:
+        resp = requests.get(
+            endpoint,
+            params={"select": "key,value", "limit": 2000},
+            headers=headers,
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            return {}
+        rows = resp.json() if resp.text else []
+        out = {}
+        for row in rows or []:
+            key = str(row.get("key", "")).strip()
+            if key:
+                out[key] = str(row.get("value", "") or "")
+        return out
+    except Exception:
+        return {}
+
+
+def _supabase_runtime_config_set(pairs):
+    endpoint, headers = _supabase_runtime_config_endpoint()
+    if not endpoint:
+        raise RuntimeError("Supabase runtime config unavailable")
+    body = []
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    for key, value in (pairs or {}).items():
+        if key is None:
+            continue
+        key_s = str(key).strip()
+        if not key_s:
+            continue
+        body.append({
+            "key": key_s,
+            "value": str(value or ""),
+            "updated_at": now_iso,
+        })
+    if not body:
+        return
+    resp = requests.post(
+        endpoint,
+        params={"on_conflict": "key"},
+        headers={**headers, "Prefer": "resolution=merge-duplicates,return=minimal"},
+        json=body,
+        timeout=12,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Failed writing cloud runtime config ({resp.status_code}): {resp.text}")
+
+
+def _load_runtime_secrets_from_cloud():
+    if not bool(getattr(feature_flags, "use_supabase_db", False)):
+        return
+    cfg = _supabase_runtime_config_get()
+    mapping = {
+        "seajob_username": "SEAJOB_USERNAME",
+        "seajob_password": "SEAJOB_PASSWORD",
+        "gemini_api_key": "GEMINI_API_KEY",
+        "pinecone_api_key": "PINECONE_API_KEY",
+    }
+    for key, env_name in mapping.items():
+        val = str(cfg.get(key, "")).strip()
+        if val:
+            os.environ[env_name] = val
+
+
+# Best-effort one-time hydration at startup (safe no-op when cloud config is unavailable).
+try:
+    _load_runtime_secrets_from_cloud()
+except Exception:
+    pass
 
 
 def _int_setting(section, key, fallback):
@@ -360,6 +476,14 @@ def _auth_mode_preference():
     return "auto"
 
 
+def _cloud_auth_required():
+    """
+    Enforce cloud auth whenever Supabase DB mode is enabled or auth is explicitly forced to cloud.
+    This avoids cross-machine user drift from silent fallback to local auth.
+    """
+    return bool(getattr(feature_flags, "use_supabase_db", False)) or _auth_mode_preference() == "cloud"
+
+
 def _supabase_auth_endpoint():
     supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     supabase_key = resolve_supabase_api_key()
@@ -404,7 +528,7 @@ def _cloud_auth_state(force_refresh=False):
     mode = "local"
     reason = "forced_local"
     pref = _auth_mode_preference()
-    if pref == "local":
+    if pref == "local" and not _cloud_auth_required():
         mode, reason = "local", "forced_local"
     else:
         try:
@@ -418,17 +542,17 @@ def _cloud_auth_state(force_refresh=False):
                 )
                 mode, reason = "cloud", "ok"
         except Exception as exc:
-            mode = "local"
+            mode = "cloud_error" if _cloud_auth_required() else "local"
             reason = f"cloud_unavailable:{exc}"
-            if pref == "cloud":
-                # cloud explicitly requested but unavailable -> still fallback to local for survivability
-                mode = "local"
     cloud_auth_state_cache.update({"ts": now, "mode": mode, "reason": reason})
     return dict(cloud_auth_state_cache)
 
 
 def _auth_mode():
-    return _cloud_auth_state(force_refresh=False).get("mode", "local")
+    mode = _cloud_auth_state(force_refresh=False).get("mode", "local")
+    if mode == "cloud_error":
+        return "cloud"
+    return mode
 
 
 def _auth_user_list_cloud(include_placeholder_passwords=False):
@@ -458,11 +582,7 @@ def _auth_user_list_cloud(include_placeholder_passwords=False):
 
 def _auth_user_list(include_placeholder_passwords=False):
     if _auth_mode() == "cloud":
-        try:
-            return _auth_user_list_cloud(include_placeholder_passwords=include_placeholder_passwords)
-        except Exception as exc:
-            print(f"[AUTH] Cloud auth list failed, using local fallback: {exc}")
-            _cloud_auth_state(force_refresh=True)
+        return _auth_user_list_cloud(include_placeholder_passwords=include_placeholder_passwords)
     return _auth_user_list_local(include_placeholder_passwords=include_placeholder_passwords)
 
 
@@ -529,9 +649,23 @@ def _auth_delete_user(username):
 
 def _bootstrap_status():
     cloud_state = _cloud_auth_state(force_refresh=False)
-    using_cloud = cloud_state.get("mode") == "cloud"
-    users_with_placeholders = _auth_user_list(include_placeholder_passwords=True)
-    users = _auth_user_list(include_placeholder_passwords=False)
+    state_mode = cloud_state.get("mode")
+    using_cloud = state_mode in {"cloud", "cloud_error"}
+    users_with_placeholders = {}
+    users = {}
+    try:
+        users_with_placeholders = _auth_user_list(include_placeholder_passwords=True)
+        users = _auth_user_list(include_placeholder_passwords=False)
+    except Exception as exc:
+        if using_cloud:
+            return {
+                "bootstrap_required": False,
+                "bootstrap_completed": False,
+                "reason": f"cloud_unavailable:{exc}",
+                "valid_user_count": 0,
+                "auth_mode": "cloud",
+            }
+        raise
     if users:
         return {
             "bootstrap_required": False,
@@ -790,19 +924,19 @@ def _settings_payload(include_plain_secrets=False):
             "use_cloud_export": bool(feature_flags.use_cloud_export),
         },
         "secrets": {
-            "seajob_username": _mask_secret(creds.get("Username", "")),
-            "seajob_password": _mask_secret(creds.get("Password", "")),
-            "gemini_api_key": _mask_secret(creds.get("Gemini_API_Key", "")),
-            "pinecone_api_key": _mask_secret(creds.get("Pinecone_API_Key", "")),
+            "seajob_username": _mask_secret(_seajob_username()),
+            "seajob_password": _mask_secret(_seajob_password()),
+            "gemini_api_key": _mask_secret(_gemini_api_key()),
+            "pinecone_api_key": _mask_secret(_pinecone_api_key()),
             "supabase_secret_key": _mask_secret(resolve_supabase_api_key()),
         }
     }
     if include_plain_secrets:
         payload["secrets_plain"] = {
-            "seajob_username": creds.get("Username", ""),
-            "seajob_password": creds.get("Password", ""),
-            "gemini_api_key": creds.get("Gemini_API_Key", ""),
-            "pinecone_api_key": creds.get("Pinecone_API_Key", ""),
+            "seajob_username": _seajob_username(),
+            "seajob_password": _seajob_password(),
+            "gemini_api_key": _gemini_api_key(),
+            "pinecone_api_key": _pinecone_api_key(),
             "supabase_secret_key": resolve_supabase_api_key(),
         }
     return payload
@@ -1171,7 +1305,11 @@ def auth_bootstrap():
     config = app_settings.config
     creds = app_settings.credentials
     settings = app_settings.settings
-    _refresh_runtime_managers()
+    try:
+        _refresh_runtime_managers()
+    except RuntimeError as exc:
+        # Bootstrap auth is still valid; return actionable runtime error instead of hard 500.
+        return jsonify({"success": False, "message": str(exc)}), 400
 
     session["username"] = admin_username
     session["role"] = "admin"
@@ -1194,7 +1332,12 @@ def auth_login():
     payload = request.json if request.is_json else {}
     username = str((payload or {}).get("username", "")).strip()
     password = str((payload or {}).get("password", "")).strip()
-    record = _auth_verify_user(username, password)
+    try:
+        record = _auth_verify_user(username, password)
+    except Exception as exc:
+        if status.get("auth_mode") == "cloud":
+            return jsonify({"success": False, "message": f"Cloud auth unavailable: {exc}"}), 503
+        raise
     if not record:
         _log_usage("login_failed", f"Login failed for username={username}")
         return jsonify({"success": False, "message": "Invalid username or password."}), 401
@@ -1263,7 +1406,7 @@ def start_session():
         login_url=_advanced_value("seajob_login_url", "http://seajob.net/seajob_login.php"),
         dashboard_url=_advanced_value("seajob_dashboard_url", "http://seajob.net/company/dashboard.php"),
     )
-    result = scraper_session.start_session(creds['Username'], creds['Password'], mobile_number)
+    result = scraper_session.start_session(_seajob_username(), _seajob_password(), mobile_number)
     if result.get("success"):
         _touch_seajobs_activity()
     return jsonify(result)
@@ -2053,10 +2196,28 @@ def save_admin_settings():
             if value:
                 _config_set_literal(config, section, key, value)
 
-    _set_if_present("Credentials", "Username", "seajob_username")
-    _set_if_present("Credentials", "Password", "seajob_password")
-    _set_if_present("Credentials", "Gemini_API_Key", "gemini_api_key")
-    _set_if_present("Credentials", "Pinecone_API_Key", "pinecone_api_key")
+    # Sensitive credentials are kept in runtime env / cloud runtime config, not persisted in local config.ini.
+    sensitive_pairs = {}
+    if "seajob_username" in payload:
+        val = str(payload.get("seajob_username", "")).strip()
+        if val:
+            os.environ["SEAJOB_USERNAME"] = val
+            sensitive_pairs["seajob_username"] = val
+    if "seajob_password" in payload:
+        val = str(payload.get("seajob_password", "")).strip()
+        if val:
+            os.environ["SEAJOB_PASSWORD"] = val
+            sensitive_pairs["seajob_password"] = val
+    if "gemini_api_key" in payload:
+        val = str(payload.get("gemini_api_key", "")).strip()
+        if val:
+            os.environ["GEMINI_API_KEY"] = val
+            sensitive_pairs["gemini_api_key"] = val
+    if "pinecone_api_key" in payload:
+        val = str(payload.get("pinecone_api_key", "")).strip()
+        if val:
+            os.environ["PINECONE_API_KEY"] = val
+            sensitive_pairs["pinecone_api_key"] = val
     _set_if_present("Settings", "Default_Download_Folder", "default_download_folder")
     _set_if_present("Settings", "Additional_Local_Folder", "verified_resumes_folder")
     _set_if_present("Advanced", "seajob_login_url", "seajob_login_url")
@@ -2096,6 +2257,14 @@ def save_admin_settings():
         if sup_key:
             os.environ["SUPABASE_SECRET_KEY"] = sup_key
             os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
+            sensitive_pairs["supabase_secret_key"] = sup_key
+
+    # Persist sensitive runtime config centrally in Supabase when available.
+    if sensitive_pairs and bool(getattr(feature_flags, "use_supabase_db", False)):
+        try:
+            _supabase_runtime_config_set(sensitive_pairs)
+        except Exception as exc:
+            return jsonify({"success": False, "message": f"Failed to save cloud secrets: {exc}"}), 400
 
     env_flags = [
         "use_supabase_db",
@@ -2104,16 +2273,29 @@ def save_admin_settings():
         "use_local_agent",
         "use_cloud_export",
     ]
+    prev_env = {name.upper(): os.environ.get(name.upper()) for name in env_flags}
     for flag_name in env_flags:
         if flag_name in payload:
             env_name = flag_name.upper()
             os.environ[env_name] = "true" if bool(payload.get(flag_name)) else "false"
 
-    app_settings = load_app_settings()
-    config = app_settings.config
-    creds = app_settings.credentials
-    settings = app_settings.settings
-    _refresh_runtime_managers()
+    try:
+        app_settings = load_app_settings()
+        config = app_settings.config
+        creds = app_settings.credentials
+        settings = app_settings.settings
+        _refresh_runtime_managers()
+    except RuntimeError as exc:
+        for env_name, prev_value in prev_env.items():
+            if prev_value is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = prev_value
+        app_settings = load_app_settings()
+        config = app_settings.config
+        creds = app_settings.credentials
+        settings = app_settings.settings
+        return jsonify({"success": False, "message": str(exc)}), 400
 
     return jsonify({
         "success": True,
@@ -2339,7 +2521,7 @@ def analyze_stream():
                 return
             
             # Create analyzer and run streaming analysis
-            analyzer = Analyzer(creds['Gemini_API_Key'])
+            analyzer = Analyzer(_gemini_api_key())
             
             # Stream progress events
             for progress_event in analyzer.run_analysis_stream(rank_folder, prompt):
@@ -2374,7 +2556,7 @@ def analyze():
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
         
-        analyzer = Analyzer(creds['Gemini_API_Key'])
+        analyzer = Analyzer(_gemini_api_key())
         result = analyzer.run_analysis(rank_folder, prompt)
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
             "success": bool(result.get("success")),
@@ -2400,7 +2582,7 @@ def submit_feedback():
     try:
         data = request.json
         
-        analyzer = Analyzer(creds['Gemini_API_Key'])
+        analyzer = Analyzer(_gemini_api_key())
         analyzer.store_feedback(
             filename=data.get('filename'),
             query=data.get('query'),
@@ -2456,6 +2638,13 @@ def _serve_local_resume(rank_folder, filename):
         return str(e), 500
 
 
+def _cloud_data_required():
+    """
+    When Supabase DB mode is enabled, require cloud-backed resume access and avoid local file fallback.
+    """
+    return bool(getattr(feature_flags, "use_supabase_db", False))
+
+
 @app.route('/open_resume', methods=['GET'])
 def open_resume():
     ok, reason = _require_role("admin", "manager", "recruiter")
@@ -2469,7 +2658,12 @@ def open_resume():
         signed, err = _supabase_storage_signed_url(storage_url, expires_in=900)
         if signed:
             return redirect(signed, code=302)
+        if _cloud_data_required():
+            return jsonify({"success": False, "message": "Resume URL unavailable from cloud storage"}), 502
         print(f"[RESUME] Signed URL fallback to local file: {err}")
+
+    if _cloud_data_required():
+        return jsonify({"success": False, "message": "Cloud storage URL is required for this resume."}), 400
 
     if not rank_folder or not filename:
         return "Missing resume path", 400
@@ -2481,6 +2675,8 @@ def get_resume(rank_folder, filename):
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return reason, 403
+    if _cloud_data_required():
+        return jsonify({"success": False, "message": "Direct local resume path is disabled in cloud mode."}), 410
     return _serve_local_resume(rank_folder, filename)
 
 @app.route('/verify_resumes', methods=['POST'])

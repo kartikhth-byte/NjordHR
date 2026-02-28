@@ -42,9 +42,9 @@ class ConfigManager:
         self.config = config_parser
 
     @property
-    def gemini_api_key(self): return self.config.get('Credentials', 'Gemini_API_Key')
+    def gemini_api_key(self): return os.getenv('GEMINI_API_KEY', self.config.get('Credentials', 'Gemini_API_Key'))
     @property
-    def pinecone_api_key(self): return self.config.get('Credentials', 'Pinecone_API_Key')
+    def pinecone_api_key(self): return os.getenv('PINECONE_API_KEY', self.config.get('Credentials', 'Pinecone_API_Key'))
     @property
     def download_root(self): return self.config.get('Settings', 'Default_Download_Folder')
     @property
@@ -195,6 +195,154 @@ class FeedbackStore:
                 LIMIT ?
             """, (f"%{query_terms[0]}%", limit))
             return cursor.fetchall()
+
+
+def _resolve_supabase_api_key():
+    return (
+        os.getenv("SUPABASE_SECRET_KEY", "").strip()
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    )
+
+
+def _should_use_cloud_ai_store():
+    return (
+        str(os.getenv("USE_SUPABASE_DB", "")).strip().lower() in {"1", "true", "yes", "on"}
+        and bool(os.getenv("SUPABASE_URL", "").strip())
+        and bool(_resolve_supabase_api_key())
+    )
+
+
+class SupabaseStoreBase:
+    def __init__(self):
+        self.supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+        self.api_key = _resolve_supabase_api_key()
+        self.headers = {
+            "apikey": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        self.lock = threading.Lock()
+
+    def _request(self, method, path, params=None, json_body=None, timeout=15):
+        resp = requests.request(
+            method=method,
+            url=f"{self.supabase_url}{path}",
+            params=params or {},
+            json=json_body,
+            headers=self.headers,
+            timeout=timeout,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Supabase AI store request failed ({resp.status_code}): {resp.text}")
+        if not resp.text:
+            return []
+        try:
+            return resp.json()
+        except Exception:
+            return []
+
+
+class SupabaseFileRegistry(SupabaseStoreBase):
+    """Cloud-backed replacement for local registry.db."""
+
+    @staticmethod
+    def _file_key(file_path):
+        return os.path.basename(str(file_path or "")).strip()
+
+    def generate_resume_id(self, file_path):
+        file_key = self._file_key(file_path)
+        return hashlib.sha1(file_key.encode()).hexdigest()
+
+    def needs_processing(self, file_path, last_modified):
+        file_key = self._file_key(file_path)
+        with self.lock:
+            rows = self._request(
+                "GET",
+                "/rest/v1/ai_file_registry",
+                params={"select": "last_modified", "file_key": f"eq.{file_key}", "limit": 1},
+            )
+        if not rows:
+            return True
+        stored = float(rows[0].get("last_modified", 0) or 0)
+        return stored < float(last_modified)
+
+    def upsert_file_record(self, file_path, last_modified, resume_id):
+        file_key = self._file_key(file_path)
+        body = [{
+            "file_key": file_key,
+            "last_modified": float(last_modified),
+            "resume_id": str(resume_id),
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }]
+        with self.lock:
+            self._request(
+                "POST",
+                "/rest/v1/ai_file_registry",
+                params={"on_conflict": "file_key"},
+                json_body=body,
+                timeout=20,
+            )
+
+    def get_resume_id(self, file_path):
+        file_key = self._file_key(file_path)
+        with self.lock:
+            rows = self._request(
+                "GET",
+                "/rest/v1/ai_file_registry",
+                params={"select": "resume_id", "file_key": f"eq.{file_key}", "limit": 1},
+            )
+        if rows:
+            resume_id = str(rows[0].get("resume_id", "")).strip()
+            if resume_id:
+                return resume_id
+        return self.generate_resume_id(file_path)
+
+
+class SupabaseFeedbackStore(SupabaseStoreBase):
+    """Cloud-backed replacement for local feedback.db."""
+
+    def add_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence,
+                     user_decision, user_notes=""):
+        body = [{
+            "filename": filename,
+            "query": query,
+            "llm_decision": llm_decision,
+            "llm_reason": llm_reason,
+            "llm_confidence": llm_confidence,
+            "user_decision": user_decision,
+            "user_notes": user_notes or "",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }]
+        with self.lock:
+            self._request("POST", "/rest/v1/ai_feedback", json_body=body, timeout=20)
+        print(f"[FEEDBACK] Stored (cloud): {filename} - User: {user_decision}, LLM: {llm_decision}")
+
+    def get_recent_feedback(self, query, limit=5):
+        query_terms = (query or "").split()
+        if not query_terms:
+            return []
+        like_term = f"*{query_terms[0]}*"
+        with self.lock:
+            rows = self._request(
+                "GET",
+                "/rest/v1/ai_feedback",
+                params={
+                    "select": "filename,llm_decision,user_decision,llm_reason,user_notes",
+                    "query": f"ilike.{like_term}",
+                    "order": "timestamp.desc",
+                    "limit": int(limit),
+                },
+            )
+        return [
+            (
+                row.get("filename", ""),
+                row.get("llm_decision", ""),
+                row.get("user_decision", ""),
+                row.get("llm_reason", ""),
+                row.get("user_notes", ""),
+            )
+            for row in (rows or [])
+        ]
 
 
 # ==============================================================================
@@ -507,8 +655,17 @@ class AIResumeAnalyzer:
     def __init__(self, config_parser):
         print("[INIT] Initializing AIResumeAnalyzer with Multi-Stage Retrieval...")
         self.config = ConfigManager(config_parser)
-        self.registry = FileRegistry(self.config.registry_db_path)
-        self.feedback = FeedbackStore(self.config.feedback_db_path)
+        if _should_use_cloud_ai_store():
+            try:
+                self.registry = SupabaseFileRegistry()
+                self.feedback = SupabaseFeedbackStore()
+                print("[INIT] Using Supabase-backed AI registry/feedback stores.")
+            except Exception as exc:
+                raise RuntimeError(f"Cloud AI stores are required but unavailable: {exc}")
+        else:
+            self.registry = FileRegistry(self.config.registry_db_path)
+            self.feedback = FeedbackStore(self.config.feedback_db_path)
+            print("[INIT] Using local AI registry/feedback stores.")
         self.pdf_processor = AdvancedPDFProcessor()
         self.prepper = RAGPrepper(self.config)
         self.vector_db = PineconeManager(self.config, embedding_dimension=self.prepper.expected_embedding_dimension())

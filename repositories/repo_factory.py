@@ -20,8 +20,9 @@ def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url
         return csv_repo
 
     if not can_enable_supabase_repo():
-        print("[CONFIG] USE_SUPABASE_DB=true requested but SUPABASE_URL and SUPABASE_SECRET_KEY/SUPABASE_SERVICE_ROLE_KEY are missing. Falling back to CSV repo.")
-        return csv_repo
+        msg = "[CONFIG] USE_SUPABASE_DB=true requested but SUPABASE_URL and SUPABASE_SECRET_KEY/SUPABASE_SERVICE_ROLE_KEY are missing."
+        print(msg)
+        raise RuntimeError(msg)
 
     supabase_api_key = resolve_supabase_api_key()
     if os.getenv("SUPABASE_SECRET_KEY", "").strip():
