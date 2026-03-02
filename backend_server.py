@@ -3156,10 +3156,10 @@ if __name__ == '__main__':
     server_url = f"http://127.0.0.1:{server_port}"
 
     print("\n" + "="*70)
-    print("🚀 NjordHR Backend Server - With Dashboard")
+    print("NjordHR Backend Server - With Dashboard")
     print("="*70)
-    print("\n🌐 Open your browser and go to:")
-    print(f"   👉 {server_url}")
+    print("\nOpen your browser and go to:")
+    print(f"   {server_url}")
     print("\n" + "="*70 + "\n")
     
     app.run(host='127.0.0.1', port=server_port, debug=False, threaded=True)
