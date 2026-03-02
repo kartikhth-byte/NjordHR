@@ -9,6 +9,7 @@ $AppDataDir = Join-Path $env:APPDATA "NjordHR"
 $RuntimeDir = Join-Path $AppDataDir "runtime"
 $VenvDir = Join-Path $RuntimeDir "venv"
 $ConfigPath = Join-Path $AppDataDir "config.ini"
+$DefaultRuntimeEnvPath = Join-Path $ProjectDir "default_runtime.env"
 $DefaultDownloadDir = Join-Path $env:USERPROFILE "Downloads\NjordHR"
 $DefaultVerifiedDir = Join-Path $AppDataDir "Verified_Resumes"
 $DefaultLogDir = Join-Path $AppDataDir "logs"
@@ -32,6 +33,40 @@ Write-Log "RuntimeDir=$RuntimeDir"
 
 function Cleanup-Lock {
     # No-op: launch lock removed to avoid false-positive "already running" loops.
+}
+
+function Read-EnvFile([string]$Path) {
+    $result = @{}
+    if (-not (Test-Path $Path)) {
+        return $result
+    }
+    foreach ($line in Get-Content -Path $Path) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed) { continue }
+        if ($trimmed.StartsWith("#")) { continue }
+        $idx = $trimmed.IndexOf("=")
+        if ($idx -le 0) { continue }
+        $key = $trimmed.Substring(0, $idx).Trim()
+        $val = $trimmed.Substring($idx + 1).Trim()
+        if ($key) {
+            $result[$key] = $val
+        }
+    }
+    return $result
+}
+
+function Escape-CmdValue([string]$Value) {
+    if ($null -eq $Value) { return "" }
+    return $Value.Replace('"', '""')
+}
+
+function Build-CmdEnvPrefix([hashtable]$Vars) {
+    $segments = @()
+    foreach ($k in ($Vars.Keys | Sort-Object)) {
+        $v = Escape-CmdValue ([string]$Vars[$k])
+        $segments += "set `"$k=$v`""
+    }
+    return ($segments -join "&& ")
 }
 
 function Test-Http([string]$url) {
@@ -242,15 +277,48 @@ try {
     $backendUrl = "http://127.0.0.1:$backendPort"
     $agentUrl = "http://127.0.0.1:$agentPort"
     $pythonLauncherForCmd = ('"' + $venvPython + '"').Trim()
+    $provisionedEnv = Read-EnvFile $DefaultRuntimeEnvPath
+    if ($provisionedEnv.Count -gt 0) {
+        Write-Log "Loaded provisioned runtime defaults from $DefaultRuntimeEnvPath"
+    } else {
+        Write-Log "No provisioned runtime defaults found at $DefaultRuntimeEnvPath"
+    }
 
     $runtimeEnvPath = Join-Path $RuntimeDir "runtime.env"
-    @(
-        "NJORDHR_BACKEND_PORT=$backendPort"
-        "NJORDHR_AGENT_RUNTIME_PORT=$agentPort"
-        "NJORDHR_SERVER_URL=$backendUrl"
-        "NJORDHR_AGENT_URL=$agentUrl"
-        "PYTHON_BASIC_REPL=1"
-    ) | Set-Content -Path $runtimeEnvPath -Encoding utf8
+    $runtimeVars = @{}
+    $runtimeVars["NJORDHR_BACKEND_PORT"] = "$backendPort"
+    $runtimeVars["NJORDHR_AGENT_RUNTIME_PORT"] = "$agentPort"
+    $runtimeVars["NJORDHR_SERVER_URL"] = $backendUrl
+    $runtimeVars["NJORDHR_AGENT_URL"] = $agentUrl
+    $runtimeVars["PYTHON_BASIC_REPL"] = "1"
+    $runtimeVars["NJORDHR_CONFIG_PATH"] = $ConfigPath
+    $runtimeVars["NJORDHR_RUNTIME_DIR"] = $RuntimeDir
+
+    $provisionKeys = @(
+        "USE_SUPABASE_DB",
+        "USE_SUPABASE_READS",
+        "USE_DUAL_WRITE",
+        "USE_LOCAL_AGENT",
+        "NJORDHR_AUTH_MODE",
+        "NJORDHR_PASSWORD_HASH_METHOD",
+        "SUPABASE_URL",
+        "SUPABASE_SECRET_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY"
+    )
+    foreach ($k in $provisionKeys) {
+        if ($provisionedEnv.ContainsKey($k)) {
+            $runtimeVars[$k] = $provisionedEnv[$k]
+        }
+    }
+
+    if (-not $runtimeVars.ContainsKey("USE_LOCAL_AGENT")) {
+        $runtimeVars["USE_LOCAL_AGENT"] = "true"
+    }
+
+    foreach ($k in $runtimeVars.Keys) {
+        Set-Item -Path "Env:$k" -Value ([string]$runtimeVars[$k])
+    }
+    ($runtimeVars.Keys | Sort-Object | ForEach-Object { "$_=$($runtimeVars[$_])" }) | Set-Content -Path $runtimeEnvPath -Encoding utf8
 
     $backendOut = Join-Path $RuntimeDir "backend.out"
     $backendErr = Join-Path $RuntimeDir "backend.err"
@@ -261,7 +329,13 @@ try {
         Write-Log "Backend already running at $backendUrl"
     } else {
         Write-Log "Starting backend at $backendUrl"
-        $backendCmd = "set `"PYTHON_BASIC_REPL=1`"&& set `"NJORDHR_PORT=$backendPort`"&& set `"NJORDHR_SERVER_URL=$backendUrl`"&& set `"NJORDHR_CONFIG_PATH=$ConfigPath`"&& set `"NJORDHR_RUNTIME_DIR=$RuntimeDir`"&& set `"USE_LOCAL_AGENT=true`"&& $pythonLauncherForCmd backend_server.py"
+        $backendVars = @{}
+        foreach ($k in $runtimeVars.Keys) {
+            $backendVars[$k] = $runtimeVars[$k]
+        }
+        $backendVars["NJORDHR_PORT"] = "$backendPort"
+        $backendPrefix = Build-CmdEnvPrefix $backendVars
+        $backendCmd = "$backendPrefix&& $pythonLauncherForCmd backend_server.py"
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c $backendCmd" -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr | Out-Null
         if (-not (Wait-Http "$backendUrl/config/runtime" 100)) {
             throw "Backend failed to start. Check $backendErr"
@@ -272,7 +346,14 @@ try {
         Write-Log "Agent already running at $agentUrl"
     } else {
         Write-Log "Starting local agent at $agentUrl"
-        $agentCmd = "set `"PYTHON_BASIC_REPL=1`"&& set `"NJORDHR_CONFIG_PATH=$ConfigPath`"&& set `"NJORDHR_AGENT_HOST=127.0.0.1`"&& set `"NJORDHR_AGENT_PORT=$agentPort`"&& $pythonLauncherForCmd agent_server.py"
+        $agentVars = @{}
+        foreach ($k in $runtimeVars.Keys) {
+            $agentVars[$k] = $runtimeVars[$k]
+        }
+        $agentVars["NJORDHR_AGENT_HOST"] = "127.0.0.1"
+        $agentVars["NJORDHR_AGENT_PORT"] = "$agentPort"
+        $agentPrefix = Build-CmdEnvPrefix $agentVars
+        $agentCmd = "$agentPrefix&& $pythonLauncherForCmd agent_server.py"
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c $agentCmd" -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $agentOut -RedirectStandardError $agentErr | Out-Null
         if (-not (Wait-Http "$agentUrl/health" 100)) {
             throw "Agent failed to start. Check $agentErr"
