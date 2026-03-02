@@ -168,7 +168,13 @@ if (not log_raw.strip()) or "/absolute/path/" in log_raw:
 with open(cfg_path, "w", encoding="utf-8") as fh:
     cfg.write(fh)
 '@
-    Invoke-Python $Py @("-c", $script, $ConfigPath, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
+    $tmpScript = Join-Path $RuntimeDir "ensure_config.py"
+    Set-Content -Path $tmpScript -Value $script -Encoding UTF8
+    try {
+        Invoke-Python $Py @($tmpScript, $ConfigPath, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
+    } finally {
+        Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Ensure-Venv([hashtable]$Py) {
