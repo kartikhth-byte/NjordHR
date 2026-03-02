@@ -33,6 +33,7 @@ AppName=NjordHR
 AppVersion=$AppVersion
 DefaultDirName={localappdata}\NjordHR
 DefaultGroupName=NjordHR
+PrivilegesRequired=lowest
 OutputBaseFilename=NjordHR-$AppVersion-setup
 Compression=lzma
 SolidCompression=yes
@@ -43,9 +44,6 @@ Source: "$escapedStage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubd
 [Icons]
 Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.bat"
 Name: "{commondesktop}\NjordHR"; Filename: "{app}\start_njordhr.bat"
-
-[Run]
-Filename: "{app}\start_njordhr.bat"; Description: "Launch NjordHR"; Flags: nowait postinstall skipifsilent
 "@ | Set-Content -Path $IssPath -Encoding ASCII
 
 & $iscc.Source $IssPath

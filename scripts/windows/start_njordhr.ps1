@@ -17,22 +17,21 @@ New-Item -Path $DefaultDownloadDir -ItemType Directory -Force | Out-Null
 New-Item -Path $DefaultVerifiedDir -ItemType Directory -Force | Out-Null
 New-Item -Path $DefaultLogDir -ItemType Directory -Force | Out-Null
 
-$lockPath = Join-Path $env:TEMP "njordhr-launch.lock"
-$lockStream = $null
-try {
-    $lockStream = [System.IO.File]::Open($lockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
-} catch {
-    Write-Host "[NjordHR] Launcher already running. Try again in a few seconds."
-    exit 0
+$LauncherLogPath = Join-Path $RuntimeDir "launcher.log"
+function Write-Log([string]$Message) {
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
+    $line = "[$ts] $Message"
+    Write-Host $line
+    Add-Content -Path $LauncherLogPath -Value $line -Encoding UTF8
 }
 
+Write-Log "Launcher started."
+Write-Log "ProjectDir=$ProjectDir"
+Write-Log "ConfigPath=$ConfigPath"
+Write-Log "RuntimeDir=$RuntimeDir"
+
 function Cleanup-Lock {
-    if ($lockStream) {
-        $lockStream.Close()
-    }
-    if (Test-Path $lockPath) {
-        Remove-Item $lockPath -Force -ErrorAction SilentlyContinue
-    }
+    # No-op: launch lock removed to avoid false-positive "already running" loops.
 }
 
 function Test-Http([string]$url) {
@@ -81,37 +80,26 @@ function Wait-Http([string]$url, [int]$retries = 40) {
 }
 
 function Get-PythonInvocation {
-    $python3 = Get-Command python3 -ErrorAction SilentlyContinue
-    if ($python3) {
-        return @{
-            Exe = $python3.Source
-            PrefixArgs = @()
-            Display = "python3"
-        }
-    }
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) {
-        return @{
-            Exe = $py.Source
-            PrefixArgs = @("-3")
-            Display = "py -3"
+        # Enforce 3.11 for stable desktop runtime behavior across Windows hosts.
+        $probe311 = & $py.Source -3.11 -c "import sys; print(sys.version)" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return @{
+                Exe = $py.Source
+                PrefixArgs = @("-3.11")
+                Display = "py -3.11"
+            }
         }
+        throw "Found py launcher but Python 3.11 is unavailable. Install Python 3.11 and run again."
     }
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if ($python) {
-        return @{
-            Exe = $python.Source
-            PrefixArgs = @()
-            Display = "python"
-        }
-    }
-    throw "Python runtime not found. Install Python 3.11+ and ensure it is on PATH."
+    throw "Python launcher 'py' not found. Install Python 3.11 from python.org and ensure py.exe is available."
 }
 
-function Invoke-Python([hashtable]$Py, [string[]]$Args) {
-    & $Py.Exe @($Py.PrefixArgs + $Args)
+function Invoke-Python([hashtable]$Py, [string[]]$PyArgs) {
+    & $Py.Exe @($Py.PrefixArgs + $PyArgs)
     if ($LASTEXITCODE -ne 0) {
-        throw "Python command failed: $($Py.Display) $($Args -join ' ')"
+        throw "Python command failed: $($Py.Display) $($PyArgs -join ' ')"
     }
 }
 
@@ -142,7 +130,7 @@ log_dir = $DefaultLogDir
 "@ | Set-Content -Path $ConfigPath -Encoding UTF8
     }
 
-    $script = @"
+    $script = @'
 import configparser
 import os
 import sys
@@ -179,7 +167,7 @@ if (not log_raw.strip()) or "/absolute/path/" in log_raw:
 
 with open(cfg_path, "w", encoding="utf-8") as fh:
     cfg.write(fh)
-"@
+'@
     Invoke-Python $Py @("-c", $script, $ConfigPath, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
 }
 
@@ -220,9 +208,10 @@ function Ensure-Venv([hashtable]$Py) {
 
 try {
     $py = Get-PythonInvocation
-    Write-Host "[NjordHR] Python launcher: $($py.Display)"
+    Write-Log "Python launcher selected: $($py.Display)"
     Ensure-Config $py
     $venvPython = Ensure-Venv $py
+    Write-Log "Venv Python: $venvPython"
 
     $defaultBackendPort = if ($env:NJORDHR_PORT) { [int]$env:NJORDHR_PORT } else { 5050 }
     $defaultAgentPort = if ($env:NJORDHR_AGENT_PORT) { [int]$env:NJORDHR_AGENT_PORT } else { 5051 }
@@ -254,6 +243,7 @@ try {
         "NJORDHR_AGENT_RUNTIME_PORT=$agentPort"
         "NJORDHR_SERVER_URL=$backendUrl"
         "NJORDHR_AGENT_URL=$agentUrl"
+        "PYTHON_BASIC_REPL=1"
     ) | Set-Content -Path $runtimeEnvPath -Encoding utf8
 
     $backendOut = Join-Path $RuntimeDir "backend.out"
@@ -262,10 +252,10 @@ try {
     $agentErr = Join-Path $RuntimeDir "agent.err"
 
     if (Wait-Http "$backendUrl/config/runtime" 1) {
-        Write-Host "[NjordHR] Backend already running at $backendUrl"
+        Write-Log "Backend already running at $backendUrl"
     } else {
-        Write-Host "[NjordHR] Starting backend at $backendUrl"
-        $backendCmd = "set `"NJORDHR_PORT=$backendPort`"&& set `"NJORDHR_SERVER_URL=$backendUrl`"&& set `"NJORDHR_CONFIG_PATH=$ConfigPath`"&& set `"NJORDHR_RUNTIME_DIR=$RuntimeDir`"&& set `"USE_LOCAL_AGENT=true`"&& $pythonLauncherForCmd backend_server.py"
+        Write-Log "Starting backend at $backendUrl"
+        $backendCmd = "set `"PYTHON_BASIC_REPL=1`"&& set `"NJORDHR_PORT=$backendPort`"&& set `"NJORDHR_SERVER_URL=$backendUrl`"&& set `"NJORDHR_CONFIG_PATH=$ConfigPath`"&& set `"NJORDHR_RUNTIME_DIR=$RuntimeDir`"&& set `"USE_LOCAL_AGENT=true`"&& $pythonLauncherForCmd backend_server.py"
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c $backendCmd" -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr | Out-Null
         if (-not (Wait-Http "$backendUrl/config/runtime" 100)) {
             throw "Backend failed to start. Check $backendErr"
@@ -273,10 +263,10 @@ try {
     }
 
     if (Wait-Http "$agentUrl/health" 1) {
-        Write-Host "[NjordHR] Agent already running at $agentUrl"
+        Write-Log "Agent already running at $agentUrl"
     } else {
-        Write-Host "[NjordHR] Starting local agent at $agentUrl"
-        $agentCmd = "set `"NJORDHR_CONFIG_PATH=$ConfigPath`"&& set `"NJORDHR_AGENT_HOST=127.0.0.1`"&& set `"NJORDHR_AGENT_PORT=$agentPort`"&& $pythonLauncherForCmd agent_server.py"
+        Write-Log "Starting local agent at $agentUrl"
+        $agentCmd = "set `"PYTHON_BASIC_REPL=1`"&& set `"NJORDHR_CONFIG_PATH=$ConfigPath`"&& set `"NJORDHR_AGENT_HOST=127.0.0.1`"&& set `"NJORDHR_AGENT_PORT=$agentPort`"&& $pythonLauncherForCmd agent_server.py"
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c $agentCmd" -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $agentOut -RedirectStandardError $agentErr | Out-Null
         if (-not (Wait-Http "$agentUrl/health" 100)) {
             throw "Agent failed to start. Check $agentErr"
@@ -294,11 +284,15 @@ try {
         Start-Process $backendUrl | Out-Null
     }
 
-    Write-Host "[NjordHR] Ready."
-    Write-Host "[NjordHR] Backend: $backendUrl"
-    Write-Host "[NjordHR] Agent:   $agentUrl"
-    Write-Host "[NjordHR] Config:  $ConfigPath"
-    Write-Host "[NjordHR] Logs:    $RuntimeDir"
+    Write-Log "Ready."
+    Write-Log "Backend: $backendUrl"
+    Write-Log "Agent: $agentUrl"
+    Write-Log "Config: $ConfigPath"
+    Write-Log "Logs: $RuntimeDir"
+} catch {
+    Write-Log "FATAL: $($_.Exception.Message)"
+    Write-Log "Stack: $($_.ScriptStackTrace)"
+    throw
 } finally {
     Cleanup-Lock
 }
