@@ -75,7 +75,6 @@ Source: "$escapedStage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubd
 
 [Icons]
 Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.bat"
-Name: "{commondesktop}\NjordHR"; Filename: "{app}\start_njordhr.bat"
 "@ | Set-Content -Path $IssPath -Encoding ASCII
 
 & $iscc.Source $IssPath
