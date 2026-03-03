@@ -28,14 +28,18 @@ if [[ "${1:-}" == "--no-open" ]]; then
 fi
 
 if [[ -f "$PROJECT_DIR/.env" ]]; then
+  set -a
   # shellcheck disable=SC1091
   source "$PROJECT_DIR/.env"
+  set +a
 fi
 
 # Load persisted runtime overrides (cloud mode, Supabase keys, auth mode, etc.).
 if [[ -f "$RUNTIME_ENV_FILE" ]]; then
+  set -a
   # shellcheck disable=SC1090
   source "$RUNTIME_ENV_FILE"
+  set +a
 fi
 
 # Provisioning support: seed missing runtime keys from bundled defaults when present.
@@ -50,8 +54,10 @@ if [[ -f "$PROJECT_DIR/default_runtime.env" ]]; then
       echo "${key}=${value}" >> "$RUNTIME_ENV_FILE"
     fi
   done < "$PROJECT_DIR/default_runtime.env"
+  set -a
   # shellcheck disable=SC1090
   source "$RUNTIME_ENV_FILE"
+  set +a
 fi
 
 CONFIG_PATH="${NJORDHR_CONFIG_PATH:-$PROJECT_DIR/config.ini}"
