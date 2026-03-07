@@ -7,6 +7,7 @@ APP_NAME="NjordHR"
 APP_DIR="$BUILD_DIR/${APP_NAME}.app"
 APP_BUNDLE_ID="${NJORDHR_APP_BUNDLE_ID:-com.njordhr.desktop.localapp}"
 EMBED_RUNTIME="${NJORDHR_EMBED_RUNTIME:-true}"
+BUILD_PYTHON_BIN="${NJORDHR_BUILD_PYTHON_BIN:-/usr/bin/python3}"
 PAYLOAD_DIR="$APP_DIR/Contents/Resources/app"
 RUNTIME_DIR="$APP_DIR/Contents/Resources/runtime"
 RUN_SCRIPT="$APP_DIR/Contents/Resources/run_njordhr.sh"
@@ -152,9 +153,20 @@ EOF
 if [[ "$EMBED_RUNTIME" == "true" ]]; then
   echo "[NjordHR] Building embedded Python runtime (this may take a few minutes)..."
   rm -rf "$RUNTIME_DIR"
+  if ! command -v "$BUILD_PYTHON_BIN" >/dev/null 2>&1; then
+    echo "[NjordHR] Build python not found: $BUILD_PYTHON_BIN"
+    echo "[NjordHR] Set NJORDHR_BUILD_PYTHON_BIN to a python.org/homebrew Python."
+    exit 1
+  fi
   # Use --copies so runtime/bin/python3 is a real bundled binary, not a symlink
   # to the builder machine's CommandLineTools path.
-  /usr/bin/python3 -m venv --copies "$RUNTIME_DIR"
+  if ! "$BUILD_PYTHON_BIN" -m venv --copies "$RUNTIME_DIR"; then
+    echo "[NjordHR] Failed to create copy-based venv with $BUILD_PYTHON_BIN"
+    echo "[NjordHR] This Python build may require symlinks."
+    echo "[NjordHR] Install python.org/homebrew Python and retry with:"
+    echo "  export NJORDHR_BUILD_PYTHON_BIN=/path/to/python3"
+    exit 1
+  fi
   "$RUNTIME_DIR/bin/pip" install --upgrade pip setuptools wheel >/dev/null
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
 fi
