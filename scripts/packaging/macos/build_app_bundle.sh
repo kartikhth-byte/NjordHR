@@ -68,7 +68,13 @@ resolve_build_python() {
 bundle_embedded_python_framework() {
   local venv_python="$1"
   local dep_line dep_path version src_framework dst_framework
-  dep_line="$(otool -L "$venv_python" 2>/dev/null | awk '/Python\.framework\/Versions\/[^/]+\/Python/{print $1; exit}')"
+  dep_line="$(
+    otool -L "$venv_python" 2>/dev/null \
+      | tail -n +2 \
+      | awk '{print $1}' \
+      | grep -E 'Python\.framework/Versions/.*/Python' \
+      | head -n 1
+  )"
   [[ -z "$dep_line" ]] && return 0
   dep_path="$dep_line"
   if [[ "$dep_path" != /* ]]; then
@@ -78,7 +84,8 @@ bundle_embedded_python_framework() {
     echo "[NjordHR] WARN: Python framework dependency path not found on build host: $dep_path"
     return 0
   fi
-  version="$(sed -E 's|.*/Python\.framework/Versions/([^/]+)/Python|\1|' <<<"$dep_path")"
+  version="${dep_path##*/Versions/}"
+  version="${version%%/*}"
   src_framework="${dep_path%%/Versions/*}/"
   src_framework="${src_framework%/}"
   if [[ ! -d "$src_framework" ]]; then

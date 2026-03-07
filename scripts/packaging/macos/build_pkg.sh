@@ -27,6 +27,20 @@ if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
     echo "[NjordHR] Rebuild app bundle with a usable build Python first."
     exit 1
   fi
+  PY_DEP="$(
+    otool -L "$APP_BUNDLE/Contents/Resources/runtime/bin/python3" 2>/dev/null \
+      | tail -n +2 \
+      | awk '{print $1}' \
+      | grep -E 'Python\.framework/Versions/.*/Python' \
+      | head -n 1
+  )"
+  if [[ -n "${PY_DEP:-}" && ! -d "$APP_BUNDLE/Contents/Resources/runtime/Frameworks/Python.framework" ]]; then
+    echo "[NjordHR] ERROR: Embedded python depends on Python.framework but it was not bundled."
+    echo "  dependency: $PY_DEP"
+    echo "  missing: $APP_BUNDLE/Contents/Resources/runtime/Frameworks/Python.framework"
+    echo "[NjordHR] Rebuild app bundle and verify framework bundling before packaging."
+    exit 1
+  fi
 fi
 
 rm -rf "$PKG_ROOT"
