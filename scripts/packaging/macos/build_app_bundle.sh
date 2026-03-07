@@ -65,6 +65,37 @@ resolve_build_python() {
   return 1
 }
 
+bundle_embedded_python_framework() {
+  local venv_python="$1"
+  local dep_line dep_path version src_framework dst_framework
+  dep_line="$(otool -L "$venv_python" 2>/dev/null | awk '/Python\.framework\/Versions\/[^/]+\/Python/{print $1; exit}')"
+  [[ -z "$dep_line" ]] && return 0
+  dep_path="$dep_line"
+  if [[ "$dep_path" != /* ]]; then
+    return 0
+  fi
+  if [[ ! -f "$dep_path" ]]; then
+    echo "[NjordHR] WARN: Python framework dependency path not found on build host: $dep_path"
+    return 0
+  fi
+  version="$(sed -E 's|.*/Python\.framework/Versions/([^/]+)/Python|\1|' <<<"$dep_path")"
+  src_framework="${dep_path%%/Versions/*}/"
+  src_framework="${src_framework%/}"
+  if [[ ! -d "$src_framework" ]]; then
+    echo "[NjordHR] WARN: Python framework directory not found: $src_framework"
+    return 0
+  fi
+  dst_framework="$RUNTIME_DIR/Frameworks/Python.framework"
+  mkdir -p "$RUNTIME_DIR/Frameworks"
+  rm -rf "$dst_framework"
+  cp -R "$src_framework" "$dst_framework"
+  echo "[NjordHR] Bundled Python.framework from: $src_framework"
+  echo "[NjordHR] Bundled Python.framework into: $dst_framework"
+  if [[ ! -f "$dst_framework/Versions/$version/Python" ]]; then
+    echo "[NjordHR] WARN: Bundled framework missing expected binary for version $version"
+  fi
+}
+
 TMP_SCPT="$(mktemp /tmp/njordhr_launcher.XXXXXX.scpt)"
 trap 'rm -f "$TMP_SCPT"' EXIT
 
@@ -213,6 +244,7 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
   "$BUILD_PYTHON_BIN" -m venv --copies "$RUNTIME_DIR"
   "$RUNTIME_DIR/bin/pip" install --upgrade pip setuptools wheel >/dev/null
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
+  bundle_embedded_python_framework "$RUNTIME_DIR/bin/python3"
 fi
 
 cat > "$RUN_SCRIPT" <<'EOF'
@@ -248,6 +280,10 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
   elif [[ -f "$PROJECT_DIR/config.example.ini" ]]; then
     cp "$PROJECT_DIR/config.example.ini" "$CONFIG_PATH"
   fi
+fi
+
+if [[ -d "$APP_RES_DIR/runtime/Frameworks" ]]; then
+  export DYLD_FRAMEWORK_PATH="$APP_RES_DIR/runtime/Frameworks${DYLD_FRAMEWORK_PATH:+:$DYLD_FRAMEWORK_PATH}"
 fi
 
 if [[ -f "$CONFIG_PATH" ]]; then
