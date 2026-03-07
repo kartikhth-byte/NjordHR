@@ -171,6 +171,13 @@ DEFAULT_LOG_DIR="${APP_SUPPORT_DIR}/logs"
 
 mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR"
 
+# Prefer embedded runtime for all first-run bootstrap work to avoid requiring
+# Xcode Command Line Tools on target machines.
+PY_BOOTSTRAP_BIN="/usr/bin/python3"
+if [[ -x "$APP_RES_DIR/runtime/bin/python3" ]]; then
+  PY_BOOTSTRAP_BIN="$APP_RES_DIR/runtime/bin/python3"
+fi
+
 if [[ ! -f "$CONFIG_PATH" ]]; then
   if [[ -f "$PROJECT_DIR/config.ini" ]]; then
     cp "$PROJECT_DIR/config.ini" "$CONFIG_PATH"
@@ -180,7 +187,7 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 
 if [[ -f "$CONFIG_PATH" ]]; then
-  /usr/bin/python3 - "$CONFIG_PATH" "$PROJECT_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR" <<'PY'
+  "$PY_BOOTSTRAP_BIN" - "$CONFIG_PATH" "$PROJECT_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR" <<'PY'
 import configparser
 import os
 import sys
