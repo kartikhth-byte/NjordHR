@@ -173,9 +173,15 @@ mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VER
 
 # Prefer embedded runtime for all first-run bootstrap work to avoid requiring
 # Xcode Command Line Tools on target machines.
-PY_BOOTSTRAP_BIN="/usr/bin/python3"
-if [[ -x "$APP_RES_DIR/runtime/bin/python3" ]]; then
-  PY_BOOTSTRAP_BIN="$APP_RES_DIR/runtime/bin/python3"
+PY_BOOTSTRAP_BIN="$APP_RES_DIR/runtime/bin/python3"
+if [[ ! -x "$PY_BOOTSTRAP_BIN" ]]; then
+  if [[ "${NJORDHR_ALLOW_SYSTEM_PYTHON_BOOTSTRAP:-false}" == "true" ]]; then
+    PY_BOOTSTRAP_BIN="/usr/bin/python3"
+  else
+    echo "[NjordHR] Embedded runtime missing at $APP_RES_DIR/runtime/bin/python3"
+    echo "[NjordHR] Reinstall NjordHR package built with embedded runtime."
+    exit 1
+  fi
 fi
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -250,6 +256,12 @@ export NJORDHR_RUNTIME_DIR="$RUNTIME_DIR"
 if [[ -x "$APP_RES_DIR/runtime/bin/python3" ]]; then
   export NJORDHR_PYTHON_BIN="$APP_RES_DIR/runtime/bin/python3"
   export PATH="$APP_RES_DIR/runtime/bin:$PATH"
+elif [[ "${NJORDHR_ALLOW_SYSTEM_PYTHON_BOOTSTRAP:-false}" == "true" ]]; then
+  export NJORDHR_PYTHON_BIN="/usr/bin/python3"
+else
+  echo "[NjordHR] Embedded runtime missing at $APP_RES_DIR/runtime/bin/python3"
+  echo "[NjordHR] Reinstall NjordHR package built with embedded runtime."
+  exit 1
 fi
 
 exec "$PROJECT_DIR/scripts/start_njordhr.sh"
