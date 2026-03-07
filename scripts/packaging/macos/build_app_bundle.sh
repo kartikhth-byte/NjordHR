@@ -152,7 +152,9 @@ EOF
 if [[ "$EMBED_RUNTIME" == "true" ]]; then
   echo "[NjordHR] Building embedded Python runtime (this may take a few minutes)..."
   rm -rf "$RUNTIME_DIR"
-  /usr/bin/python3 -m venv "$RUNTIME_DIR"
+  # Use --copies so runtime/bin/python3 is a real bundled binary, not a symlink
+  # to the builder machine's CommandLineTools path.
+  /usr/bin/python3 -m venv --copies "$RUNTIME_DIR"
   "$RUNTIME_DIR/bin/pip" install --upgrade pip setuptools wheel >/dev/null
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
 fi
