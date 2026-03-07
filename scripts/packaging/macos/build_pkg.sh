@@ -20,6 +20,15 @@ if [[ ! -d "$APP_BUNDLE" ]]; then
   "$PROJECT_DIR/scripts/packaging/macos/build_app_bundle.sh"
 fi
 
+if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
+  if [[ ! -x "$APP_BUNDLE/Contents/Resources/runtime/bin/python3" ]]; then
+    echo "[NjordHR] ERROR: Embedded runtime missing in app bundle:"
+    echo "  $APP_BUNDLE/Contents/Resources/runtime/bin/python3"
+    echo "[NjordHR] Rebuild app bundle with a usable build Python first."
+    exit 1
+  fi
+fi
+
 rm -rf "$PKG_ROOT"
 mkdir -p "$PKG_ROOT/Applications"
 cp -R "$APP_BUNDLE" "$PKG_ROOT/Applications/NjordHR.app"

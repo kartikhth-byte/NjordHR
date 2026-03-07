@@ -7,7 +7,7 @@ APP_NAME="NjordHR"
 APP_DIR="$BUILD_DIR/${APP_NAME}.app"
 APP_BUNDLE_ID="${NJORDHR_APP_BUNDLE_ID:-com.njordhr.desktop.localapp}"
 EMBED_RUNTIME="${NJORDHR_EMBED_RUNTIME:-true}"
-BUILD_PYTHON_BIN="${NJORDHR_BUILD_PYTHON_BIN:-/usr/bin/python3}"
+BUILD_PYTHON_BIN="${NJORDHR_BUILD_PYTHON_BIN:-}"
 PAYLOAD_DIR="$APP_DIR/Contents/Resources/app"
 RUNTIME_DIR="$APP_DIR/Contents/Resources/runtime"
 RUN_SCRIPT="$APP_DIR/Contents/Resources/run_njordhr.sh"
@@ -17,6 +17,53 @@ command -v osacompile >/dev/null 2>&1 || { echo "osacompile not found."; exit 1;
 command -v rsync >/dev/null 2>&1 || { echo "rsync not found."; exit 1; }
 
 mkdir -p "$BUILD_DIR"
+
+supports_copy_venv() {
+  local pybin="$1"
+  local tmpvenv
+  tmpvenv="$(mktemp -d /tmp/njordhr_venvprobe.XXXXXX)"
+  if "$pybin" -m venv --copies "$tmpvenv" >/dev/null 2>&1; then
+    rm -rf "$tmpvenv"
+    return 0
+  fi
+  rm -rf "$tmpvenv"
+  return 1
+}
+
+resolve_build_python() {
+  if [[ -n "$BUILD_PYTHON_BIN" ]]; then
+    if command -v "$BUILD_PYTHON_BIN" >/dev/null 2>&1 && supports_copy_venv "$BUILD_PYTHON_BIN"; then
+      echo "$BUILD_PYTHON_BIN"
+      return 0
+    fi
+    echo ""
+    return 1
+  fi
+
+  local candidates=()
+  while IFS= read -r p; do
+    [[ -n "$p" ]] && candidates+=("$p")
+  done < <(command -v -a python3 2>/dev/null || true)
+
+  for p in /opt/homebrew/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /usr/local/bin/python3.12 /usr/local/bin/python3.11; do
+    [[ -x "$p" ]] && candidates+=("$p")
+  done
+
+  local seen=""
+  for pybin in "${candidates[@]}"; do
+    [[ -z "$pybin" ]] && continue
+    if grep -q "|$pybin|" <<<"$seen"; then
+      continue
+    fi
+    seen="${seen}|$pybin|"
+    if supports_copy_venv "$pybin"; then
+      echo "$pybin"
+      return 0
+    fi
+  done
+  echo ""
+  return 1
+}
 
 TMP_SCPT="$(mktemp /tmp/njordhr_launcher.XXXXXX.scpt)"
 trap 'rm -f "$TMP_SCPT"' EXIT
@@ -153,20 +200,17 @@ EOF
 if [[ "$EMBED_RUNTIME" == "true" ]]; then
   echo "[NjordHR] Building embedded Python runtime (this may take a few minutes)..."
   rm -rf "$RUNTIME_DIR"
-  if ! command -v "$BUILD_PYTHON_BIN" >/dev/null 2>&1; then
-    echo "[NjordHR] Build python not found: $BUILD_PYTHON_BIN"
-    echo "[NjordHR] Set NJORDHR_BUILD_PYTHON_BIN to a python.org/homebrew Python."
-    exit 1
-  fi
-  # Use --copies so runtime/bin/python3 is a real bundled binary, not a symlink
-  # to the builder machine's CommandLineTools path.
-  if ! "$BUILD_PYTHON_BIN" -m venv --copies "$RUNTIME_DIR"; then
-    echo "[NjordHR] Failed to create copy-based venv with $BUILD_PYTHON_BIN"
-    echo "[NjordHR] This Python build may require symlinks."
-    echo "[NjordHR] Install python.org/homebrew Python and retry with:"
+  BUILD_PYTHON_BIN="$(resolve_build_python || true)"
+  if [[ -z "$BUILD_PYTHON_BIN" ]]; then
+    echo "[NjordHR] No usable Python found for copy-based venv."
+    echo "[NjordHR] Install python.org/Homebrew Python and/or set:"
     echo "  export NJORDHR_BUILD_PYTHON_BIN=/path/to/python3"
     exit 1
   fi
+  echo "[NjordHR] Using build python: $BUILD_PYTHON_BIN"
+  # Use --copies so runtime/bin/python3 is a real bundled binary, not a symlink
+  # to the builder machine's CommandLineTools path.
+  "$BUILD_PYTHON_BIN" -m venv --copies "$RUNTIME_DIR"
   "$RUNTIME_DIR/bin/pip" install --upgrade pip setuptools wheel >/dev/null
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
 fi
