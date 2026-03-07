@@ -67,7 +67,7 @@ resolve_build_python() {
 
 bundle_embedded_python_framework() {
   local venv_python="$1"
-  local dep_line dep_path version src_framework dst_framework
+  local dep_line dep_path version src_framework dst_framework rel_target
   dep_line="$(
     otool -L "$venv_python" 2>/dev/null \
       | tail -n +2 \
@@ -100,6 +100,26 @@ bundle_embedded_python_framework() {
   echo "[NjordHR] Bundled Python.framework into: $dst_framework"
   if [[ ! -f "$dst_framework/Versions/$version/Python" ]]; then
     echo "[NjordHR] WARN: Bundled framework missing expected binary for version $version"
+    return 0
+  fi
+
+  # Rewrite python binary linkage to use bundled framework path.
+  rel_target="@executable_path/../Frameworks/Python.framework/Versions/$version/Python"
+  for pybin in "$RUNTIME_DIR/bin/python3" "$RUNTIME_DIR/bin/python3.11" "$RUNTIME_DIR/bin/python"; do
+    if [[ -x "$pybin" ]]; then
+      if otool -L "$pybin" | awk '{print $1}' | grep -qx "$dep_path"; then
+        install_name_tool -change "$dep_path" "$rel_target" "$pybin" || {
+          echo "[NjordHR] WARN: Failed to rewrite framework path in $pybin"
+        }
+      fi
+    fi
+  done
+
+  # Validate rewrite on primary launcher binary.
+  if otool -L "$RUNTIME_DIR/bin/python3" | awk '{print $1}' | grep -q "/opt/homebrew/Cellar/python@3.11"; then
+    echo "[NjordHR] ERROR: Embedded python still links to Homebrew Cellar path."
+    echo "[NjordHR] Build is not portable; aborting."
+    exit 1
   fi
 }
 
