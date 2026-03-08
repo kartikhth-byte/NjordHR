@@ -412,25 +412,42 @@ mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VER
 
 # Prefer framework python when bundled; it is more portable than venv launchers
 # across machines when the framework is relocated into the app bundle.
-FRAMEWORK_VERSIONS_DIR="$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions"
-FRAMEWORK_HOME=""
-if [[ -x "$FRAMEWORK_VERSIONS_DIR/Current/bin/python3" ]]; then
-  FRAMEWORK_HOME="$FRAMEWORK_VERSIONS_DIR/Current"
-else
-  FRAMEWORK_HOME="$(find "$FRAMEWORK_VERSIONS_DIR" -maxdepth 1 -type d -name '3.*' | sort -V | tail -n1 || true)"
+# IMPORTANT: derive version from runtime/bin/python3 so we don't accidentally
+# bind to an unrelated Versions/Current symlink (e.g. 3.11 vs 3.13 mismatch).
+RUNTIME_PY_BIN="$APP_RES_DIR/runtime/bin/python3"
+PY_MM=""
+if [[ -x "$RUNTIME_PY_BIN" ]]; then
+  PY_MM="$("$RUNTIME_PY_BIN" - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
 fi
 
-if [[ -n "$FRAMEWORK_HOME" && -x "$FRAMEWORK_HOME/bin/python3" ]]; then
-  PY_MM="$(find "$FRAMEWORK_HOME/lib" -maxdepth 1 -type d -name 'python*.*' | xargs -n1 basename | head -n1 | sed 's/^python//')"
+FRAMEWORK_HOME=""
+if [[ -n "${PY_MM:-}" && ( -x "$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/${PY_MM}/bin/python3" || -x "$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/${PY_MM}/bin/python${PY_MM}" ) ]]; then
+  FRAMEWORK_HOME="$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/${PY_MM}"
+elif [[ -x "$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/Current/bin/python3" ]]; then
+  FRAMEWORK_HOME="$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/Current"
+fi
+
+if [[ -n "$FRAMEWORK_HOME" && ( -x "$FRAMEWORK_HOME/bin/python3" || ( -n "${PY_MM:-}" && -x "$FRAMEWORK_HOME/bin/python${PY_MM}" ) ) ]]; then
+  if [[ -z "${PY_MM:-}" ]]; then
+    PY_MM="$(find "$FRAMEWORK_HOME/lib" -maxdepth 1 -type d -name 'python*.*' | xargs -n1 basename | head -n1 | sed 's/^python//')"
+  fi
   export PYTHONHOME="$FRAMEWORK_HOME"
   if [[ -n "${PY_MM:-}" ]]; then
     export PYTHONPATH="$APP_RES_DIR/runtime/lib/python${PY_MM}/site-packages:$FRAMEWORK_HOME/lib/python${PY_MM}/site-packages"
   fi
   export PYTHONNOUSERSITE=1
   export PATH="$FRAMEWORK_HOME/bin:$APP_RES_DIR/runtime/bin:$PATH"
-  PRIMARY_PYTHON_BIN="$FRAMEWORK_HOME/bin/python3"
+  if [[ -n "${PY_MM:-}" && -x "$FRAMEWORK_HOME/bin/python${PY_MM}" ]]; then
+    PRIMARY_PYTHON_BIN="$FRAMEWORK_HOME/bin/python${PY_MM}"
+  else
+    PRIMARY_PYTHON_BIN="$FRAMEWORK_HOME/bin/python3"
+  fi
 else
-  PRIMARY_PYTHON_BIN="$APP_RES_DIR/runtime/bin/python3"
+  PRIMARY_PYTHON_BIN="$RUNTIME_PY_BIN"
 fi
 
 # Prefer embedded runtime for all first-run bootstrap work to avoid requiring
