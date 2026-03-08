@@ -250,6 +250,40 @@ relocate_external_dylib_deps() {
       done
 }
 
+rewrite_framework_absolute_refs() {
+  local runtime_root="$1"
+  local version="$2"
+  local src_prefix="/Library/Frameworks/Python.framework/Versions/$version/"
+  local dst_prefix="$runtime_root/Frameworks/Python.framework/Versions/$version/"
+  local bin dep rel target newdep
+  find "$runtime_root" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
+    | while IFS= read -r bin; do
+        while IFS= read -r dep; do
+          [[ -n "$dep" ]] || continue
+          [[ "$dep" == "$src_prefix"* ]] || continue
+          target="$dst_prefix${dep#$src_prefix}"
+          [[ -f "$target" ]] || continue
+          rel="$(/usr/bin/python3 - <<PY
+import os
+print(os.path.relpath("$target", os.path.dirname("$bin")))
+PY
+)"
+          newdep="@loader_path/$rel"
+          if ! install_name_tool -change "$dep" "$newdep" "$bin"; then
+            echo "[NjordHR] ERROR: Failed to rewrite framework absolute dependency in $bin"
+            echo "  from: $dep"
+            echo "  to:   $newdep"
+            exit 1
+          fi
+          if otool -L "$bin" 2>/dev/null | awk '{print $1}' | grep -qx "$dep"; then
+            echo "[NjordHR] ERROR: Framework absolute dependency rewrite did not apply in $bin"
+            echo "  still references: $dep"
+            exit 1
+          fi
+        done < <(otool -L "$bin" 2>/dev/null | tail -n +2 | awk '{print $1}')
+      done
+}
+
 TMP_SCPT="$(mktemp /tmp/njordhr_launcher.XXXXXX.scpt)"
 trap 'rm -f "$TMP_SCPT" "$RELOCATE_SEEN_FILE"' EXIT
 
@@ -400,6 +434,14 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
   bundle_embedded_python_framework "$RUNTIME_DIR/bin/python3"
   relocate_external_dylib_deps "$RUNTIME_DIR"
+  BUILD_PY_MM="$("$RUNTIME_DIR/bin/python3" - <<'PY'
+import sys
+print(f"{sys.version_info.major}.{sys.version_info.minor}")
+PY
+)"
+  if [[ -n "${BUILD_PY_MM:-}" ]]; then
+    rewrite_framework_absolute_refs "$RUNTIME_DIR" "$BUILD_PY_MM"
+  fi
 fi
 
 cat > "$RUN_SCRIPT" <<'EOF'
