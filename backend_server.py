@@ -331,6 +331,7 @@ def _start_ui_idle_shutdown_monitor():
     auto_shutdown_started = True
 
     def _worker():
+        global auto_shutdown_in_progress
         idle_seconds = _ui_idle_shutdown_seconds()
         # Wait for UI to initialize/open.
         time.sleep(15)
