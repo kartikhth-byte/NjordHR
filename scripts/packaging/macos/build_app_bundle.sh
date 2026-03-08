@@ -253,15 +253,16 @@ relocate_external_dylib_deps() {
 rewrite_framework_absolute_refs() {
   local runtime_root="$1"
   local version="$2"
-  local src_prefix="/Library/Frameworks/Python.framework/Versions/$version/"
-  local dst_prefix="$runtime_root/Frameworks/Python.framework/Versions/$version/"
-  local bin dep rel target newdep
+  local src_versions_prefix="/Library/Frameworks/Python.framework/Versions/"
+  local dst_versions_prefix="$runtime_root/Frameworks/Python.framework/Versions/"
+  local bin dep rel target newdep rest
   find "$runtime_root" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
     | while IFS= read -r bin; do
         while IFS= read -r dep; do
           [[ -n "$dep" ]] || continue
-          [[ "$dep" == "$src_prefix"* ]] || continue
-          target="$dst_prefix${dep#$src_prefix}"
+          [[ "$dep" == "$src_versions_prefix"* ]] || continue
+          rest="${dep#$src_versions_prefix}"
+          target="$dst_versions_prefix$rest"
           [[ -f "$target" ]] || continue
           rel="$(/usr/bin/python3 - <<PY
 import os
