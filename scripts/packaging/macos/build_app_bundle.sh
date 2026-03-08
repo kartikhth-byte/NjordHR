@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# macOS ships Bash 3.2 by default; this script uses constructs that are unstable
+# there under heavy process substitution/pipeline workloads.
+if [[ "${BASH_VERSINFO[0]:-0}" -lt 4 ]]; then
+  echo "[NjordHR] ERROR: Bash 4+ is required for macOS bundle build."
+  echo "[NjordHR] Current bash: ${BASH_VERSION:-unknown}"
+  echo "[NjordHR] Install Homebrew bash and rerun with:"
+  echo "  /opt/homebrew/bin/bash scripts/packaging/macos/build_app_bundle.sh"
+  exit 1
+fi
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build/macos"
 APP_NAME="NjordHR"
@@ -402,14 +412,23 @@ mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VER
 
 # Prefer framework python when bundled; it is more portable than venv launchers
 # across machines when the framework is relocated into the app bundle.
-FRAMEWORK_HOME="$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/3.11"
-FRAMEWORK_PY_BIN="$FRAMEWORK_HOME/bin/python3.11"
-if [[ -x "$FRAMEWORK_PY_BIN" ]]; then
+FRAMEWORK_VERSIONS_DIR="$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions"
+FRAMEWORK_HOME=""
+if [[ -x "$FRAMEWORK_VERSIONS_DIR/Current/bin/python3" ]]; then
+  FRAMEWORK_HOME="$FRAMEWORK_VERSIONS_DIR/Current"
+else
+  FRAMEWORK_HOME="$(find "$FRAMEWORK_VERSIONS_DIR" -maxdepth 1 -type d -name '3.*' | sort -V | tail -n1 || true)"
+fi
+
+if [[ -n "$FRAMEWORK_HOME" && -x "$FRAMEWORK_HOME/bin/python3" ]]; then
+  PY_MM="$(find "$FRAMEWORK_HOME/lib" -maxdepth 1 -type d -name 'python*.*' | xargs -n1 basename | head -n1 | sed 's/^python//')"
   export PYTHONHOME="$FRAMEWORK_HOME"
-  export PYTHONPATH="$APP_RES_DIR/runtime/lib/python3.11/site-packages:$FRAMEWORK_HOME/lib/python3.11/site-packages"
+  if [[ -n "${PY_MM:-}" ]]; then
+    export PYTHONPATH="$APP_RES_DIR/runtime/lib/python${PY_MM}/site-packages:$FRAMEWORK_HOME/lib/python${PY_MM}/site-packages"
+  fi
   export PYTHONNOUSERSITE=1
   export PATH="$FRAMEWORK_HOME/bin:$APP_RES_DIR/runtime/bin:$PATH"
-  PRIMARY_PYTHON_BIN="$FRAMEWORK_PY_BIN"
+  PRIMARY_PYTHON_BIN="$FRAMEWORK_HOME/bin/python3"
 else
   PRIMARY_PYTHON_BIN="$APP_RES_DIR/runtime/bin/python3"
 fi
