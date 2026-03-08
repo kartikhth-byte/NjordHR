@@ -42,17 +42,17 @@ if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
     exit 1
   fi
 
-  # Hard fail if app bundle still contains absolute Homebrew links.
+  # Hard fail if app bundle still contains absolute host links.
   BUNDLE_BAD_REFS="$(
     find "$APP_BUNDLE/Contents/Resources/runtime" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
       | while IFS= read -r exe; do
-          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/(opt|Cellar)/'; then
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^((/opt/homebrew|/usr/local)/(opt|Cellar)/|/Library/Frameworks/Python\.framework/)'; then
             echo "$exe"
           fi
         done
   )"
   if [[ -n "${BUNDLE_BAD_REFS:-}" ]]; then
-    echo "[NjordHR] ERROR: App bundle contains absolute Homebrew references:"
+    echo "[NjordHR] ERROR: App bundle contains absolute host references:"
     echo "$BUNDLE_BAD_REFS"
     echo "[NjordHR] Rebuild app bundle before packaging."
     exit 1
@@ -95,13 +95,13 @@ if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
   PKG_BAD_REFS="$(
     find "$PKG_RUNTIME_DIR" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
       | while IFS= read -r exe; do
-          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/(opt|Cellar)/'; then
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^((/opt/homebrew|/usr/local)/(opt|Cellar)/|/Library/Frameworks/Python\.framework/)'; then
             echo "$exe"
           fi
         done
   )"
   if [[ -n "${PKG_BAD_REFS:-}" ]]; then
-    echo "[NjordHR] ERROR: Package payload still contains absolute Homebrew references:"
+    echo "[NjordHR] ERROR: Package payload still contains absolute host references:"
     echo "$PKG_BAD_REFS"
     exit 1
   fi

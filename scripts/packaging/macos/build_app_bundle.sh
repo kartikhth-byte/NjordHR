@@ -107,6 +107,12 @@ bundle_embedded_python_framework() {
   mkdir -p "$RUNTIME_DIR/Frameworks"
   rm -rf "$dst_framework"
   cp -R "$src_framework" "$dst_framework"
+  # Keep only selected framework version to avoid dragging older versions
+  # (e.g. 3.11) that may contain absolute host links.
+  if [[ -d "$dst_framework/Versions" ]]; then
+    find "$dst_framework/Versions" -mindepth 1 -maxdepth 1 -type d ! -name "$version" -exec rm -rf {} +
+    ln -sfn "$version" "$dst_framework/Versions/Current"
+  fi
   echo "[NjordHR] Bundled Python.framework from: $src_framework"
   echo "[NjordHR] Bundled Python.framework into: $dst_framework"
   if [[ ! -f "$dst_framework/Versions/$version/Python" ]]; then
@@ -147,18 +153,18 @@ bundle_embedded_python_framework() {
         done
   fi
 
-  # Validate no absolute Homebrew dependency remains in runtime binaries/extensions.
+  # Validate no absolute host dependencies remain in runtime binaries/extensions.
   local bad_refs
   bad_refs="$(
     find "$RUNTIME_DIR" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
       | while IFS= read -r exe; do
-          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/(opt|Cellar)/'; then
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^((/opt/homebrew|/usr/local)/(opt|Cellar)/|/Library/Frameworks/Python\.framework/)'; then
             echo "$exe"
           fi
         done
   )"
   if [[ -n "${bad_refs:-}" ]]; then
-    echo "[NjordHR] ERROR: Embedded runtime still has absolute Homebrew Python.framework references:"
+    echo "[NjordHR] ERROR: Embedded runtime still has absolute host references:"
     echo "$bad_refs"
     echo "[NjordHR] Build is not portable; aborting."
     exit 1
@@ -203,11 +209,11 @@ rewrite_copied_dylib_deps() {
     otool -L "$dylib" 2>/dev/null \
       | tail -n +2 \
       | awk '{print $1}' \
-      | grep -E '^(/opt/homebrew|/usr/local)/(opt|Cellar)/.*/lib/.*\.dylib$' || true
+      | grep -E '^((/opt/homebrew|/usr/local)/(opt|Cellar)/.*/lib/.*\.dylib|/Library/Frameworks/Python\.framework/Versions/[^/]+/lib/.*\.dylib)$' || true
   )
 }
 
-relocate_homebrew_opt_deps() {
+relocate_external_dylib_deps() {
   local root="$1"
   local bin dep dep_base dep_dir dep_copy
   find "$root" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
@@ -239,7 +245,7 @@ relocate_homebrew_opt_deps() {
           otool -L "$bin" 2>/dev/null \
             | tail -n +2 \
             | awk '{print $1}' \
-            | grep -E '^(/opt/homebrew|/usr/local)/(opt|Cellar)/.*/lib/.*\.dylib$' || true
+            | grep -E '^((/opt/homebrew|/usr/local)/(opt|Cellar)/.*/lib/.*\.dylib|/Library/Frameworks/Python\.framework/Versions/[^/]+/lib/.*\.dylib)$' || true
         )
       done
 }
@@ -393,7 +399,7 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
   "$RUNTIME_DIR/bin/pip" install --upgrade pip setuptools wheel >/dev/null
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
   bundle_embedded_python_framework "$RUNTIME_DIR/bin/python3"
-  relocate_homebrew_opt_deps "$RUNTIME_DIR"
+  relocate_external_dylib_deps "$RUNTIME_DIR"
 fi
 
 cat > "$RUN_SCRIPT" <<'EOF'
