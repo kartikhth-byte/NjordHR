@@ -17,6 +17,7 @@ command -v osacompile >/dev/null 2>&1 || { echo "osacompile not found."; exit 1;
 command -v rsync >/dev/null 2>&1 || { echo "rsync not found."; exit 1; }
 
 mkdir -p "$BUILD_DIR"
+RELOCATE_SEEN_FILE="$(mktemp /tmp/njordhr_relocate_seen.XXXXXX)"
 
 supports_copy_venv() {
   local pybin="$1"
@@ -136,12 +137,12 @@ bundle_embedded_python_framework() {
         done
   fi
 
-  # Validate no absolute Homebrew framework dependency remains in runtime binaries.
+  # Validate no absolute Homebrew dependency remains in runtime binaries/extensions.
   local bad_refs
   bad_refs="$(
-    find "$RUNTIME_DIR" -type f -perm -111 2>/dev/null \
+    find "$RUNTIME_DIR" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
       | while IFS= read -r exe; do
-          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/Cellar/python@3\.[0-9]+/.*/Python\.framework/Versions/.*/Python$'; then
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/(opt|Cellar)/'; then
             echo "$exe"
           fi
         done
@@ -154,8 +155,65 @@ bundle_embedded_python_framework() {
   fi
 }
 
+rewrite_copied_dylib_deps() {
+  local dylib="$1"
+  local dep dep_base dep_copy dep_dir
+  dep_dir="$(dirname "$dylib")"
+  if grep -Fxq "$dylib" "$RELOCATE_SEEN_FILE" 2>/dev/null; then
+    return 0
+  fi
+  echo "$dylib" >> "$RELOCATE_SEEN_FILE"
+
+  install_name_tool -id "@loader_path/$(basename "$dylib")" "$dylib" >/dev/null 2>&1 || true
+
+  while IFS= read -r dep; do
+    [[ -n "$dep" ]] || continue
+    [[ -f "$dep" ]] || continue
+    dep_base="$(basename "$dep")"
+    dep_copy="$dep_dir/$dep_base"
+    if [[ ! -f "$dep_copy" ]]; then
+      cp -f "$dep" "$dep_copy"
+      chmod 755 "$dep_copy" >/dev/null 2>&1 || true
+    fi
+    install_name_tool -change "$dep" "@loader_path/$dep_base" "$dylib" >/dev/null 2>&1 || true
+    rewrite_copied_dylib_deps "$dep_copy"
+  done < <(
+    otool -L "$dylib" 2>/dev/null \
+      | tail -n +2 \
+      | awk '{print $1}' \
+      | grep -E '^(/opt/homebrew|/usr/local)/(opt|Cellar)/.*/lib/.*\.dylib$' || true
+  )
+}
+
+relocate_homebrew_opt_deps() {
+  local root="$1"
+  local bin dep dep_base dep_dir dep_copy
+  find "$root" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
+    | while IFS= read -r bin; do
+        while IFS= read -r dep; do
+          [[ -n "$dep" ]] || continue
+          [[ -f "$dep" ]] || continue
+          dep_base="$(basename "$dep")"
+          dep_dir="$(dirname "$bin")/.njordhr_deps"
+          mkdir -p "$dep_dir"
+          dep_copy="$dep_dir/$dep_base"
+          if [[ ! -f "$dep_copy" ]]; then
+            cp -f "$dep" "$dep_copy"
+            chmod 755 "$dep_copy" >/dev/null 2>&1 || true
+          fi
+          install_name_tool -change "$dep" "@loader_path/.njordhr_deps/$dep_base" "$bin" >/dev/null 2>&1 || true
+          rewrite_copied_dylib_deps "$dep_copy"
+        done < <(
+          otool -L "$bin" 2>/dev/null \
+            | tail -n +2 \
+            | awk '{print $1}' \
+            | grep -E '^(/opt/homebrew|/usr/local)/(opt|Cellar)/.*/lib/.*\.dylib$' || true
+        )
+      done
+}
+
 TMP_SCPT="$(mktemp /tmp/njordhr_launcher.XXXXXX.scpt)"
-trap 'rm -f "$TMP_SCPT"' EXIT
+trap 'rm -f "$TMP_SCPT" "$RELOCATE_SEEN_FILE"' EXIT
 
 cat > "$TMP_SCPT" <<EOF
 on run
@@ -303,6 +361,7 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
   "$RUNTIME_DIR/bin/pip" install --upgrade pip setuptools wheel >/dev/null
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
   bundle_embedded_python_framework "$RUNTIME_DIR/bin/python3"
+  relocate_homebrew_opt_deps "$RUNTIME_DIR"
 fi
 
 cat > "$RUN_SCRIPT" <<'EOF'
@@ -464,3 +523,5 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
 else
   echo "[NjordHR] Embedded runtime: disabled"
 fi
+
+rm -f "$RELOCATE_SEEN_FILE" >/dev/null 2>&1 || true

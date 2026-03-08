@@ -41,6 +41,22 @@ if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
     echo "[NjordHR] Rebuild app bundle and verify framework bundling before packaging."
     exit 1
   fi
+
+  # Hard fail if app bundle still contains absolute Homebrew links.
+  BUNDLE_BAD_REFS="$(
+    find "$APP_BUNDLE/Contents/Resources/runtime" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
+      | while IFS= read -r exe; do
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/(opt|Cellar)/'; then
+            echo "$exe"
+          fi
+        done
+  )"
+  if [[ -n "${BUNDLE_BAD_REFS:-}" ]]; then
+    echo "[NjordHR] ERROR: App bundle contains absolute Homebrew references:"
+    echo "$BUNDLE_BAD_REFS"
+    echo "[NjordHR] Rebuild app bundle before packaging."
+    exit 1
+  fi
 fi
 
 rm -rf "$PKG_ROOT"
@@ -72,6 +88,23 @@ pkgutil --expand-full "$PKG_PATH_VERSIONED" "$TMP_EXPAND_DIR" >/dev/null
 if ! find "$TMP_EXPAND_DIR" -maxdepth 8 -name "NjordHR.app" | grep -q "NjordHR.app"; then
   echo "[NjordHR] ERROR: Package payload verification failed (NjordHR.app not found)."
   exit 1
+fi
+
+if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
+  PKG_RUNTIME_DIR="$TMP_EXPAND_DIR/Payload/Applications/NjordHR.app/Contents/Resources/runtime"
+  PKG_BAD_REFS="$(
+    find "$PKG_RUNTIME_DIR" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
+      | while IFS= read -r exe; do
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/(opt|Cellar)/'; then
+            echo "$exe"
+          fi
+        done
+  )"
+  if [[ -n "${PKG_BAD_REFS:-}" ]]; then
+    echo "[NjordHR] ERROR: Package payload still contains absolute Homebrew references:"
+    echo "$PKG_BAD_REFS"
+    exit 1
+  fi
 fi
 
 echo "[NjordHR] Package built:"
