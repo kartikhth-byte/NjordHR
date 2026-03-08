@@ -164,7 +164,9 @@ rewrite_copied_dylib_deps() {
   fi
   echo "$dylib" >> "$RELOCATE_SEEN_FILE"
 
-  install_name_tool -id "@loader_path/$(basename "$dylib")" "$dylib" >/dev/null 2>&1 || true
+  if ! install_name_tool -id "@loader_path/$(basename "$dylib")" "$dylib" >/dev/null 2>&1; then
+    echo "[NjordHR] WARN: Failed to set install_name id for $dylib"
+  fi
 
   while IFS= read -r dep; do
     [[ -n "$dep" ]] || continue
@@ -175,7 +177,17 @@ rewrite_copied_dylib_deps() {
       cp -f "$dep" "$dep_copy"
       chmod 755 "$dep_copy" >/dev/null 2>&1 || true
     fi
-    install_name_tool -change "$dep" "@loader_path/$dep_base" "$dylib" >/dev/null 2>&1 || true
+    if ! install_name_tool -change "$dep" "@loader_path/$dep_base" "$dylib"; then
+      echo "[NjordHR] ERROR: Failed to rewrite dylib dependency in $dylib"
+      echo "  from: $dep"
+      echo "  to:   @loader_path/$dep_base"
+      exit 1
+    fi
+    if otool -L "$dylib" 2>/dev/null | awk '{print $1}' | grep -qx "$dep"; then
+      echo "[NjordHR] ERROR: Dylib dependency rewrite did not apply in $dylib"
+      echo "  still references: $dep"
+      exit 1
+    fi
     rewrite_copied_dylib_deps "$dep_copy"
   done < <(
     otool -L "$dylib" 2>/dev/null \
@@ -201,7 +213,17 @@ relocate_homebrew_opt_deps() {
             cp -f "$dep" "$dep_copy"
             chmod 755 "$dep_copy" >/dev/null 2>&1 || true
           fi
-          install_name_tool -change "$dep" "@loader_path/.njordhr_deps/$dep_base" "$bin" >/dev/null 2>&1 || true
+          if ! install_name_tool -change "$dep" "@loader_path/.njordhr_deps/$dep_base" "$bin"; then
+            echo "[NjordHR] ERROR: Failed to rewrite binary dependency in $bin"
+            echo "  from: $dep"
+            echo "  to:   @loader_path/.njordhr_deps/$dep_base"
+            exit 1
+          fi
+          if otool -L "$bin" 2>/dev/null | awk '{print $1}' | grep -qx "$dep"; then
+            echo "[NjordHR] ERROR: Binary dependency rewrite did not apply in $bin"
+            echo "  still references: $dep"
+            exit 1
+          fi
           rewrite_copied_dylib_deps "$dep_copy"
         done < <(
           otool -L "$bin" 2>/dev/null \
