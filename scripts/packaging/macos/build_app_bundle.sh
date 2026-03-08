@@ -104,20 +104,51 @@ bundle_embedded_python_framework() {
   fi
 
   # Rewrite python binary linkage to use bundled framework path.
-  rel_target="@executable_path/../Frameworks/Python.framework/Versions/$version/Python"
+  # runtime/bin executables: use path relative to runtime/bin
+  local rel_target_bin="@executable_path/../Frameworks/Python.framework/Versions/$version/Python"
   for pybin in "$RUNTIME_DIR/bin/python3" "$RUNTIME_DIR/bin/python3.11" "$RUNTIME_DIR/bin/python"; do
-    if [[ -x "$pybin" ]]; then
-      if otool -L "$pybin" | awk '{print $1}' | grep -qx "$dep_path"; then
-        install_name_tool -change "$dep_path" "$rel_target" "$pybin" || {
-          echo "[NjordHR] WARN: Failed to rewrite framework path in $pybin"
-        }
-      fi
+    if [[ -x "$pybin" ]] && otool -L "$pybin" | awk '{print $1}' | grep -qx "$dep_path"; then
+      install_name_tool -change "$dep_path" "$rel_target_bin" "$pybin" || {
+        echo "[NjordHR] WARN: Failed to rewrite framework path in $pybin"
+      }
     fi
   done
 
-  # Validate rewrite on primary launcher binary.
-  if otool -L "$RUNTIME_DIR/bin/python3" | awk '{print $1}' | grep -q "/opt/homebrew/Cellar/python@3.11"; then
-    echo "[NjordHR] ERROR: Embedded python still links to Homebrew Cellar path."
+  # Python.app executable inside bundled framework: point at sibling Python dylib.
+  local framework_py_app="$dst_framework/Versions/$version/Resources/Python.app/Contents/MacOS/Python"
+  local rel_target_framework="@executable_path/../../../../Python"
+  if [[ -x "$framework_py_app" ]] && otool -L "$framework_py_app" | awk '{print $1}' | grep -qx "$dep_path"; then
+    install_name_tool -change "$dep_path" "$rel_target_framework" "$framework_py_app" || {
+      echo "[NjordHR] WARN: Failed to rewrite framework path in $framework_py_app"
+    }
+  fi
+
+  # Framework bin executables (python3, python3.11, etc.) should link to ../Python.
+  local framework_bin_dir="$dst_framework/Versions/$version/bin"
+  if [[ -d "$framework_bin_dir" ]]; then
+    find "$framework_bin_dir" -maxdepth 1 -type f -perm -111 2>/dev/null \
+      | while IFS= read -r fexe; do
+          if otool -L "$fexe" 2>/dev/null | awk '{print $1}' | grep -qx "$dep_path"; then
+            install_name_tool -change "$dep_path" "@executable_path/../Python" "$fexe" || {
+              echo "[NjordHR] WARN: Failed to rewrite framework bin path in $fexe"
+            }
+          fi
+        done
+  fi
+
+  # Validate no absolute Homebrew framework dependency remains in runtime binaries.
+  local bad_refs
+  bad_refs="$(
+    find "$RUNTIME_DIR" -type f -perm -111 2>/dev/null \
+      | while IFS= read -r exe; do
+          if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^(/opt/homebrew|/usr/local)/Cellar/python@3\.[0-9]+/.*/Python\.framework/Versions/.*/Python$'; then
+            echo "$exe"
+          fi
+        done
+  )"
+  if [[ -n "${bad_refs:-}" ]]; then
+    echo "[NjordHR] ERROR: Embedded runtime still has absolute Homebrew Python.framework references:"
+    echo "$bad_refs"
     echo "[NjordHR] Build is not portable; aborting."
     exit 1
   fi
@@ -288,9 +319,23 @@ DEFAULT_LOG_DIR="${APP_SUPPORT_DIR}/logs"
 
 mkdir -p "$APP_SUPPORT_DIR" "$RUNTIME_DIR" "$DEFAULT_DOWNLOAD_DIR" "$DEFAULT_VERIFIED_DIR" "$DEFAULT_LOG_DIR"
 
+# Prefer framework python when bundled; it is more portable than venv launchers
+# across machines when the framework is relocated into the app bundle.
+FRAMEWORK_HOME="$APP_RES_DIR/runtime/Frameworks/Python.framework/Versions/3.11"
+FRAMEWORK_PY_BIN="$FRAMEWORK_HOME/bin/python3.11"
+if [[ -x "$FRAMEWORK_PY_BIN" ]]; then
+  export PYTHONHOME="$FRAMEWORK_HOME"
+  export PYTHONPATH="$APP_RES_DIR/runtime/lib/python3.11/site-packages:$FRAMEWORK_HOME/lib/python3.11/site-packages"
+  export PYTHONNOUSERSITE=1
+  export PATH="$FRAMEWORK_HOME/bin:$APP_RES_DIR/runtime/bin:$PATH"
+  PRIMARY_PYTHON_BIN="$FRAMEWORK_PY_BIN"
+else
+  PRIMARY_PYTHON_BIN="$APP_RES_DIR/runtime/bin/python3"
+fi
+
 # Prefer embedded runtime for all first-run bootstrap work to avoid requiring
 # Xcode Command Line Tools on target machines.
-PY_BOOTSTRAP_BIN="$APP_RES_DIR/runtime/bin/python3"
+PY_BOOTSTRAP_BIN="$PRIMARY_PYTHON_BIN"
 if [[ ! -x "$PY_BOOTSTRAP_BIN" ]]; then
   if [[ "${NJORDHR_ALLOW_SYSTEM_PYTHON_BOOTSTRAP:-false}" == "true" ]]; then
     PY_BOOTSTRAP_BIN="/usr/bin/python3"
@@ -374,15 +419,28 @@ fi
 export NJORDHR_CONFIG_PATH="$CONFIG_PATH"
 export NJORDHR_RUNTIME_DIR="$RUNTIME_DIR"
 
-if [[ -x "$APP_RES_DIR/runtime/bin/python3" ]]; then
-  export NJORDHR_PYTHON_BIN="$APP_RES_DIR/runtime/bin/python3"
-  export PATH="$APP_RES_DIR/runtime/bin:$PATH"
+if [[ -x "$PRIMARY_PYTHON_BIN" ]]; then
+  export NJORDHR_PYTHON_BIN="$PRIMARY_PYTHON_BIN"
 elif [[ "${NJORDHR_ALLOW_SYSTEM_PYTHON_BOOTSTRAP:-false}" == "true" ]]; then
   export NJORDHR_PYTHON_BIN="/usr/bin/python3"
 else
-  echo "[NjordHR] Embedded runtime missing at $APP_RES_DIR/runtime/bin/python3"
+  echo "[NjordHR] Embedded runtime missing at $PRIMARY_PYTHON_BIN"
   echo "[NjordHR] Reinstall NjordHR package built with embedded runtime."
   exit 1
+fi
+
+# Force requests/urllib3 CA bundle to embedded runtime certifi, preventing
+# stale host-level SSL_CERT_FILE/REQUESTS_CA_BUNDLE paths from breaking TLS.
+if [[ -x "${NJORDHR_PYTHON_BIN:-}" ]]; then
+  NJORDHR_CERTIFI_CA="$("$NJORDHR_PYTHON_BIN" - <<'PY'
+import certifi
+print(certifi.where())
+PY
+)"
+  if [[ -n "${NJORDHR_CERTIFI_CA:-}" && -f "$NJORDHR_CERTIFI_CA" ]]; then
+    export SSL_CERT_FILE="$NJORDHR_CERTIFI_CA"
+    export REQUESTS_CA_BUNDLE="$NJORDHR_CERTIFI_CA"
+  fi
 fi
 
 exec "$PROJECT_DIR/scripts/start_njordhr.sh"
