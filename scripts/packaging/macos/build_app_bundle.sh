@@ -434,14 +434,11 @@ if [[ "$EMBED_RUNTIME" == "true" ]]; then
   "$RUNTIME_DIR/bin/pip" install -r "$PAYLOAD_DIR/requirements.txt" >/dev/null
   bundle_embedded_python_framework "$RUNTIME_DIR/bin/python3"
   relocate_external_dylib_deps "$RUNTIME_DIR"
-  BUILD_PY_MM="$("$RUNTIME_DIR/bin/python3" - <<'PY'
-import sys
-print(f"{sys.version_info.major}.{sys.version_info.minor}")
-PY
-)"
-  if [[ -n "${BUILD_PY_MM:-}" ]]; then
-    rewrite_framework_absolute_refs "$RUNTIME_DIR" "$BUILD_PY_MM"
-  fi
+  for vdir in "$RUNTIME_DIR"/Frameworks/Python.framework/Versions/3.*; do
+    [[ -d "$vdir" ]] || continue
+    vname="$(basename "$vdir")"
+    rewrite_framework_absolute_refs "$RUNTIME_DIR" "$vname"
+  done
 fi
 
 cat > "$RUN_SCRIPT" <<'EOF'
