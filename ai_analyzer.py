@@ -759,12 +759,65 @@ class AIResumeAnalyzer:
         age_constraint = self._extract_age_constraint(user_prompt)
         if age_constraint:
             constraints["hard_constraints"]["age_years"] = age_constraint
+        experienced_ship_type = self._extract_experience_ship_type_constraint(user_prompt)
+        if experienced_ship_type:
+            constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
         return constraints
 
     def _normalize_ship_type(self, ship_type):
         normalized = str(ship_type or "").strip().lower()
         normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
         return re.sub(r"\s+", " ", normalized).strip()
+
+    def _ship_type_aliases(self):
+        return {
+            "tanker": [
+                "tanker", "oil tanker", "product tanker", "crude oil tanker",
+                "chemical tanker", "oil chem tanker", "bitumen tanker", "mr tanker", "vlcc",
+            ],
+            "bulk carrier": [
+                "bulk carrier", "mini bulk carrier", "cape bulk", "bulk vessel",
+            ],
+            "container": [
+                "container", "container vessel", "cellular container", "reefer container", "reefer container vessel",
+            ],
+            "offshore": [
+                "offshore", "offshore supply", "offshore supply vessel", "aht", "ahts", "platform supply vessel", "psv",
+            ],
+            "lng": [
+                "lng", "lng carrier",
+            ],
+            "lpg": [
+                "lpg", "lpg carrier",
+            ],
+            "ro-ro": [
+                "ro-ro", "roro", "ro ro", "ro-ro vessel",
+            ],
+            "car carrier": [
+                "car carrier",
+            ],
+        }
+
+    def _extract_experience_ship_type_constraint(self, user_prompt):
+        prompt = self._normalize_ship_type(user_prompt)
+        if not prompt:
+            return None
+        if not any(token in prompt for token in ("experience", "experienced", "sailed", "worked on", "vessel", "ship")):
+            return None
+        for canonical, aliases in self._ship_type_aliases().items():
+            for alias in aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                escaped = re.escape(normalized_alias)
+                patterns = [
+                    rf'\b{escaped}\s+experience\b',
+                    rf'\bexperience\s+(?:on|in|with)?\s*{escaped}\b',
+                    rf'\bexperienced\s+on\s+{escaped}\b',
+                    rf'\bsailed on\s+{escaped}\b',
+                    rf'\bworked on\s+{escaped}\b',
+                ]
+                if any(re.search(pattern, prompt) for pattern in patterns):
+                    return canonical
+        return None
 
     def _strip_age_constraint_phrases(self, user_prompt):
         prompt = str(user_prompt or "")
@@ -847,6 +900,19 @@ class AIResumeAnalyzer:
             return {}
         files = data.get("files") if isinstance(data, dict) else {}
         return files if isinstance(files, dict) else {}
+
+    def _extract_experienced_ship_types_from_text(self, raw_text):
+        text = self._normalize_ship_type(raw_text)
+        if not text:
+            return []
+        matched = []
+        for canonical, aliases in self._ship_type_aliases().items():
+            for alias in aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                if normalized_alias and re.search(rf'\b{re.escape(normalized_alias)}\b', text):
+                    matched.append(canonical)
+                    break
+        return sorted(set(matched))
 
     def _parse_dob_from_text(self, raw_text):
         dob_fact = self._extract_dob_fact_from_text(raw_text)
@@ -971,6 +1037,15 @@ class AIResumeAnalyzer:
 
     def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
         age_info = self._resolve_candidate_age(chunks, original_path=original_path, text_cache=text_cache)
+        source_text = ""
+        if original_path and text_cache is not None:
+            source_text = text_cache.get(str(original_path), "")
+        if not source_text:
+            source_text = "\n".join(
+                str((chunk.get('metadata') or {}).get('raw_text', ''))
+                for chunk in (chunks or [])
+            )
+        experienced_ship_types = self._extract_experienced_ship_types_from_text(source_text)
         metadata_entry = {}
         if folder_metadata:
             metadata_entry = folder_metadata.get(filename) or {}
@@ -986,6 +1061,9 @@ class AIResumeAnalyzer:
             },
             "application": {
                 "applied_ship_types": applied_ship_types,
+            },
+            "experience": {
+                "vessel_types": experienced_ship_types,
             },
             "derived": {
                 "age_years": age_info.get("age"),
@@ -1097,6 +1175,36 @@ class AIResumeAnalyzer:
                     "message": (
                         f"Candidate applied ship type {candidate_ship_types} does not match requested "
                         f"filter '{ship_type_constraint}'."
+                    ),
+                })
+
+        experience_ship_type_constraint = hard_constraints.get("experience_ship_type")
+        if experience_ship_type_constraint:
+            requested_ship_type = self._normalize_ship_type(experience_ship_type_constraint)
+            experienced_ship_types = [
+                self._normalize_ship_type(value)
+                for value in ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
+            ]
+            experienced_ship_types = [value for value in experienced_ship_types if value]
+            if not experienced_ship_types:
+                results.append({
+                    "decision": "UNKNOWN",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_MISSING",
+                    "message": f"Could not determine experienced ship type for requested filter '{experience_ship_type_constraint}'.",
+                })
+            elif requested_ship_type in experienced_ship_types:
+                results.append({
+                    "decision": "PASS",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_MATCH",
+                    "message": f"Candidate resume shows experience on '{experience_ship_type_constraint}'.",
+                })
+            else:
+                results.append({
+                    "decision": "FAIL",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_MISMATCH",
+                    "message": (
+                        f"Candidate experienced ship types {experienced_ship_types} do not match requested "
+                        f"filter '{experience_ship_type_constraint}'."
                     ),
                 })
 
@@ -1473,7 +1581,7 @@ Examples of GOOD responses:
         
         return {"is_match": False, "reason": "Failed to get conclusive answer from AI.", "confidence": 0.0}
 
-    def run_analysis_stream(self, rank, user_prompt, applied_ship_type=None):
+    def run_analysis_stream(self, rank, user_prompt, applied_ship_type=None, experienced_ship_type=None):
         """Streaming analysis with multi-stage retrieval for compound queries"""
         yield {"type": "status", "message": "Initializing analysis..."}
         
@@ -1491,6 +1599,8 @@ Examples of GOOD responses:
             job_constraints = self._extract_job_constraints(user_prompt, rank=rank)
             if str(applied_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
+            if str(experienced_ship_type or "").strip():
+                job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = str(experienced_ship_type).strip()
             structured_only_prompt = self._is_structured_only_prompt(user_prompt)
             folder_metadata = self._rank_manifest_metadata(target_folder)
             
@@ -1661,7 +1771,7 @@ Examples of GOOD responses:
             traceback.print_exc()
             yield {"type": "error", "message": f"Analysis failed: {str(e)}"}
 
-    def run_analysis(self, rank, user_prompt, applied_ship_type=None):
+    def run_analysis(self, rank, user_prompt, applied_ship_type=None, experienced_ship_type=None):
         """Non-streaming version"""
         verified_matches = []
         uncertain_matches = []
@@ -1669,7 +1779,12 @@ Examples of GOOD responses:
         hard_filter_summary = {}
         message = ""
         
-        for event in self.run_analysis_stream(rank, user_prompt, applied_ship_type=applied_ship_type):
+        for event in self.run_analysis_stream(
+            rank,
+            user_prompt,
+            applied_ship_type=applied_ship_type,
+            experienced_ship_type=experienced_ship_type,
+        ):
             if event['type'] == 'match_found':
                 verified_matches.append(event['match'])
             elif event['type'] == 'uncertain_found':
@@ -1717,13 +1832,23 @@ class Analyzer:
             config.read(config_path)
             Analyzer._instance = AIResumeAnalyzer(config)
 
-    def run_analysis(self, target_folder, prompt, applied_ship_type=None):
+    def run_analysis(self, target_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
-        return Analyzer._instance.run_analysis(rank_name, prompt, applied_ship_type=applied_ship_type)
+        return Analyzer._instance.run_analysis(
+            rank_name,
+            prompt,
+            applied_ship_type=applied_ship_type,
+            experienced_ship_type=experienced_ship_type,
+        )
     
-    def run_analysis_stream(self, target_folder, prompt, applied_ship_type=None):
+    def run_analysis_stream(self, target_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
-        for progress_event in Analyzer._instance.run_analysis_stream(rank_name, prompt, applied_ship_type=applied_ship_type):
+        for progress_event in Analyzer._instance.run_analysis_stream(
+            rank_name,
+            prompt,
+            applied_ship_type=applied_ship_type,
+            experienced_ship_type=experienced_ship_type,
+        ):
             yield progress_event
     
     def store_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence,

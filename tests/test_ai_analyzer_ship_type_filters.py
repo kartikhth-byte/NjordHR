@@ -149,6 +149,42 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["unknown"], 1)
 
+    def test_experienced_ship_type_is_extracted_from_resume_text(self):
+        vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
+            "Sea Service: Chief Officer on Product Tanker, VLCC and Bulk Carrier vessels."
+        )
+        self.assertEqual(vessel_types, ["bulk carrier", "tanker"])
+
+    def test_experience_ship_type_prompt_constraint_is_extracted(self):
+        constraint = self.analyzer._extract_experience_ship_type_constraint(
+            "Need candidates with tanker experience and valid US visa"
+        )
+        self.assertEqual(constraint, "tanker")
+
+    def test_experience_ship_type_hard_filter_is_separate_from_applied_ship_type(self):
+        candidate_facts = {
+            "application": {"applied_ship_types": ["Bulk Carrier"]},
+            "experience": {"vessel_types": ["tanker"]},
+        }
+        result = self.analyzer._evaluate_hard_filters(candidate_facts, {
+            "hard_constraints": {
+                "applied_ship_type": "Bulk Carrier",
+                "experience_ship_type": "Tanker",
+            }
+        })
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_experience_ship_type_missing_is_unknown(self):
+        candidate_facts = {
+            "application": {"applied_ship_types": ["Bulk Carrier"]},
+            "experience": {"vessel_types": []},
+        }
+        result = self.analyzer._evaluate_hard_filters(candidate_facts, {
+            "hard_constraints": {"experience_ship_type": "Tanker"}
+        })
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MISSING")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -548,10 +548,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs):
                 pass
 
-            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None):
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
                 captured["rank_folder"] = rank_folder
                 captured["prompt"] = prompt
                 captured["applied_ship_type"] = applied_ship_type
+                captured["experienced_ship_type"] = experienced_ship_type
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -563,7 +564,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
             resp = self.client.get(
-                "/analyze_stream?rank_folder=Chief_Officer&prompt=show%20candidates&applied_ship_type=Bulk%20Carrier"
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=show%20candidates&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
             )
 
         self.assertEqual(resp.status_code, 200)
@@ -572,6 +573,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(captured["rank_folder"], "Chief_Officer")
         self.assertEqual(captured["prompt"], "show candidates")
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
+        self.assertEqual(captured["experienced_ship_type"], "Tanker")
 
     def test_admin_settings_requires_token(self):
         with self.client.session_transaction() as sess:

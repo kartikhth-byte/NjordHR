@@ -2571,6 +2571,7 @@ def analyze_stream():
     prompt = request.args.get('prompt')
     rank_folder = request.args.get('rank_folder')
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
+    experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
 
     def generate():
@@ -2588,7 +2589,12 @@ def analyze_stream():
             analyzer = Analyzer(_gemini_api_key())
             
             # Stream progress events
-            for progress_event in analyzer.run_analysis_stream(rank_folder, prompt, applied_ship_type=applied_ship_type):
+            for progress_event in analyzer.run_analysis_stream(
+                rank_folder,
+                prompt,
+                applied_ship_type=applied_ship_type,
+                experienced_ship_type=experienced_ship_type,
+            ):
                 yield f"data: {json.dumps(progress_event)}\n\n"
             
         except Exception as e:
@@ -2610,6 +2616,7 @@ def analyze():
         prompt = data.get('prompt')
         rank_folder = data.get('rank_folder')
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
+        experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
 
         if not prompt or not rank_folder:
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
@@ -2622,7 +2629,12 @@ def analyze():
         print(f"[BACKEND] Prompt: {prompt}")
         
         analyzer = Analyzer(_gemini_api_key())
-        result = analyzer.run_analysis(rank_folder, prompt, applied_ship_type=applied_ship_type)
+        result = analyzer.run_analysis(
+            rank_folder,
+            prompt,
+            applied_ship_type=applied_ship_type,
+            experienced_ship_type=experienced_ship_type,
+        )
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
             "success": bool(result.get("success")),
             "verified_matches": len(result.get("verified_matches", [])),
