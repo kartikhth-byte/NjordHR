@@ -540,6 +540,33 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(body["success"])
         self.assertEqual(body["ship_types"], ["Bulk Carrier", "Tanker"])
 
+    def test_get_rank_folder_summaries_reports_pdf_counts(self):
+        (self.rank_dir / "Chief_Officer_1001.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "Chief_Officer_1002.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "notes.txt").write_text("ignore me", encoding="utf-8")
+        other_rank = self.download_root / "2nd_Engineer"
+        other_rank.mkdir(parents=True, exist_ok=True)
+        (other_rank / "2nd_Engineer_2001.pdf").write_bytes(b"%PDF-1.4")
+
+        resp = self.client.get("/get_rank_folder_summaries")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        summaries = {row["folder"]: row["pdf_count"] for row in body["folders"]}
+        self.assertEqual(summaries["Chief_Officer"], 2)
+        self.assertEqual(summaries["2nd_Engineer"], 1)
+
+    def test_get_rank_folder_files_returns_sorted_pdfs_only(self):
+        (self.rank_dir / "Chief_Officer_1002.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "Chief_Officer_1001.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "notes.txt").write_text("ignore me", encoding="utf-8")
+
+        resp = self.client.get("/get_rank_folder_files?rank_folder=Chief_Officer")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["files"], ["Chief_Officer_1001.pdf", "Chief_Officer_1002.pdf"])
+
     def test_analyze_stream_forwards_applied_ship_type_to_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         captured = {}

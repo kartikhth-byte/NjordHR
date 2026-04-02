@@ -143,6 +143,14 @@
 
             const [rankFolders, setRankFolders] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
+            const [downloadFolderSummaries, setDownloadFolderSummaries] = useState([]);
+            const [downloadFolderBrowser, setDownloadFolderBrowser] = useState({
+                open: false,
+                rankFolder: '',
+                files: [],
+                selectedFile: '',
+                loading: false,
+            });
             const [rankFolderShipTypes, setRankFolderShipTypes] = useState([]);
             const [selectedSearchShipType, setSelectedSearchShipType] = useState('');
             const [selectedExperienceShipType, setSelectedExperienceShipType] = useState('');
@@ -412,6 +420,7 @@
             useEffect(() => {
                 if (!authUser) return;
                 fetchRankFolders(authUser);
+                fetchDownloadFolderSummaries(authUser);
             }, [authUser, downloadLog]);
 
             useEffect(() => {
@@ -653,6 +662,7 @@
             const fetchRankFolders = async (currentUser = authUser) => {
                 if (!currentUser) {
                     setRankFolders([]);
+                    setDownloadFolderSummaries([]);
                     setSelectedRankFolder('');
                     return;
                 }
@@ -668,6 +678,79 @@
                 } catch (error) {
                     console.error("Could not fetch rank folders", error);
                 }
+            };
+
+            const fetchDownloadFolderSummaries = async (currentUser = authUser) => {
+                if (!currentUser) {
+                    setDownloadFolderSummaries([]);
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_rank_folder_summaries`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setDownloadFolderSummaries(data.folders || []);
+                    } else {
+                        setDownloadFolderSummaries([]);
+                    }
+                } catch (error) {
+                    console.error("Could not fetch rank folder summaries", error);
+                    setDownloadFolderSummaries([]);
+                }
+            };
+
+            const openDownloadFolderBrowser = async (rankFolder) => {
+                const targetRankFolder = String(rankFolder || '').trim();
+                if (!targetRankFolder) return;
+                setDownloadFolderBrowser({
+                    open: true,
+                    rankFolder: targetRankFolder,
+                    files: [],
+                    selectedFile: '',
+                    loading: true,
+                });
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_rank_folder_files?rank_folder=${encodeURIComponent(targetRankFolder)}`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load downloaded resumes.');
+                        setDownloadFolderBrowser({
+                            open: true,
+                            rankFolder: targetRankFolder,
+                            files: [],
+                            selectedFile: '',
+                            loading: false,
+                        });
+                        return;
+                    }
+                    const files = data.files || [];
+                    setDownloadFolderBrowser({
+                        open: true,
+                        rankFolder: targetRankFolder,
+                        files,
+                        selectedFile: files[0] || '',
+                        loading: false,
+                    });
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load downloaded resumes.');
+                    setDownloadFolderBrowser({
+                        open: true,
+                        rankFolder: targetRankFolder,
+                        files: [],
+                        selectedFile: '',
+                        loading: false,
+                    });
+                }
+            };
+
+            const closeDownloadFolderBrowser = () => {
+                setDownloadFolderBrowser({
+                    open: false,
+                    rankFolder: '',
+                    files: [],
+                    selectedFile: '',
+                    loading: false,
+                });
             };
 
             const fetchRankFolderShipTypes = async (rankFolder) => {
@@ -1617,6 +1700,7 @@
                                 handleSendMessage('success', data.message || 'Download finished.');
                                 setDownloadCompleted(true);
                                 fetchRankFolders();
+                                fetchDownloadFolderSummaries();
                             } else {
                                 handleSendMessage('error', data.message || 'Download failed.');
                             }
@@ -2030,6 +2114,39 @@
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-6">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-slate-800">Download Folder Summary</h3>
+                                            <p className="text-xs text-slate-600">Current PDF count by rank folder.</p>
+                                        </div>
+                                        <span className="text-xs font-medium text-slate-500">
+                                            {downloadFolderSummaries.reduce((sum, entry) => sum + Number(entry.pdf_count || 0), 0)} files
+                                        </span>
+                                    </div>
+                                    {downloadFolderSummaries.length > 0 ? (
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                            {downloadFolderSummaries.map(entry => (
+                                                <div key={entry.folder} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 border border-slate-200 gap-3">
+                                                    <div className="min-w-0">
+                                                        <span className="text-sm text-slate-700 break-all block">{entry.folder}</span>
+                                                        <span className="text-xs text-slate-500">{entry.pdf_count} PDF{entry.pdf_count === 1 ? '' : 's'}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openDownloadFolderBrowser(entry.folder)}
+                                                        disabled={!entry.pdf_count}
+                                                        className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        Browse
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-slate-500">No rank folders found in the download directory yet.</p>
+                                    )}
+                                </div>
                                 <div>
                                     <label htmlFor="rank" className="block text-sm font-medium text-gray-700 mb-1">Select Rank</label>
                                     <select id="rank" value={selectedRank} onChange={e => setSelectedRank(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
@@ -3740,6 +3857,63 @@
                                         </tbody>
                                     </table>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {downloadFolderBrowser.open && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[85vh] overflow-hidden flex flex-col" role="dialog" aria-modal="true" aria-label={`Downloaded resumes in ${downloadFolderBrowser.rankFolder}`}>
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-900">Downloaded Resumes</h3>
+                                    <p className="text-sm text-slate-600">{downloadFolderBrowser.rankFolder}</p>
+                                </div>
+                                <button
+                                    onClick={closeDownloadFolderBrowser}
+                                    className="text-gray-500 hover:text-gray-700"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)]">
+                                <div className="border-r border-slate-200 bg-slate-50 p-4 overflow-y-auto">
+                                    {downloadFolderBrowser.loading ? (
+                                        <p className="text-sm text-slate-600">Loading downloaded resumes...</p>
+                                    ) : downloadFolderBrowser.files.length === 0 ? (
+                                        <p className="text-sm text-slate-500">No PDFs found in this folder.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {downloadFolderBrowser.files.map((file) => (
+                                                <button
+                                                    key={file}
+                                                    type="button"
+                                                    onClick={() => setDownloadFolderBrowser(prev => ({ ...prev, selectedFile: file }))}
+                                                    className={`w-full text-left rounded-lg border px-3 py-2 text-sm break-all ${
+                                                        downloadFolderBrowser.selectedFile === file
+                                                            ? 'border-blue-300 bg-blue-50 text-blue-700'
+                                                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    {file}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="bg-slate-100 h-full">
+                                    {downloadFolderBrowser.selectedFile ? (
+                                        <iframe
+                                            title={`Preview ${downloadFolderBrowser.selectedFile}`}
+                                            src={`${API_BASE_URL}/get_resume/${downloadFolderBrowser.rankFolder}/${encodeURIComponent(downloadFolderBrowser.selectedFile)}`}
+                                            className="w-full h-full"
+                                        />
+                                    ) : (
+                                        <div className="h-full flex items-center justify-center text-sm text-slate-500">
+                                            Select a downloaded resume to preview it.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>

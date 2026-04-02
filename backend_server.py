@@ -2537,6 +2537,51 @@ def get_rank_folders():
         return jsonify({"success": False, "folders": [], "message": str(e)})
 
 
+@app.route('/get_rank_folder_summaries', methods=['GET'])
+def get_rank_folder_summaries():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    base_folder = settings['Default_Download_Folder']
+    if not os.path.isdir(base_folder):
+        return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
+
+    try:
+        summaries = []
+        for folder in sorted(d for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))):
+            folder_path = os.path.join(base_folder, folder)
+            pdf_count = len([name for name in os.listdir(folder_path) if name.lower().endswith('.pdf')])
+            summaries.append({
+                "folder": folder,
+                "pdf_count": pdf_count,
+            })
+        return jsonify({"success": True, "folders": summaries})
+    except Exception as e:
+        return jsonify({"success": False, "folders": [], "message": str(e)})
+
+
+@app.route('/get_rank_folder_files', methods=['GET'])
+def get_rank_folder_files():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    rank_folder = str(request.args.get('rank_folder', '')).strip()
+    if not rank_folder:
+        return jsonify({"success": False, "message": "Rank folder is required.", "files": []}), 400
+    if not _is_safe_name(rank_folder):
+        return jsonify({"success": False, "message": "Invalid rank folder.", "files": []}), 400
+
+    base_folder = settings['Default_Download_Folder']
+    try:
+        folder_path = _resolve_within_base(base_folder, rank_folder)
+        if not os.path.isdir(folder_path):
+            return jsonify({"success": False, "message": "Rank folder not found.", "files": []}), 404
+        files = sorted(name for name in os.listdir(folder_path) if name.lower().endswith('.pdf'))
+        return jsonify({"success": True, "files": files})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e), "files": []}), 500
+
+
 @app.route('/get_rank_folder_ship_types', methods=['GET'])
 def get_rank_folder_ship_types():
     ok, reason = _require_role("admin", "manager", "recruiter")
