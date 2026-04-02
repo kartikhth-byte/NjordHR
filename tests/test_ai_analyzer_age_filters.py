@@ -184,6 +184,11 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["unknown"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["matched"], 2)
+        audit_by_filename = {entry["filename"]: entry for entry in complete_event["hard_filter_audit"]}
+        self.assertEqual(audit_by_filename["2nd_Engineer_120969.pdf"]["hard_filter_decision"], "FAIL")
+        self.assertEqual(audit_by_filename["2nd_Engineer_unknown.pdf"]["hard_filter_decision"], "UNKNOWN")
+        self.assertEqual(audit_by_filename["2nd_Engineer_315781.pdf"]["result_bucket"], "verified_match")
+        self.assertTrue(audit_by_filename["2nd_Engineer_315781.pdf"]["llm_reached"])
 
         self.assertEqual(len(llm_calls), 2)
         llm_prompts = [call["prompt"] for call in llm_calls]

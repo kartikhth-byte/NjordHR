@@ -575,6 +575,69 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
         self.assertEqual(captured["experienced_ship_type"], "Tanker")
 
+    def test_analyze_stream_logs_hard_filter_audit_rows(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        self._write_fake_resume("Chief_Officer_1002.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_audit": [
+                        {
+                            "candidate_id": "1001",
+                            "filename": "Chief_Officer_1001.pdf",
+                            "hard_filter_decision": "FAIL",
+                            "hard_filter_reasons": [
+                                {
+                                    "reason_code": "US_VISA_EXPIRED",
+                                    "message": "Visa US Visa (USA) expired on 2023-02-09.",
+                                }
+                            ],
+                            "llm_reached": False,
+                            "result_bucket": "excluded",
+                        },
+                        {
+                            "candidate_id": "1002",
+                            "filename": "Chief_Officer_1002.pdf",
+                            "hard_filter_decision": "UNKNOWN",
+                            "hard_filter_reasons": [
+                                {
+                                    "reason_code": "VISA_FILTER_UNSUPPORTED",
+                                    "message": "Requested filter 'valid UK visa' is not yet supported by the deterministic visa parser.",
+                                }
+                            ],
+                            "llm_reached": False,
+                            "result_bucket": "needs_review",
+                        },
+                    ],
+                    "hard_filter_summary": {"scanned": 2, "passed": 0, "failed": 1, "unknown": 1, "matched": 0},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=having%20valid%20UK%20visa&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        audit_rows = backend_server.csv_manager.get_ai_search_audit_rows()
+        self.assertEqual(len(audit_rows), 2)
+        self.assertEqual(audit_rows[0]["Candidate_ID"], "1001")
+        self.assertEqual(audit_rows[0]["Hard_Filter_Decision"], "FAIL")
+        self.assertEqual(audit_rows[0]["Reason_Codes"], "US_VISA_EXPIRED")
+        self.assertEqual(audit_rows[0]["Result_Bucket"], "excluded")
+        self.assertEqual(audit_rows[1]["Hard_Filter_Decision"], "UNKNOWN")
+        self.assertEqual(audit_rows[1]["Reason_Codes"], "VISA_FILTER_UNSUPPORTED")
+        self.assertEqual(audit_rows[1]["Applied_Ship_Type_Filter"], "Bulk Carrier")
+        self.assertEqual(audit_rows[1]["Experienced_Ship_Type_Filter"], "Tanker")
+
     def test_admin_settings_requires_token(self):
         with self.client.session_transaction() as sess:
             sess.clear()

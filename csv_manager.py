@@ -27,11 +27,27 @@ class CSVManager:
         'Country',
         'Mobile_No'
     ]
+    AI_SEARCH_AUDIT_COLUMNS = [
+        'Timestamp',
+        'Search_Session_ID',
+        'Candidate_ID',
+        'Filename',
+        'Rank_Applied_For',
+        'AI_Search_Prompt',
+        'Applied_Ship_Type_Filter',
+        'Experienced_Ship_Type_Filter',
+        'Hard_Filter_Decision',
+        'Reason_Codes',
+        'Reason_Messages',
+        'LLM_Reached',
+        'Result_Bucket',
+    ]
 
     def __init__(self, base_folder='Verified_Resumes', server_url='http://127.0.0.1:5000'):
         self.base_folder = base_folder
         self.server_url = server_url
         self.master_csv = os.path.join(base_folder, 'verified_resumes.csv')
+        self.ai_search_audit_csv = os.path.join(base_folder, 'ai_search_audit.csv')
         self._lock = threading.RLock()
         os.makedirs(base_folder, exist_ok=True)
 
@@ -48,6 +64,20 @@ class CSVManager:
         temp_path = f"{self.master_csv}.tmp"
         df.to_csv(temp_path, index=False)
         os.replace(temp_path, self.master_csv)
+
+    def _load_ai_search_audit_df(self):
+        if os.path.exists(self.ai_search_audit_csv):
+            df = pd.read_csv(self.ai_search_audit_csv, keep_default_na=False, dtype=str)
+            for col in self.AI_SEARCH_AUDIT_COLUMNS:
+                if col not in df.columns:
+                    df[col] = ''
+            return df[self.AI_SEARCH_AUDIT_COLUMNS]
+        return pd.DataFrame(columns=self.AI_SEARCH_AUDIT_COLUMNS)
+
+    def _save_ai_search_audit_df(self, df):
+        temp_path = f"{self.ai_search_audit_csv}.tmp"
+        df.to_csv(temp_path, index=False)
+        os.replace(temp_path, self.ai_search_audit_csv)
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
@@ -85,6 +115,54 @@ class CSVManager:
         except Exception as e:
             print(f"[CSV ERROR] Failed to append event row: {e}")
             return False
+
+    def log_ai_search_audit(
+        self,
+        search_session_id,
+        candidate_id,
+        filename,
+        rank_applied_for='',
+        ai_prompt='',
+        applied_ship_type_filter='',
+        experienced_ship_type_filter='',
+        hard_filter_decision='',
+        reason_codes='',
+        reason_messages='',
+        llm_reached=False,
+        result_bucket='',
+    ):
+        timestamp = datetime.utcnow().isoformat() + 'Z'
+        new_row = {
+            'Timestamp': timestamp,
+            'Search_Session_ID': str(search_session_id or ''),
+            'Candidate_ID': str(candidate_id or ''),
+            'Filename': str(filename or ''),
+            'Rank_Applied_For': str(rank_applied_for or ''),
+            'AI_Search_Prompt': str(ai_prompt or ''),
+            'Applied_Ship_Type_Filter': str(applied_ship_type_filter or ''),
+            'Experienced_Ship_Type_Filter': str(experienced_ship_type_filter or ''),
+            'Hard_Filter_Decision': str(hard_filter_decision or ''),
+            'Reason_Codes': str(reason_codes or ''),
+            'Reason_Messages': str(reason_messages or ''),
+            'LLM_Reached': 'true' if llm_reached else 'false',
+            'Result_Bucket': str(result_bucket or ''),
+        }
+        try:
+            with self._lock:
+                df = self._load_ai_search_audit_df()
+                df = pd.concat([df, pd.DataFrame([new_row], columns=self.AI_SEARCH_AUDIT_COLUMNS)], ignore_index=True)
+                self._save_ai_search_audit_df(df)
+            return True
+        except Exception as e:
+            print(f"[CSV ERROR] Failed to append AI search audit row: {e}")
+            return False
+
+    def get_ai_search_audit_rows(self):
+        with self._lock:
+            df = self._load_ai_search_audit_df()
+        if df.empty:
+            return []
+        return df.sort_values('Timestamp').to_dict(orient='records')
 
     def get_latest_status_per_candidate(self, rank_name=''):
         """Return latest event row per candidate, optionally filtered by rank."""

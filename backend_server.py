@@ -2573,6 +2573,39 @@ def analyze_stream():
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
+    search_session_id = datetime.utcnow().strftime("search-%Y%m%d%H%M%S%f")
+
+    def _log_ai_search_audit_rows(audit_rows, rank_folder, prompt, applied_ship_type, experienced_ship_type, search_session_id):
+        for row in audit_rows or []:
+            filename = str(row.get("filename", "")).strip()
+            candidate_id = str(row.get("candidate_id", "")).strip()
+            if not candidate_id and filename:
+                candidate_id = _extract_candidate_id_from_filename(filename) or ""
+            reasons = row.get("hard_filter_reasons") or []
+            reason_codes = ";".join(
+                str(reason.get("reason_code", "")).strip()
+                for reason in reasons
+                if str(reason.get("reason_code", "")).strip()
+            )
+            reason_messages = "; ".join(
+                str(reason.get("message", "")).strip()
+                for reason in reasons
+                if str(reason.get("message", "")).strip()
+            )
+            csv_manager.log_ai_search_audit(
+                search_session_id=search_session_id,
+                candidate_id=candidate_id,
+                filename=filename,
+                rank_applied_for=rank_folder,
+                ai_prompt=prompt,
+                applied_ship_type_filter=applied_ship_type,
+                experienced_ship_type_filter=experienced_ship_type,
+                hard_filter_decision=str(row.get("hard_filter_decision", "")).strip(),
+                reason_codes=reason_codes,
+                reason_messages=reason_messages,
+                llm_reached=bool(row.get("llm_reached", False)),
+                result_bucket=str(row.get("result_bucket", "")).strip(),
+            )
 
     def generate():
         try:
@@ -2595,6 +2628,15 @@ def analyze_stream():
                 applied_ship_type=applied_ship_type,
                 experienced_ship_type=experienced_ship_type,
             ):
+                if progress_event.get("type") == "complete":
+                    _log_ai_search_audit_rows(
+                        progress_event.get("hard_filter_audit"),
+                        rank_folder,
+                        prompt,
+                        applied_ship_type,
+                        experienced_ship_type,
+                        search_session_id,
+                    )
                 yield f"data: {json.dumps(progress_event)}\n\n"
             
         except Exception as e:

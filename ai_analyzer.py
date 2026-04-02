@@ -2090,6 +2090,7 @@ Examples of GOOD responses:
             verified_matches = []
             uncertain_matches = []
             unknown_matches = []
+            hard_filter_audit = []
             hard_filter_summary = {
                 "scanned": total_candidates,
                 "passed": 0,
@@ -2121,14 +2122,25 @@ Examples of GOOD responses:
                 dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
                 applied_ship_types = ((candidate_facts.get("application") or {}).get("applied_ship_types") or [])
                 experienced_ship_types = ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
+                audit_entry = {
+                    "candidate_id": resume_id,
+                    "filename": filename,
+                    "hard_filter_decision": hard_filter_result["decision"],
+                    "hard_filter_reasons": hard_filter_result["results"],
+                    "llm_reached": False,
+                    "result_bucket": "excluded",
+                }
 
                 if hard_filter_result["decision"] == "FAIL":
                     hard_filter_summary["failed"] += 1
+                    hard_filter_audit.append(audit_entry)
                     print(f"[HARD FILTER] Rejecting {filename}: {hard_filter_result['results']}")
                     continue
 
                 if hard_filter_result["decision"] == "UNKNOWN":
                     hard_filter_summary["unknown"] += 1
+                    audit_entry["result_bucket"] = "needs_review"
+                    hard_filter_audit.append(audit_entry)
                     unknown_match = {
                         "filename": filename,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
@@ -2149,6 +2161,8 @@ Examples of GOOD responses:
                     continue
 
                 hard_filter_summary["passed"] += 1
+                audit_entry["llm_reached"] = True
+                audit_entry["result_bucket"] = "llm_no_match"
                 if age_constraint and age_value is not None and dob_value is not None:
                     prompt_for_reasoning = (
                         f"{user_prompt}\n"
@@ -2176,13 +2190,16 @@ Examples of GOOD responses:
                     # Flag uncertain matches (confidence < 0.7)
                     if match_data['confidence'] < 0.7:
                         uncertain_matches.append(match_data)
+                        audit_entry["result_bucket"] = "uncertain_match"
                         yield {"type": "uncertain_found", "match": match_data, 
                                "current": i, "total": total_candidates}
                     else:
                         verified_matches.append(match_data)
+                        audit_entry["result_bucket"] = "verified_match"
                         yield {"type": "match_found", "match": match_data, 
                                "current": i, "total": total_candidates}
                     hard_filter_summary["matched"] += 1
+                hard_filter_audit.append(audit_entry)
                 
                 # Rate limiting
                 if i < total_candidates:
@@ -2192,6 +2209,7 @@ Examples of GOOD responses:
                    "verified_matches": verified_matches,
                    "uncertain_matches": uncertain_matches,
                    "unknown_matches": unknown_matches,
+                   "hard_filter_audit": hard_filter_audit,
                    "hard_filter_summary": hard_filter_summary,
                    "message": (
                        f"Scanned {hard_filter_summary['scanned']}, "
