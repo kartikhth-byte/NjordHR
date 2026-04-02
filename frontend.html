@@ -153,7 +153,8 @@
                 total: 0,
                 message: '',
                 liveVerified: [],
-                liveUncertain: []
+                liveUncertain: [],
+                liveUnknown: []
             });
             
             const [selectedFiles, setSelectedFiles] = useState(new Set());
@@ -338,6 +339,7 @@
                     setLoginPassword('');
                     const nextRole = (data.user && data.user.role) || '';
                     setActiveTab((nextRole === 'admin' || nextRole === 'manager') ? 'download' : 'search');
+                    await fetchRankFolders(data.user || null);
                     handleSendMessage('success', `Logged in as ${data.user?.role || 'user'}`);
                 } catch (_error) {
                     handleSendMessage('error', 'Login request failed');
@@ -405,8 +407,9 @@
             };
 
             useEffect(() => {
-                fetchRankFolders();
-            }, [downloadLog]);
+                if (!authUser) return;
+                fetchRankFolders(authUser);
+            }, [authUser, downloadLog]);
 
             useEffect(() => {
                 const initAuth = async () => {
@@ -505,8 +508,10 @@
             }, [role, settingsLoaded, settingsSection]);
 
             useEffect(() => {
+                if (!authUser) return;
+                if (activeTab !== 'dashboard') return;
                 fetchDashboardData({ resetPage: true });
-            }, [dashboardSection, dashboardView, dashboardRank]);
+            }, [dashboardSection, dashboardView, dashboardRank, authUser, activeTab]);
             
             useEffect(() => {
                 filterAndSortData();
@@ -637,7 +642,12 @@
                 return () => window.removeEventListener('keydown', onKeyDown);
             }, [isDashboardDrawerOpen, historyModal.open]);
 
-            const fetchRankFolders = async () => {
+            const fetchRankFolders = async (currentUser = authUser) => {
+                if (!currentUser) {
+                    setRankFolders([]);
+                    setSelectedRankFolder('');
+                    return;
+                }
                 try {
                     const response = await fetch(`${API_BASE_URL}/get_rank_folders`);
                     const data = await response.json();
@@ -696,6 +706,11 @@
             };
             
             const fetchAvailableRanks = async () => {
+                if (!authUser) {
+                    setAvailableRanks([]);
+                    setDashboardRank('');
+                    return;
+                }
                 try {
                     const scope = dashboardSection === 'archive' ? 'archive' : 'active';
                     const response = await fetch(`${API_BASE_URL}/get_available_ranks?scope=${encodeURIComponent(scope)}`);
@@ -714,6 +729,12 @@
             };
             
             const fetchDashboardData = async ({ resetPage = false, preserveScroll = false } = {}) => {
+                if (!authUser) {
+                    setDashboardData([]);
+                    setFilteredData([]);
+                    setIsDashboardLoading(false);
+                    return;
+                }
                 if (dashboardView === 'rank' && !dashboardRank) {
                     setDashboardData([]);
                     setFilteredData([]);
@@ -1631,7 +1652,8 @@
                     total: 0,
                     message: 'Connecting...',
                     liveVerified: [],
-                    liveUncertain: []
+                    liveUncertain: [],
+                    liveUnknown: []
                 });
                 
                 try {
@@ -1694,11 +1716,20 @@
                                 current: data.current,
                                 total: data.total
                             }));
+                        } else if (data.type === 'hard_filter_unknown') {
+                            setAnalysisProgress(prev => ({
+                                ...prev,
+                                liveUnknown: [...prev.liveUnknown, data.match],
+                                current: data.current,
+                                total: data.total
+                            }));
                         } else if (data.type === 'complete') {
                             setAnalysisResults({
                                 success: true,
                                 verified_matches: data.verified_matches || [],
                                 uncertain_matches: data.uncertain_matches || [],
+                                unknown_matches: data.unknown_matches || [],
+                                hard_filter_summary: data.hard_filter_summary || {},
                                 message: data.message
                             });
                             setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
@@ -3336,12 +3367,44 @@
                                                         </div>
                                                     </div>
                                                 )}
+
+                                                {analysisProgress.liveUnknown.length > 0 && (
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold text-slate-700 mb-2">
+                                                            ? Needs Review ({analysisProgress.liveUnknown.length}):
+                                                        </h4>
+                                                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                            {analysisProgress.liveUnknown.map((m, i) => (
+                                                                <p key={i} className="text-xs text-slate-600">• {m.filename}</p>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )}
                                     
                                     {analysisResults && !analysisProgress.isAnalyzing && (
                                         <div className="mt-8 space-y-6">
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                                    <p className="text-xs uppercase tracking-wide text-slate-500">Scanned</p>
+                                                    <p className="text-2xl font-semibold text-slate-900">{analysisResults.hard_filter_summary?.scanned ?? 0}</p>
+                                                </div>
+                                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                                    <p className="text-xs uppercase tracking-wide text-green-700">Passed Hard Filters</p>
+                                                    <p className="text-2xl font-semibold text-green-900">{analysisResults.hard_filter_summary?.passed ?? 0}</p>
+                                                </div>
+                                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                                                    <p className="text-xs uppercase tracking-wide text-amber-700">Needs Review</p>
+                                                    <p className="text-2xl font-semibold text-amber-900">{analysisResults.hard_filter_summary?.unknown ?? 0}</p>
+                                                </div>
+                                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                                    <p className="text-xs uppercase tracking-wide text-blue-700">Matched</p>
+                                                    <p className="text-2xl font-semibold text-blue-900">{analysisResults.hard_filter_summary?.matched ?? 0}</p>
+                                                </div>
+                                            </div>
+
                                             <div>
                                                 <div className="flex justify-between items-center mb-4">
                                                     <h3 className="text-xl font-semibold">
@@ -3420,6 +3483,39 @@
                                                     ) : <p className="text-center text-gray-500 p-4">No verified matches found.</p>}
                                                 </div>
                                             </div>
+
+                                            {analysisResults.unknown_matches && analysisResults.unknown_matches.length > 0 && (
+                                                <div>
+                                                    <h3 className="text-xl font-semibold text-slate-700 mb-4">
+                                                        ? Needs Review ({analysisResults.unknown_matches.length})
+                                                    </h3>
+                                                    <p className="text-sm text-gray-600 mb-4">
+                                                        These resumes were not sent to AI reasoning because a hard filter could not be evaluated deterministically.
+                                                    </p>
+                                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-4">
+                                                        {analysisResults.unknown_matches.map((match, i) => (
+                                                            <div key={i} className="bg-white p-4 rounded border border-slate-200">
+                                                                <div className="flex justify-between items-start gap-4">
+                                                                    <div className="flex-1">
+                                                                        <a href={`${API_BASE_URL}/get_resume/${selectedRankFolder}/${encodeURIComponent(match.filename)}`}
+                                                                           target="_blank" rel="noopener noreferrer"
+                                                                           className="text-sm font-medium text-blue-600 hover:underline">
+                                                                            {match.filename}
+                                                                        </a>
+                                                                        <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
+                                                                        {match.dob && (
+                                                                            <p className="text-xs text-slate-500 mt-2">DOB: {match.dob}</p>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+                                                                        {match.hard_filter_decision}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {analysisResults.uncertain_matches && analysisResults.uncertain_matches.length > 0 && (
                                                 <div>

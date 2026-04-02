@@ -314,3 +314,73 @@ Suggested overlap:
   - `M4`
 - Release/DevOps owner:
   - `M5`, `M6`
+
+### 6.8 Newly noted pending UX tasks (not yet implemented)
+- `M5-T7` Ensure Njord logo is consistently shown in the app header across supported builds/platforms.
+- `M5-T8` Windows first-run bootstrap UX:
+  - move install/dependency bootstrap to background (no visible terminal window),
+  - add first-run progress UI with status text + progress indicator while runtime/dependencies are prepared.
+- `M5-T9` Add password generator action in `User Password` page:
+  - provide one-click strong password generation when creating/updating user credentials.
+- `M5-T10` Add branded Windows application icon parity with macOS:
+  - use orange background + navy anchor icon for Windows app/start-menu/taskbar assets.
+
+---
+
+## 7. Current Tactical Workstream: Deterministic AI Search Filters
+
+**Reason:** AI Search produced incorrect results for age-range prompts because structured constraints were still effectively being interpreted by LLM reasoning instead of being enforced deterministically.
+
+### 7.1 Immediate objective
+- Build a deterministic hard-filter layer in AI Search before LLM reasoning.
+- Start with age derived from DOB.
+- Keep LLM usage for semantic explanation/ranking only after hard-filter pass.
+
+### 7.2 Current status
+- In progress in:
+  - `/Users/kartikraghavan/Tools/NjordHR/ai_analyzer.py`
+  - `/Users/kartikraghavan/Tools/NjordHR/frontend.html`
+- Implemented in source:
+  - minimal `JobConstraints` extraction for age
+  - minimal `CandidateFacts` extraction for DOB
+  - evaluation-time age computation
+  - hard-filter result states:
+    - `PASS`
+    - `FAIL`
+    - `UNKNOWN`
+  - AI Search summary counters:
+    - scanned
+    - passed hard filters
+    - needs review
+    - matched
+  - `UNKNOWN` candidates rendered as `Needs Review`
+- Packaged mac app validation completed successfully for the tested age-only flow.
+- Root cause of the final mismatch was fixed in DOB parsing:
+  - support for resume DOB format `DD-Mon-YYYY`
+  - removal of unsafe fallback that could pick unrelated dates
+- Structured-only age prompts now evaluate the full selected rank folder before LLM reasoning.
+
+### 7.2.1 Current DOB parsing contract
+- DOB is only parsed when it appears next to an explicit DOB label such as `Date of Birth`, `DOB`, or `D.O.B`.
+- Supported unambiguous DOB formats:
+  - `DD-Mon-YYYY` and equivalent month-name separator variants such as `DD Mon YYYY`, `DD/Mon/YYYY`
+  - `Mon DD YYYY` / `Month DD YYYY`
+  - ISO-style `YYYY-MM-DD`
+- Ambiguous numeric formats must be treated as `UNKNOWN`, not guessed:
+  - examples: `04/11/1989`, `03-02-1974`, `11.04.89`
+- Unlabeled dates elsewhere in the resume must not be used as DOB fallbacks.
+
+### 7.3 Next tasks in this workstream
+- `AI-T1` Add regression cases for age range prompts and DOB edge cases.
+- `AI-T2` Ensure `FAIL` candidates never reach LLM reasoning.
+- `AI-T3` Decide UI behavior for `UNKNOWN`:
+  - separate review bucket only
+  - or optional inclusion toggle.
+- `AI-T4` Extend deterministic constraint extraction/evaluation to ship type.
+- `AI-T5` Add deterministic/audit logging for hard-filter outcomes.
+
+### 7.4 Acceptance criteria
+- Prompt `between 30 and 50 years old` excludes candidates older than 50 or younger than 30.
+- Candidates with missing/ambiguous DOB are not shown as verified matches.
+- UI clearly distinguishes deterministic pass/fail/unknown behavior from LLM confidence.
+- Real resume DOB formats observed in the corpus are covered by regression tests.

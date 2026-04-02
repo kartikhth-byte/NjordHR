@@ -10,7 +10,7 @@ import re
 import io
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date
 
 # --- Core Dependencies ---
 import requests
@@ -41,6 +41,15 @@ class ConfigManager:
     def __init__(self, config_parser):
         self.config = config_parser
 
+    def _resolve_runtime_path(self, raw_path, fallback_name):
+        candidate = str(raw_path or "").strip()
+        if not candidate:
+            candidate = fallback_name
+        candidate = os.path.expanduser(candidate)
+        if os.path.isabs(candidate):
+            return os.path.abspath(candidate)
+        return os.path.abspath(os.path.join(self.log_dir, candidate))
+
     @property
     def gemini_api_key(self): return os.getenv('GEMINI_API_KEY', self.config.get('Credentials', 'Gemini_API_Key'))
     @property
@@ -58,9 +67,11 @@ class ConfigManager:
     @property
     def min_similarity_score(self): return self.config.getfloat('Advanced', 'min_similarity_score')
     @property
-    def registry_db_path(self): return self.config.get('Advanced', 'registry_db_path', fallback='registry.db')
+    def log_dir(self): return os.path.abspath(os.path.expanduser(self.config.get('Advanced', 'log_dir', fallback='logs')))
     @property
-    def feedback_db_path(self): return self.config.get('Advanced', 'feedback_db_path', fallback='feedback.db')
+    def registry_db_path(self): return self._resolve_runtime_path(self.config.get('Advanced', 'registry_db_path', fallback='registry.db'), 'registry.db')
+    @property
+    def feedback_db_path(self): return self._resolve_runtime_path(self.config.get('Advanced', 'feedback_db_path', fallback='feedback.db'), 'feedback.db')
 
 
 # ==============================================================================
@@ -71,6 +82,7 @@ class FileRegistry:
     DB_VERSION = 2
     
     def __init__(self, db_path='registry.db'):
+        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.lock = threading.Lock()
         self._migrate_schema()
@@ -146,6 +158,7 @@ class FeedbackStore:
     """Stores user feedback on match decisions for learning"""
     
     def __init__(self, db_path='feedback.db'):
+        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.lock = threading.Lock()
         self._create_table()
@@ -671,6 +684,379 @@ class AIResumeAnalyzer:
         self.vector_db = PineconeManager(self.config, embedding_dimension=self.prepper.expected_embedding_dimension())
         print("[INIT] Initialization complete")
 
+    def _extract_age_constraint(self, user_prompt):
+        prompt = str(user_prompt or "").strip().lower()
+        if not prompt:
+            return None
+
+        range_patterns = [
+            r'between\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old',
+            r'between\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'within\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'within\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'with\s*in\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'age\s+range\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'age\s+range\s+of\s+(\d{1,2})\s*-\s*(\d{1,2})',
+            r'age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old',
+            r'ages?\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'aged?\s+(\d{1,2})\s*(?:-|to|and)\s*(\d{1,2})',
+            r'(\d{1,2})\s*(?:-|to)\s*(\d{1,2})\s+years?\s+old',
+        ]
+        for pattern in range_patterns:
+            match = re.search(pattern, prompt)
+            if match:
+                lower = int(match.group(1))
+                upper = int(match.group(2))
+                if lower > upper:
+                    lower, upper = upper, lower
+                return {"min_age": lower, "max_age": upper}
+
+        # Generic age-context fallback for recruiter phrasing like
+        # "should be with in the age of 30 and 50 years old".
+        if any(token in prompt for token in (" age ", " ages ", "aged", "years old", "year old")):
+            nums = [int(n) for n in re.findall(r'\b(\d{1,2})\b', prompt)]
+            plausible = [n for n in nums if 18 <= n <= 80]
+            if len(plausible) >= 2:
+                lower, upper = plausible[0], plausible[1]
+                if lower > upper:
+                    lower, upper = upper, lower
+                return {"min_age": lower, "max_age": upper}
+
+        min_patterns = [
+            r'at\s+least\s+(\d{1,2})\s+years?\s+old',
+            r'older\s+than\s+(\d{1,2})',
+            r'over\s+(\d{1,2})',
+            r'above\s+(\d{1,2})',
+            r'minimum\s+age\s+(?:of\s+)?(\d{1,2})',
+        ]
+        for pattern in min_patterns:
+            match = re.search(pattern, prompt)
+            if match:
+                value = int(match.group(1))
+                if 'older than' in pattern or 'over' in pattern or 'above' in pattern:
+                    value += 1
+                return {"min_age": value, "max_age": None}
+
+        max_patterns = [
+            r'up\s+to\s+(\d{1,2})\s+years?\s+old',
+            r'younger\s+than\s+(\d{1,2})',
+            r'under\s+(\d{1,2})',
+            r'below\s+(\d{1,2})',
+            r'maximum\s+age\s+(?:of\s+)?(\d{1,2})',
+        ]
+        for pattern in max_patterns:
+            match = re.search(pattern, prompt)
+            if match:
+                value = int(match.group(1))
+                if 'younger than' in pattern or 'under' in pattern or 'below' in pattern:
+                    value -= 1
+                return {"min_age": None, "max_age": value}
+
+        return None
+
+    def _extract_job_constraints(self, user_prompt, rank=None):
+        constraints = {"rank": str(rank or "").strip(), "hard_constraints": {}}
+        age_constraint = self._extract_age_constraint(user_prompt)
+        if age_constraint:
+            constraints["hard_constraints"]["age_years"] = age_constraint
+        return constraints
+
+    def _strip_age_constraint_phrases(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt:
+            return ""
+
+        patterns = [
+            r'between\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
+            r'between\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'within\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'within\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'with\s*in\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'age\s+range\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'age\s+range\s+of\s+\d{1,2}\s*-\s*\d{1,2}',
+            r'age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
+            r'ages?\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'aged?\s+\d{1,2}\s*(?:-|to|and)\s*\d{1,2}',
+            r'\d{1,2}\s*(?:-|to)\s*\d{1,2}\s+years?\s+old',
+            r'at\s+least\s+\d{1,2}\s+years?\s+old',
+            r'older\s+than\s+\d{1,2}',
+            r'over\s+\d{1,2}',
+            r'above\s+\d{1,2}',
+            r'minimum\s+age\s+(?:of\s+)?\d{1,2}',
+            r'up\s+to\s+\d{1,2}\s+years?\s+old',
+            r'younger\s+than\s+\d{1,2}',
+            r'under\s+\d{1,2}',
+            r'below\s+\d{1,2}',
+            r'maximum\s+age\s+(?:of\s+)?\d{1,2}',
+        ]
+
+        cleaned = prompt
+        for pattern in patterns:
+            cleaned = re.sub(pattern, ' ', cleaned, flags=re.IGNORECASE)
+
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip(" ,.-")
+        return cleaned
+
+    def _is_structured_only_prompt(self, user_prompt):
+        stripped = self._strip_age_constraint_phrases(user_prompt).lower()
+        if not stripped:
+            return True
+        filler_tokens = {
+            "candidate", "candidates", "should", "be", "must", "need", "needs",
+            "within", "the", "age", "ages", "years", "year", "old", "of",
+            "show", "find", "give", "me", "with", "who", "that", "are", "is",
+        }
+        terms = re.findall(r"[a-zA-Z0-9/+.-]{2,}", stripped)
+        meaningful = [term for term in terms if term not in filler_tokens]
+        return len(meaningful) == 0
+
+    def _enumerate_rank_candidates(self, target_folder, rank):
+        candidates = {}
+        for idx, pdf_path in enumerate(sorted(target_folder.glob("*.pdf"))):
+            try:
+                text = self.pdf_processor.extract_text(str(pdf_path))
+            except Exception:
+                continue
+            if not text:
+                continue
+            resume_id = self.registry.get_resume_id(str(pdf_path))
+            candidates[resume_id] = [{
+                "id": f"fullscan-{resume_id}-{idx}",
+                "score": 1.0,
+                "metadata": {
+                    "resume_id": resume_id,
+                    "rank": rank,
+                    "raw_text": text[:12000],
+                }
+            }]
+        print(f"[FULL SCAN] Enumerated {len(candidates)} candidate resumes from rank folder")
+        return candidates
+
+    def _parse_dob_from_text(self, raw_text):
+        dob_fact = self._extract_dob_fact_from_text(raw_text)
+        return dob_fact.get("dob")
+
+    def _extract_dob_fact_from_text(self, raw_text):
+        text = str(raw_text or "")
+        if not text:
+            return {"dob": None, "status": "MISSING"}
+
+        label_pattern = r'(?:date\s+of\s+birth|dob|d\.o\.b\.?)'
+        date_patterns = [
+            r'(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})',
+            r'(\d{1,2})[\s\/\-.]+([A-Za-z]{3,9})[\s\/\-.]+(\d{2,4})',
+            r'([A-Za-z]{3,9})[\s\/\-.]+(\d{1,2}),?[\s\/\-.]+(\d{2,4})',
+        ]
+        ambiguous_numeric_pattern = r'\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b'
+
+        # Prefer DOB values that appear directly after an explicit DOB label.
+        for label_match in re.finditer(label_pattern, text, flags=re.IGNORECASE):
+            snippet = text[label_match.start():label_match.start() + 120]
+            for pattern in date_patterns:
+                match = re.search(pattern, snippet, flags=re.IGNORECASE)
+                if match:
+                    parsed = self._build_date_from_match(match.groups())
+                    if parsed and 1940 <= parsed.year <= date.today().year:
+                        return {"dob": parsed, "status": "PARSED"}
+
+            if re.search(ambiguous_numeric_pattern, snippet):
+                return {"dob": None, "status": "AMBIGUOUS_NUMERIC"}
+
+        # Generic unlabeled fallback is intentionally conservative. If the resume
+        # does not expose a DOB label, it is safer to return UNKNOWN than to grab
+        # an arbitrary expiry/employment date and compute a wrong age.
+        return {"dob": None, "status": "MISSING"}
+
+    def _build_date_from_match(self, parts):
+        if not parts or len(parts) != 3:
+            return None
+
+        month_lookup = {
+            "jan": 1, "january": 1,
+            "feb": 2, "february": 2,
+            "mar": 3, "march": 3,
+            "apr": 4, "april": 4,
+            "may": 5,
+            "jun": 6, "june": 6,
+            "jul": 7, "july": 7,
+            "aug": 8, "august": 8,
+            "sep": 9, "sept": 9, "september": 9,
+            "oct": 10, "october": 10,
+            "nov": 11, "november": 11,
+            "dec": 12, "december": 12,
+        }
+
+        a, b, c = [str(p).strip() for p in parts]
+        try:
+            if len(a) == 4 and a.isdigit():
+                year = int(a)
+                month = int(b)
+                day = int(c)
+            elif a.isalpha():
+                month = month_lookup.get(a.lower())
+                day = int(b)
+                year = int(c)
+            elif b.isalpha():
+                day = int(a)
+                month = month_lookup.get(b.lower())
+                year = int(c)
+            else:
+                day = int(a)
+                month = int(b)
+                year = int(c)
+            if year < 100:
+                year += 1900 if year >= 40 else 2000
+            if not month:
+                return None
+            parsed = date(year, month, day)
+            if parsed > date.today():
+                return None
+            return parsed
+        except Exception:
+            return None
+
+    def _calculate_age(self, dob_value, reference_date=None):
+        if not dob_value:
+            return None
+        today = reference_date or date.today()
+        years = today.year - dob_value.year
+        if (today.month, today.day) < (dob_value.month, dob_value.day):
+            years -= 1
+        return years
+
+    def _resolve_candidate_age(self, chunks, original_path=None, text_cache=None):
+        text_cache = text_cache if text_cache is not None else {}
+        source_text = ""
+        cache_key = str(original_path) if original_path else None
+
+        if cache_key:
+            source_text = text_cache.get(cache_key, "")
+            if not source_text:
+                try:
+                    source_text = self.pdf_processor.extract_text(str(original_path)) or ""
+                except Exception:
+                    source_text = ""
+                text_cache[cache_key] = source_text
+
+        if not source_text:
+            source_text = "\n".join(
+                str((chunk.get('metadata') or {}).get('raw_text', ''))
+                for chunk in (chunks or [])
+            )
+
+        dob_fact = self._extract_dob_fact_from_text(source_text)
+        dob_value = dob_fact.get("dob")
+        age = self._calculate_age(dob_value)
+        return {
+            "dob": dob_value,
+            "age": age,
+            "dob_parse_status": dob_fact.get("status", "MISSING"),
+        }
+
+    def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None):
+        age_info = self._resolve_candidate_age(chunks, original_path=original_path, text_cache=text_cache)
+        return {
+            "candidate_id": filename,
+            "rank_folder": rank,
+            "personal": {
+                "dob": age_info.get("dob"),
+                "dob_parse_status": age_info.get("dob_parse_status"),
+            },
+            "derived": {
+                "age_years": age_info.get("age"),
+            },
+        }
+
+    def _age_constraint_reason(self, constraint):
+        if not constraint:
+            return ""
+        min_age = constraint.get("min_age")
+        max_age = constraint.get("max_age")
+        if min_age is not None and max_age is not None:
+            return f"between {min_age} and {max_age} years old"
+        if min_age is not None:
+            return f"at least {min_age} years old"
+        if max_age is not None:
+            return f"at most {max_age} years old"
+        return ""
+
+    def _age_within_constraint(self, age_value, constraint):
+        if age_value is None or not constraint:
+            return None
+        min_age = constraint.get("min_age")
+        max_age = constraint.get("max_age")
+        if min_age is not None and age_value < min_age:
+            return False
+        if max_age is not None and age_value > max_age:
+            return False
+        return True
+
+    def _evaluate_age_rule(self, candidate_facts, constraint):
+        if not constraint:
+            return {
+                "decision": "PASS",
+                "reason_code": "AGE_RULE_NOT_REQUESTED",
+                "message": "No age filter requested.",
+            }
+
+        dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
+        dob_parse_status = ((candidate_facts.get("personal") or {}).get("dob_parse_status"))
+        age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
+        if dob_value is None or age_value is None:
+            if dob_parse_status == "AMBIGUOUS_NUMERIC":
+                return {
+                    "decision": "UNKNOWN",
+                    "reason_code": "AGE_DOB_AMBIGUOUS_FORMAT",
+                    "message": (
+                        f"DOB was present but in an ambiguous numeric format, so age was left unknown for "
+                        f"requested age filter {self._age_constraint_reason(constraint)}."
+                    ),
+                }
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "AGE_MISSING",
+                "message": f"Could not determine DOB/age for requested age filter {self._age_constraint_reason(constraint)}.",
+            }
+
+        if self._age_within_constraint(age_value, constraint):
+            return {
+                "decision": "PASS",
+                "reason_code": "AGE_IN_RANGE",
+                "message": (
+                    f"Computed age {age_value} from DOB {dob_value.isoformat()}, which is "
+                    f"{self._age_constraint_reason(constraint)}."
+                ),
+            }
+
+        return {
+            "decision": "FAIL",
+            "reason_code": "AGE_OUT_OF_RANGE",
+            "message": (
+                f"Computed age {age_value} from DOB {dob_value.isoformat()}, which is not "
+                f"{self._age_constraint_reason(constraint)}."
+            ),
+        }
+
+    def _evaluate_hard_filters(self, candidate_facts, job_constraints):
+        hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
+        results = []
+
+        age_constraint = hard_constraints.get("age_years")
+        if age_constraint:
+            results.append(self._evaluate_age_rule(candidate_facts, age_constraint))
+
+        if any(result["decision"] == "FAIL" for result in results):
+            final_decision = "FAIL"
+        elif any(result["decision"] == "UNKNOWN" for result in results):
+            final_decision = "UNKNOWN"
+        else:
+            final_decision = "PASS"
+
+        return {
+            "decision": final_decision,
+            "results": results,
+        }
+
     def _ingest_folder(self, folder_path, rank):
         print(f"[{rank}] Starting ingestion scan...")
         pdf_paths = list(Path(folder_path).glob("*.pdf"))
@@ -760,16 +1146,34 @@ class AIResumeAnalyzer:
         Detect and parse compound queries into sub-queries and logic operators.
         Returns: (is_compound, operator, sub_queries)
         """
-        prompt_lower = user_prompt.lower()
+        prompt_text = str(user_prompt or "")
+        prompt_lower = prompt_text.lower()
+        protected_prompt = prompt_text
+        protected_lower = prompt_lower
+
+        age_range_patterns = [
+            r'between\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
+            r'between\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'within\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'within\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'with\s*in\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'age\s+range\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
+            r'ages?\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'aged?\s+\d{1,2}\s*(?:-|to|and)\s*\d{1,2}',
+        ]
+        for pattern in age_range_patterns:
+            protected_prompt = re.sub(pattern, lambda m: m.group(0).replace(" and ", " __RANGE_AND__ "), protected_prompt, flags=re.IGNORECASE)
+            protected_lower = protected_prompt.lower()
         
         # Check for AND logic
-        if ' and ' in prompt_lower:
-            sub_queries = [q.strip() for q in user_prompt.split(' and ')]
+        if ' and ' in protected_lower:
+            sub_queries = [q.strip().replace("__RANGE_AND__", "and") for q in protected_prompt.split(' and ')]
             return (True, 'AND', sub_queries)
         
         # Check for OR logic  
-        elif ' or ' in prompt_lower:
-            sub_queries = [q.strip() for q in user_prompt.split(' or ')]
+        elif ' or ' in protected_lower:
+            sub_queries = [q.strip().replace("__RANGE_AND__", "and") for q in protected_prompt.split(' or ')]
             return (True, 'OR', sub_queries)
         
         # Simple query
@@ -1028,11 +1432,17 @@ Examples of GOOD responses:
             yield {"type": "status", "message": "Scanning for new files..."}
             for ingest_event in self._ingest_folder(str(target_folder), rank):
                 yield ingest_event
+
+            job_constraints = self._extract_job_constraints(user_prompt, rank=rank)
+            structured_only_prompt = self._is_structured_only_prompt(user_prompt)
             
             # Parse query to detect compound logic
             is_compound, operator, sub_queries = self._parse_compound_query(user_prompt)
             
-            if is_compound:
+            if structured_only_prompt and job_constraints.get("hard_constraints"):
+                yield {"type": "status", "message": "Structured-only prompt detected. Evaluating all resumes in selected rank folder..."}
+                candidates = self._enumerate_rank_candidates(target_folder, rank)
+            elif is_compound:
                 yield {"type": "status", "message": f"Detected compound query: {operator} logic with {len(sub_queries)} conditions"}
                 print(f"[COMPOUND QUERY] Operator: {operator}")
                 print(f"[COMPOUND QUERY] Sub-queries: {sub_queries}")
@@ -1077,11 +1487,20 @@ Examples of GOOD responses:
             yield {"type": "progress", "current": 0, "total": total_candidates, 
                    "message": f"Found {total_candidates} candidates to analyze"}
             
-            # Get past feedback for learning
+            # Deterministic hard filter gate
             past_feedback = self.feedback.get_recent_feedback(user_prompt)
+            text_cache = {}
             
             verified_matches = []
             uncertain_matches = []
+            unknown_matches = []
+            hard_filter_summary = {
+                "scanned": total_candidates,
+                "passed": 0,
+                "failed": 0,
+                "unknown": 0,
+                "matched": 0,
+            }
             
             for i, (resume_id, chunks) in enumerate(candidates.items(), 1):
                 original_path = next((p for p in target_folder.glob("*.pdf") 
@@ -1090,15 +1509,64 @@ Examples of GOOD responses:
                 
                 yield {"type": "progress", "current": i, "total": total_candidates, 
                        "message": f"Analyzing: {filename}"}
+
+                prompt_for_reasoning = user_prompt
+                candidate_facts = self._build_candidate_facts(
+                    filename,
+                    rank,
+                    chunks,
+                    original_path=original_path,
+                    text_cache=text_cache,
+                )
+                hard_filter_result = self._evaluate_hard_filters(candidate_facts, job_constraints)
+                age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
+                dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
+
+                if hard_filter_result["decision"] == "FAIL":
+                    hard_filter_summary["failed"] += 1
+                    print(f"[HARD FILTER] Rejecting {filename}: {hard_filter_result['results']}")
+                    continue
+
+                if hard_filter_result["decision"] == "UNKNOWN":
+                    hard_filter_summary["unknown"] += 1
+                    unknown_match = {
+                        "filename": filename,
+                        "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
+                        "hard_filter_decision": "UNKNOWN",
+                        "hard_filter_reasons": hard_filter_result["results"],
+                        "computed_age": age_value,
+                        "dob": dob_value.isoformat() if dob_value else None,
+                    }
+                    unknown_matches.append(unknown_match)
+                    yield {
+                        "type": "hard_filter_unknown",
+                        "match": unknown_match,
+                        "current": i,
+                        "total": total_candidates,
+                    }
+                    continue
+
+                hard_filter_summary["passed"] += 1
+                if age_value is not None and dob_value is not None:
+                    prompt_for_reasoning = (
+                        f"{user_prompt}\n"
+                        f"Computed candidate age from DOB: {age_value} years old "
+                        f"(DOB: {dob_value.isoformat()}). Treat this age as authoritative. "
+                        f"This candidate already passed the deterministic age gate."
+                    )
                 
                 # LLM reasoning with confidence
-                llm_result = self._reason_with_llm(user_prompt, chunks, past_feedback)
+                llm_result = self._reason_with_llm(prompt_for_reasoning, chunks, past_feedback)
                 
                 if llm_result.get('is_match'):
                     match_data = {
                         "filename": filename,
                         "reason": llm_result.get('reason', 'Match found.'),
-                        "confidence": llm_result.get('confidence', 0.5)
+                        "confidence": llm_result.get('confidence', 0.5),
+                        "hard_filter_decision": hard_filter_result["decision"],
+                        "hard_filter_reasons": hard_filter_result["results"],
+                        "computed_age": age_value,
+                        "dob": dob_value.isoformat() if dob_value else None,
                     }
                     
                     # Flag uncertain matches (confidence < 0.7)
@@ -1110,6 +1578,7 @@ Examples of GOOD responses:
                         verified_matches.append(match_data)
                         yield {"type": "match_found", "match": match_data, 
                                "current": i, "total": total_candidates}
+                    hard_filter_summary["matched"] += 1
                 
                 # Rate limiting
                 if i < total_candidates:
@@ -1118,7 +1587,14 @@ Examples of GOOD responses:
             yield {"type": "complete", 
                    "verified_matches": verified_matches,
                    "uncertain_matches": uncertain_matches,
-                   "message": f"Found {len(verified_matches)} verified, {len(uncertain_matches)} uncertain matches."}
+                   "unknown_matches": unknown_matches,
+                   "hard_filter_summary": hard_filter_summary,
+                   "message": (
+                       f"Scanned {hard_filter_summary['scanned']}, "
+                       f"passed hard filters {hard_filter_summary['passed']}, "
+                       f"unknown {hard_filter_summary['unknown']}, "
+                       f"matched {hard_filter_summary['matched']}."
+                   )}
         
         except Exception as e:
             print(f"[ERROR] Analysis failed: {e}")
@@ -1130,6 +1606,8 @@ Examples of GOOD responses:
         """Non-streaming version"""
         verified_matches = []
         uncertain_matches = []
+        unknown_matches = []
+        hard_filter_summary = {}
         message = ""
         
         for event in self.run_analysis_stream(rank, user_prompt):
@@ -1137,16 +1615,21 @@ Examples of GOOD responses:
                 verified_matches.append(event['match'])
             elif event['type'] == 'uncertain_found':
                 uncertain_matches.append(event['match'])
+            elif event['type'] == 'hard_filter_unknown':
+                unknown_matches.append(event['match'])
             elif event['type'] == 'complete':
                 message = event['message']
+                hard_filter_summary = event.get("hard_filter_summary", {})
             elif event['type'] == 'error':
-                return {"success": False, "verified_matches": [], "uncertain_matches": [], 
+                return {"success": False, "verified_matches": [], "uncertain_matches": [], "unknown_matches": [],
                         "message": event['message']}
         
         return {
             "success": True, 
             "verified_matches": verified_matches,
             "uncertain_matches": uncertain_matches,
+            "unknown_matches": unknown_matches,
+            "hard_filter_summary": hard_filter_summary,
             "message": message
         }
     
