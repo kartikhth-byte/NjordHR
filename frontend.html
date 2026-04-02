@@ -1944,6 +1944,34 @@
                     </span>
                 );
             };
+
+            const renderShipTypeEvidence = (match) => {
+                const applied = Array.isArray(match.applied_ship_types) ? match.applied_ship_types.filter(Boolean) : [];
+                const experienced = Array.isArray(match.experienced_ship_types) ? match.experienced_ship_types.filter(Boolean) : [];
+                if (applied.length === 0 && experienced.length === 0) return null;
+                return (
+                    <div className="mt-2 space-y-1">
+                        {applied.length > 0 && (
+                            <p className="text-xs text-slate-500">Applied Ship Type: {applied.join(', ')}</p>
+                        )}
+                        {experienced.length > 0 && (
+                            <p className="text-xs text-slate-500">Experienced Ship Type: {experienced.join(', ')}</p>
+                        )}
+                    </div>
+                );
+            };
+
+            const renderHardFilterReasons = (match) => {
+                const reasons = Array.isArray(match.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                if (reasons.length === 0) return null;
+                return (
+                    <div className="mt-2 space-y-1">
+                        {reasons.map((item, index) => (
+                            <p key={index} className="text-xs text-slate-500">{item.message}</p>
+                        ))}
+                    </div>
+                );
+            };
             
             const DownloadTabContent = () => {
                 if (!sessionConnected) {
@@ -3548,7 +3576,11 @@
                                                                             </a>
                                                                         </td>
                                                                         <td className="px-6 py-4 text-sm">{getConfidenceBadge(match.confidence)}</td>
-                                                                        <td className="px-6 py-4 text-sm text-gray-500">{match.reason}</td>
+                                                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                                                            <p>{match.reason}</p>
+                                                                            {renderShipTypeEvidence(match)}
+                                                                            {renderHardFilterReasons(match)}
+                                                                        </td>
                                                                     </tr>
                                                                 ))}
                                                             </tbody>
@@ -3579,6 +3611,8 @@
                                                                         {match.dob && (
                                                                             <p className="text-xs text-slate-500 mt-2">DOB: {match.dob}</p>
                                                                         )}
+                                                                        {renderShipTypeEvidence(match)}
+                                                                        {renderHardFilterReasons(match)}
                                                                     </div>
                                                                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
                                                                         {match.hard_filter_decision}
@@ -3609,6 +3643,8 @@
                                                                             {match.filename}
                                                                         </a>
                                                                         <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
+                                                                        {renderShipTypeEvidence(match)}
+                                                                        {renderHardFilterReasons(match)}
                                                                     </div>
                                                                     {getConfidenceBadge(match.confidence)}
                                                                 </div>

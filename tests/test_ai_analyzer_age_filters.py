@@ -125,7 +125,6 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
             ]
             for spec in resume_specs
         }
-
         def fake_build_candidate_facts(filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
             spec = fact_by_filename[filename]
             return {
@@ -180,6 +179,87 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         self.assertTrue(all("deterministic age gate" in prompt for prompt in llm_prompts))
         self.assertTrue(all("2nd_Engineer_120969.pdf" not in prompt for prompt in llm_prompts))
         self.assertTrue(all("2nd_Engineer_unknown.pdf" not in prompt for prompt in llm_prompts))
+
+    def test_visa_only_prompt_does_not_inject_age_gate_language(self):
+        resume_specs = [
+            {"filename": "2nd_Engineer_349740.pdf", "dob": date(1989, 11, 4), "age": 36, "status": "PARSED"},
+        ]
+        fact_by_filename = {spec["filename"]: spec for spec in resume_specs}
+
+        for spec in resume_specs:
+            (self.rank_folder / spec["filename"]).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(spec["filename"]).stem: [
+                {
+                    "id": f"chunk-{Path(spec['filename']).stem}",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(spec["filename"]).stem,
+                        "rank": self.rank,
+                        "raw_text": "US Visa valid until 04-May-2027",
+                    },
+                }
+            ]
+            for spec in resume_specs
+        }
+        self.analyzer.prepper = types.SimpleNamespace(
+            get_embeddings=lambda prompts: [[0.1] for _ in prompts],
+            last_error=None,
+        )
+        self.analyzer.vector_db = types.SimpleNamespace(
+            query=lambda *_args, **_kwargs: [
+                {
+                    "score": 0.99,
+                    "metadata": {
+                        "resume_id": Path(resume_specs[0]["filename"]).stem,
+                        "rank": self.rank,
+                        "raw_text": "US Visa valid until 04-May-2027",
+                    },
+                }
+            ],
+            last_error=None,
+        )
+
+        def fake_build_candidate_facts(filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
+            spec = fact_by_filename[filename]
+            return {
+                "candidate_id": filename,
+                "rank_folder": rank,
+                "personal": {
+                    "dob": spec["dob"],
+                    "dob_parse_status": spec["status"],
+                },
+                "derived": {
+                    "age_years": spec["age"],
+                },
+            }
+
+        llm_calls = []
+
+        def fake_reason_with_llm(prompt, retrieved_chunks, past_feedback):
+            llm_calls.append(prompt)
+            return {
+                "is_match": True,
+                "reason": "Candidate has a valid US visa.",
+                "confidence": 0.95,
+            }
+
+        self.analyzer._build_candidate_facts = fake_build_candidate_facts
+        self.analyzer._reason_with_llm = fake_reason_with_llm
+
+        events = list(
+            self.analyzer.run_analysis_stream(
+                self.rank,
+                "has a valid US visa",
+            )
+        )
+
+        complete_event = next(event for event in events if event["type"] == "complete")
+        self.assertEqual(len(complete_event["verified_matches"]), 1)
+        self.assertEqual(len(llm_calls), 1)
+        self.assertNotIn("Computed candidate age from DOB", llm_calls[0])
+        self.assertNotIn("deterministic age gate", llm_calls[0])
 
 
 if __name__ == "__main__":

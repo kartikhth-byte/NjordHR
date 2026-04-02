@@ -144,6 +144,8 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
 
         self.assertEqual(verified, ["2nd_Engineer_1001.pdf"])
         self.assertEqual(unknown, ["2nd_Engineer_1003.pdf"])
+        self.assertEqual(complete_event["verified_matches"][0]["applied_ship_types"], ["Bulk Carrier"])
+        self.assertEqual(complete_event["unknown_matches"][0]["applied_ship_types"], [])
         self.assertEqual(len(llm_calls), 1)
         self.assertEqual(complete_event["hard_filter_summary"]["passed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
@@ -173,6 +175,20 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             }
         })
         self.assertEqual(result["decision"], "PASS")
+
+    def test_build_candidate_facts_exposes_experienced_ship_types(self):
+        self.analyzer._resolve_candidate_age = lambda *args, **kwargs: {
+            "dob": None,
+            "age": None,
+            "dob_parse_status": "MISSING",
+        }
+        facts = self.analyzer._build_candidate_facts(
+            "2nd_Engineer_1001.pdf",
+            self.rank,
+            [{"metadata": {"raw_text": "Sea Service on Product Tanker and Bulk Carrier"}}],
+            folder_metadata={},
+        )
+        self.assertEqual(facts["experience"]["vessel_types"], ["bulk carrier", "tanker"])
 
     def test_experience_ship_type_missing_is_unknown(self):
         candidate_facts = {

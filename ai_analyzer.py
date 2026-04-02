@@ -1688,8 +1688,11 @@ Examples of GOOD responses:
                     folder_metadata=folder_metadata,
                 )
                 hard_filter_result = self._evaluate_hard_filters(candidate_facts, job_constraints)
+                age_constraint = ((job_constraints.get("hard_constraints") or {}).get("age_years"))
                 age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
                 dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
+                applied_ship_types = ((candidate_facts.get("application") or {}).get("applied_ship_types") or [])
+                experienced_ship_types = ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
 
                 if hard_filter_result["decision"] == "FAIL":
                     hard_filter_summary["failed"] += 1
@@ -1705,6 +1708,8 @@ Examples of GOOD responses:
                         "hard_filter_reasons": hard_filter_result["results"],
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
+                        "applied_ship_types": applied_ship_types,
+                        "experienced_ship_types": experienced_ship_types,
                     }
                     unknown_matches.append(unknown_match)
                     yield {
@@ -1716,7 +1721,7 @@ Examples of GOOD responses:
                     continue
 
                 hard_filter_summary["passed"] += 1
-                if age_value is not None and dob_value is not None:
+                if age_constraint and age_value is not None and dob_value is not None:
                     prompt_for_reasoning = (
                         f"{user_prompt}\n"
                         f"Computed candidate age from DOB: {age_value} years old "
@@ -1736,6 +1741,8 @@ Examples of GOOD responses:
                         "hard_filter_reasons": hard_filter_result["results"],
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
+                        "applied_ship_types": applied_ship_types,
+                        "experienced_ship_types": experienced_ship_types,
                     }
                     
                     # Flag uncertain matches (confidence < 0.7)
