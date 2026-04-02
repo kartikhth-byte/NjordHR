@@ -151,6 +151,7 @@
                 selectedFile: '',
                 loading: false,
             });
+            const [isDownloadBrowserVerifying, setIsDownloadBrowserVerifying] = useState(false);
             const [rankFolderShipTypes, setRankFolderShipTypes] = useState([]);
             const [selectedSearchShipType, setSelectedSearchShipType] = useState('');
             const [selectedExperienceShipType, setSelectedExperienceShipType] = useState('');
@@ -653,11 +654,25 @@
                         closeDashboardDrawer();
                     } else if (historyModal.open) {
                         setHistoryModal({ open: false, candidateId: '', rows: [] });
+                    } else if (downloadFolderBrowser.open) {
+                        setDownloadFolderBrowser({ open: false, rankFolder: '', files: [], selectedFile: '', loading: false });
                     }
                 };
                 window.addEventListener('keydown', onKeyDown);
                 return () => window.removeEventListener('keydown', onKeyDown);
-            }, [isDashboardDrawerOpen, historyModal.open]);
+            }, [isDashboardDrawerOpen, historyModal.open, downloadFolderBrowser.open]);
+
+            useEffect(() => {
+                if (!downloadFolderBrowser.open) return undefined;
+                const previousBodyOverflow = document.body.style.overflow;
+                const previousHtmlOverflow = document.documentElement.style.overflow;
+                document.body.style.overflow = 'hidden';
+                document.documentElement.style.overflow = 'hidden';
+                return () => {
+                    document.body.style.overflow = previousBodyOverflow;
+                    document.documentElement.style.overflow = previousHtmlOverflow;
+                };
+            }, [downloadFolderBrowser.open]);
 
             const fetchRankFolders = async (currentUser = authUser) => {
                 if (!currentUser) {
@@ -751,6 +766,58 @@
                     selectedFile: '',
                     loading: false,
                 });
+                setIsDownloadBrowserVerifying(false);
+            };
+
+            const handleVerifyDownloadedResume = async () => {
+                const rankFolder = String(downloadFolderBrowser.rankFolder || '').trim();
+                const filename = String(downloadFolderBrowser.selectedFile || '').trim();
+                if (!rankFolder || !filename) {
+                    handleSendMessage('error', 'Select a downloaded resume to verify.');
+                    return;
+                }
+
+                setIsDownloadBrowserVerifying(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/verify_resumes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            rank_folder: rankFolder,
+                            search_ship_type: '',
+                            filenames: [filename],
+                            match_data: {
+                                [filename]: {
+                                    reason: 'Verified from Download tab browser',
+                                    confidence: 1,
+                                },
+                            },
+                            ai_prompt: 'Manual verification from Download tab browser',
+                        }),
+                    });
+
+                    const data = await response.json();
+                    if (!data.success) {
+                        const details = (data.errors && data.errors.length > 0)
+                            ? ` ${data.errors.slice(0, 2).join(' | ')}`
+                            : '';
+                        handleSendMessage('error', (data.message || 'Failed to verify resume.') + details);
+                        return;
+                    }
+
+                    const warningText = (data.errors && data.errors.length > 0)
+                        ? ` Warnings: ${data.errors.length} issue(s).`
+                        : '';
+                    handleSendMessage('success', `Verified ${filename} and updated dashboard data.${warningText}`);
+                    fetchAvailableRanks();
+                    fetchDashboardData({ resetPage: true });
+                    fetchDownloadFolderSummaries();
+                } catch (error) {
+                    console.error('Download browser verification error:', error);
+                    handleSendMessage('error', 'Failed to connect to backend.');
+                } finally {
+                    setIsDownloadBrowserVerifying(false);
+                }
             };
 
             const fetchRankFolderShipTypes = async (rankFolder) => {
@@ -2114,8 +2181,8 @@
                                 </div>
                                 {!sessionConnected ? (
                                     <div className="bg-gray-50 p-6 rounded-lg border">
-                                        <h3 className="text-lg font-medium text-gray-800 mb-2">Connect to Seajobs</h3>
-                                        <p className="text-sm text-gray-600 mb-4">Connect to the website to start downloading new resumes.</p>
+                                        <h3 className="text-lg font-medium text-gray-800 mb-2">Connect to the website to start downloading new resumes.</h3>
+                                        <p className="text-sm text-gray-600 mb-4">Browsing downloaded resumes does not require an active website session.</p>
                                         {loginStep === 'phone' && (
                                             <div className="space-y-4">
                                                 <div>
@@ -3906,13 +3973,29 @@
                                         </div>
                                     )}
                                 </div>
-                                <div className="bg-slate-100 h-full">
+                                <div className="bg-slate-100 h-full flex flex-col min-h-0">
                                     {downloadFolderBrowser.selectedFile ? (
-                                        <iframe
-                                            title={`Preview ${downloadFolderBrowser.selectedFile}`}
-                                            src={`${API_BASE_URL}/get_resume/${downloadFolderBrowser.rankFolder}/${encodeURIComponent(downloadFolderBrowser.selectedFile)}`}
-                                            className="w-full h-full"
-                                        />
+                                        <>
+                                            <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-slate-200 bg-white">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-slate-900 truncate">{downloadFolderBrowser.selectedFile}</p>
+                                                    <p className="text-xs text-slate-500">Adds the resume to the existing verified/dashboard event log without moving the source file.</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleVerifyDownloadedResume}
+                                                    disabled={isDownloadBrowserVerifying}
+                                                    className="shrink-0 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    {isDownloadBrowserVerifying ? 'Verifying...' : 'Verify Resume'}
+                                                </button>
+                                            </div>
+                                            <iframe
+                                                title={`Preview ${downloadFolderBrowser.selectedFile}`}
+                                                src={`${API_BASE_URL}/get_resume/${downloadFolderBrowser.rankFolder}/${encodeURIComponent(downloadFolderBrowser.selectedFile)}`}
+                                                className="w-full flex-1 min-h-0"
+                                            />
+                                        </>
                                     ) : (
                                         <div className="h-full flex items-center justify-center text-sm text-slate-500">
                                             Select a downloaded resume to preview it.
