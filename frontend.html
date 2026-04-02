@@ -143,6 +143,8 @@
 
             const [rankFolders, setRankFolders] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
+            const [rankFolderShipTypes, setRankFolderShipTypes] = useState([]);
+            const [selectedSearchShipType, setSelectedSearchShipType] = useState('');
             const [aiPrompt, setAiPrompt] = useState('');
             const [analysisResults, setAnalysisResults] = useState(null);
             
@@ -412,6 +414,11 @@
             }, [authUser, downloadLog]);
 
             useEffect(() => {
+                if (!authUser) return;
+                fetchRankFolderShipTypes(selectedRankFolder);
+            }, [authUser, selectedRankFolder]);
+
+            useEffect(() => {
                 const initAuth = async () => {
                     const needed = await fetchBootstrapStatus();
                     if (needed) {
@@ -659,6 +666,31 @@
                     }
                 } catch (error) {
                     console.error("Could not fetch rank folders", error);
+                }
+            };
+
+            const fetchRankFolderShipTypes = async (rankFolder) => {
+                const currentRankFolder = String(rankFolder || '').trim();
+                if (!currentRankFolder) {
+                    setRankFolderShipTypes([]);
+                    setSelectedSearchShipType('');
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_rank_folder_ship_types?rank_folder=${encodeURIComponent(currentRankFolder)}`);
+                    const data = await response.json();
+                    if (data.success) {
+                        const nextShipTypes = data.ship_types || [];
+                        setRankFolderShipTypes(nextShipTypes);
+                        setSelectedSearchShipType(prev => (prev && nextShipTypes.includes(prev) ? prev : ''));
+                    } else {
+                        setRankFolderShipTypes([]);
+                        setSelectedSearchShipType('');
+                    }
+                } catch (error) {
+                    console.error("Could not fetch rank folder ship types", error);
+                    setRankFolderShipTypes([]);
+                    setSelectedSearchShipType('');
                 }
             };
 
@@ -1659,7 +1691,8 @@
                 try {
                     const url = `${API_BASE_URL}/analyze_stream?` + new URLSearchParams({
                         prompt: aiPrompt,
-                        rank_folder: selectedRankFolder
+                        rank_folder: selectedRankFolder,
+                        applied_ship_type: selectedSearchShipType
                     });
                     
                     const eventSource = new EventSource(url);
@@ -1837,6 +1870,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             rank_folder: selectedRankFolder,
+                            search_ship_type: selectedSearchShipType,
                             filenames: Array.from(selectedFiles),
                             match_data: matchData,
                             ai_prompt: aiPrompt
@@ -3290,6 +3324,19 @@
                                                     <option>No downloaded resume folders found</option>
                                                 )}
                                             </select>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">Applied Ship Type Filter</label>
+                                            <select
+                                                id="searchShipType"
+                                                value={selectedSearchShipType}
+                                                onChange={e => setSelectedSearchShipType(e.target.value)}
+                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                            >
+                                                <option value="">Any applied ship type</option>
+                                                {rankFolderShipTypes.map(shipType => <option key={shipType} value={shipType}>{shipType}</option>)}
+                                            </select>
+                                            <p className="mt-1 text-xs text-gray-500">Uses ship type captured from the Seajobs download filter, not resume-derived vessel experience.</p>
                                         </div>
                                         <div>
                                             <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-1">Enter AI Search Prompt</label>

@@ -761,6 +761,11 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["age_years"] = age_constraint
         return constraints
 
+    def _normalize_ship_type(self, ship_type):
+        normalized = str(ship_type or "").strip().lower()
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+        return re.sub(r"\s+", " ", normalized).strip()
+
     def _strip_age_constraint_phrases(self, user_prompt):
         prompt = str(user_prompt or "")
         if not prompt:
@@ -831,6 +836,17 @@ class AIResumeAnalyzer:
             }]
         print(f"[FULL SCAN] Enumerated {len(candidates)} candidate resumes from rank folder")
         return candidates
+
+    def _rank_manifest_metadata(self, target_folder):
+        manifest_path = Path(target_folder) / "manifest.json"
+        if not manifest_path.exists():
+            return {}
+        try:
+            data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        files = data.get("files") if isinstance(data, dict) else {}
+        return files if isinstance(files, dict) else {}
 
     def _parse_dob_from_text(self, raw_text):
         dob_fact = self._extract_dob_fact_from_text(raw_text)
@@ -953,14 +969,23 @@ class AIResumeAnalyzer:
             "dob_parse_status": dob_fact.get("status", "MISSING"),
         }
 
-    def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None):
+    def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
         age_info = self._resolve_candidate_age(chunks, original_path=original_path, text_cache=text_cache)
+        metadata_entry = {}
+        if folder_metadata:
+            metadata_entry = folder_metadata.get(filename) or {}
+        applied_ship_types = metadata_entry.get("applied_ship_types")
+        if not isinstance(applied_ship_types, list):
+            applied_ship_types = []
         return {
             "candidate_id": filename,
             "rank_folder": rank,
             "personal": {
                 "dob": age_info.get("dob"),
                 "dob_parse_status": age_info.get("dob_parse_status"),
+            },
+            "application": {
+                "applied_ship_types": applied_ship_types,
             },
             "derived": {
                 "age_years": age_info.get("age"),
@@ -1044,6 +1069,36 @@ class AIResumeAnalyzer:
         age_constraint = hard_constraints.get("age_years")
         if age_constraint:
             results.append(self._evaluate_age_rule(candidate_facts, age_constraint))
+
+        ship_type_constraint = hard_constraints.get("applied_ship_type")
+        if ship_type_constraint:
+            requested_ship_type = self._normalize_ship_type(ship_type_constraint)
+            candidate_ship_types = [
+                self._normalize_ship_type(value)
+                for value in ((candidate_facts.get("application") or {}).get("applied_ship_types") or [])
+            ]
+            candidate_ship_types = [value for value in candidate_ship_types if value]
+            if not candidate_ship_types:
+                results.append({
+                    "decision": "UNKNOWN",
+                    "reason_code": "APPLIED_SHIP_TYPE_MISSING",
+                    "message": f"Could not determine applied ship type for requested filter '{ship_type_constraint}'.",
+                })
+            elif requested_ship_type in candidate_ship_types:
+                results.append({
+                    "decision": "PASS",
+                    "reason_code": "APPLIED_SHIP_TYPE_MATCH",
+                    "message": f"Candidate applied ship type matches '{ship_type_constraint}'.",
+                })
+            else:
+                results.append({
+                    "decision": "FAIL",
+                    "reason_code": "APPLIED_SHIP_TYPE_MISMATCH",
+                    "message": (
+                        f"Candidate applied ship type {candidate_ship_types} does not match requested "
+                        f"filter '{ship_type_constraint}'."
+                    ),
+                })
 
         if any(result["decision"] == "FAIL" for result in results):
             final_decision = "FAIL"
@@ -1418,7 +1473,7 @@ Examples of GOOD responses:
         
         return {"is_match": False, "reason": "Failed to get conclusive answer from AI.", "confidence": 0.0}
 
-    def run_analysis_stream(self, rank, user_prompt):
+    def run_analysis_stream(self, rank, user_prompt, applied_ship_type=None):
         """Streaming analysis with multi-stage retrieval for compound queries"""
         yield {"type": "status", "message": "Initializing analysis..."}
         
@@ -1434,7 +1489,10 @@ Examples of GOOD responses:
                 yield ingest_event
 
             job_constraints = self._extract_job_constraints(user_prompt, rank=rank)
+            if str(applied_ship_type or "").strip():
+                job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
             structured_only_prompt = self._is_structured_only_prompt(user_prompt)
+            folder_metadata = self._rank_manifest_metadata(target_folder)
             
             # Parse query to detect compound logic
             is_compound, operator, sub_queries = self._parse_compound_query(user_prompt)
@@ -1517,6 +1575,7 @@ Examples of GOOD responses:
                     chunks,
                     original_path=original_path,
                     text_cache=text_cache,
+                    folder_metadata=folder_metadata,
                 )
                 hard_filter_result = self._evaluate_hard_filters(candidate_facts, job_constraints)
                 age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
@@ -1602,7 +1661,7 @@ Examples of GOOD responses:
             traceback.print_exc()
             yield {"type": "error", "message": f"Analysis failed: {str(e)}"}
 
-    def run_analysis(self, rank, user_prompt):
+    def run_analysis(self, rank, user_prompt, applied_ship_type=None):
         """Non-streaming version"""
         verified_matches = []
         uncertain_matches = []
@@ -1610,7 +1669,7 @@ Examples of GOOD responses:
         hard_filter_summary = {}
         message = ""
         
-        for event in self.run_analysis_stream(rank, user_prompt):
+        for event in self.run_analysis_stream(rank, user_prompt, applied_ship_type=applied_ship_type):
             if event['type'] == 'match_found':
                 verified_matches.append(event['match'])
             elif event['type'] == 'uncertain_found':
@@ -1658,13 +1717,13 @@ class Analyzer:
             config.read(config_path)
             Analyzer._instance = AIResumeAnalyzer(config)
 
-    def run_analysis(self, target_folder, prompt):
+    def run_analysis(self, target_folder, prompt, applied_ship_type=None):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
-        return Analyzer._instance.run_analysis(rank_name, prompt)
+        return Analyzer._instance.run_analysis(rank_name, prompt, applied_ship_type=applied_ship_type)
     
-    def run_analysis_stream(self, target_folder, prompt):
+    def run_analysis_stream(self, target_folder, prompt, applied_ship_type=None):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
-        for progress_event in Analyzer._instance.run_analysis_stream(rank_name, prompt):
+        for progress_event in Analyzer._instance.run_analysis_stream(rank_name, prompt, applied_ship_type=applied_ship_type):
             yield progress_event
     
     def store_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence,

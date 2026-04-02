@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import sys
 import types
@@ -514,6 +515,63 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn('"type": "log"', payload)
         self.assertIn('"type": "complete"', payload)
         self.assertIn('"success": true', payload.lower())
+
+    def test_get_rank_folder_ship_types_reads_manifest_metadata(self):
+        manifest_path = self.rank_dir / "manifest.json"
+        manifest_path.write_text(json.dumps({
+            "version": 1,
+            "files": {
+                "Chief_Officer_1001.pdf": {
+                    "candidate_id": "1001",
+                    "rank": self.rank,
+                    "applied_ship_types": ["Bulk Carrier", "Tanker"],
+                },
+                "Chief_Officer_1002.pdf": {
+                    "candidate_id": "1002",
+                    "rank": self.rank,
+                    "applied_ship_types": ["Bulk Carrier"],
+                },
+            }
+        }), encoding="utf-8")
+
+        resp = self.client.get(f"/get_rank_folder_ship_types?rank_folder={self.rank}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["ship_types"], ["Bulk Carrier", "Tanker"])
+
+    def test_analyze_stream_forwards_applied_ship_type_to_analyzer(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None):
+                captured["rank_folder"] = rank_folder
+                captured["prompt"] = prompt
+                captured["applied_ship_type"] = applied_ship_type
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {"scanned": 0, "passed": 0, "failed": 0, "unknown": 0, "matched": 0},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=show%20candidates&applied_ship_type=Bulk%20Carrier"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["prompt"], "show candidates")
+        self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
 
     def test_admin_settings_requires_token(self):
         with self.client.session_transaction() as sess:

@@ -126,7 +126,7 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
             for spec in resume_specs
         }
 
-        def fake_build_candidate_facts(filename, rank, chunks, original_path=None, text_cache=None):
+        def fake_build_candidate_facts(filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
             spec = fact_by_filename[filename]
             return {
                 "candidate_id": filename,

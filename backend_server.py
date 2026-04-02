@@ -279,6 +279,23 @@ def _platform_from_filename(name: str):
     return "all"
 
 
+def _rank_manifest_data(rank_folder):
+    base_folder = settings['Default_Download_Folder']
+    rank_path = _resolve_within_base(base_folder, rank_folder)
+    manifest_path = os.path.join(rank_path, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return {}
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            return {}
+        files = data.get("files")
+        return files if isinstance(files, dict) else {}
+    except Exception:
+        return {}
+
+
 def _ui_idle_autoshutdown_enabled():
     return _env_bool("NJORDHR_AUTO_SHUTDOWN_ON_UI_IDLE", default=False)
 
@@ -2519,6 +2536,30 @@ def get_rank_folders():
     except Exception as e:
         return jsonify({"success": False, "folders": [], "message": str(e)})
 
+
+@app.route('/get_rank_folder_ship_types', methods=['GET'])
+def get_rank_folder_ship_types():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    rank_folder = str(request.args.get('rank_folder', '')).strip()
+    if not rank_folder:
+        return jsonify({"success": True, "ship_types": []})
+    if not _is_safe_name(rank_folder):
+        return jsonify({"success": False, "message": "Invalid rank folder."}), 400
+    files = _rank_manifest_data(rank_folder)
+    ship_types = set()
+    for entry in files.values():
+        if not isinstance(entry, dict):
+            continue
+        values = entry.get("applied_ship_types") or []
+        if isinstance(values, list):
+            for value in values:
+                normalized = str(value or "").strip()
+                if normalized:
+                    ship_types.add(normalized)
+    return jsonify({"success": True, "ship_types": sorted(ship_types)})
+
 @app.route('/analyze_stream', methods=['GET'])
 def analyze_stream():
     """Stream analysis progress using Server-Sent Events"""
@@ -2529,6 +2570,7 @@ def analyze_stream():
         return Response(denied(), mimetype='text/event-stream')
     prompt = request.args.get('prompt')
     rank_folder = request.args.get('rank_folder')
+    applied_ship_type = request.args.get('applied_ship_type', '').strip()
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
 
     def generate():
@@ -2546,7 +2588,7 @@ def analyze_stream():
             analyzer = Analyzer(_gemini_api_key())
             
             # Stream progress events
-            for progress_event in analyzer.run_analysis_stream(rank_folder, prompt):
+            for progress_event in analyzer.run_analysis_stream(rank_folder, prompt, applied_ship_type=applied_ship_type):
                 yield f"data: {json.dumps(progress_event)}\n\n"
             
         except Exception as e:
@@ -2567,6 +2609,7 @@ def analyze():
         data = request.json
         prompt = data.get('prompt')
         rank_folder = data.get('rank_folder')
+        applied_ship_type = str(data.get('applied_ship_type', '')).strip()
 
         if not prompt or not rank_folder:
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
@@ -2579,7 +2622,7 @@ def analyze():
         print(f"[BACKEND] Prompt: {prompt}")
         
         analyzer = Analyzer(_gemini_api_key())
-        result = analyzer.run_analysis(rank_folder, prompt)
+        result = analyzer.run_analysis(rank_folder, prompt, applied_ship_type=applied_ship_type)
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
             "success": bool(result.get("success")),
             "verified_matches": len(result.get("verified_matches", [])),

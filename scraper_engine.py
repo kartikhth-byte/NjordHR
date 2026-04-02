@@ -203,6 +203,52 @@ class Scraper:
             return True
         except Exception: return False
 
+    def _rank_manifest_path(self, target_folder):
+        return os.path.join(target_folder, "manifest.json")
+
+    def _load_rank_manifest(self, target_folder):
+        manifest_path = self._rank_manifest_path(target_folder)
+        if not os.path.exists(manifest_path):
+            return {"version": 1, "files": {}}
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                return {"version": 1, "files": {}}
+            if not isinstance(data.get("files"), dict):
+                data["files"] = {}
+            data.setdefault("version", 1)
+            return data
+        except Exception:
+            return {"version": 1, "files": {}}
+
+    def _save_rank_manifest(self, target_folder, manifest):
+        os.makedirs(target_folder, exist_ok=True)
+        manifest_path = self._rank_manifest_path(target_folder)
+        temp_path = f"{manifest_path}.tmp"
+        with open(temp_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, indent=2, sort_keys=True)
+        os.replace(temp_path, manifest_path)
+
+    def _record_download_metadata(self, target_folder, filename, rank, ship_type, candidate_id):
+        manifest = self._load_rank_manifest(target_folder)
+        files = manifest.setdefault("files", {})
+        entry = files.get(filename) or {}
+        ship_types = entry.get("applied_ship_types")
+        if not isinstance(ship_types, list):
+            ship_types = []
+        normalized_ship_type = str(ship_type or "").strip()
+        if normalized_ship_type and normalized_ship_type not in ship_types:
+            ship_types.append(normalized_ship_type)
+            ship_types.sort()
+        entry.update({
+            "candidate_id": str(candidate_id or "").strip(),
+            "rank": str(rank or "").strip(),
+            "applied_ship_types": ship_types,
+        })
+        files[filename] = entry
+        self._save_rank_manifest(target_folder, manifest)
+
     def _candidate_file_exists(self, target_folder, rank, ship_type, candidate_id):
         """
         Detect existing resume files for a candidate across both naming schemes:
@@ -293,6 +339,7 @@ class Scraper:
                 pdf_filename = f"{rank_slug}_{candidate_id}.pdf"
                 if not force_redownload and self._candidate_file_exists(target_folder, rank, ship_type, candidate_id):
                     logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
+                    self._record_download_metadata(target_folder, pdf_filename, rank, ship_type, candidate_id)
                     existing_ids.add(candidate_id)
                     continue
 
@@ -311,6 +358,7 @@ class Scraper:
                     self.driver.switch_to.window(new_window)
                     self.wait.until(EC.visibility_of_element_located((By.XPATH, DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH)))
                     if self._save_page_as_pdf(target_folder, pdf_filename):
+                        self._record_download_metadata(target_folder, pdf_filename, rank, ship_type, candidate_id)
                         logger.info(f"  -> Saved: {pdf_filename}")
                         existing_ids.add(candidate_id)
                 except Exception as e:
