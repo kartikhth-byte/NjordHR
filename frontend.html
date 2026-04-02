@@ -2058,59 +2058,24 @@
             };
             
             const DownloadTabContent = () => {
-                if (!sessionConnected) {
-                    return (
-                        <div>
-                            <h2 className="text-2xl font-semibold mb-2">Online Resume Download</h2>
-                            <p className="text-gray-600 mb-6">Connect to the website to start downloading new resumes.</p>
-                            <div className="bg-gray-50 p-6 rounded-lg border">
-                                {loginStep === 'phone' && (
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Registered Mobile Number</label>
-                                            <input type="text" id="phone" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" placeholder="e.g. 91xxxxxxxxxx"/>
-                                        </div>
-                                        <button onClick={handleSendOTP} disabled={isOtpSending} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
-                                            {isOtpSending ? 'Connecting...' : 'Connect & Get OTP'}
-                                        </button>
-                                    </div>
-                                )}
-                                {loginStep === 'otp' && (
-                                     <div className="space-y-4">
-                                        <p className="text-sm text-center text-gray-600">An OTP was sent to {phoneNumber}.</p>
-                                        {otpSecondsLeft !== null && (
-                                            <p className={`text-xs text-center ${otpSecondsLeft <= 30 ? 'text-red-600' : 'text-gray-500'}`}>
-                                                OTP expires in {otpSecondsLeft}s
-                                            </p>
-                                        )}
-                                        <div>
-                                            <label htmlFor="otp" className="block text-sm font-medium text-gray-700">Enter OTP</label>
-                                            <input type="text" key="otp-input" id="otp" value={otp} onChange={e => setOtp(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md"/>
-                                        </div>
-                                        <button onClick={handleVerifyOTP} disabled={isOtpVerifying} className="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-300">
-                                            {isOtpVerifying ? 'Verifying...' : 'Verify & Start Session'}
-                                        </button>
-                                         <button onClick={() => { setLoginStep('phone'); setOtp(''); setOtpExpiresAt(null); }} className="w-full text-sm text-center text-blue-600 hover:underline">
-                                            Use a different number
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    );
-                }
-
                 return (
                     <div>
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-semibold">Download Resumes</h2>
-                            <div className="flex items-center space-x-4">
-                                <div className="flex items-center space-x-2">
-                                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>
-                                    <span className="text-sm font-medium text-green-700">Connected to Website</span>
-                                </div>
-                                <button onClick={handleDisconnect} disabled={isDisconnecting} className="text-sm text-red-600 hover:underline disabled:text-gray-400">{isDisconnecting ? 'Disconnecting...' : 'Disconnect'}</button>
+                            <div>
+                                <h2 className="text-2xl font-semibold">Download Resumes</h2>
+                                <p className="text-sm text-gray-600 mt-1">Browse already-downloaded resumes anytime. Live scraping still requires an active website session.</p>
                             </div>
+                            {sessionConnected ? (
+                                <div className="flex items-center space-x-4">
+                                    <div className="flex items-center space-x-2">
+                                        <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>
+                                        <span className="text-sm font-medium text-green-700">Connected to Website</span>
+                                    </div>
+                                    <button onClick={handleDisconnect} disabled={isDisconnecting} className="text-sm text-red-600 hover:underline disabled:text-gray-400">{isDisconnecting ? 'Disconnecting...' : 'Disconnect'}</button>
+                                </div>
+                            ) : (
+                                <span className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">Website disconnected</span>
+                            )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-6">
@@ -2147,40 +2112,80 @@
                                         <p className="text-sm text-slate-500">No rank folders found in the download directory yet.</p>
                                     )}
                                 </div>
-                                <div>
-                                    <label htmlFor="rank" className="block text-sm font-medium text-gray-700 mb-1">Select Rank</label>
-                                    <select id="rank" value={selectedRank} onChange={e => setSelectedRank(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                                        {ranks.map(r => <option key={r} value={r}>{r}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label htmlFor="shipType" className="block text-sm font-medium text-gray-700 mb-1">Select Ship Type</label>
-                                    <select id="shipType" value={selectedShipType} onChange={e => setSelectedShipType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                                        {shipTypes.map(st => <option key={st} value={st}>{st}</option>)}
-                                    </select>
-                                </div>
-                                <div className="flex items-center">
-                                    <input id="force" type="checkbox" checked={forceRedownload} onChange={e => setForceRedownload(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                                    <label htmlFor="force" className="ml-2 block text-sm text-gray-900">Force re-download all resumes (slower)</label>
-                                </div>
-                                <button onClick={handleStartDownload} disabled={isDownloadLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
-                                    {isDownloadLoading ? 'Downloading...' : 'Start Download'}
-                                </button>
-                                {isDownloadInProgress && (
-                                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center space-x-2">
-                                                <svg className="animate-spin h-5 w-5 text-blue-700" viewBox="0 0 24 24" fill="none">
-                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"></circle>
-                                                    <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" className="opacity-90"></path>
-                                                </svg>
-                                                <span className="text-sm font-semibold text-blue-800">Download in progress</span>
+                                {!sessionConnected ? (
+                                    <div className="bg-gray-50 p-6 rounded-lg border">
+                                        <h3 className="text-lg font-medium text-gray-800 mb-2">Connect to Seajobs</h3>
+                                        <p className="text-sm text-gray-600 mb-4">Connect to the website to start downloading new resumes.</p>
+                                        {loginStep === 'phone' && (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Registered Mobile Number</label>
+                                                    <input type="text" id="phone" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" placeholder="e.g. 91xxxxxxxxxx"/>
+                                                </div>
+                                                <button onClick={handleSendOTP} disabled={isOtpSending} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
+                                                    {isOtpSending ? 'Connecting...' : 'Connect & Get OTP'}
+                                                </button>
                                             </div>
-                                            <span className="text-xs text-blue-700">Elapsed: {downloadElapsedSeconds}s</span>
-                                        </div>
-                                        <div className="h-2 rounded bg-blue-100 download-indeterminate"></div>
-                                        <p className="text-xs text-blue-700 mt-2">The scraper is collecting profiles and generating PDFs. This may take a few minutes.</p>
+                                        )}
+                                        {loginStep === 'otp' && (
+                                             <div className="space-y-4">
+                                                <p className="text-sm text-center text-gray-600">An OTP was sent to {phoneNumber}.</p>
+                                                {otpSecondsLeft !== null && (
+                                                    <p className={`text-xs text-center ${otpSecondsLeft <= 30 ? 'text-red-600' : 'text-gray-500'}`}>
+                                                        OTP expires in {otpSecondsLeft}s
+                                                    </p>
+                                                )}
+                                                <div>
+                                                    <label htmlFor="otp" className="block text-sm font-medium text-gray-700">Enter OTP</label>
+                                                    <input type="text" key="otp-input" id="otp" value={otp} onChange={e => setOtp(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md"/>
+                                                </div>
+                                                <button onClick={handleVerifyOTP} disabled={isOtpVerifying} className="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-300">
+                                                    {isOtpVerifying ? 'Verifying...' : 'Verify & Start Session'}
+                                                </button>
+                                                 <button onClick={() => { setLoginStep('phone'); setOtp(''); setOtpExpiresAt(null); }} className="w-full text-sm text-center text-blue-600 hover:underline">
+                                                    Use a different number
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label htmlFor="rank" className="block text-sm font-medium text-gray-700 mb-1">Select Rank</label>
+                                            <select id="rank" value={selectedRank} onChange={e => setSelectedRank(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                                                {ranks.map(r => <option key={r} value={r}>{r}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="shipType" className="block text-sm font-medium text-gray-700 mb-1">Select Ship Type</label>
+                                            <select id="shipType" value={selectedShipType} onChange={e => setSelectedShipType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                                                {shipTypes.map(st => <option key={st} value={st}>{st}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center">
+                                            <input id="force" type="checkbox" checked={forceRedownload} onChange={e => setForceRedownload(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                                            <label htmlFor="force" className="ml-2 block text-sm text-gray-900">Force re-download all resumes (slower)</label>
+                                        </div>
+                                        <button onClick={handleStartDownload} disabled={isDownloadLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
+                                            {isDownloadLoading ? 'Downloading...' : 'Start Download'}
+                                        </button>
+                                        {isDownloadInProgress && (
+                                            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center space-x-2">
+                                                        <svg className="animate-spin h-5 w-5 text-blue-700" viewBox="0 0 24 24" fill="none">
+                                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"></circle>
+                                                            <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" className="opacity-90"></path>
+                                                        </svg>
+                                                        <span className="text-sm font-semibold text-blue-800">Download in progress</span>
+                                                    </div>
+                                                    <span className="text-xs text-blue-700">Elapsed: {downloadElapsedSeconds}s</span>
+                                                </div>
+                                                <div className="h-2 rounded bg-blue-100 download-indeterminate"></div>
+                                                <p className="text-xs text-blue-700 mt-2">The scraper is collecting profiles and generating PDFs. This may take a few minutes.</p>
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                             <div>
