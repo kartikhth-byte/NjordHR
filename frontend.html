@@ -124,6 +124,8 @@
             const [isVerifyingResumes, setIsVerifyingResumes] = useState(false);
             
             const [sessionConnected, setSessionConnected] = useState(false);
+            const [sessionHealthInfo, setSessionHealthInfo] = useState({ idleSeconds: 0, idleTimeoutSeconds: 0 });
+            const [sessionDisconnectNotice, setSessionDisconnectNotice] = useState('');
             const [loginStep, setLoginStep] = useState('phone');
             const [phoneNumber, setPhoneNumber] = useState('');
             const [otp, setOtp] = useState('');
@@ -610,6 +612,10 @@
                         if (!data.success) return;
 
                         const health = data.health || {};
+                        setSessionHealthInfo({
+                            idleSeconds: Number(data.idle_seconds) || 0,
+                            idleTimeoutSeconds: Number(data.idle_timeout_seconds) || 0,
+                        });
                         if (loginStep === 'otp') {
                             if (health.otp_expired || health.reason === 'Returned to login page') {
                                 setLoginStep('phone');
@@ -620,11 +626,20 @@
                         }
 
                         if (sessionConnected && !health.valid) {
-                            setSessionConnected(false);
-                            setLoginStep('phone');
-                            setOtp('');
-                            setOtpExpiresAt(null);
-                            handleSendMessage('error', `Session disconnected: ${health.reason || 'Unknown reason'}`);
+                            const reason = data.message || health.reason || 'Session disconnected.';
+                            const isIdleTimeout = String(health.reason || '').toLowerCase().includes('idle timeout');
+                            applySessionDisconnected(
+                                isIdleTimeout
+                                    ? `${reason} Request a new OTP to reconnect.`
+                                    : `Session disconnected: ${reason}`,
+                                {
+                                    preservePhone: true,
+                                    clearOtpState: true,
+                                    surfaceAsError: true,
+                                    idleSeconds: data.idle_seconds,
+                                    idleTimeoutSeconds: data.idle_timeout_seconds,
+                                }
+                            );
                         }
                     } catch (_error) {
                         // Best-effort polling; no UI disruption on transient failures.
@@ -1644,6 +1659,53 @@
                 Export: exportCompleted
             };
 
+            const formatIdleDuration = (seconds) => {
+                const total = Math.max(0, Number(seconds) || 0);
+                const minutes = Math.floor(total / 60);
+                const remainingSeconds = total % 60;
+                if (minutes <= 0) return `${remainingSeconds}s`;
+                if (remainingSeconds === 0) return `${minutes}m`;
+                return `${minutes}m ${remainingSeconds}s`;
+            };
+
+            const resetDownloadActivityState = () => {
+                setIsDownloadLoading(false);
+                setIsDownloadInProgress(false);
+            };
+
+            const applySessionDisconnected = (reason, options = {}) => {
+                const {
+                    preservePhone = true,
+                    clearOtpState = true,
+                    surfaceAsError = true,
+                    idleSeconds = 0,
+                    idleTimeoutSeconds = 0,
+                } = options;
+                const message = String(reason || 'Session disconnected.').trim();
+                if (downloadEventSourceRef.current) {
+                    downloadEventSourceRef.current.close();
+                    downloadEventSourceRef.current = null;
+                }
+                setSessionConnected(false);
+                setLoginStep('phone');
+                if (!preservePhone) {
+                    setPhoneNumber('');
+                }
+                if (clearOtpState) {
+                    setOtp('');
+                    setOtpExpiresAt(null);
+                }
+                setSessionHealthInfo({
+                    idleSeconds: Number(idleSeconds) || 0,
+                    idleTimeoutSeconds: Number(idleTimeoutSeconds) || 0,
+                });
+                setSessionDisconnectNotice(message);
+                resetDownloadActivityState();
+                if (surfaceAsError) {
+                    handleSendMessage('error', message);
+                }
+            };
+
             const currentWorkflowStep = (() => {
                 if (!workflowState.Connect) return 'Connect';
                 if (!workflowState.Download) return 'Download';
@@ -1656,6 +1718,7 @@
             const handleSendOTP = async () => {
                 if (!phoneNumber) return handleSendMessage('error', 'Please enter a mobile number.');
                 setIsOtpSending(true);
+                setSessionDisconnectNotice('');
                 try {
                     const response = await fetch(`${API_BASE_URL}/start_session`, {
                         method: 'POST',
@@ -1690,6 +1753,8 @@
                         setSelectedRank(data.ranks ? data.ranks[0] : '');
                         setSelectedShipType(data.ship_types ? data.ship_types[0] : '');
                         setSessionConnected(true);
+                        setSessionDisconnectNotice('');
+                        setSessionHealthInfo({ idleSeconds: 0, idleTimeoutSeconds: 0 });
                         setOtpExpiresAt(null);
                         setDownloadCompleted(false);
                         setReviewCompleted(false);
@@ -1779,12 +1844,34 @@
                     };
 
                     stream.onerror = () => {
-                        handleSendMessage('error', 'Download stream disconnected.');
-                        setDownloadLog(prev => [...prev, 'ERROR: Download stream disconnected.']);
-                        setIsDownloadLoading(false);
-                        setIsDownloadInProgress(false);
                         stream.close();
                         downloadEventSourceRef.current = null;
+                        resetDownloadActivityState();
+                        fetch(`${API_BASE_URL}/session_health`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success && data.health && !data.health.valid) {
+                                    const reason = data.message || data.health.reason || 'Session disconnected during download.';
+                                    applySessionDisconnected(
+                                        `${reason} Request a new OTP to reconnect.`,
+                                        {
+                                            preservePhone: true,
+                                            clearOtpState: true,
+                                            surfaceAsError: true,
+                                            idleSeconds: data.idle_seconds,
+                                            idleTimeoutSeconds: data.idle_timeout_seconds,
+                                        }
+                                    );
+                                    setDownloadLog(prev => [...prev, `ERROR: ${reason}`]);
+                                    return;
+                                }
+                                handleSendMessage('error', 'Download stream disconnected. You can reconnect and retry.');
+                                setDownloadLog(prev => [...prev, 'ERROR: Download stream disconnected.']);
+                            })
+                            .catch(() => {
+                                handleSendMessage('error', 'Download stream disconnected. You can reconnect and retry.');
+                                setDownloadLog(prev => [...prev, 'ERROR: Download stream disconnected.']);
+                            });
                     };
                 } catch (error) {
                     handleSendMessage('error', 'Failed to connect to backend server.');
@@ -1803,6 +1890,8 @@
                     }
                     await fetch(`${API_BASE_URL}/disconnect_session`, { method: 'POST' });
                     setSessionConnected(false);
+                    setSessionDisconnectNotice('');
+                    setSessionHealthInfo({ idleSeconds: 0, idleTimeoutSeconds: 0 });
                     setLoginStep('phone');
                     setPhoneNumber('');
                     setOtp('');
@@ -2138,6 +2227,11 @@
                                         <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>
                                         <span className="text-sm font-medium text-green-700">Connected to Website</span>
                                     </div>
+                                    {sessionHealthInfo.idleTimeoutSeconds > 0 && (
+                                        <span className="text-xs text-slate-500">
+                                            Idle timeout: {formatIdleDuration(Math.max(0, sessionHealthInfo.idleTimeoutSeconds - sessionHealthInfo.idleSeconds))} remaining
+                                        </span>
+                                    )}
                                     <button onClick={handleDisconnect} disabled={isDisconnecting} className="text-sm text-red-600 hover:underline disabled:text-gray-400">{isDisconnecting ? 'Disconnecting...' : 'Disconnect'}</button>
                                 </div>
                             ) : (
@@ -2183,6 +2277,16 @@
                                     <div className="bg-gray-50 p-6 rounded-lg border">
                                         <h3 className="text-lg font-medium text-gray-800 mb-2">Connect to the website to start downloading new resumes.</h3>
                                         <p className="text-sm text-gray-600 mb-4">Browsing downloaded resumes does not require an active website session.</p>
+                                        {sessionDisconnectNotice && (
+                                            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                                                <p className="text-sm text-amber-800">{sessionDisconnectNotice}</p>
+                                                {sessionHealthInfo.idleTimeoutSeconds > 0 && (
+                                                    <p className="mt-1 text-xs text-amber-700">
+                                                        Previous session lasted {formatIdleDuration(sessionHealthInfo.idleSeconds)} and timed out after {formatIdleDuration(sessionHealthInfo.idleTimeoutSeconds)} of inactivity.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                         {loginStep === 'phone' && (
                                             <div className="space-y-4">
                                                 <div>
@@ -2192,6 +2296,9 @@
                                                 <button onClick={handleSendOTP} disabled={isOtpSending} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
                                                     {isOtpSending ? 'Connecting...' : 'Connect & Get OTP'}
                                                 </button>
+                                                {!!phoneNumber && !isOtpSending && (
+                                                    <p className="text-xs text-slate-500">Your last mobile number is preserved so you can reconnect quickly.</p>
+                                                )}
                                             </div>
                                         )}
                                         {loginStep === 'otp' && (
