@@ -288,6 +288,156 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         self.assertNotIn("Computed candidate age from DOB", llm_calls[0])
         self.assertNotIn("deterministic age gate", llm_calls[0])
 
+    def test_age_rule_marks_implausibly_low_or_high_age_as_unknown(self):
+        low_result = self.analyzer._evaluate_age_rule(
+            {
+                "personal": {"dob": date(2020, 1, 1), "dob_parse_status": "PARSED"},
+                "derived": {"age_years": 6},
+                "fact_meta": {"derived.age_years": {"confidence": 0.99}},
+            },
+            {"min_age": 30, "max_age": 50},
+        )
+        high_result = self.analyzer._evaluate_age_rule(
+            {
+                "personal": {"dob": date(1900, 1, 1), "dob_parse_status": "PARSED"},
+                "derived": {"age_years": 126},
+                "fact_meta": {"derived.age_years": {"confidence": 0.99}},
+            },
+            {"min_age": 30, "max_age": 50},
+        )
+        self.assertEqual(low_result["decision"], "UNKNOWN")
+        self.assertEqual(low_result["reason_code"], "INVALID_AGE_TOO_LOW")
+        self.assertEqual(high_result["decision"], "UNKNOWN")
+        self.assertEqual(high_result["reason_code"], "INVALID_AGE_TOO_HIGH")
+
+    def test_age_rule_marks_explicit_age_conflict_as_unknown(self):
+        result = self.analyzer._evaluate_age_rule(
+            {
+                "personal": {
+                    "dob": date(1989, 11, 4),
+                    "dob_parse_status": "PARSED",
+                    "stated_age": 31,
+                    "stated_age_status": "PARSED",
+                },
+                "derived": {"age_years": 36},
+                "fact_meta": {"derived.age_years": {"confidence": 0.99}},
+            },
+            {"min_age": 30, "max_age": 50},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "DATA_CONFLICT")
+        self.assertIn("explicitly stated age", result["message"])
+
+    def test_hard_filter_output_includes_evaluation_metadata(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "personal": {"dob": date(1989, 11, 4), "dob_parse_status": "PARSED"},
+                "derived": {"age_years": 36},
+                "fact_meta": {"derived.age_years": {"confidence": 0.99}},
+            },
+            {"hard_constraints": {"age_years": {"min_age": 30, "max_age": 50}}},
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertIn("evaluation_date_used", result)
+        self.assertEqual(result["facts_version"], AIResumeAnalyzer.FACTS_VERSION)
+        self.assertEqual(result["results"][0]["actual_value"], 36)
+        self.assertEqual(result["results"][0]["expected_value"], {"min_age": 30, "max_age": 50})
+
+    # ------------------------------------------------------------------
+    # _extract_stated_age_fact_from_text — disqualifying prefix guard
+    # ------------------------------------------------------------------
+
+    def test_stated_age_extraction_ignores_vessel_age(self):
+        """Vessel age, engine age, etc. must not be treated as candidate age."""
+        disqualifying_cases = [
+            "vessel age: 15 years",
+            "ship age 8",
+            "engine age: 12",
+            "document age: 3 years",
+            "course age: 2",
+            "sea age 5",
+            "charter age: 7",
+        ]
+        for text in disqualifying_cases:
+            with self.subTest(text=text):
+                result = self.analyzer._extract_stated_age_fact_from_text(text)
+                self.assertEqual(result["status"], "MISSING", msg=f"Should not extract from: {text!r}")
+                self.assertIsNone(result["age"])
+
+    def test_stated_age_extraction_accepts_plain_candidate_age(self):
+        """Explicit candidate age labels without disqualifying prefixes must be extracted."""
+        valid_cases = [
+            ("Age: 36", 36),
+            ("age 29", 29),
+            ("Aged 42", 42),
+            ("Candidate Age: 31", 31),
+        ]
+        for text, expected_age in valid_cases:
+            with self.subTest(text=text):
+                result = self.analyzer._extract_stated_age_fact_from_text(text)
+                self.assertEqual(result["status"], "PARSED", msg=f"Should extract from: {text!r}")
+                self.assertEqual(result["age"], expected_age)
+
+    # ------------------------------------------------------------------
+    # _check_age_conflict — out-of-range stated age is ignored
+    # ------------------------------------------------------------------
+
+    def test_conflict_detection_ignores_out_of_range_stated_age(self):
+        """Stated ages outside 14-80 are almost certainly extraction artefacts."""
+        out_of_range_cases = [0, 5, 13, 81, 150, 200]
+        for stated_age in out_of_range_cases:
+            with self.subTest(stated_age=stated_age):
+                result = self.analyzer._check_age_conflict(
+                    36,
+                    {"age": stated_age, "status": "PARSED"},
+                )
+                self.assertIsNone(result, msg=f"Should ignore stated_age={stated_age}")
+
+    def test_conflict_detection_triggers_on_plausible_disagreement(self):
+        """A stated age within 14-80 that disagrees with DOB by more than 2 years triggers DATA_CONFLICT."""
+        result = self.analyzer._check_age_conflict(
+            36,
+            {"age": 25, "status": "PARSED"},
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result["reason_code"], "DATA_CONFLICT")
+
+    def test_conflict_detection_passes_when_ages_agree(self):
+        """A stated age within 2 years of DOB-derived age must not conflict."""
+        result = self.analyzer._check_age_conflict(
+            36,
+            {"age": 37, "status": "PARSED"},
+        )
+        self.assertIsNone(result)
+
+    # ------------------------------------------------------------------
+    # _evaluate_rule — new operators
+    # ------------------------------------------------------------------
+
+    def test_evaluate_rule_gte(self):
+        self.assertTrue(self.analyzer._evaluate_rule("gte", 10, 5))
+        self.assertTrue(self.analyzer._evaluate_rule("gte", 5, 5))
+        self.assertFalse(self.analyzer._evaluate_rule("gte", 4, 5))
+
+    def test_evaluate_rule_lte(self):
+        self.assertTrue(self.analyzer._evaluate_rule("lte", 4, 5))
+        self.assertTrue(self.analyzer._evaluate_rule("lte", 5, 5))
+        self.assertFalse(self.analyzer._evaluate_rule("lte", 6, 5))
+
+    def test_evaluate_rule_contains_all(self):
+        self.assertTrue(self.analyzer._evaluate_rule("contains_all", ["tanker", "bulk"], ["tanker"]))
+        self.assertTrue(self.analyzer._evaluate_rule("contains_all", ["tanker", "bulk"], ["tanker", "bulk"]))
+        self.assertFalse(self.analyzer._evaluate_rule("contains_all", ["tanker"], ["tanker", "bulk"]))
+        self.assertFalse(self.analyzer._evaluate_rule("contains_all", [], ["tanker"]))
+
+    def test_evaluate_rule_raises_on_none_actual_value(self):
+        with self.assertRaises(ValueError):
+            self.analyzer._evaluate_rule("gte", None, 5)
+
+    def test_evaluate_rule_raises_on_unsupported_operator(self):
+        with self.assertRaises(ValueError):
+            self.analyzer._evaluate_rule("fuzzy_match", "tanker", "tanker")
+
 
 if __name__ == "__main__":
     unittest.main()

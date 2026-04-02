@@ -664,6 +664,7 @@ class PineconeManager:
 # ==============================================================================
 class AIResumeAnalyzer:
     """The main RAG pipeline engine with feedback learning and multi-stage retrieval."""
+    FACTS_VERSION = "1.1"
     
     def __init__(self, config_parser):
         print("[INIT] Initializing AIResumeAnalyzer with Multi-Stage Retrieval...")
@@ -1214,10 +1215,20 @@ class AIResumeAnalyzer:
         dob_fact = self._extract_dob_fact_from_text(raw_text)
         return dob_fact.get("dob")
 
+    def _build_fact_meta(self, value, confidence=None, extraction_method="", status="", source_label="", context=None):
+        return {
+            "value": value,
+            "confidence": confidence,
+            "extraction_method": str(extraction_method or ""),
+            "status": str(status or ""),
+            "source_label": str(source_label or ""),
+            "context": context or {},
+        }
+
     def _extract_dob_fact_from_text(self, raw_text):
         text = str(raw_text or "")
         if not text:
-            return {"dob": None, "status": "MISSING"}
+            return {"dob": None, "status": "MISSING", "confidence": None, "extraction_method": "label_scan", "source_label": ""}
 
         label_pattern = r'(?:date\s+of\s+birth|dob|d\.o\.b\.?)'
         date_patterns = [
@@ -1230,20 +1241,82 @@ class AIResumeAnalyzer:
         # Prefer DOB values that appear directly after an explicit DOB label.
         for label_match in re.finditer(label_pattern, text, flags=re.IGNORECASE):
             snippet = text[label_match.start():label_match.start() + 120]
+            source_label = label_match.group(0)
             for pattern in date_patterns:
                 match = re.search(pattern, snippet, flags=re.IGNORECASE)
                 if match:
                     parsed = self._build_date_from_match(match.groups())
                     if parsed and 1940 <= parsed.year <= date.today().year:
-                        return {"dob": parsed, "status": "PARSED"}
+                        return {
+                            "dob": parsed,
+                            "status": "PARSED",
+                            "confidence": 0.99,
+                            "extraction_method": "label_scan",
+                            "source_label": source_label,
+                        }
 
             if re.search(ambiguous_numeric_pattern, snippet):
-                return {"dob": None, "status": "AMBIGUOUS_NUMERIC"}
+                return {
+                    "dob": None,
+                    "status": "AMBIGUOUS_NUMERIC",
+                    "confidence": None,
+                    "extraction_method": "label_scan",
+                    "source_label": source_label,
+                }
 
         # Generic unlabeled fallback is intentionally conservative. If the resume
         # does not expose a DOB label, it is safer to return UNKNOWN than to grab
         # an arbitrary expiry/employment date and compute a wrong age.
-        return {"dob": None, "status": "MISSING"}
+        return {"dob": None, "status": "MISSING", "confidence": None, "extraction_method": "label_scan", "source_label": ""}
+
+    def _extract_stated_age_fact_from_text(self, raw_text):
+        text = str(raw_text or "")
+        if not text:
+            return {
+                "age": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "label_scan",
+                "source_label": "",
+            }
+
+        # Words in the 40 characters before an "age" match that indicate the
+        # value is NOT the candidate's age (vessel age, engine age, etc.).
+        _DISQUALIFYING_PREFIXES = (
+            "vessel", "ship", "document", "course", "sea", "charter", "engine",
+            "crew age", "boat", "aircraft",
+        )
+
+        label_patterns = [
+            r'(?:^|\b)(age)\s*[:\-]?\s*(\d{1,3})\b',
+            r'(?:^|\b)(aged)\s+(\d{1,3})\b',
+        ]
+        for pattern in label_patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                # Check the 40 characters before the match for disqualifying context.
+                pre_start = max(0, match.start() - 40)
+                pre_text = text[pre_start:match.start()].lower()
+                if any(prefix in pre_text for prefix in _DISQUALIFYING_PREFIXES):
+                    continue
+                try:
+                    return {
+                        "age": int(match.group(2)),
+                        "status": "PARSED",
+                        "confidence": 0.95,
+                        "extraction_method": "label_scan",
+                        "source_label": match.group(1),
+                    }
+                except Exception as exc:
+                    print(f"[WARN] _extract_stated_age_fact_from_text: failed to parse match '{match.group(0)}': {exc}")
+                    continue
+
+        return {
+            "age": None,
+            "status": "MISSING",
+            "confidence": None,
+            "extraction_method": "label_scan",
+            "source_label": "",
+        }
 
     def _build_date_from_match(self, parts, allow_future=False):
         if not parts or len(parts) != 3:
@@ -1302,6 +1375,43 @@ class AIResumeAnalyzer:
             years -= 1
         return years
 
+    def _validate_age_value(self, age_value):
+        if age_value is None:
+            return None
+        if age_value < 14:
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "INVALID_AGE_TOO_LOW",
+                "message": f"Computed age {age_value} is below the supported minimum of 14 years.",
+            }
+        if age_value > 100:
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "INVALID_AGE_TOO_HIGH",
+                "message": f"Computed age {age_value} is above the supported maximum of 100 years.",
+            }
+        return None
+
+    def _check_age_conflict(self, computed_age, stated_age_fact):
+        stated_age = stated_age_fact.get("age")
+        if computed_age is None or stated_age is None:
+            return None
+        # Ignore stated age values outside the plausible candidate age range.
+        # A value like 0, 5, or 150 is almost certainly an extraction artefact
+        # (e.g. "age of vessel: 5"), not the candidate's real age.
+        if not (14 <= int(stated_age) <= 80):
+            return None
+        if abs(int(computed_age) - int(stated_age)) > 2:
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "DATA_CONFLICT",
+                "message": (
+                    f"Computed age {computed_age} conflicts with explicitly stated age {stated_age} "
+                    f"by more than 2 years."
+                ),
+            }
+        return None
+
     def _resolve_candidate_age(self, chunks, original_path=None, text_cache=None):
         text_cache = text_cache if text_cache is not None else {}
         source_text = ""
@@ -1323,12 +1433,21 @@ class AIResumeAnalyzer:
             )
 
         dob_fact = self._extract_dob_fact_from_text(source_text)
+        stated_age_fact = self._extract_stated_age_fact_from_text(source_text)
         dob_value = dob_fact.get("dob")
         age = self._calculate_age(dob_value)
         return {
             "dob": dob_value,
             "age": age,
             "dob_parse_status": dob_fact.get("status", "MISSING"),
+            "dob_confidence": dob_fact.get("confidence"),
+            "dob_extraction_method": dob_fact.get("extraction_method", ""),
+            "dob_source_label": dob_fact.get("source_label", ""),
+            "stated_age": stated_age_fact.get("age"),
+            "stated_age_status": stated_age_fact.get("status", "MISSING"),
+            "stated_age_confidence": stated_age_fact.get("confidence"),
+            "stated_age_extraction_method": stated_age_fact.get("extraction_method", ""),
+            "stated_age_source_label": stated_age_fact.get("source_label", ""),
         }
 
     def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
@@ -1351,10 +1470,13 @@ class AIResumeAnalyzer:
             applied_ship_types = []
         return {
             "candidate_id": filename,
+            "facts_version": self.FACTS_VERSION,
             "rank_folder": rank,
             "personal": {
                 "dob": age_info.get("dob"),
                 "dob_parse_status": age_info.get("dob_parse_status"),
+                "stated_age": age_info.get("stated_age"),
+                "stated_age_status": age_info.get("stated_age_status"),
             },
             "application": {
                 "applied_ship_types": applied_ship_types,
@@ -1372,6 +1494,56 @@ class AIResumeAnalyzer:
             },
             "derived": {
                 "age_years": age_info.get("age"),
+            },
+            "fact_meta": {
+                "personal.dob": self._build_fact_meta(
+                    age_info.get("dob").isoformat() if age_info.get("dob") else None,
+                    confidence=age_info.get("dob_confidence"),
+                    extraction_method=age_info.get("dob_extraction_method"),
+                    status=age_info.get("dob_parse_status"),
+                    source_label=age_info.get("dob_source_label"),
+                    context={"field": "personal.dob"},
+                ),
+                "personal.stated_age": self._build_fact_meta(
+                    age_info.get("stated_age"),
+                    confidence=age_info.get("stated_age_confidence"),
+                    extraction_method=age_info.get("stated_age_extraction_method"),
+                    status=age_info.get("stated_age_status"),
+                    source_label=age_info.get("stated_age_source_label"),
+                    context={"field": "personal.stated_age"},
+                ),
+                "derived.age_years": self._build_fact_meta(
+                    age_info.get("age"),
+                    confidence=age_info.get("dob_confidence"),
+                    extraction_method="derived_from_dob",
+                    status="PARSED" if age_info.get("age") is not None else "MISSING",
+                    source_label=age_info.get("dob_source_label"),
+                    context={"field": "derived.age_years", "derived_from": "personal.dob"},
+                ),
+                "application.applied_ship_types": self._build_fact_meta(
+                    applied_ship_types,
+                    confidence=1.0 if applied_ship_types else None,
+                    extraction_method="download_manifest",
+                    status="PARSED" if applied_ship_types else "MISSING",
+                    source_label="manifest.applied_ship_types",
+                    context={"field": "application.applied_ship_types"},
+                ),
+                "experience.vessel_types": self._build_fact_meta(
+                    experienced_ship_types,
+                    confidence=0.8 if experienced_ship_types else None,
+                    extraction_method="resume_keyword_scan",
+                    status="PARSED" if experienced_ship_types else "MISSING",
+                    source_label="resume_text",
+                    context={"field": "experience.vessel_types"},
+                ),
+                "travel.visa_records": self._build_fact_meta(
+                    [record.get("visa_type") for record in (visa_info.get("visa_records") or [])],
+                    confidence=0.9 if visa_info.get("visa_records") else None,
+                    extraction_method="resume_visa_scan",
+                    status=visa_info.get("status", "MISSING"),
+                    source_label="resume_text",
+                    context={"field": "travel.visa_records"},
+                ),
             },
         }
 
@@ -1399,59 +1571,157 @@ class AIResumeAnalyzer:
             return False
         return True
 
+    def _base_rule_result(self, decision, reason_code, message, actual_value=None, expected_value=None, confidence=None):
+        return {
+            "decision": decision,
+            "reason_code": reason_code,
+            "message": message,
+            "actual_value": actual_value,
+            "expected_value": expected_value,
+            "confidence": confidence,
+        }
+
+    def _evaluate_rule(self, operator, actual_value, expected_value):
+        """
+        Shared predicate evaluator for deterministic hard-filter rules.
+
+        Returns True (pass), False (fail), or raises ValueError for unsupported
+        operators. Never returns None — callers must guard against missing values
+        before calling this method.
+        """
+        if actual_value is None:
+            raise ValueError(
+                f"_evaluate_rule called with actual_value=None for operator '{operator}'. "
+                "Callers must handle missing facts before invoking the evaluator."
+            )
+        if operator == "between_inclusive":
+            min_value = expected_value.get("min")
+            max_value = expected_value.get("max")
+            if min_value is not None and actual_value < min_value:
+                return False
+            if max_value is not None and actual_value > max_value:
+                return False
+            return True
+        if operator == "gte":
+            return actual_value >= expected_value
+        if operator == "lte":
+            return actual_value <= expected_value
+        if operator == "eq":
+            return actual_value == expected_value
+        if operator == "contains_any":
+            actual_values = set(actual_value or [])
+            expected_values = set(expected_value or [])
+            return bool(actual_values & expected_values)
+        if operator == "contains_all":
+            actual_values = set(actual_value or [])
+            expected_values = set(expected_value or [])
+            return expected_values.issubset(actual_values)
+        raise ValueError(f"Unsupported rule operator: '{operator}'")
+
     def _evaluate_age_rule(self, candidate_facts, constraint):
         if not constraint:
-            return {
-                "decision": "PASS",
-                "reason_code": "AGE_RULE_NOT_REQUESTED",
-                "message": "No age filter requested.",
-            }
+            return self._base_rule_result(
+                "PASS",
+                "AGE_RULE_NOT_REQUESTED",
+                "No age filter requested.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=None,
+            )
 
         dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
         dob_parse_status = ((candidate_facts.get("personal") or {}).get("dob_parse_status"))
+        stated_age = ((candidate_facts.get("personal") or {}).get("stated_age"))
+        stated_age_status = ((candidate_facts.get("personal") or {}).get("stated_age_status"))
         age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
         if dob_value is None or age_value is None:
             if dob_parse_status == "AMBIGUOUS_NUMERIC":
-                return {
-                    "decision": "UNKNOWN",
-                    "reason_code": "AGE_DOB_AMBIGUOUS_FORMAT",
-                    "message": (
+                return self._base_rule_result(
+                    "UNKNOWN",
+                    "AGE_DOB_AMBIGUOUS_FORMAT",
+                    (
                         f"DOB was present but in an ambiguous numeric format, so age was left unknown for "
                         f"requested age filter {self._age_constraint_reason(constraint)}."
                     ),
-                }
-            return {
-                "decision": "UNKNOWN",
-                "reason_code": "AGE_MISSING",
-                "message": f"Could not determine DOB/age for requested age filter {self._age_constraint_reason(constraint)}.",
-            }
+                    actual_value=None,
+                    expected_value=constraint,
+                    confidence=None,
+                )
+            return self._base_rule_result(
+                "UNKNOWN",
+                "AGE_MISSING",
+                f"Could not determine DOB/age for requested age filter {self._age_constraint_reason(constraint)}.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=None,
+            )
 
-        if self._age_within_constraint(age_value, constraint):
-            return {
-                "decision": "PASS",
-                "reason_code": "AGE_IN_RANGE",
-                "message": (
+        age_validity = self._validate_age_value(age_value)
+        if age_validity:
+            return self._base_rule_result(
+                age_validity["decision"],
+                age_validity["reason_code"],
+                age_validity["message"],
+                actual_value=age_value,
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("derived.age_years") or {}).get("confidence"),
+            )
+
+        stated_age_fact = {
+            "age": stated_age,
+            "status": stated_age_status,
+        }
+        age_conflict = self._check_age_conflict(age_value, stated_age_fact)
+        if age_conflict:
+            return self._base_rule_result(
+                age_conflict["decision"],
+                age_conflict["reason_code"],
+                age_conflict["message"],
+                actual_value={"computed_age": age_value, "stated_age": stated_age},
+                expected_value=constraint,
+                confidence=None,
+            )
+
+        is_match = self._evaluate_rule(
+            "between_inclusive",
+            age_value,
+            {"min": constraint.get("min_age"), "max": constraint.get("max_age")},
+        )
+        if is_match:
+            return self._base_rule_result(
+                "PASS",
+                "AGE_IN_RANGE",
+                (
                     f"Computed age {age_value} from DOB {dob_value.isoformat()}, which is "
                     f"{self._age_constraint_reason(constraint)}."
                 ),
-            }
+                actual_value=age_value,
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("derived.age_years") or {}).get("confidence"),
+            )
 
-        return {
-            "decision": "FAIL",
-            "reason_code": "AGE_OUT_OF_RANGE",
-            "message": (
+        return self._base_rule_result(
+            "FAIL",
+            "AGE_OUT_OF_RANGE",
+            (
                 f"Computed age {age_value} from DOB {dob_value.isoformat()}, which is not "
                 f"{self._age_constraint_reason(constraint)}."
             ),
-        }
+            actual_value=age_value,
+            expected_value=constraint,
+            confidence=((candidate_facts.get("fact_meta") or {}).get("derived.age_years") or {}).get("confidence"),
+        )
 
     def _evaluate_us_visa_rule(self, candidate_facts, constraint, reference_date=None):
         if not constraint:
-            return {
-                "decision": "PASS",
-                "reason_code": "US_VISA_RULE_NOT_REQUESTED",
-                "message": "No visa filter requested.",
-            }
+            return self._base_rule_result(
+                "PASS",
+                "US_VISA_RULE_NOT_REQUESTED",
+                "No visa filter requested.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=None,
+            )
 
         travel = candidate_facts.get("travel") or {}
         visa_status = travel.get("us_visa_status")
@@ -1461,43 +1731,58 @@ class AIResumeAnalyzer:
         today = reference_date or date.today()
 
         if constraint.get("supported") is False:
-            return {
-                "decision": "UNKNOWN",
-                "reason_code": "VISA_FILTER_UNSUPPORTED",
-                "message": f"Requested filter '{requested_label}' is not yet supported by the deterministic visa parser.",
-            }
+            return self._base_rule_result(
+                "UNKNOWN",
+                "VISA_FILTER_UNSUPPORTED",
+                f"Requested filter '{requested_label}' is not yet supported by the deterministic visa parser.",
+                actual_value=sorted(set(travel.get("visa_types") or [])),
+                expected_value=constraint,
+                confidence=None,
+            )
 
         if visa_status == "PARSED_NO_VISA":
-            return {
-                "decision": "FAIL",
-                "reason_code": "US_VISA_NOT_PRESENT",
-                "message": f"Resume indicates no visa matching requested filter '{requested_label}'.",
-            }
+            return self._base_rule_result(
+                "FAIL",
+                "US_VISA_NOT_PRESENT",
+                f"Resume indicates no visa matching requested filter '{requested_label}'.",
+                actual_value=[],
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
         if visa_status == "MISSING" or not visa_records:
-            return {
-                "decision": "UNKNOWN",
-                "reason_code": "US_VISA_MISSING",
-                "message": f"Could not determine visa evidence for requested filter '{requested_label}'.",
-            }
+            return self._base_rule_result(
+                "UNKNOWN",
+                "US_VISA_MISSING",
+                f"Could not determine visa evidence for requested filter '{requested_label}'.",
+                actual_value=[],
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
         matching_records = [record for record in visa_records if not accepted_types or record.get("visa_type") in accepted_types]
         if not matching_records:
             seen_types = sorted(set(travel.get("visa_types") or []))
             if seen_types:
-                return {
-                    "decision": "FAIL",
-                    "reason_code": "US_VISA_TYPE_MISMATCH",
-                    "message": (
+                return self._base_rule_result(
+                    "FAIL",
+                    "US_VISA_TYPE_MISMATCH",
+                    (
                         f"Resume shows visa types {', '.join(seen_types)}, which do not satisfy requested filter "
                         f"'{requested_label}'."
                     ),
-                }
-            return {
-                "decision": "UNKNOWN",
-                "reason_code": "US_VISA_MISSING",
-                "message": f"Could not determine visa evidence for requested filter '{requested_label}'.",
-            }
+                    actual_value=seen_types,
+                    expected_value=constraint,
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+                )
+            return self._base_rule_result(
+                "UNKNOWN",
+                "US_VISA_MISSING",
+                f"Could not determine visa evidence for requested filter '{requested_label}'.",
+                actual_value=[],
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
         invalid_records = []
         unknown_records = []
@@ -1525,39 +1810,54 @@ class AIResumeAnalyzer:
 
         if valid_records:
             visa_type, expiry_date = valid_records[0]
-            return {
-                "decision": "PASS",
-                "reason_code": "US_VISA_VALID",
-                "message": f"Visa {visa_type} is valid until {expiry_date.isoformat()} for requested filter '{requested_label}'.",
-            }
+            return self._base_rule_result(
+                "PASS",
+                "US_VISA_VALID",
+                f"Visa {visa_type} is valid until {expiry_date.isoformat()} for requested filter '{requested_label}'.",
+                actual_value={"visa_type": visa_type, "expiry_date": expiry_date.isoformat()},
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
         if invalid_records:
-            return {
-                "decision": "FAIL",
-                "reason_code": "US_VISA_EXPIRY_INVALID",
-                "message": f"Visa {invalid_records[0]} has an invalid expiry date value.",
-            }
+            return self._base_rule_result(
+                "FAIL",
+                "US_VISA_EXPIRY_INVALID",
+                f"Visa {invalid_records[0]} has an invalid expiry date value.",
+                actual_value={"visa_type": invalid_records[0], "expiry_date": None},
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
         if unknown_records:
-            return {
-                "decision": "UNKNOWN",
-                "reason_code": "US_VISA_EXPIRY_MISSING",
-                "message": unknown_records[0] + ".",
-            }
+            return self._base_rule_result(
+                "UNKNOWN",
+                "US_VISA_EXPIRY_MISSING",
+                unknown_records[0] + ".",
+                actual_value={"visa_type": matching_records[0].get("visa_type"), "expiry_date": None},
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
         if expired_records:
             visa_type, expiry_date = expired_records[0]
-            return {
-                "decision": "FAIL",
-                "reason_code": "US_VISA_EXPIRED",
-                "message": f"Visa {visa_type} expired on {expiry_date.isoformat()}.",
-            }
+            return self._base_rule_result(
+                "FAIL",
+                "US_VISA_EXPIRED",
+                f"Visa {visa_type} expired on {expiry_date.isoformat()}.",
+                actual_value={"visa_type": visa_type, "expiry_date": expiry_date.isoformat()},
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
 
-        return {
-            "decision": "UNKNOWN",
-            "reason_code": "US_VISA_MISSING",
-            "message": f"Could not determine visa evidence for requested filter '{requested_label}'.",
-        }
+        return self._base_rule_result(
+            "UNKNOWN",
+            "US_VISA_MISSING",
+            f"Could not determine visa evidence for requested filter '{requested_label}'.",
+            actual_value=[],
+            expected_value=constraint,
+            confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+        )
 
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
@@ -1580,26 +1880,35 @@ class AIResumeAnalyzer:
             ]
             candidate_ship_types = [value for value in candidate_ship_types if value]
             if not candidate_ship_types:
-                results.append({
-                    "decision": "UNKNOWN",
-                    "reason_code": "APPLIED_SHIP_TYPE_MISSING",
-                    "message": f"Could not determine applied ship type for requested filter '{ship_type_constraint}'.",
-                })
-            elif requested_ship_type in candidate_ship_types:
-                results.append({
-                    "decision": "PASS",
-                    "reason_code": "APPLIED_SHIP_TYPE_MATCH",
-                    "message": f"Candidate applied ship type matches '{ship_type_constraint}'.",
-                })
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "APPLIED_SHIP_TYPE_MISSING",
+                    f"Could not determine applied ship type for requested filter '{ship_type_constraint}'.",
+                    actual_value=[],
+                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("application.applied_ship_types") or {}).get("confidence"),
+                ))
+            elif self._evaluate_rule("contains_any", candidate_ship_types, [requested_ship_type]):
+                results.append(self._base_rule_result(
+                    "PASS",
+                    "APPLIED_SHIP_TYPE_MATCH",
+                    f"Candidate applied ship type matches '{ship_type_constraint}'.",
+                    actual_value=candidate_ship_types,
+                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("application.applied_ship_types") or {}).get("confidence"),
+                ))
             else:
-                results.append({
-                    "decision": "FAIL",
-                    "reason_code": "APPLIED_SHIP_TYPE_MISMATCH",
-                    "message": (
+                results.append(self._base_rule_result(
+                    "FAIL",
+                    "APPLIED_SHIP_TYPE_MISMATCH",
+                    (
                         f"Candidate applied ship type {candidate_ship_types} does not match requested "
                         f"filter '{ship_type_constraint}'."
                     ),
-                })
+                    actual_value=candidate_ship_types,
+                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("application.applied_ship_types") or {}).get("confidence"),
+                ))
 
         experience_ship_type_constraint = hard_constraints.get("experience_ship_type")
         if experience_ship_type_constraint:
@@ -1610,26 +1919,35 @@ class AIResumeAnalyzer:
             ]
             experienced_ship_types = [value for value in experienced_ship_types if value]
             if not experienced_ship_types:
-                results.append({
-                    "decision": "UNKNOWN",
-                    "reason_code": "EXPERIENCE_SHIP_TYPE_MISSING",
-                    "message": f"Could not determine experienced ship type for requested filter '{experience_ship_type_constraint}'.",
-                })
-            elif requested_ship_type in experienced_ship_types:
-                results.append({
-                    "decision": "PASS",
-                    "reason_code": "EXPERIENCE_SHIP_TYPE_MATCH",
-                    "message": f"Candidate resume shows experience on '{experience_ship_type_constraint}'.",
-                })
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "EXPERIENCE_SHIP_TYPE_MISSING",
+                    f"Could not determine experienced ship type for requested filter '{experience_ship_type_constraint}'.",
+                    actual_value=[],
+                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
+                ))
+            elif self._evaluate_rule("contains_any", experienced_ship_types, [requested_ship_type]):
+                results.append(self._base_rule_result(
+                    "PASS",
+                    "EXPERIENCE_SHIP_TYPE_MATCH",
+                    f"Candidate resume shows experience on '{experience_ship_type_constraint}'.",
+                    actual_value=experienced_ship_types,
+                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
+                ))
             else:
-                results.append({
-                    "decision": "FAIL",
-                    "reason_code": "EXPERIENCE_SHIP_TYPE_MISMATCH",
-                    "message": (
+                results.append(self._base_rule_result(
+                    "FAIL",
+                    "EXPERIENCE_SHIP_TYPE_MISMATCH",
+                    (
                         f"Candidate experienced ship types {experienced_ship_types} do not match requested "
                         f"filter '{experience_ship_type_constraint}'."
                     ),
-                })
+                    actual_value=experienced_ship_types,
+                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
+                ))
 
         if any(result["decision"] == "FAIL" for result in results):
             final_decision = "FAIL"
@@ -1641,6 +1959,8 @@ class AIResumeAnalyzer:
         return {
             "decision": final_decision,
             "results": results,
+            "evaluation_date_used": date.today().isoformat(),
+            "facts_version": self.FACTS_VERSION,
         }
 
     def _ingest_folder(self, folder_path, rank):
@@ -2127,6 +2447,8 @@ Examples of GOOD responses:
                     "filename": filename,
                     "hard_filter_decision": hard_filter_result["decision"],
                     "hard_filter_reasons": hard_filter_result["results"],
+                    "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
+                    "facts_version": hard_filter_result.get("facts_version"),
                     "llm_reached": False,
                     "result_bucket": "excluded",
                 }
@@ -2150,6 +2472,8 @@ Examples of GOOD responses:
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
                         "experienced_ship_types": experienced_ship_types,
+                        "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
+                        "facts_version": hard_filter_result.get("facts_version"),
                     }
                     unknown_matches.append(unknown_match)
                     yield {
@@ -2185,6 +2509,8 @@ Examples of GOOD responses:
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
                         "experienced_ship_types": experienced_ship_types,
+                        "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
+                        "facts_version": hard_filter_result.get("facts_version"),
                     }
                     
                     # Flag uncertain matches (confidence < 0.7)
