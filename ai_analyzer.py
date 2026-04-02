@@ -759,6 +759,9 @@ class AIResumeAnalyzer:
         age_constraint = self._extract_age_constraint(user_prompt)
         if age_constraint:
             constraints["hard_constraints"]["age_years"] = age_constraint
+        visa_constraint = self._extract_us_visa_constraint(user_prompt)
+        if visa_constraint:
+            constraints["hard_constraints"]["us_visa"] = visa_constraint
         experienced_ship_type = self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
@@ -819,6 +822,129 @@ class AIResumeAnalyzer:
                     return canonical
         return None
 
+    def _visa_type_definitions(self):
+        return [
+            {
+                "canonical": "C1/D (USA)",
+                "group": "usa",
+                "patterns": [r"\bc1\s*/\s*d\b", r"\bc1d\b"],
+            },
+            {
+                "canonical": "B1/B2 (USA)",
+                "group": "usa",
+                "patterns": [r"\bb1\s*/\s*b2\b", r"\bb1b2\b"],
+            },
+            {
+                "canonical": "C1 (USA)",
+                "group": "usa",
+                "patterns": [r"\bc1\s+visa\b", r"\bc1\s*\(\s*usa\s*\)", r"\bc1\b(?!\s*/\s*d)"],
+            },
+            {
+                "canonical": "D (USA)",
+                "group": "usa",
+                "patterns": [r"\bd\s+visa\b", r"\bd\s*\(\s*usa\s*\)"],
+            },
+            {
+                "canonical": "US Visa (USA)",
+                "group": "usa",
+                "patterns": [
+                    r"\bus\s+visa\b",
+                    r"\busa\s+visa\b",
+                    r"\bamerican\s+visa\b",
+                    r"\bus\s+work\s+authorization\b",
+                ],
+            },
+            {
+                "canonical": "Australia Entry visa",
+                "group": "australia",
+                "patterns": [r"\baustralia(?:n)?\s+entry\s+visa\b"],
+            },
+            {
+                "canonical": "MCV (Australia)",
+                "group": "australia",
+                "patterns": [r"\bmcv\s*\(\s*australia\s*\)", r"\bmcv\b"],
+            },
+            {
+                "canonical": "Schengen",
+                "group": "schengen",
+                "patterns": [r"\bschengen(?:\s+visa)?\b"],
+            },
+        ]
+
+    def _extract_specific_visa_type_from_prompt(self, prompt):
+        for visa_def in self._visa_type_definitions():
+            if any(re.search(pattern, prompt, flags=re.IGNORECASE) for pattern in visa_def["patterns"]):
+                return visa_def
+        return None
+
+    def _extract_us_visa_constraint(self, user_prompt):
+        prompt = str(user_prompt or "").strip().lower()
+        if not prompt:
+            return None
+
+        group_patterns = [
+            (
+                "usa",
+                [r"\bvalid\s+us\s+visa\b", r"\bcurrent\s+us\s+visa\b", r"\bhas\s+a\s+valid\s+us\s+visa\b",
+                 r"\bus\s+visa\b", r"\bamerican\s+visa\b", r"\bus\s+work\s+authorization\b"],
+                "valid US visa",
+            ),
+            (
+                "australia",
+                [r"\bvalid\s+australia(?:n)?\s+visa\b", r"\bcurrent\s+australia(?:n)?\s+visa\b", r"\baustralia(?:n)?\s+visa\b"],
+                "valid Australia visa",
+            ),
+            (
+                "schengen",
+                [r"\bvalid\s+schengen\s+visa\b", r"\bcurrent\s+schengen\s+visa\b", r"\bschengen\s+visa\b"],
+                "valid Schengen visa",
+            ),
+        ]
+        for group, patterns, label in group_patterns:
+            if any(re.search(pattern, prompt) for pattern in patterns):
+                accepted = [
+                    visa_def["canonical"]
+                    for visa_def in self._visa_type_definitions()
+                    if visa_def["group"] == group
+                ]
+                return {
+                    "required": True,
+                    "must_be_valid": True,
+                    "accepted_types": accepted,
+                    "visa_group": group,
+                    "requested_label": label,
+                }
+
+        specific = self._extract_specific_visa_type_from_prompt(prompt)
+        if specific:
+            return {
+                "required": True,
+                "must_be_valid": True,
+                "accepted_types": [specific["canonical"]],
+                "visa_group": specific["group"],
+                "requested_label": specific["canonical"],
+            }
+
+        unsupported_patterns = [
+            (r"\bvalid\s+uk\s+visa\b", "valid UK visa"),
+            (r"\bcurrent\s+uk\s+visa\b", "valid UK visa"),
+            (r"\bhaving\s+valid\s+uk\s+visa\b", "valid UK visa"),
+            (r"\buk\s+visa\b", "valid UK visa"),
+            (r"\bvalid\s+united\s+kingdom\s+visa\b", "valid UK visa"),
+            (r"\bunited\s+kingdom\s+visa\b", "valid UK visa"),
+        ]
+        for pattern, label in unsupported_patterns:
+            if re.search(pattern, prompt):
+                return {
+                    "required": True,
+                    "must_be_valid": True,
+                    "accepted_types": [],
+                    "visa_group": "uk",
+                    "requested_label": label,
+                    "supported": False,
+                }
+        return None
+
     def _strip_age_constraint_phrases(self, user_prompt):
         prompt = str(user_prompt or "")
         if not prompt:
@@ -855,14 +981,59 @@ class AIResumeAnalyzer:
         cleaned = re.sub(r'\s+', ' ', cleaned).strip(" ,.-")
         return cleaned
 
+    def _strip_visa_constraint_phrases(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt:
+            return ""
+        patterns = [
+            r'having\s+valid\s+uk\s+visa',
+            r'has\s+a\s+valid\s+us\s+visa',
+            r'having\s+valid\s+us\s+visa',
+            r'valid\s+us\s+visa',
+            r'current\s+us\s+visa',
+            r'us\s+visa',
+            r'usa\s+visa',
+            r'c1/d\s+visa',
+            r'c1\s+visa',
+            r'd\s+visa',
+            r'b1/b2\s+visa',
+            r'american\s+visa',
+            r'us\s+work\s+authorization',
+            r'having\s+valid\s+australia(?:n)?\s+visa',
+            r'valid\s+australia(?:n)?\s+visa',
+            r'current\s+australia(?:n)?\s+visa',
+            r'australia(?:n)?\s+visa',
+            r'australia(?:n)?\s+entry\s+visa',
+            r'mcv\s*\(\s*australia\s*\)',
+            r'mcv',
+            r'having\s+valid\s+schengen\s+visa',
+            r'valid\s+schengen\s+visa',
+            r'current\s+schengen\s+visa',
+            r'schengen\s+visa',
+            r'valid\s+uk\s+visa',
+            r'current\s+uk\s+visa',
+            r'uk\s+visa',
+            r'valid\s+united\s+kingdom\s+visa',
+            r'united\s+kingdom\s+visa',
+        ]
+        cleaned = prompt
+        for pattern in patterns:
+            cleaned = re.sub(pattern, ' ', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip(" ,.-")
+        return cleaned
+
     def _is_structured_only_prompt(self, user_prompt):
-        stripped = self._strip_age_constraint_phrases(user_prompt).lower()
+        stripped = self._strip_age_constraint_phrases(user_prompt)
+        stripped = self._strip_visa_constraint_phrases(stripped).lower()
         if not stripped:
             return True
         filler_tokens = {
             "candidate", "candidates", "should", "be", "must", "need", "needs",
             "within", "the", "age", "ages", "years", "year", "old", "of",
             "show", "find", "give", "me", "with", "who", "that", "are", "is",
+            "valid", "visa", "visas", "us", "usa", "american", "work", "authorization",
+            "current", "has", "australia", "australian", "entry", "mcv", "schengen",
+            "uk", "united", "kingdom", "having",
         }
         terms = re.findall(r"[a-zA-Z0-9/+.-]{2,}", stripped)
         meaningful = [term for term in terms if term not in filler_tokens]
@@ -914,6 +1085,131 @@ class AIResumeAnalyzer:
                     break
         return sorted(set(matched))
 
+    def _extract_date_fact_from_snippet(self, text):
+        snippet = str(text or "")
+        if not snippet:
+            return {"date": None, "status": "MISSING"}
+        if re.search(r'(?<!\d)-?0001\b', snippet):
+            return {"date": None, "status": "INVALID"}
+
+        if re.search(r'issue\s+date.*expiry\s+date', snippet, flags=re.IGNORECASE):
+            date_tokens = re.findall(
+                r'\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\s\/\-.]+[A-Za-z]{3,9}[\s\/\-.]+\d{2,4}|[A-Za-z]{3,9}[\s\/\-.]+\d{1,2},?[\s\/\-.]+\d{2,4}',
+                snippet,
+                flags=re.IGNORECASE,
+            )
+            if len(date_tokens) >= 2:
+                parsed = self._extract_date_fact_from_snippet(date_tokens[1])
+                if parsed.get("status") != "MISSING":
+                    return parsed
+
+        date_patterns = [
+            r'(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})',
+            r'(\d{1,2})[\s\/\-.]+([A-Za-z]{3,9})[\s\/\-.]+(\d{2,4})',
+            r'([A-Za-z]{3,9})[\s\/\-.]+(\d{1,2}),?[\s\/\-.]+(\d{2,4})',
+        ]
+        for pattern in date_patterns:
+            match = re.search(pattern, snippet, flags=re.IGNORECASE)
+            if match:
+                parsed = self._build_date_from_match(match.groups(), allow_future=True)
+                if parsed:
+                    return {"date": parsed, "status": "PARSED"}
+
+        if re.search(r'\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b', snippet):
+            return {"date": None, "status": "AMBIGUOUS_NUMERIC"}
+        return {"date": None, "status": "MISSING"}
+
+    def _extract_us_visa_fact_from_text(self, raw_text):
+        text = str(raw_text or "")
+        if not text:
+            return {
+                "status": "MISSING",
+                "visa_type": None,
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "visa_records": [],
+            }
+
+        lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
+        snippets = []
+        for idx, line in enumerate(lines):
+            if re.search(
+                r"\bvisa\b|\bc1\s*/\s*d\b|\bc1\s+visa\b|\bd\s+visa\b|\bb1\s*/\s*b2\b|\bmcv\b|\bschengen\b",
+                line,
+                flags=re.IGNORECASE,
+            ):
+                combined = " ".join(lines[idx:idx + 4])
+                snippets.append(combined)
+
+        if not snippets:
+            for match in re.finditer(r"\bvisa\b|\bc1\s*/\s*d\b|\bb1\s*/\s*b2\b|\bmcv\b|\bschengen\b", text, flags=re.IGNORECASE):
+                snippets.append(text[max(0, match.start() - 30):match.start() + 220])
+
+        no_visa_patterns = [r"[:\-]\s*other\b", r"[:\-]\s*n/?a\b", r"[:\-]\s*none\b", r"\bvisa\s*[:\-]?\s*other\b"]
+        visa_records = []
+        saw_no_visa = False
+
+        for snippet in snippets:
+            visa_def = self._extract_specific_visa_type_from_prompt(snippet)
+            if visa_def:
+                expiry_snippet = snippet
+                expiry_label = re.search(r"(?:valid\s+until)", snippet, flags=re.IGNORECASE)
+                if expiry_label:
+                    expiry_snippet = snippet[expiry_label.start():]
+                expiry_fact = self._extract_date_fact_from_snippet(expiry_snippet)
+                visa_records.append({
+                    "status": "PARSED",
+                    "visa_type": visa_def["canonical"],
+                    "visa_group": visa_def["group"],
+                    "expiry_date": expiry_fact.get("date"),
+                    "expiry_status": expiry_fact.get("status", "MISSING"),
+                })
+                continue
+
+            normalized_snippet = snippet.lower()
+            if any(re.search(no_visa_pattern, normalized_snippet, flags=re.IGNORECASE) for no_visa_pattern in no_visa_patterns):
+                saw_no_visa = True
+
+        deduped_records = []
+        seen = set()
+        for record in visa_records:
+            key = (
+                record.get("visa_type"),
+                record.get("expiry_date").isoformat() if record.get("expiry_date") else None,
+                record.get("expiry_status"),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped_records.append(record)
+
+        if deduped_records:
+            primary_record = deduped_records[0]
+            return {
+                "status": "PARSED",
+                "visa_type": primary_record.get("visa_type"),
+                "expiry_date": primary_record.get("expiry_date"),
+                "expiry_status": primary_record.get("expiry_status"),
+                "visa_records": deduped_records,
+            }
+
+        if saw_no_visa:
+            return {
+                "status": "PARSED_NO_VISA",
+                "visa_type": None,
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "visa_records": [],
+            }
+
+        return {
+            "status": "MISSING",
+            "visa_type": None,
+            "expiry_date": None,
+            "expiry_status": "MISSING",
+            "visa_records": [],
+        }
+
     def _parse_dob_from_text(self, raw_text):
         dob_fact = self._extract_dob_fact_from_text(raw_text)
         return dob_fact.get("dob")
@@ -949,7 +1245,7 @@ class AIResumeAnalyzer:
         # an arbitrary expiry/employment date and compute a wrong age.
         return {"dob": None, "status": "MISSING"}
 
-    def _build_date_from_match(self, parts):
+    def _build_date_from_match(self, parts, allow_future=False):
         if not parts or len(parts) != 3:
             return None
 
@@ -991,7 +1287,7 @@ class AIResumeAnalyzer:
             if not month:
                 return None
             parsed = date(year, month, day)
-            if parsed > date.today():
+            if not allow_future and parsed > date.today():
                 return None
             return parsed
         except Exception:
@@ -1046,6 +1342,7 @@ class AIResumeAnalyzer:
                 for chunk in (chunks or [])
             )
         experienced_ship_types = self._extract_experienced_ship_types_from_text(source_text)
+        visa_info = self._extract_us_visa_fact_from_text(source_text)
         metadata_entry = {}
         if folder_metadata:
             metadata_entry = folder_metadata.get(filename) or {}
@@ -1064,6 +1361,14 @@ class AIResumeAnalyzer:
             },
             "experience": {
                 "vessel_types": experienced_ship_types,
+            },
+            "travel": {
+                "us_visa_type": visa_info.get("visa_type"),
+                "us_visa_expiry_date": visa_info.get("expiry_date"),
+                "us_visa_status": visa_info.get("status"),
+                "us_visa_expiry_status": visa_info.get("expiry_status"),
+                "visa_records": visa_info.get("visa_records") or [],
+                "visa_types": [record.get("visa_type") for record in (visa_info.get("visa_records") or []) if record.get("visa_type")],
             },
             "derived": {
                 "age_years": age_info.get("age"),
@@ -1140,6 +1445,120 @@ class AIResumeAnalyzer:
             ),
         }
 
+    def _evaluate_us_visa_rule(self, candidate_facts, constraint, reference_date=None):
+        if not constraint:
+            return {
+                "decision": "PASS",
+                "reason_code": "US_VISA_RULE_NOT_REQUESTED",
+                "message": "No visa filter requested.",
+            }
+
+        travel = candidate_facts.get("travel") or {}
+        visa_status = travel.get("us_visa_status")
+        visa_records = travel.get("visa_records") or []
+        accepted_types = constraint.get("accepted_types") or []
+        requested_label = constraint.get("requested_label") or "valid visa"
+        today = reference_date or date.today()
+
+        if constraint.get("supported") is False:
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "VISA_FILTER_UNSUPPORTED",
+                "message": f"Requested filter '{requested_label}' is not yet supported by the deterministic visa parser.",
+            }
+
+        if visa_status == "PARSED_NO_VISA":
+            return {
+                "decision": "FAIL",
+                "reason_code": "US_VISA_NOT_PRESENT",
+                "message": f"Resume indicates no visa matching requested filter '{requested_label}'.",
+            }
+
+        if visa_status == "MISSING" or not visa_records:
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "US_VISA_MISSING",
+                "message": f"Could not determine visa evidence for requested filter '{requested_label}'.",
+            }
+
+        matching_records = [record for record in visa_records if not accepted_types or record.get("visa_type") in accepted_types]
+        if not matching_records:
+            seen_types = sorted(set(travel.get("visa_types") or []))
+            if seen_types:
+                return {
+                    "decision": "FAIL",
+                    "reason_code": "US_VISA_TYPE_MISMATCH",
+                    "message": (
+                        f"Resume shows visa types {', '.join(seen_types)}, which do not satisfy requested filter "
+                        f"'{requested_label}'."
+                    ),
+                }
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "US_VISA_MISSING",
+                "message": f"Could not determine visa evidence for requested filter '{requested_label}'.",
+            }
+
+        invalid_records = []
+        unknown_records = []
+        expired_records = []
+        valid_records = []
+
+        for record in matching_records:
+            visa_type = record.get("visa_type")
+            expiry_date = record.get("expiry_date")
+            expiry_status = record.get("expiry_status")
+
+            if expiry_status == "INVALID":
+                invalid_records.append(visa_type)
+                continue
+            if expiry_status == "AMBIGUOUS_NUMERIC":
+                unknown_records.append(f"{visa_type} has ambiguous expiry format")
+                continue
+            if not expiry_date:
+                unknown_records.append(f"{visa_type} is present but expiry date is missing")
+                continue
+            if expiry_date < today:
+                expired_records.append((visa_type, expiry_date))
+                continue
+            valid_records.append((visa_type, expiry_date))
+
+        if valid_records:
+            visa_type, expiry_date = valid_records[0]
+            return {
+                "decision": "PASS",
+                "reason_code": "US_VISA_VALID",
+                "message": f"Visa {visa_type} is valid until {expiry_date.isoformat()} for requested filter '{requested_label}'.",
+            }
+
+        if invalid_records:
+            return {
+                "decision": "FAIL",
+                "reason_code": "US_VISA_EXPIRY_INVALID",
+                "message": f"Visa {invalid_records[0]} has an invalid expiry date value.",
+            }
+
+        if unknown_records:
+            return {
+                "decision": "UNKNOWN",
+                "reason_code": "US_VISA_EXPIRY_MISSING",
+                "message": unknown_records[0] + ".",
+            }
+
+        if expired_records:
+            visa_type, expiry_date = expired_records[0]
+            return {
+                "decision": "FAIL",
+                "reason_code": "US_VISA_EXPIRED",
+                "message": f"Visa {visa_type} expired on {expiry_date.isoformat()}.",
+            }
+
+        return {
+            "decision": "UNKNOWN",
+            "reason_code": "US_VISA_MISSING",
+            "message": f"Could not determine visa evidence for requested filter '{requested_label}'.",
+        }
+
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         results = []
@@ -1147,6 +1566,10 @@ class AIResumeAnalyzer:
         age_constraint = hard_constraints.get("age_years")
         if age_constraint:
             results.append(self._evaluate_age_rule(candidate_facts, age_constraint))
+
+        visa_constraint = hard_constraints.get("us_visa")
+        if visa_constraint:
+            results.append(self._evaluate_us_visa_rule(candidate_facts, visa_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if ship_type_constraint:
@@ -1504,13 +1927,15 @@ Resume Context:
 
 Instructions:
 
-1. **US VISA VALIDATION - VERY STRICT:**
-   - If the "US Visa / Other" field shows "Other" → This means NO US VISA (mark FALSE)
-   - If the field shows "US Visa", "C1/D", "B1/B2", etc. → Check expiry date
-   - If expiry date is before 2025 → EXPIRED (mark FALSE)
+1. **VISA VALIDATION - VERY STRICT:**
+   - Supported visa evidence includes: "US Visa", "C1/D (USA)", "C1 (USA)", "D (USA)", "B1/B2 (USA)", "Australia Entry visa", "MCV (Australia)", and "Schengen"
+   - If a visa field shows "Other", blank, "N/A", or "None" → This means NO VALID VISA (mark FALSE)
+   - If a supported visa type is present → Check expiry date
+   - If expiry date is before the current date → EXPIRED (mark FALSE)
    - If expiry date shows year "0001" or "-0001" → INVALID (mark FALSE)
-   - If the field is blank or "N/A" → NO VISA (mark FALSE)
-   - ONLY mark TRUE if there's a specific visa type (not "Other") with valid future expiry
+   - ONLY mark TRUE if there's a specific supported visa type with valid future expiry
+   - NEVER substitute one country's visa for another country's visa
+   - A certificate, CoC, license, flag endorsement, or document issued by a country is NOT a visa or right-to-work unless the resume explicitly says so
 
 2. COMPOUND REQUIREMENTS:
    - "A and B" requires BOTH A AND B
@@ -1518,7 +1943,10 @@ Instructions:
    - If ANY required condition (in AND queries) is missing → mark FALSE
 
 3. TERMINOLOGY FLEXIBILITY:
-   - "US visa" matches: "C1/D visa", "B1/B2 visa", "American visa", "US work authorization"
+   - "US visa" matches: "C1/D visa", "C1 visa", "D visa", "B1/B2 visa", "American visa", "US work authorization"
+   - "Australia visa" matches: "Australia Entry visa", "MCV (Australia)"
+   - "Schengen visa" matches: "Schengen"
+   - "UK visa" does NOT match US visa, Schengen visa, or UK-issued certificates
    - "Oil tanker" matches: "crude oil tanker", "product tanker", "VLCC", "oil/chem tanker"
    - "Bulk carrier" matches: "dry cargo vessel", "handy size", "capesize", "panamax"
 

@@ -137,6 +137,17 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
                 "derived": {
                     "age_years": spec["age"],
                 },
+                "travel": {
+                    "us_visa_status": "PARSED",
+                    "visa_records": [{
+                        "status": "PARSED",
+                        "visa_type": "US Visa (USA)",
+                        "visa_group": "usa",
+                        "expiry_date": date(2027, 5, 4),
+                        "expiry_status": "PARSED",
+                    }],
+                    "visa_types": ["US Visa (USA)"],
+                },
             }
 
         llm_calls = []
@@ -232,6 +243,17 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
                 },
                 "derived": {
                     "age_years": spec["age"],
+                },
+                "travel": {
+                    "us_visa_status": "PARSED",
+                    "visa_records": [{
+                        "status": "PARSED",
+                        "visa_type": "US Visa (USA)",
+                        "visa_group": "usa",
+                        "expiry_date": date(2027, 5, 4),
+                        "expiry_status": "PARSED",
+                    }],
+                    "visa_types": ["US Visa (USA)"],
                 },
             }
 
