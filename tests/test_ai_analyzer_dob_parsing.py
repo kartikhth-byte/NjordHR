@@ -132,6 +132,18 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "AGE_DOB_AMBIGUOUS_FORMAT")
         self.assertIn("ambiguous numeric format", result["message"])
 
+    def test_resolved_candidate_age_extracts_explicit_stated_age(self):
+        raw_text = "Date of Birth: 04-Nov-1989\nAge: 36\nNationality: Indian"
+        age_info = self.analyzer._resolve_candidate_age(
+            [{"metadata": {"raw_text": raw_text}}],
+            original_path=None,
+            text_cache={},
+        )
+        self.assertEqual(age_info["dob"], date(1989, 11, 4))
+        self.assertEqual(age_info["age"], self.analyzer._calculate_age(date(1989, 11, 4)))
+        self.assertEqual(age_info["stated_age"], 36)
+        self.assertEqual(age_info["stated_age_status"], "PARSED")
+
 
 if __name__ == "__main__":
     unittest.main()
