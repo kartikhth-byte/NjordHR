@@ -506,6 +506,33 @@ The four states for STCW certificates and endorsements:
 - Vessel type and rank strings pass through the alias tables. Unrecognized strings → `null`.
 - If a constraint cannot be reliably parsed, the field is `null`.
 
+### 5.2.1 Prompt corpus and rule design requirement
+
+Constraint extraction rules must be derived from a real prompt corpus, not invented only from hypothetical examples. For every supported constraint family, the team must collect a representative sample of recruiter prompts and use that sample to drive both parser design and regression coverage. The operational prompt-corpus source and review loop are defined in [prompt-corpus-and-feedback-spec-v0.3.md](/Users/kartikraghavan/Tools/NjordHR/docs/prompt-corpus-and-feedback-spec-v0.3.md).
+
+Required workflow for each new constraint family:
+
+1. Collect real prompt examples from users, logs, UAT notes, or recruiter-provided examples.
+2. Cluster prompts by intent:
+   - deterministic hard constraint
+   - semantic / fuzzy preference
+   - ambiguous or unsupported phrasing
+3. Define the supported prompt forms for that family from the observed prompt corpus.
+4. Add deterministic parsing rules for those forms.
+5. Add regression tests using the observed prompt examples, not just synthetic examples.
+6. Measure prompt coverage before launch:
+   - how many sampled prompts are parsed correctly
+   - how many fall into `unapplied_constraints`
+   - how many are misparsed
+
+This is a design and readiness requirement, not optional documentation. A constraint family is not ready because the field extractor works in resumes; it is ready only when real user phrasing for that constraint family is understood with acceptable coverage.
+
+This requirement applies retroactively to already-live deterministic constraint families as well. In Phase 1, that means age range and US visa are not exempt because their parsers predate this section: a real prompt sample must still be assembled and coverage measured for them before Phase 1 is considered complete.
+
+Terminology:
+- **Constraint prompts** are prompts that express hard, checkable requirements such as age, visa, rank, or required documents.
+- **Semantic or fuzzy prompts** are prompts that express qualitative relevance such as "strong leadership", "good stability", or "best fit". These are not deterministic constraints and should not be forced into hard-filter rules.
+
 ### 5.3 Mixed-support query UX
 
 When a query contains supported and unsupported constraint types, the system must display a structured constraint summary:
@@ -629,8 +656,18 @@ If confidence < 0.85 → component = 0.0, `score_incomplete: true`.
 
 **sea_service** *(Tier 2 only)*
 ```
-sea_service = min(1.0, actual_months / max(required_months, 36))
+if actual_months is UNKNOWN or required_months is null:
+    sea_service = 0.0
+    score_incomplete = true
+elif actual_months < required_months:
+    sea_service = actual_months / required_months
+else:
+    sea_service = 1.0
 ```
+
+The sea-service component measures **requirement satisfaction**, not total career depth. It answers a narrow question: **how fully does the candidate meet the stated sea-service requirement?** A candidate who meets the recruiter’s stated minimum receives full component credit. Additional experience above the minimum does not increase this component further.
+
+This design avoids penalising candidates who fully satisfy the recruiter’s stated requirement while still allowing modest extra credit for materially deeper experience. Extra experience depth and concentration in the relevant vessel type are handled separately through capped bonuses (Section 7.3), rather than being mixed into the base sea-service formula.
 
 **vessel_type** *(Tier 2 only)*
 ```
@@ -653,6 +690,7 @@ vessel_type = min(1.0, relevant_months / max(total_sea_service_months, 1))
 
 | Bonus | Condition | Value |
 |---|---|---|
+| Sea-service depth | Candidate exceeds required sea service by ≥ 24 months | +0.03 |
 | Specialisation | ≥ 60% of sea service on required vessel type | +0.05 |
 | Promotion candidate | Applied rank one step above most recent rank | +0.03 |
 
@@ -869,9 +907,20 @@ All criteria must be met before Phase 2 begins. Sign-off required from the devel
 
 | Field | Correctness | Max incorrect rate | Usable coverage |
 |---|---|---|---|
-| Rank (normalized) | ≥ 85% correct | ≤ 10% incorrect | ≥ 70% not-UNKNOWN |
-| COC present + valid | — | ≤ 10% incorrect | ≥ 60% not-UNKNOWN |
+| Rank (normalized) | ≥ 85% correct | ≤ 10% incorrect | ≥ 70% not-UNKNOWN | Minimum pilot threshold on 30 sampled resumes, not a confidence-building threshold |
+| COC present + valid | — | ≤ 10% incorrect | ≥ 60% not-UNKNOWN | Minimum pilot threshold on 30 sampled resumes, not a confidence-building threshold |
 | US visa extraction | No new false positives or false negatives vs v1.1 | — | — |
+
+**Prompt corpus coverage** — validate against sampled real search prompts, not only synthetic examples.
+
+| Constraint family | Measurement | Threshold |
+|---|---|---|
+| Age range prompt parsing | Sample 20 real age-related prompts | ≥ 85% parsed into correct `age_range` constraints, ≤ 10% misparsed |
+| Rank prompt parsing | Sample 20 real rank-related prompts | ≥ 80% parsed into correct `rank_match` constraints, ≤ 10% misparsed |
+| COC prompt parsing | Sample 20 real COC-related prompts | ≥ 80% parsed into correct `coc_document_gate` constraints, ≤ 10% misparsed |
+| US visa prompt parsing | Sample 20 real visa-related prompts | ≥ 85% parsed into correct `us_visa` constraints, ≤ 10% misparsed |
+
+Prompts that are not yet supported may land in `unapplied_constraints`, but they must not be silently misparsed into the wrong rule family.
 
 **RANK_MATCH launch gate:** if rank usable coverage is below 70% at exit evaluation, RANK_MATCH does not launch as a hard filter. Phase 1 ships without it active. It is re-evaluated once alias table coverage has been improved and the 30-resume sample re-run. This is a pre-launch gate, not a post-deploy soft demotion.
 
@@ -915,11 +964,13 @@ Start with the most structured table formats. Accept UNKNOWN conservatively. Mea
 
 | Criterion | Measurement | Threshold |
 |---|---|---|
-| Sea service correctness | Hand-check 30 resumes | ≥ 80% correct |
-| Sea service usable coverage | Same 30 resumes | ≥ 60% not-UNKNOWN |
-| Vessel type correctness | Same 30 resumes | ≥ 80% correct |
-| Vessel type usable coverage | Same 30 resumes | ≥ 60% not-UNKNOWN |
-| Scorer-to-recruiter correlation | Compare heuristic ranking to recruiter ranking on 20 real candidates | Spearman ρ ≥ 0.60 |
+| Sea service correctness | Hand-check 30 resumes | ≥ 80% correct (minimum pilot threshold, not a confidence-building threshold) |
+| Sea service usable coverage | Same 30 resumes | ≥ 60% not-UNKNOWN (minimum pilot threshold, not a confidence-building threshold) |
+| Vessel type correctness | Same 30 resumes | ≥ 80% correct (minimum pilot threshold, not a confidence-building threshold) |
+| Vessel type usable coverage | Same 30 resumes | ≥ 60% not-UNKNOWN (minimum pilot threshold, not a confidence-building threshold) |
+| Sea service prompt parsing | Sample 20 real sea-service-related prompts | ≥ 80% parsed into correct `min_sea_service` constraints, ≤ 10% misparsed |
+| Vessel type prompt parsing | Sample 20 real vessel-type-related prompts | ≥ 80% parsed into correct `vessel_type` constraints, ≤ 10% misparsed |
+| Scorer-to-recruiter correlation | Compare heuristic ranking to recruiter ranking on 20 real candidates | Spearman ρ ≥ 0.60 (minimum pilot threshold, not a confidence-building threshold) |
 | No score-based false exclusions | Shortlist monitoring results from 50 triggered comparisons | Broader set does not consistently outperform top-N by recruiter override rate |
 | Scorer label visible in UI | UI review | Heuristic label on all score surfaces |
 | Constraint preview design approved | Product sign-off | Interaction model approved before LLM constraint extraction deploys |
@@ -1020,5 +1071,5 @@ Every new extractor must have a test file before integration. Tests must cover t
 *Specification v3.4 — NjordHR Candidate Intelligence Architecture*
 *Supersedes: Architecture v3.3 (2026-04-03)*
 *Deterministic Filter Engine Spec v2.1 remains authoritative for filter engine internals*
-*Status: Final revision — treat as stable working document*
+*Status: Approved for implementation — stable working document*
 *Date: 2026-04-03*
