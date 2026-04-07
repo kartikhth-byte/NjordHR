@@ -259,6 +259,20 @@ Suggested overlap:
 - `P1` High. Needed for production-ready workflow.
 - `P2` Medium. Hardening and rollout polish.
 
+### 6.2 Current AI Search Phase 1 follow-up focus
+- `P0` Pinecone false-empty rerun issue is resolved:
+  - root cause was the namespace existence probe
+  - the old zero-vector cosine query was unreliable
+  - the fix uses Pinecone `list(namespace=..., limit=1)` with bounded retry and query fallback only when `list()` is unavailable
+- `P1` Keep STCW extractor conservative for now:
+  - do not add a broader `UNKNOWN -> PASS` heuristic yet
+  - do not reduce the `Needs Review` bucket unless the same missed-positive pattern repeats across multiple folders
+- `P1` Continue manual quality review of current AI Search output:
+  - spot-check verified matches
+  - spot-check fails
+  - spot-check needs-review samples
+- `P1` If further STCW work is needed, prioritize false `FAIL` / false `expired` corrections over promoting more `UNKNOWN` cases to `PASS`
+
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).
 - `M1-T1` Create Supabase environments (`dev`, `staging`, `prod`).

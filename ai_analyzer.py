@@ -567,6 +567,9 @@ class RAGPrepper:
 # ==============================================================================
 class PineconeManager:
     """Manages the connection and querying of a Pinecone index."""
+    EMPTY_NAMESPACE_RETRY_COUNT = 2
+    EMPTY_NAMESPACE_RETRY_DELAY_SECONDS = 3
+
     def __init__(self, config_manager, embedding_dimension=None):
         self.config = config_manager
         self.pc = Pinecone(api_key=self.config.pinecone_api_key)
@@ -599,16 +602,94 @@ class PineconeManager:
             self.embedding_dimension = vector_dimension
             self._index = None
 
+    def _candidate_dimensions(self):
+        candidates = []
+        for dimension in (self.embedding_dimension, 768, 3072):
+            if dimension and dimension not in candidates:
+                candidates.append(dimension)
+        return candidates
+
+    def _candidate_index_names(self):
+        candidates = []
+        for dimension in self._candidate_dimensions():
+            index_name = self._index_name_for_dimension(dimension)
+            if index_name not in candidates:
+                candidates.append(index_name)
+        if self.base_index_name not in candidates:
+            candidates.append(self.base_index_name)
+        return candidates
+
     def namespace_vector_count(self, namespace):
         try:
-            stats = self._coerce_dict(self.index.describe_index_stats())
-            namespaces = stats.get("namespaces", {})
-            ns_meta = namespaces.get(namespace, {})
-            return int(ns_meta.get("vector_count", 0) or 0)
+            retry_count = max(0, int(getattr(self, "EMPTY_NAMESPACE_RETRY_COUNT", 0)))
+            retry_delay = max(0, float(getattr(self, "EMPTY_NAMESPACE_RETRY_DELAY_SECONDS", 0)))
+
+            for attempt in range(retry_count + 1):
+                stats = self._coerce_dict(self.index.describe_index_stats())
+                namespaces = stats.get("namespaces", {})
+                ns_meta = namespaces.get(namespace, {})
+                count = int(ns_meta.get("vector_count", 0) or 0)
+                if count > 0:
+                    return count
+
+                for index_name in self._candidate_index_names():
+                    has_vectors = self.namespace_has_vectors(namespace, index_name=index_name)
+                    if has_vectors:
+                        return 1
+
+                if attempt < retry_count:
+                    time.sleep(retry_delay)
+
+            return 0
         except Exception as e:
             self.last_error = f"Failed to inspect namespace stats: {e}"
             print(f"[ERROR] {self.last_error}")
             return 0
+
+    def namespace_has_vectors(self, namespace, dimension=None, index_name=None):
+        try:
+            resolved_index_name = index_name or self.index_name
+
+            index = self.index
+            if resolved_index_name != self.index_name:
+                available_indexes = self.pc.list_indexes().names()
+                if resolved_index_name not in available_indexes:
+                    return False
+                index = self.pc.Index(resolved_index_name)
+
+            try:
+                pages = index.list(namespace=namespace, limit=1)
+                first_page = next(iter(pages), [])
+                ids = list(first_page or [])
+                return bool(ids)
+            except Exception as list_error:
+                query_dimension = dimension
+                if query_dimension is None:
+                    if resolved_index_name.endswith("-d3072"):
+                        query_dimension = 3072
+                    elif resolved_index_name.endswith("-d768"):
+                        query_dimension = 768
+                    else:
+                        query_dimension = self.embedding_dimension or 768
+                print(
+                    f"[WARN] namespace list probe failed for namespace={namespace} "
+                    f"index={resolved_index_name}: {list_error}. Falling back to query probe."
+                )
+                results = index.query(
+                    namespace=namespace,
+                    vector=[0.0] * query_dimension,
+                    top_k=1,
+                    include_metadata=False,
+                )
+                if isinstance(results, dict):
+                    matches = results.get("matches", [])
+                else:
+                    matches = getattr(results, "matches", [])
+                return bool(matches)
+        except Exception as e:
+            self.last_error = f"Failed to probe namespace contents: {e}"
+            print(f"[WARN] {self.last_error}")
+            return False
 
     @property
     def index(self):
@@ -642,7 +723,8 @@ class PineconeManager:
         if not vectors_to_upsert:
             return
         try:
-            self.index.upsert(vectors=vectors_to_upsert, namespace=rank)
+            index = self.index
+            index.upsert(vectors=vectors_to_upsert, namespace=rank)
         except Exception as e:
             self.last_error = f"Upsert failed: {e}"
             print(f"[ERROR] {self.last_error}")
