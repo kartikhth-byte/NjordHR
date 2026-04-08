@@ -119,6 +119,7 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
                     "metadata": {
                         "resume_id": Path(spec["filename"]).stem,
                         "rank": self.rank,
+                        "source_path": str(self.rank_folder / spec["filename"]),
                         "raw_text": spec["filename"],
                     },
                 }
@@ -213,6 +214,7 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
                     "metadata": {
                         "resume_id": Path(spec["filename"]).stem,
                         "rank": self.rank,
+                        "source_path": str(self.rank_folder / spec["filename"]),
                         "raw_text": "US Visa valid until 04-May-2027",
                     },
                 }
@@ -230,6 +232,7 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
                     "metadata": {
                         "resume_id": Path(resume_specs[0]["filename"]).stem,
                         "rank": self.rank,
+                        "source_path": str(self.rank_folder / resume_specs[0]["filename"]),
                         "raw_text": "US Visa valid until 04-May-2027",
                     },
                 }

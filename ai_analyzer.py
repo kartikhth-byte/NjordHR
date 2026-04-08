@@ -446,14 +446,110 @@ class RAGPrepper:
             self.last_error = f"Could not list Gemini models: {e}"
             return []
 
-    def chunk_text(self, text, resume_id, rank):
-        tokens = text.split()
-        chunk_size, overlap = 400, 50
+    def _chunk_metadata(self, resume_id, rank, chunk_text):
+        return {
+            "resume_id": resume_id,
+            "rank": rank,
+            "raw_text": chunk_text,
+        }
+
+    def _split_structure_blocks(self, text):
+        normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+        blocks = []
+        current_lines = []
+
+        for raw_line in normalized.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                if current_lines:
+                    blocks.append("\n".join(current_lines))
+                    current_lines = []
+                continue
+            current_lines.append(line)
+
+        if current_lines:
+            blocks.append("\n".join(current_lines))
+
+        return [block for block in blocks if block.strip()]
+
+    def _split_large_block(self, block_text, chunk_size):
+        lines = [line.strip() for line in str(block_text or "").split("\n") if line.strip()]
+        if len(lines) <= 1:
+            tokens = str(block_text or "").split()
+            return [" ".join(tokens[i:i + chunk_size]) for i in range(0, len(tokens), chunk_size)]
+
         chunks = []
-        for i in range(0, len(tokens), chunk_size - overlap):
-            chunk_text = " ".join(tokens[i:i + chunk_size])
-            chunk_metadata = {"resume_id": resume_id, "rank": rank, "raw_text": chunk_text}
-            chunks.append({"text": chunk_text, "metadata": chunk_metadata})
+        current_lines = []
+        current_token_count = 0
+
+        for line in lines:
+            line_tokens = line.split()
+            line_token_count = len(line_tokens)
+            if line_token_count >= chunk_size:
+                if current_lines:
+                    chunks.append("\n".join(current_lines))
+                    current_lines = []
+                    current_token_count = 0
+                chunks.extend(" ".join(line_tokens[i:i + chunk_size]) for i in range(0, line_token_count, chunk_size))
+                continue
+
+            if current_lines and current_token_count + line_token_count > chunk_size:
+                chunks.append("\n".join(current_lines))
+                current_lines = []
+                current_token_count = 0
+
+            current_lines.append(line)
+            current_token_count += line_token_count
+
+        if current_lines:
+            chunks.append("\n".join(current_lines))
+
+        return chunks
+
+    def chunk_text(self, text, resume_id, rank):
+        chunk_size, overlap = 400, 50
+        blocks = self._split_structure_blocks(text)
+        if not blocks:
+            return []
+
+        units = []
+        for block in blocks:
+            token_count = len(block.split())
+            if token_count <= chunk_size:
+                units.append(block)
+            else:
+                units.extend(self._split_large_block(block, chunk_size))
+
+        chunks = []
+        current_units = []
+        current_token_count = 0
+        overlap_seed = ""
+
+        for unit in units:
+            unit_token_count = len(unit.split())
+            if current_units and current_token_count + unit_token_count > chunk_size:
+                chunk_text = "\n\n".join(current_units).strip()
+                if chunk_text:
+                    chunks.append({
+                        "text": chunk_text,
+                        "metadata": self._chunk_metadata(resume_id, rank, chunk_text),
+                    })
+                    overlap_seed = " ".join(chunk_text.split()[-overlap:])
+                current_units = [overlap_seed, unit] if overlap_seed else [unit]
+                current_token_count = len(" ".join(current_units).split())
+                continue
+
+            current_units.append(unit)
+            current_token_count += unit_token_count
+
+        if current_units:
+            chunk_text = "\n\n".join(part for part in current_units if str(part or "").strip()).strip()
+            if chunk_text:
+                chunks.append({
+                    "text": chunk_text,
+                    "metadata": self._chunk_metadata(resume_id, rank, chunk_text),
+                })
+
         return chunks
 
     def get_embeddings(self, texts):

@@ -116,6 +116,7 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
                     "metadata": {
                         "resume_id": Path(spec["filename"]).stem,
                         "rank": self.rank,
+                        "source_path": str(self.rank_folder / spec["filename"]),
                         "raw_text": spec["filename"],
                     },
                 }
