@@ -10,7 +10,7 @@ import re
 import io
 import threading
 from pathlib import Path
-from datetime import datetime, date
+from datetime import UTC, datetime, date
 
 # --- Core Dependencies ---
 import requests
@@ -226,6 +226,8 @@ def _should_use_cloud_ai_store():
 
 
 class SupabaseStoreBase:
+    DEFAULT_TIMEOUT_SECONDS = 30
+
     def __init__(self):
         self.supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
         self.api_key = _resolve_supabase_api_key()
@@ -236,13 +238,18 @@ class SupabaseStoreBase:
         }
         self.lock = threading.Lock()
 
-    def _request(self, method, path, params=None, json_body=None, timeout=15):
+    def _request(self, method, path, params=None, json_body=None, timeout=None, headers=None):
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT_SECONDS
+        req_headers = dict(self.headers)
+        if headers:
+            req_headers.update(headers)
         resp = requests.request(
             method=method,
             url=f"{self.supabase_url}{path}",
             params=params or {},
             json=json_body,
-            headers=self.headers,
+            headers=req_headers,
             timeout=timeout,
         )
         if resp.status_code >= 400:
@@ -285,7 +292,7 @@ class SupabaseFileRegistry(SupabaseStoreBase):
             "file_key": file_key,
             "last_modified": float(last_modified),
             "resume_id": str(resume_id),
-            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }]
         with self.lock:
             self._request(
@@ -293,7 +300,8 @@ class SupabaseFileRegistry(SupabaseStoreBase):
                 "/rest/v1/ai_file_registry",
                 params={"on_conflict": "file_key"},
                 json_body=body,
-                timeout=20,
+                timeout=45,
+                headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
             )
 
     def get_resume_id(self, file_path):
@@ -324,10 +332,10 @@ class SupabaseFeedbackStore(SupabaseStoreBase):
             "llm_confidence": llm_confidence,
             "user_decision": user_decision,
             "user_notes": user_notes or "",
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }]
         with self.lock:
-            self._request("POST", "/rest/v1/ai_feedback", json_body=body, timeout=20)
+            self._request("POST", "/rest/v1/ai_feedback", json_body=body, timeout=45)
         print(f"[FEEDBACK] Stored (cloud): {filename} - User: {user_decision}, LLM: {llm_decision}")
 
     def get_recent_feedback(self, query, limit=5):
@@ -746,15 +754,155 @@ class PineconeManager:
 # ==============================================================================
 class AIResumeAnalyzer:
     """The main RAG pipeline engine with feedback learning and multi-stage retrieval."""
-    FACTS_VERSION = "1.1"
+    FACTS_VERSION = "2.0"
+    SYNC_REEXTRACT_COOLDOWN_SECONDS = 24 * 60 * 60
+    SYNC_REEXTRACT_PER_SEARCH_LIMIT = 5
+    SYNC_REEXTRACT_TIMEOUT_SECONDS = 10
+    SYNC_REEXTRACT_WAIT_SECONDS = 12
+    LLM_RATE_LIMIT_SLEEP_SECONDS = 0.5
+    V2_ONLY_CONSTRAINT_IDS = {"rank_match", "coc_document_gate", "stcw_basic"}
+    RANK_ALIAS_TABLE = {
+        "master": {
+            "canonical_id": "master",
+            "department": "deck",
+            "seniority_bucket": "command",
+        },
+        "captain": {
+            "canonical_id": "master",
+            "department": "deck",
+            "seniority_bucket": "command",
+        },
+        "chief officer": {
+            "canonical_id": "chief_officer",
+            "department": "deck",
+            "seniority_bucket": "senior_officer",
+        },
+        "chief mate": {
+            "canonical_id": "chief_officer",
+            "department": "deck",
+            "seniority_bucket": "senior_officer",
+        },
+        "c o": {
+            "canonical_id": "chief_officer",
+            "department": "deck",
+            "seniority_bucket": "senior_officer",
+        },
+        "2nd officer": {
+            "canonical_id": "2nd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "second officer": {
+            "canonical_id": "2nd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "2 o": {
+            "canonical_id": "2nd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "3rd officer": {
+            "canonical_id": "3rd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "third officer": {
+            "canonical_id": "3rd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "3 o": {
+            "canonical_id": "3rd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "chief engineer": {
+            "canonical_id": "chief_engineer",
+            "department": "engine",
+            "seniority_bucket": "command",
+        },
+        "c e": {
+            "canonical_id": "chief_engineer",
+            "department": "engine",
+            "seniority_bucket": "command",
+        },
+        "2nd engineer": {
+            "canonical_id": "2nd_engineer",
+            "department": "engine",
+            "seniority_bucket": "senior_officer",
+        },
+        "second engineer": {
+            "canonical_id": "2nd_engineer",
+            "department": "engine",
+            "seniority_bucket": "senior_officer",
+        },
+        "2 e": {
+            "canonical_id": "2nd_engineer",
+            "department": "engine",
+            "seniority_bucket": "senior_officer",
+        },
+        "3rd engineer": {
+            "canonical_id": "3rd_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "third engineer": {
+            "canonical_id": "3rd_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "3 e": {
+            "canonical_id": "3rd_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "4th engineer": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "junior 4th engineer": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "fourth engineer": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "junior fourth engineer": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "4 e": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "eto": {
+            "canonical_id": "electro_technical_officer",
+            "department": "engine",
+            "seniority_bucket": "specialist_officer",
+        },
+        "electro technical officer": {
+            "canonical_id": "electro_technical_officer",
+            "department": "engine",
+            "seniority_bucket": "specialist_officer",
+        },
+    }
     
     def __init__(self, config_parser):
         print("[INIT] Initializing AIResumeAnalyzer with Multi-Stage Retrieval...")
         self.config = ConfigManager(config_parser)
+        self.ingest_registry_cache = None
         if _should_use_cloud_ai_store():
             try:
                 self.registry = SupabaseFileRegistry()
                 self.feedback = SupabaseFeedbackStore()
+                self.ingest_registry_cache = FileRegistry(self.config.registry_db_path)
                 print("[INIT] Using Supabase-backed AI registry/feedback stores.")
             except Exception as exc:
                 raise RuntimeError(f"Cloud AI stores are required but unavailable: {exc}")
@@ -765,7 +913,214 @@ class AIResumeAnalyzer:
         self.pdf_processor = AdvancedPDFProcessor()
         self.prepper = RAGPrepper(self.config)
         self.vector_db = PineconeManager(self.config, embedding_dimension=self.prepper.expected_embedding_dimension())
+        self._sync_reextract_state_lock = threading.Lock()
+        self._sync_reextract_last_run = {}
+        self._sync_reextract_inflight = {}
         print("[INIT] Initialization complete")
+
+    def _ingest_needs_processing(self, file_path, last_modified):
+        cache = getattr(self, "ingest_registry_cache", None)
+        if cache is not None:
+            return cache.needs_processing(file_path, last_modified)
+        return self.registry.needs_processing(file_path, last_modified)
+
+    def _ingest_mark_processed(self, file_path, last_modified, resume_id):
+        self.registry.upsert_file_record(file_path, last_modified, resume_id)
+        cache = getattr(self, "ingest_registry_cache", None)
+        if cache is not None:
+            cache.upsert_file_record(file_path, last_modified, resume_id)
+
+    def _ensure_sync_reextract_state(self):
+        if not hasattr(self, "_sync_reextract_state_lock"):
+            self._sync_reextract_state_lock = threading.Lock()
+        if not hasattr(self, "_sync_reextract_last_run"):
+            self._sync_reextract_last_run = {}
+        if not hasattr(self, "_sync_reextract_inflight"):
+            self._sync_reextract_inflight = {}
+
+    def _active_v2_only_constraints(self, job_constraints):
+        applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
+        return applied_constraints & self.V2_ONLY_CONSTRAINT_IDS
+
+    def _should_try_sync_reextract(self, candidate_facts, job_constraints):
+        facts_version = str((candidate_facts or {}).get("facts_version") or self.FACTS_VERSION)
+        return facts_version == "1.1" and bool(self._active_v2_only_constraints(job_constraints))
+
+    def _synchronous_reextract_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
+        return self._build_candidate_facts(
+            filename,
+            rank,
+            chunks,
+            original_path=original_path,
+            text_cache=text_cache,
+            folder_metadata=folder_metadata,
+        )
+
+    def _sync_reextract_fallback_meta(self, reason, candidate_id, active_constraints, detail=""):
+        return {
+            "attempted": True,
+            "succeeded": False,
+            "fallback_reason": str(reason or ""),
+            "candidate_id": str(candidate_id or ""),
+            "active_constraints": sorted(active_constraints or []),
+            "detail": str(detail or ""),
+        }
+
+    def _record_perf_timing(self, perf_state, key, elapsed_seconds):
+        if not isinstance(perf_state, dict):
+            return
+        stats = perf_state.setdefault(key, {"count": 0, "total_seconds": 0.0, "max_seconds": 0.0})
+        stats["count"] += 1
+        stats["total_seconds"] += float(elapsed_seconds or 0.0)
+        stats["max_seconds"] = max(float(stats.get("max_seconds", 0.0) or 0.0), float(elapsed_seconds or 0.0))
+
+    def _perf_snapshot(self, perf_state):
+        snapshot = {}
+        for key, stats in (perf_state or {}).items():
+            count = int(stats.get("count", 0) or 0)
+            total_seconds = float(stats.get("total_seconds", 0.0) or 0.0)
+            snapshot[key] = {
+                "count": count,
+                "total_seconds": round(total_seconds, 3),
+                "avg_seconds": round((total_seconds / count), 3) if count else 0.0,
+                "max_seconds": round(float(stats.get("max_seconds", 0.0) or 0.0), 3),
+            }
+        return snapshot
+
+    def _maybe_sync_reextract_candidate(
+        self,
+        candidate_facts,
+        job_constraints,
+        filename,
+        rank,
+        chunks,
+        original_path,
+        text_cache,
+        folder_metadata,
+        search_state,
+        perf_state=None,
+    ):
+        sync_started_at = time.perf_counter()
+        if not self._should_try_sync_reextract(candidate_facts, job_constraints):
+            self._record_perf_timing(perf_state, "sync_reextract_gate_skipped", time.perf_counter() - sync_started_at)
+            return candidate_facts, None
+
+        self._ensure_sync_reextract_state()
+        active_constraints = self._active_v2_only_constraints(job_constraints)
+        candidate_id = str((candidate_facts or {}).get("candidate_id") or filename or "").strip() or str(filename or "")
+        now_ts = time.time()
+
+        with self._sync_reextract_state_lock:
+            last_run = float(self._sync_reextract_last_run.get(candidate_id, 0) or 0)
+            if last_run and (now_ts - last_run) < self.SYNC_REEXTRACT_COOLDOWN_SECONDS:
+                self._record_perf_timing(perf_state, "sync_reextract_cooldown", time.perf_counter() - sync_started_at)
+                return candidate_facts, self._sync_reextract_fallback_meta(
+                    "cooldown",
+                    candidate_id,
+                    active_constraints,
+                    "Candidate was synchronously re-extracted within the last 24 hours.",
+                )
+
+            if int(search_state.get("sync_reextract_count", 0)) >= self.SYNC_REEXTRACT_PER_SEARCH_LIMIT:
+                self._record_perf_timing(perf_state, "sync_reextract_per_search_limit", time.perf_counter() - sync_started_at)
+                return candidate_facts, self._sync_reextract_fallback_meta(
+                    "per_search_limit",
+                    candidate_id,
+                    active_constraints,
+                    "Per-search synchronous re-extraction limit reached.",
+                )
+
+            inflight = self._sync_reextract_inflight.get(candidate_id)
+            is_owner = inflight is None
+            if is_owner:
+                inflight = {
+                    "event": threading.Event(),
+                    "result": None,
+                    "error": None,
+                }
+                self._sync_reextract_inflight[candidate_id] = inflight
+                search_state["sync_reextract_count"] = int(search_state.get("sync_reextract_count", 0)) + 1
+
+        if not is_owner:
+            completed = inflight["event"].wait(self.SYNC_REEXTRACT_WAIT_SECONDS)
+            if completed and inflight.get("result") is not None:
+                self._record_perf_timing(perf_state, "sync_reextract_waiter_success", time.perf_counter() - sync_started_at)
+                return inflight["result"], {
+                    "attempted": True,
+                    "succeeded": True,
+                    "mode": "waiter",
+                    "candidate_id": candidate_id,
+                    "active_constraints": sorted(active_constraints),
+                }
+            if completed and inflight.get("error") is not None:
+                self._record_perf_timing(perf_state, "sync_reextract_waiter_failure", time.perf_counter() - sync_started_at)
+                return candidate_facts, self._sync_reextract_fallback_meta(
+                    "failure",
+                    candidate_id,
+                    active_constraints,
+                    str(inflight.get("error")),
+                )
+            self._record_perf_timing(perf_state, "sync_reextract_concurrency_guard", time.perf_counter() - sync_started_at)
+            return candidate_facts, self._sync_reextract_fallback_meta(
+                "concurrency_guard",
+                candidate_id,
+                active_constraints,
+                "Another search is already re-extracting this candidate.",
+            )
+
+        def _worker():
+            try:
+                result = self._synchronous_reextract_candidate_facts(
+                    filename,
+                    rank,
+                    chunks,
+                    original_path=original_path,
+                    text_cache=text_cache,
+                    folder_metadata=folder_metadata,
+                )
+                facts_version = str((result or {}).get("facts_version") or "")
+                if facts_version != self.FACTS_VERSION:
+                    raise RuntimeError(
+                        f"Synchronous re-extraction did not produce {self.FACTS_VERSION} facts."
+                    )
+                inflight["result"] = result
+                with self._sync_reextract_state_lock:
+                    self._sync_reextract_last_run[candidate_id] = time.time()
+            except Exception as exc:
+                inflight["error"] = exc
+            finally:
+                inflight["event"].set()
+                with self._sync_reextract_state_lock:
+                    current = self._sync_reextract_inflight.get(candidate_id)
+                    if current is inflight:
+                        self._sync_reextract_inflight.pop(candidate_id, None)
+
+        threading.Thread(target=_worker, daemon=True).start()
+        completed = inflight["event"].wait(self.SYNC_REEXTRACT_TIMEOUT_SECONDS)
+        if completed and inflight.get("result") is not None:
+            self._record_perf_timing(perf_state, "sync_reextract_success", time.perf_counter() - sync_started_at)
+            return inflight["result"], {
+                "attempted": True,
+                "succeeded": True,
+                "mode": "owner",
+                "candidate_id": candidate_id,
+                "active_constraints": sorted(active_constraints),
+            }
+        if completed and inflight.get("error") is not None:
+            self._record_perf_timing(perf_state, "sync_reextract_failure", time.perf_counter() - sync_started_at)
+            return candidate_facts, self._sync_reextract_fallback_meta(
+                "failure",
+                candidate_id,
+                active_constraints,
+                str(inflight.get("error")),
+            )
+        self._record_perf_timing(perf_state, "sync_reextract_timeout", time.perf_counter() - sync_started_at)
+        return candidate_facts, self._sync_reextract_fallback_meta(
+            "timeout",
+            candidate_id,
+            active_constraints,
+            "Synchronous re-extraction timed out.",
+        )
 
     def _extract_age_constraint(self, user_prompt):
         prompt = str(user_prompt or "").strip().lower()
@@ -837,23 +1192,309 @@ class AIResumeAnalyzer:
 
         return None
 
+    def _extract_rank_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt.strip():
+            return None
+
+        seen = []
+        for alias, entry in self.RANK_ALIAS_TABLE.items():
+            if re.search(rf"\b{re.escape(alias)}\b", prompt, flags=re.IGNORECASE):
+                canonical_id = entry["canonical_id"]
+                if canonical_id not in seen:
+                    seen.append(canonical_id)
+        if not seen:
+            return None
+        return {
+            "applied_rank_normalized": seen,
+            "operator": "contains_any",
+        }
+
+    def _extract_coc_requirement_constraint(self, user_prompt):
+        prompt = str(user_prompt or "").lower()
+        patterns = [
+            r"\bvalid\s+coc\b",
+            r"\bcoc\s+required\b",
+            r"\bvalid\s+certificate\s+of\s+competency\b",
+            r"\bcertificate\s+of\s+competency\s+required\b",
+            r"\bmust\s+hold\s+valid\s+coc\b",
+        ]
+        if any(re.search(pattern, prompt) for pattern in patterns):
+            return {
+                "coc_required": True,
+                "coc_valid_required": True,
+            }
+        return None
+
+    def _extract_stcw_basic_constraint(self, user_prompt):
+        prompt = str(user_prompt or "").lower()
+        patterns = [
+            r"\bvalid\s+stcw\s+basic\b",
+            r"\bstcw\s+basic\s+required\b",
+            r"\bmust\s+hold\s+all\s+basic\s+stcw\s+certificates\b",
+            r"\bvalid\s+stcw\s+basic\s+required\b",
+        ]
+        if any(re.search(pattern, prompt) for pattern in patterns):
+            return {"required": True}
+        return None
+
+    def _extract_min_sea_service_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        match = re.search(r"\b(\d+)\s*\+?\s*(years?|months?)\b", prompt, flags=re.IGNORECASE)
+        if not match:
+            return None
+        value = int(match.group(1))
+        unit = match.group(2).lower()
+        months = value * 12 if unit.startswith("year") else value
+        original_phrase = match.group(0).strip()
+        if re.search(r"\bsea\s+service\b|\bexperience\b", prompt, flags=re.IGNORECASE):
+            return {"min_total_months": months, "display_value": original_phrase, "operator": "gte"}
+        return None
+
+    def _extract_vessel_type_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        lowered = prompt.lower()
+        seen = []
+        for canonical, aliases in self._ship_type_aliases().items():
+            for alias in aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                if not normalized_alias:
+                    continue
+                alias_pattern = re.escape(normalized_alias).replace(r"\ ", r"\s+")
+                # Treat softened forms like "VLCC-ish" as unclassified noise, not a clean constraint hit.
+                if re.search(rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9-])", lowered, flags=re.IGNORECASE):
+                    if canonical not in seen:
+                        seen.append(canonical)
+                    break
+        if not seen:
+            return None
+        return {"required": seen, "display_value": ", ".join(seen), "operator": "contains_any"}
+
+    def _extract_availability_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        immediate_match = re.search(r"\b(available immediately|join immediately)\b", prompt, flags=re.IGNORECASE)
+        if immediate_match:
+            return {"value_type": "status", "status": "immediately", "display_value": immediate_match.group(1).lower()}
+
+        date_match = re.search(r"\bavailable\s+from\s+([A-Za-z]{3,9}\s+\d{1,2}(?:,\s*\d{4})?)\b", prompt, flags=re.IGNORECASE)
+        if date_match:
+            date_fact = self._extract_date_fact_from_snippet(date_match.group(1))
+            if date_fact.get("status") == "PARSED":
+                return {
+                    "value_type": "date",
+                    "available_from_date": date_fact["date"].isoformat(),
+                    "display_value": date_match.group(0).strip(),
+                }
+
+        relative_match = re.search(r"\bjoinable\s+in\s+(\d+)\s+days\b", prompt, flags=re.IGNORECASE)
+        if relative_match:
+            return {
+                "value_type": "relative_phrase",
+                "relative_display_value": f"in {relative_match.group(1)} days",
+                "display_value": relative_match.group(0).strip().lower(),
+            }
+        return None
+
+    def _extract_endorsement_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        mappings = [
+            (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
+            (r"\bgmdss\b", "gmdss", "GMDSS"),
+            (r"\boil tanker endorsement\b", "tanker_oil", "oil tanker endorsement"),
+            (r"\bchemical tanker endorsement\b", "tanker_chemical", "chemical tanker endorsement"),
+            (r"\bgas tanker endorsement\b", "tanker_gas", "gas tanker endorsement"),
+        ]
+        for pattern, canonical_id, display_value in mappings:
+            if re.search(pattern, prompt, flags=re.IGNORECASE):
+                return {"endorsements_required": [canonical_id], "display_value": display_value}
+
+        if re.search(r"\btanker endorsement\b", prompt, flags=re.IGNORECASE):
+            return {"ambiguous": True, "fragment": "tanker endorsement"}
+        if re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt):
+            return {"ambiguous": True, "fragment": re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt).group(0)}
+        return None
+
     def _extract_job_constraints(self, user_prompt, rank=None):
-        constraints = {"rank": str(rank or "").strip(), "hard_constraints": {}}
+        constraints = {
+            "rank": str(rank or "").strip(),
+            "hard_constraints": {},
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "parsing_notes": [],
+        }
         age_constraint = self._extract_age_constraint(user_prompt)
         if age_constraint:
             constraints["hard_constraints"]["age_years"] = age_constraint
+            constraints["applied_constraints"].append("age_range")
+
+        rank_constraint = self._extract_rank_constraint(user_prompt)
+        if rank_constraint:
+            constraints["hard_constraints"]["rank"] = rank_constraint
+            constraints["applied_constraints"].append("rank_match")
+
         visa_constraint = self._extract_us_visa_constraint(user_prompt)
         if visa_constraint:
             constraints["hard_constraints"]["us_visa"] = visa_constraint
+            constraints["applied_constraints"].append("us_visa")
+
+        coc_constraint = self._extract_coc_requirement_constraint(user_prompt)
+        if coc_constraint:
+            constraints["hard_constraints"]["certifications"] = coc_constraint
+            constraints["applied_constraints"].append("coc_document_gate")
+
+        stcw_constraint = self._extract_stcw_basic_constraint(user_prompt)
+        if stcw_constraint:
+            constraints["hard_constraints"]["stcw_basic"] = stcw_constraint
+            constraints["applied_constraints"].append("stcw_basic")
+
         experienced_ship_type = self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
+
+        sea_service_constraint = self._extract_min_sea_service_constraint(user_prompt)
+        if sea_service_constraint:
+            constraints["hard_constraints"]["sea_service"] = sea_service_constraint
+            constraints["unapplied_constraints"].append("min_sea_service")
+
+        vessel_type_constraint = self._extract_vessel_type_constraint(user_prompt)
+        if vessel_type_constraint:
+            constraints["hard_constraints"]["vessel_type"] = vessel_type_constraint
+            constraints["unapplied_constraints"].append("vessel_type")
+
+        availability_constraint = self._extract_availability_constraint(user_prompt)
+        if availability_constraint:
+            constraints["hard_constraints"]["availability"] = availability_constraint
+            constraints["unapplied_constraints"].append("availability")
+
+        endorsement_constraint = self._extract_endorsement_constraint(user_prompt)
+        if endorsement_constraint:
+            if endorsement_constraint.get("ambiguous"):
+                constraints["parsing_notes"].append(endorsement_constraint["fragment"])
+            else:
+                certs = constraints["hard_constraints"].setdefault("certifications", {})
+                certs["endorsements_required"] = endorsement_constraint["endorsements_required"]
+                certs["endorsement_display_value"] = endorsement_constraint["display_value"]
+                constraints["unapplied_constraints"].append("stcw_endorsement")
+
+        if not constraints["applied_constraints"] and not constraints["unapplied_constraints"] and str(user_prompt or "").strip():
+            constraints["parsing_notes"].append(str(user_prompt).strip())
+
+        constraints["applied_constraints"] = list(dict.fromkeys(constraints["applied_constraints"]))
+        constraints["unapplied_constraints"] = list(dict.fromkeys(constraints["unapplied_constraints"]))
+        constraints["parsing_notes"] = list(dict.fromkeys(note for note in constraints["parsing_notes"] if note))
         return constraints
 
     def _normalize_ship_type(self, ship_type):
         normalized = str(ship_type or "").strip().lower()
         normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
         return re.sub(r"\s+", " ", normalized).strip()
+
+    def _normalize_rank_label(self, raw_rank):
+        normalized = str(raw_rank or "").strip().lower()
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+        return re.sub(r"\s+", " ", normalized).strip()
+
+    def _normalize_rank(self, raw_rank):
+        normalized_rank = self._normalize_rank_label(raw_rank)
+        alias_entry = self.RANK_ALIAS_TABLE.get(normalized_rank)
+        if not alias_entry:
+            return None, None, None, None
+
+        canonical_id = alias_entry["canonical_id"]
+        department = alias_entry["department"]
+        seniority_bucket = alias_entry["seniority_bucket"]
+        confidence = 1.0 if normalized_rank.replace(" ", "_") == canonical_id else 0.9
+        return canonical_id, department, seniority_bucket, confidence
+
+    def _extract_rank_fact_from_text(self, text):
+        source_text = str(text or "")
+        if not source_text.strip():
+            return {
+                "raw_rank": None,
+                "canonical_id": None,
+                "department": None,
+                "seniority_bucket": None,
+                "confidence": None,
+                "status": "MISSING",
+                "extraction_method": "labeled_field_regex",
+                "source_label": None,
+            }
+
+        present_patterns = [
+            r"(?i)\bpresent\s+rank\s*[:\-]?\s*(.+?)(?=\s+(?:from\s+date|till\s+date|personal(?:\s*&\s*contact)?\s+details|name|email|availability\s+details)\b|$)",
+            r"(?im)^(?:current|present)\s+rank\s*[:\-]\s*([^\n,]+)",
+            r"(?im)^rank\s*[:\-]\s*([^\n,]+)",
+        ]
+        applied_patterns = [
+            r"(?i)\bapplied\s+for\s+rank\s*[:\-]?\s*(.+?)(?=\s+(?:present\s+rank|from\s+date|till\s+date|personal(?:\s*&\s*contact)?\s+details|name|email|availability\s+details)\b|$)",
+        ]
+
+        def _normalize_raw_rank(raw_rank):
+            cleaned = re.sub(r"\s+", " ", str(raw_rank or "").strip(" ,:-"))
+            canonical_id, department, seniority_bucket, confidence = self._normalize_rank(cleaned)
+            return cleaned, canonical_id, department, seniority_bucket, confidence
+
+        present_unknown = None
+        for pattern in present_patterns:
+            match = re.search(pattern, source_text)
+            if not match:
+                continue
+            raw_rank, canonical_id, department, seniority_bucket, confidence = _normalize_raw_rank(match.group(1))
+            if canonical_id:
+                return {
+                    "raw_rank": raw_rank,
+                    "canonical_id": canonical_id,
+                    "department": department,
+                    "seniority_bucket": seniority_bucket,
+                    "confidence": confidence,
+                    "status": "PARSED",
+                    "extraction_method": "labeled_field_regex",
+                    "source_label": "current_rank",
+                }
+            present_unknown = {
+                "raw_rank": raw_rank,
+                "canonical_id": None,
+                "department": None,
+                "seniority_bucket": None,
+                "confidence": None,
+                "status": "UNKNOWN",
+                "extraction_method": "labeled_field_regex",
+                "source_label": "current_rank",
+            }
+            break
+
+        for pattern in applied_patterns:
+            match = re.search(pattern, source_text)
+            if not match:
+                continue
+            raw_applied = re.sub(r"\s+", " ", match.group(1).strip(" ,:-"))
+            for candidate_rank in re.split(r"\s*,\s*", raw_applied):
+                raw_rank, canonical_id, department, seniority_bucket, confidence = _normalize_raw_rank(candidate_rank)
+                if canonical_id:
+                    return {
+                        "raw_rank": raw_rank,
+                        "canonical_id": canonical_id,
+                        "department": department,
+                        "seniority_bucket": seniority_bucket,
+                        "confidence": confidence,
+                        "status": "PARSED",
+                        "extraction_method": "labeled_field_regex",
+                        "source_label": "applied_for_rank",
+                    }
+
+        if present_unknown:
+            return present_unknown
+
+        return {
+            "raw_rank": None,
+            "canonical_id": None,
+            "department": None,
+            "seniority_bucket": None,
+            "confidence": None,
+            "status": "MISSING",
+            "extraction_method": "labeled_field_regex",
+            "source_label": None,
+        }
 
     def _ship_type_aliases(self):
         return {
@@ -1122,6 +1763,44 @@ class AIResumeAnalyzer:
         meaningful = [term for term in terms if term not in filler_tokens]
         return len(meaningful) == 0
 
+    def _has_semantic_intent(self, user_prompt, job_constraints):
+        prompt = str(user_prompt or "").strip().lower()
+        if not prompt:
+            return False
+
+        semantic_patterns = [
+            r"\bleadership\b",
+            r"\bunder pressure\b",
+            r"\bstability\b",
+            r"\bbest fit\b",
+            r"\bcommunication\b",
+            r"\bproblem solving\b",
+            r"\breliable\b",
+            r"\bmotivated\b",
+            r"\bteam player\b",
+            r"\boffshore exposure\b",
+            r"\bstrong\b",
+            r"\bgood\b",
+        ]
+        if not any(re.search(pattern, prompt, flags=re.IGNORECASE) for pattern in semantic_patterns):
+            return False
+
+        residual = prompt
+        rank_constraint = ((job_constraints or {}).get("hard_constraints") or {}).get("rank") or {}
+        for candidate_phrase in [
+            rank_constraint.get("requested_label"),
+            ((job_constraints or {}).get("hard_constraints") or {}).get("sea_service", {}).get("display_value"),
+            ((job_constraints or {}).get("hard_constraints") or {}).get("vessel_type", {}).get("display_value"),
+            ((job_constraints or {}).get("hard_constraints") or {}).get("availability", {}).get("display_value"),
+            ((job_constraints or {}).get("hard_constraints") or {}).get("certifications", {}).get("endorsement_display_value"),
+        ]:
+            if candidate_phrase:
+                residual = residual.replace(str(candidate_phrase).lower(), " ")
+        residual = self._strip_age_constraint_phrases(residual)
+        residual = self._strip_visa_constraint_phrases(residual)
+        residual = re.sub(r"\s+", " ", residual).strip(" ,.-")
+        return bool(residual)
+
     def _enumerate_rank_candidates(self, target_folder, rank):
         candidates = {}
         for idx, pdf_path in enumerate(sorted(target_folder.glob("*.pdf"))):
@@ -1131,13 +1810,18 @@ class AIResumeAnalyzer:
                 continue
             if not text:
                 continue
-            resume_id = self.registry.get_resume_id(str(pdf_path))
+            # Full-scan hard-filter mode does not need a remote registry lookup.
+            # Use the registry's deterministic ID generator and carry the source
+            # path forward in chunk metadata for later local access.
+            resume_id = self.registry.generate_resume_id(str(pdf_path))
             candidates[resume_id] = [{
                 "id": f"fullscan-{resume_id}-{idx}",
                 "score": 1.0,
                 "metadata": {
                     "resume_id": resume_id,
                     "rank": rank,
+                    "filename": pdf_path.name,
+                    "source_path": str(pdf_path),
                     "raw_text": text[:12000],
                 }
             }]
@@ -1291,6 +1975,360 @@ class AIResumeAnalyzer:
             "expiry_date": None,
             "expiry_status": "MISSING",
             "visa_records": [],
+        }
+
+    def _extract_passport_expiry_fact_from_text(self, raw_text):
+        text = str(raw_text or "")
+        if not text:
+            return {
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "confidence": None,
+                "extraction_method": "labeled_field_regex",
+                "source_label": None,
+            }
+
+        lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
+        snippets = []
+        for idx, line in enumerate(lines):
+            if re.search(r"passport", line, flags=re.IGNORECASE):
+                snippets.append(" ".join(lines[idx:idx + 3]))
+
+        if not snippets:
+            for match in re.finditer(r"passport", text, flags=re.IGNORECASE):
+                snippets.append(text[max(0, match.start() - 30):match.start() + 180])
+
+        if not snippets:
+            return {
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "confidence": None,
+                "extraction_method": "labeled_field_regex",
+                "source_label": None,
+            }
+
+        for snippet in snippets:
+            expiry_fact = self._extract_date_fact_from_snippet(snippet)
+            if expiry_fact.get("status") in {"PARSED", "AMBIGUOUS_NUMERIC", "INVALID"}:
+                return {
+                    "expiry_date": expiry_fact.get("date"),
+                    "expiry_status": expiry_fact.get("status"),
+                    "confidence": 0.9 if expiry_fact.get("status") == "PARSED" else 0.75,
+                    "extraction_method": "labeled_field_regex",
+                    "source_label": "passport",
+                }
+
+        return {
+            "expiry_date": None,
+            "expiry_status": "MISSING",
+            "confidence": None,
+            "extraction_method": "labeled_field_regex",
+            "source_label": "passport",
+        }
+
+    def _extract_logistics_from_text(self, raw_text, reference_date=None):
+        today = reference_date or date.today()
+        passport_fact = self._extract_passport_expiry_fact_from_text(raw_text)
+        visa_fact = self._extract_us_visa_fact_from_text(raw_text)
+
+        passport_expiry = passport_fact.get("expiry_date")
+        passport_expiry_status = passport_fact.get("expiry_status", "MISSING")
+        passport_valid = None
+        if passport_expiry_status == "PARSED" and passport_expiry:
+            passport_valid = passport_expiry >= today
+
+        valid_visa_records = []
+        for record in (visa_fact.get("visa_records") or []):
+            expiry_date = record.get("expiry_date")
+            expiry_status = record.get("expiry_status")
+            if expiry_status == "PARSED" and expiry_date and expiry_date >= today:
+                valid_visa_records.append(record)
+
+        if valid_visa_records:
+            primary_visa = valid_visa_records[0]
+            us_visa_valid = True
+            us_visa_status = primary_visa.get("visa_type")
+            us_visa_expiry_date = primary_visa.get("expiry_date")
+        elif visa_fact.get("status") == "PARSED_NO_VISA":
+            us_visa_valid = False
+            us_visa_status = None
+            us_visa_expiry_date = None
+        elif visa_fact.get("visa_records"):
+            us_visa_valid = False
+            us_visa_status = (visa_fact.get("visa_records")[0] or {}).get("visa_type")
+            us_visa_expiry_date = None
+        else:
+            us_visa_valid = None
+            us_visa_status = None
+            us_visa_expiry_date = None
+
+        return {
+            "passport_expiry_date": passport_expiry,
+            "passport_expiry_status": passport_expiry_status,
+            "passport_valid": passport_valid,
+            "us_visa_valid": us_visa_valid,
+            "us_visa_status": us_visa_status,
+            "us_visa_expiry_date": us_visa_expiry_date,
+            "passport_fact": passport_fact,
+            "visa_fact": visa_fact,
+        }
+
+    def _extract_coc_fact_from_text(self, raw_text):
+        text = str(raw_text or "")
+        if not text:
+            return {
+                "status": "MISSING",
+                "grade": None,
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "confidence": None,
+                "extraction_method": "labeled_field_regex",
+                "source_label": None,
+            }
+
+        lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
+        snippets = []
+        table_grade_patterns = [
+            r"master\s*\((?:fg|ncv)\)",
+            r"chief\s+officer\s*\((?:fg|ncv)\)",
+            r"chief\s+mate\s*\((?:fg|ncv)\)",
+            r"first\s+mate\s*\((?:fg|ncv)\)",
+            r"second\s+mate\s*\((?:fg|ncv)\)|second\s+officer\s*\((?:fg|ncv)\)|2nd\s+officer\s*\((?:fg|ncv)\)",
+            r"third\s+officer\s*\((?:fg|ncv)\)|3rd\s+officer\s*\((?:fg|ncv)\)",
+            r"chief\s+engineer\s*\((?:fg|ncv)\)",
+            r"second\s+engineer\s*\((?:fg|ncv)\)|2nd\s+engineer\s*\((?:fg|ncv)\)",
+            r"third\s+engineer\s*\((?:fg|ncv)\)|3rd\s+engineer\s*\((?:fg|ncv)\)",
+            r"fourth\s+engineer\s*\((?:fg|ncv)\)|4th\s+engineer\s*\((?:fg|ncv)\)",
+            r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b",
+            r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b",
+            r"meo\s+class\s+iv\b",
+        ]
+        date_token_pattern = (
+            r"\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}"
+            r"|\d{1,2}[\s\/\-.]+[A-Za-z]{3,9}[\s\/\-.]+\d{2,4}"
+            r"|[A-Za-z]{3,9}[\s\/\-.]+\d{1,2},?[\s\/\-.]+\d{2,4}"
+        )
+        for idx, line in enumerate(lines):
+            if re.search(r"\bcoc\b|certificate\s+of\s+competency", line, flags=re.IGNORECASE):
+                snippets.append(" ".join(lines[idx:idx + 4]))
+                continue
+            if (
+                any(re.search(pattern, line, flags=re.IGNORECASE) for pattern in table_grade_patterns)
+                and len(re.findall(date_token_pattern, line, flags=re.IGNORECASE)) >= 2
+            ):
+                context_start = max(0, idx - 1)
+                snippets.append(" ".join(lines[context_start:idx + 1]))
+
+        if not snippets:
+            for match in re.finditer(r"\bcoc\b|certificate\s+of\s+competency", text, flags=re.IGNORECASE):
+                snippets.append(text[max(0, match.start() - 30):match.start() + 220])
+
+        if not snippets:
+            return {
+                "status": "MISSING",
+                "grade": None,
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "confidence": None,
+                "extraction_method": "labeled_field_regex",
+                "source_label": None,
+            }
+
+        grade_patterns = [
+            (r"chief\s+engineer", "chief_engineer"),
+            (r"second\s+engineer|2nd\s+engineer", "2nd_engineer"),
+            (r"third\s+engineer|3rd\s+engineer", "3rd_engineer"),
+            (r"fourth\s+engineer|4th\s+engineer", "4th_engineer"),
+            (r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b", "chief_engineer"),
+            (r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b", "2nd_engineer"),
+            (r"meo\s+class\s+iv\b", "4th_engineer"),
+            (r"master", "master"),
+            (r"first\s+mate|chief\s+mate|chief\s+officer", "chief_officer"),
+            (r"second\s+mate|2nd\s+officer|second\s+officer", "2nd_officer"),
+            (r"third\s+mate|3rd\s+officer|third\s+officer", "3rd_officer"),
+        ]
+
+        for snippet in snippets:
+            normalized_snippet = snippet.lower()
+            grade = None
+            for pattern, canonical_grade in grade_patterns:
+                if re.search(pattern, normalized_snippet):
+                    grade = canonical_grade
+                    break
+
+            date_tokens = re.findall(date_token_pattern, snippet, flags=re.IGNORECASE)
+            if len(date_tokens) >= 2:
+                expiry_fact = self._extract_date_fact_from_snippet(date_tokens[1])
+            else:
+                expiry_fact = self._extract_date_fact_from_snippet(snippet)
+
+            if expiry_fact.get("status") == "PARSED":
+                return {
+                    "status": "PARSED",
+                    "grade": grade,
+                    "expiry_date": expiry_fact.get("date"),
+                    "expiry_status": "PARSED",
+                    "confidence": 0.9,
+                    "extraction_method": "labeled_field_regex",
+                    "source_label": "coc",
+                }
+
+            if expiry_fact.get("status") in {"AMBIGUOUS_NUMERIC", "INVALID"}:
+                return {
+                    "status": "PARSED",
+                    "grade": grade,
+                    "expiry_date": None,
+                    "expiry_status": expiry_fact.get("status"),
+                    "confidence": 0.75,
+                    "extraction_method": "labeled_field_regex",
+                    "source_label": "coc",
+                }
+
+            return {
+                "status": "PARSED",
+                "grade": grade,
+                "expiry_date": None,
+                "expiry_status": "MISSING",
+                "confidence": 0.7,
+                "extraction_method": "labeled_field_regex",
+                "source_label": "coc",
+            }
+
+        return {
+            "status": "MISSING",
+            "grade": None,
+            "expiry_date": None,
+            "expiry_status": "MISSING",
+            "confidence": None,
+            "extraction_method": "labeled_field_regex",
+            "source_label": None,
+        }
+
+    def _extract_certificate_state(self, raw_text, aliases):
+        text = str(raw_text or "")
+        if not text.strip():
+            return "unknown"
+
+        alias_patterns = [re.escape(alias) for alias in aliases if alias]
+        if not alias_patterns:
+            return "unknown"
+
+        combined_pattern = r"(?:%s)" % "|".join(alias_patterns)
+        matches = list(re.finditer(combined_pattern, text, flags=re.IGNORECASE))
+        if not matches:
+            return "unknown"
+
+        for match in matches:
+            snippet = text[max(0, match.start() - 40):match.start() + 220]
+            local_window = text[max(0, match.start() - 20):min(len(text), match.end() + 80)]
+            lowered = snippet.lower()
+            lowered_local = local_window.lower()
+            if re.search(r"\b(no|not held|n/?a|none|absent)\b", lowered):
+                return "absent"
+            if re.search(r"\b(expired|lapsed|out of date)\b", lowered_local):
+                return "expired"
+            if re.search(r"\b(pending|in progress|applied for)\b", lowered):
+                return "unknown"
+
+            # Dates should only drive certificate validity when the alias carries
+            # a nearby certificate-local cue. This prevents expiry dates from
+            # later endorsement rows from being attached to dense course lists.
+            if re.search(
+                r"\b(valid until|valid till|validity|expires|expires on|expiry date|exp date|exp\b)\b",
+                lowered_local,
+            ):
+                expiry_fact = self._extract_date_fact_from_snippet(local_window)
+                if expiry_fact.get("status") == "PARSED":
+                    if expiry_fact.get("date") and expiry_fact["date"] < date.today():
+                        return "expired"
+                    return "present"
+
+            if re.search(r"\b(held|valid|completed|certificate)\b", lowered):
+                return "present"
+
+        return "unknown"
+
+    def _certificate_has_pending_cue(self, raw_text, aliases):
+        text = str(raw_text or "")
+        if not text.strip():
+            return False
+        alias_patterns = [re.escape(alias) for alias in aliases if alias]
+        if not alias_patterns:
+            return False
+        combined_pattern = r"(?:%s)" % "|".join(alias_patterns)
+        for match in re.finditer(combined_pattern, text, flags=re.IGNORECASE):
+            snippet = text[max(0, match.start() - 40):match.start() + 220].lower()
+            if re.search(r"\b(pending|in progress|applied for)\b", snippet):
+                return True
+        return False
+
+    def _extract_stcw_fact_from_text(self, raw_text):
+        text = str(raw_text or "")
+        certificate_aliases = {
+            "pst": ["pst", "personal survival techniques"],
+            "fpff": ["fpff", "fire prevention and fire fighting"],
+            "efa": ["efa", "elementary first aid"],
+            "pssr": ["pssr", "personal safety and social responsibilities"],
+        }
+
+        certificate_states = {
+            cert_id: self._extract_certificate_state(text, aliases)
+            for cert_id, aliases in certificate_aliases.items()
+        }
+
+        alias_presence = {
+            cert_id: any(re.search(re.escape(alias), text, flags=re.IGNORECASE) for alias in aliases)
+            for cert_id, aliases in certificate_aliases.items()
+        }
+        pending_cues = {
+            cert_id: self._certificate_has_pending_cue(text, aliases)
+            for cert_id, aliases in certificate_aliases.items()
+        }
+
+        # Resume corpora often list all four STCW basic courses in a compact
+        # certificate block without dates or explicit "valid" wording. When all
+        # four aliases are present and none has explicit negative evidence, treat
+        # that dense list pattern as positive presence evidence instead of routing
+        # the entire block to UNKNOWN.
+        if (
+            all(alias_presence.values())
+            and not any(state in {"expired", "absent"} for state in certificate_states.values())
+            and not any(pending_cues.values())
+        ):
+            certificate_states = {
+                cert_id: ("present" if alias_presence.get(cert_id) and state == "unknown" else state)
+                for cert_id, state in certificate_states.items()
+            }
+
+        state_values = list(certificate_states.values())
+        if all(state == "present" for state in state_values):
+            stcw_basic_all_valid = True
+        elif any(state in {"expired", "absent"} for state in state_values):
+            stcw_basic_all_valid = False
+        else:
+            stcw_basic_all_valid = None
+
+        return {
+            "certificates": certificate_states,
+            "stcw_basic_all_valid": stcw_basic_all_valid,
+            "confidence": 0.9 if any(state != "unknown" for state in state_values) else None,
+            "status": "PARSED" if any(state != "unknown" for state in state_values) else "MISSING",
+            "extraction_method": "keyword_regex",
+            "source_label": "stcw_basic",
+        }
+
+    def _extract_endorsements_from_text(self, raw_text):
+        text = str(raw_text or "")
+        endorsement_aliases = {
+            "tanker_oil": ["oil tanker endorsement"],
+            "tanker_chemical": ["chemical tanker endorsement"],
+            "tanker_gas": ["gas tanker endorsement"],
+            "dp_operational": ["dpo", "dp operator"],
+            "gmdss": ["gmdss"],
+        }
+        return {
+            endorsement_id: self._extract_certificate_state(text, aliases)
+            for endorsement_id, aliases in endorsement_aliases.items()
         }
 
     def _parse_dob_from_text(self, raw_text):
@@ -1543,17 +2581,54 @@ class AIResumeAnalyzer:
                 for chunk in (chunks or [])
             )
         experienced_ship_types = self._extract_experienced_ship_types_from_text(source_text)
-        visa_info = self._extract_us_visa_fact_from_text(source_text)
+        logistics_fact = self._extract_logistics_from_text(source_text)
         metadata_entry = {}
         if folder_metadata:
             metadata_entry = folder_metadata.get(filename) or {}
         applied_ship_types = metadata_entry.get("applied_ship_types")
         if not isinstance(applied_ship_types, list):
             applied_ship_types = []
+        current_rank_fact = self._extract_rank_fact_from_text(source_text)
+        coc_fact = self._extract_coc_fact_from_text(source_text)
+        stcw_fact = self._extract_stcw_fact_from_text(source_text)
+        endorsement_facts = self._extract_endorsements_from_text(source_text)
+        applied_rank_raw = str(rank or "").strip() or None
+        applied_rank_normalized, applied_department, applied_seniority_bucket, applied_rank_confidence = self._normalize_rank(applied_rank_raw)
         return {
             "candidate_id": filename,
             "facts_version": self.FACTS_VERSION,
             "rank_folder": rank,
+            "identity": {
+                "full_name": None,
+                "nationality": None,
+            },
+            "role": {
+                "current_rank_raw": current_rank_fact.get("raw_rank"),
+                "current_rank_normalized": current_rank_fact.get("canonical_id"),
+                "applied_rank_raw": applied_rank_raw,
+                "applied_rank_normalized": applied_rank_normalized,
+                "department": current_rank_fact.get("department") or applied_department,
+                "seniority_bucket": current_rank_fact.get("seniority_bucket") or applied_seniority_bucket,
+            },
+            "certifications": {
+                "coc": {
+                    "grade": coc_fact.get("grade"),
+                    "expiry_date": coc_fact.get("expiry_date").isoformat() if coc_fact.get("expiry_date") else None,
+                    "expiry_status": coc_fact.get("expiry_status"),
+                    "status": coc_fact.get("status"),
+                },
+                "stcw_basic_all_valid": stcw_fact.get("stcw_basic_all_valid"),
+                "endorsements": endorsement_facts,
+            },
+            "logistics": {
+                "passport_expiry_date": logistics_fact.get("passport_expiry_date").isoformat() if logistics_fact.get("passport_expiry_date") else None,
+                "passport_valid": logistics_fact.get("passport_valid"),
+                "us_visa_valid": logistics_fact.get("us_visa_valid"),
+                "us_visa_status": logistics_fact.get("us_visa_status"),
+                "us_visa_expiry_date": logistics_fact.get("us_visa_expiry_date").isoformat() if logistics_fact.get("us_visa_expiry_date") else None,
+                "availability_date": None,
+                "salary_expectation_usd": None,
+            },
             "personal": {
                 "dob": age_info.get("dob"),
                 "dob_parse_status": age_info.get("dob_parse_status"),
@@ -1567,15 +2642,16 @@ class AIResumeAnalyzer:
                 "vessel_types": experienced_ship_types,
             },
             "travel": {
-                "us_visa_type": visa_info.get("visa_type"),
-                "us_visa_expiry_date": visa_info.get("expiry_date"),
-                "us_visa_status": visa_info.get("status"),
-                "us_visa_expiry_status": visa_info.get("expiry_status"),
-                "visa_records": visa_info.get("visa_records") or [],
-                "visa_types": [record.get("visa_type") for record in (visa_info.get("visa_records") or []) if record.get("visa_type")],
+                "us_visa_type": logistics_fact.get("visa_fact", {}).get("visa_type"),
+                "us_visa_expiry_date": logistics_fact.get("visa_fact", {}).get("expiry_date"),
+                "us_visa_status": logistics_fact.get("visa_fact", {}).get("status"),
+                "us_visa_expiry_status": logistics_fact.get("visa_fact", {}).get("expiry_status"),
+                "visa_records": logistics_fact.get("visa_fact", {}).get("visa_records") or [],
+                "visa_types": [record.get("visa_type") for record in (logistics_fact.get("visa_fact", {}).get("visa_records") or []) if record.get("visa_type")],
             },
             "derived": {
                 "age_years": age_info.get("age"),
+                "age_is_cached": True,
             },
             "fact_meta": {
                 "personal.dob": self._build_fact_meta(
@@ -1619,12 +2695,52 @@ class AIResumeAnalyzer:
                     context={"field": "experience.vessel_types"},
                 ),
                 "travel.visa_records": self._build_fact_meta(
-                    [record.get("visa_type") for record in (visa_info.get("visa_records") or [])],
-                    confidence=0.9 if visa_info.get("visa_records") else None,
+                    [record.get("visa_type") for record in (logistics_fact.get("visa_fact", {}).get("visa_records") or [])],
+                    confidence=0.9 if logistics_fact.get("visa_fact", {}).get("visa_records") else None,
                     extraction_method="resume_visa_scan",
-                    status=visa_info.get("status", "MISSING"),
+                    status=logistics_fact.get("visa_fact", {}).get("status", "MISSING"),
                     source_label="resume_text",
                     context={"field": "travel.visa_records"},
+                ),
+                "role.current_rank_normalized": self._build_fact_meta(
+                    current_rank_fact.get("canonical_id"),
+                    confidence=current_rank_fact.get("confidence"),
+                    extraction_method=current_rank_fact.get("extraction_method", ""),
+                    status=current_rank_fact.get("status", "MISSING"),
+                    source_label=current_rank_fact.get("source_label"),
+                    context={"field": "role.current_rank_normalized"},
+                ),
+                "role.applied_rank_normalized": self._build_fact_meta(
+                    applied_rank_normalized,
+                    confidence=applied_rank_confidence,
+                    extraction_method="rank_folder_alias_lookup",
+                    status="PARSED" if applied_rank_normalized else "UNKNOWN",
+                    source_label="rank_folder",
+                    context={"field": "role.applied_rank_normalized"},
+                ),
+                "certifications.coc": self._build_fact_meta(
+                    coc_fact.get("status"),
+                    confidence=coc_fact.get("confidence"),
+                    extraction_method=coc_fact.get("extraction_method", ""),
+                    status=coc_fact.get("status", "MISSING"),
+                    source_label=coc_fact.get("source_label"),
+                    context={"field": "certifications.coc"},
+                ),
+                "certifications.stcw_basic_all_valid": self._build_fact_meta(
+                    stcw_fact.get("stcw_basic_all_valid"),
+                    confidence=stcw_fact.get("confidence"),
+                    extraction_method=stcw_fact.get("extraction_method", ""),
+                    status=stcw_fact.get("status", "MISSING"),
+                    source_label=stcw_fact.get("source_label"),
+                    context={"field": "certifications.stcw_basic_all_valid"},
+                ),
+                "logistics.passport_expiry_date": self._build_fact_meta(
+                    logistics_fact.get("passport_expiry_date").isoformat() if logistics_fact.get("passport_expiry_date") else None,
+                    confidence=logistics_fact.get("passport_fact", {}).get("confidence"),
+                    extraction_method=logistics_fact.get("passport_fact", {}).get("extraction_method", ""),
+                    status=logistics_fact.get("passport_expiry_status", "MISSING"),
+                    source_label=logistics_fact.get("passport_fact", {}).get("source_label"),
+                    context={"field": "logistics.passport_expiry_date"},
                 ),
             },
         }
@@ -1653,7 +2769,16 @@ class AIResumeAnalyzer:
             return False
         return True
 
-    def _base_rule_result(self, decision, reason_code, message, actual_value=None, expected_value=None, confidence=None):
+    def _base_rule_result(
+        self,
+        decision,
+        reason_code,
+        message,
+        actual_value=None,
+        expected_value=None,
+        confidence=None,
+        unknown_reason=None,
+    ):
         return {
             "decision": decision,
             "reason_code": reason_code,
@@ -1661,6 +2786,7 @@ class AIResumeAnalyzer:
             "actual_value": actual_value,
             "expected_value": expected_value,
             "confidence": confidence,
+            "unknown_reason": unknown_reason if decision == "UNKNOWN" else None,
         }
 
     def _evaluate_rule(self, operator, actual_value, expected_value):
@@ -1719,16 +2845,17 @@ class AIResumeAnalyzer:
         if dob_value is None or age_value is None:
             if dob_parse_status == "AMBIGUOUS_NUMERIC":
                 return self._base_rule_result(
-                    "UNKNOWN",
-                    "AGE_DOB_AMBIGUOUS_FORMAT",
-                    (
-                        f"DOB was present but in an ambiguous numeric format, so age was left unknown for "
-                        f"requested age filter {self._age_constraint_reason(constraint)}."
-                    ),
-                    actual_value=None,
-                    expected_value=constraint,
-                    confidence=None,
-                )
+                "UNKNOWN",
+                "AGE_DOB_AMBIGUOUS_FORMAT",
+                (
+                    f"DOB was present but in an ambiguous numeric format, so age was left unknown for "
+                    f"requested age filter {self._age_constraint_reason(constraint)}."
+                ),
+                actual_value=None,
+                expected_value=constraint,
+                confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
             return self._base_rule_result(
                 "UNKNOWN",
                 "AGE_MISSING",
@@ -1736,6 +2863,7 @@ class AIResumeAnalyzer:
                 actual_value=None,
                 expected_value=constraint,
                 confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN",
             )
 
         age_validity = self._validate_age_value(age_value)
@@ -1747,6 +2875,7 @@ class AIResumeAnalyzer:
                 actual_value=age_value,
                 expected_value=constraint,
                 confidence=((candidate_facts.get("fact_meta") or {}).get("derived.age_years") or {}).get("confidence"),
+                unknown_reason="FACTUAL_UNKNOWN" if age_validity["decision"] == "UNKNOWN" else None,
             )
 
         stated_age_fact = {
@@ -1762,6 +2891,7 @@ class AIResumeAnalyzer:
                 actual_value={"computed_age": age_value, "stated_age": stated_age},
                 expected_value=constraint,
                 confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN" if age_conflict["decision"] == "UNKNOWN" else None,
             )
 
         is_match = self._evaluate_rule(
@@ -1820,6 +2950,7 @@ class AIResumeAnalyzer:
                 actual_value=sorted(set(travel.get("visa_types") or [])),
                 expected_value=constraint,
                 confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN",
             )
 
         if visa_status == "PARSED_NO_VISA":
@@ -1840,6 +2971,7 @@ class AIResumeAnalyzer:
                 actual_value=[],
                 expected_value=constraint,
                 confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+                unknown_reason="FACTUAL_UNKNOWN",
             )
 
         matching_records = [record for record in visa_records if not accepted_types or record.get("visa_type") in accepted_types]
@@ -1864,6 +2996,7 @@ class AIResumeAnalyzer:
                 actual_value=[],
                 expected_value=constraint,
                 confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+                unknown_reason="FACTUAL_UNKNOWN",
             )
 
         invalid_records = []
@@ -1919,6 +3052,7 @@ class AIResumeAnalyzer:
                 actual_value={"visa_type": matching_records[0].get("visa_type"), "expiry_date": None},
                 expected_value=constraint,
                 confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+                unknown_reason="FACTUAL_UNKNOWN",
             )
 
         if expired_records:
@@ -1939,22 +3073,235 @@ class AIResumeAnalyzer:
             actual_value=[],
             expected_value=constraint,
             confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            unknown_reason="FACTUAL_UNKNOWN",
+        )
+
+    def _evaluate_rank_rule(self, candidate_facts, constraint):
+        role = candidate_facts.get("role") or {}
+        actual_rank = role.get("applied_rank_normalized")
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("role.applied_rank_normalized") or {}).get("confidence")
+        expected_ranks = (constraint or {}).get("applied_rank_normalized") or []
+
+        if actual_rank is None:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RANK_UNKNOWN",
+                "Could not determine normalized applied rank for rank filter evaluation.",
+                actual_value=None,
+                expected_value=expected_ranks,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if confidence is not None and confidence < 0.85:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RANK_CONFIDENCE_LOW",
+                "Normalized applied rank confidence is below the hard-filter threshold.",
+                actual_value=actual_rank,
+                expected_value=expected_ranks,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if self._evaluate_rule("contains_any", [actual_rank], expected_ranks):
+            return self._base_rule_result(
+                "PASS",
+                "RANK_MATCH",
+                f"Candidate normalized rank '{actual_rank}' matches the requested rank set.",
+                actual_value=actual_rank,
+                expected_value=expected_ranks,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "RANK_MISMATCH",
+            f"Candidate normalized rank '{actual_rank}' does not match the requested rank set.",
+            actual_value=actual_rank,
+            expected_value=expected_ranks,
+            confidence=confidence,
+        )
+
+    def _evaluate_coc_document_gate(self, candidate_facts, constraint, reference_date=None):
+        coc = (candidate_facts.get("certifications") or {}).get("coc") or {}
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("certifications.coc") or {}).get("confidence")
+        today = reference_date or date.today()
+        expiry_status = coc.get("expiry_status")
+        expiry_date_raw = coc.get("expiry_date")
+        grade = coc.get("grade")
+
+        expiry_date = None
+        if expiry_date_raw:
+            try:
+                expiry_date = date.fromisoformat(expiry_date_raw)
+            except Exception:
+                expiry_date = None
+
+        if confidence is not None and confidence < 0.85:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_CONFIDENCE_LOW",
+                "COC evidence confidence is below the hard-filter threshold.",
+                actual_value={"grade": grade, "expiry_date": expiry_date_raw},
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if coc.get("status") == "MISSING" and grade is None and expiry_date is None:
+            return self._base_rule_result(
+                "FAIL",
+                "COC_ABSENT",
+                "No certificate of competency evidence was found.",
+                actual_value={"grade": None, "expiry_date": None},
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        if expiry_status == "PARSED" and expiry_date:
+            if expiry_date >= today:
+                return self._base_rule_result(
+                    "PASS",
+                    "COC_VALID",
+                    f"Certificate of competency is valid until {expiry_date.isoformat()}.",
+                    actual_value={"grade": grade, "expiry_date": expiry_date.isoformat()},
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+            return self._base_rule_result(
+                "FAIL",
+                "COC_EXPIRED",
+                f"Certificate of competency expired on {expiry_date.isoformat()}.",
+                actual_value={"grade": grade, "expiry_date": expiry_date.isoformat()},
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "UNKNOWN",
+            "COC_UNKNOWN",
+            "Certificate of competency evidence is present but expiry could not be determined reliably.",
+            actual_value={"grade": grade, "expiry_date": expiry_date_raw},
+            expected_value=constraint,
+            confidence=confidence,
+            unknown_reason="FACTUAL_UNKNOWN",
+        )
+
+    def _evaluate_stcw_basic_rule(self, candidate_facts, constraint):
+        certifications = candidate_facts.get("certifications") or {}
+        actual_value = certifications.get("stcw_basic_all_valid")
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("certifications.stcw_basic_all_valid") or {}).get("confidence")
+
+        if actual_value is None or (confidence is not None and confidence < 0.80):
+            return self._base_rule_result(
+                "UNKNOWN",
+                "STCW_BASIC_UNKNOWN",
+                "STCW basic validity could not be determined with sufficient confidence.",
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if actual_value is True:
+            return self._base_rule_result(
+                "PASS",
+                "STCW_BASIC_VALID",
+                "All four STCW basic certificates were confirmed valid.",
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "STCW_BASIC_INVALID",
+            "One or more STCW basic certificates are absent or expired.",
+            actual_value=actual_value,
+            expected_value=constraint,
+            confidence=confidence,
         )
 
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
+        applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
         results = []
+        facts_version = str(candidate_facts.get("facts_version") or self.FACTS_VERSION)
+        candidate_id = str((candidate_facts or {}).get("candidate_id") or "").strip()
+        activated_rules = []
+        hard_filter_debug = os.getenv("NJORDHR_DEBUG_HARD_FILTERS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+        if hard_filter_debug:
+            print(
+                "[FILTERS] "
+                f"candidate_id={candidate_id or '-'} "
+                f"facts_version={facts_version} "
+                f"applied_constraints={sorted(applied_constraints)} "
+                f"hard_constraint_keys={sorted(hard_constraints.keys())}"
+            )
 
         age_constraint = hard_constraints.get("age_years")
-        if age_constraint:
+        if "age_range" in applied_constraints and age_constraint:
+            activated_rules.append("age_range")
             results.append(self._evaluate_age_rule(candidate_facts, age_constraint))
 
         visa_constraint = hard_constraints.get("us_visa")
-        if visa_constraint:
+        if "us_visa" in applied_constraints and visa_constraint:
+            activated_rules.append("us_visa")
             results.append(self._evaluate_us_visa_rule(candidate_facts, visa_constraint))
+
+        rank_constraint = hard_constraints.get("rank")
+        if "rank_match" in applied_constraints and rank_constraint:
+            activated_rules.append("rank_match")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "RANK_RULE_REQUIRES_V2_FACTS",
+                    "Rank match requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=rank_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_rank_rule(candidate_facts, rank_constraint))
+
+        coc_constraint = (hard_constraints.get("certifications") or {}) if isinstance(hard_constraints.get("certifications"), dict) else {}
+        if "coc_document_gate" in applied_constraints and coc_constraint.get("coc_required"):
+            activated_rules.append("coc_document_gate")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "COC_RULE_REQUIRES_V2_FACTS",
+                    "COC validation requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=coc_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_coc_document_gate(candidate_facts, coc_constraint))
+
+        stcw_constraint = hard_constraints.get("stcw_basic")
+        if "stcw_basic" in applied_constraints and stcw_constraint:
+            activated_rules.append("stcw_basic")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "STCW_BASIC_RULE_REQUIRES_V2_FACTS",
+                    "STCW basic validation requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=stcw_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_stcw_basic_rule(candidate_facts, stcw_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if ship_type_constraint:
+            activated_rules.append("applied_ship_type")
             requested_ship_type = self._normalize_ship_type(ship_type_constraint)
             candidate_ship_types = [
                 self._normalize_ship_type(value)
@@ -1969,6 +3316,7 @@ class AIResumeAnalyzer:
                     actual_value=[],
                     expected_value=[requested_ship_type] if requested_ship_type else [],
                     confidence=((candidate_facts.get("fact_meta") or {}).get("application.applied_ship_types") or {}).get("confidence"),
+                    unknown_reason="FACTUAL_UNKNOWN",
                 ))
             elif self._evaluate_rule("contains_any", candidate_ship_types, [requested_ship_type]):
                 results.append(self._base_rule_result(
@@ -1994,6 +3342,7 @@ class AIResumeAnalyzer:
 
         experience_ship_type_constraint = hard_constraints.get("experience_ship_type")
         if experience_ship_type_constraint:
+            activated_rules.append("experience_ship_type")
             requested_ship_type = self._normalize_ship_type(experience_ship_type_constraint)
             experienced_ship_types = [
                 self._normalize_ship_type(value)
@@ -2008,6 +3357,7 @@ class AIResumeAnalyzer:
                     actual_value=[],
                     expected_value=[requested_ship_type] if requested_ship_type else [],
                     confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
+                    unknown_reason="FACTUAL_UNKNOWN",
                 ))
             elif self._evaluate_rule("contains_any", experienced_ship_types, [requested_ship_type]):
                 results.append(self._base_rule_result(
@@ -2031,6 +3381,13 @@ class AIResumeAnalyzer:
                     confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
                 ))
 
+        if hard_filter_debug:
+            print(
+                "[FILTERS] "
+                f"candidate_id={candidate_id or '-'} "
+                f"activated_rules={activated_rules}"
+            )
+
         if any(result["decision"] == "FAIL" for result in results):
             final_decision = "FAIL"
         elif any(result["decision"] == "UNKNOWN" for result in results):
@@ -2042,13 +3399,13 @@ class AIResumeAnalyzer:
             "decision": final_decision,
             "results": results,
             "evaluation_date_used": date.today().isoformat(),
-            "facts_version": self.FACTS_VERSION,
+            "facts_version": facts_version,
         }
 
     def _ingest_folder(self, folder_path, rank):
         print(f"[{rank}] Starting ingestion scan...")
         pdf_paths = list(Path(folder_path).glob("*.pdf"))
-        files_to_process = [p for p in pdf_paths if self.registry.needs_processing(str(p), p.stat().st_mtime)]
+        files_to_process = [p for p in pdf_paths if self._ingest_needs_processing(str(p), p.stat().st_mtime)]
         
         if not files_to_process:
             # If local registry is up-to-date but vector namespace is empty
@@ -2091,7 +3448,7 @@ class AIResumeAnalyzer:
                 }
                 continue
             
-            resume_id = self.registry.get_resume_id(str(path))
+            resume_id = self.registry.generate_resume_id(str(path))
             chunks = self.prepper.chunk_text(text, resume_id, rank)
             embeddings = self.prepper.get_embeddings([c['text'] for c in chunks])
 
@@ -2099,7 +3456,7 @@ class AIResumeAnalyzer:
                 embedding_failures = 0
                 self.vector_db.upsert_chunks(chunks, embeddings, rank)
                 print(f"    - Indexed {len(chunks)} chunks.")
-                self.registry.upsert_file_record(str(path), path.stat().st_mtime, resume_id)
+                self._ingest_mark_processed(str(path), path.stat().st_mtime, resume_id)
                 processed_files += 1
                 yield {
                     "type": "indexing_progress",
@@ -2431,14 +3788,54 @@ Examples of GOOD responses:
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
             if str(experienced_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = str(experienced_ship_type).strip()
+            has_semantic_intent = self._has_semantic_intent(user_prompt, job_constraints)
+            has_actionable_constraints = bool(
+                job_constraints.get("applied_constraints")
+                or str(applied_ship_type or "").strip()
+                or str(experienced_ship_type or "").strip()
+            )
             structured_only_prompt = self._is_structured_only_prompt(user_prompt)
             folder_metadata = self._rank_manifest_metadata(target_folder)
+
+            if not has_actionable_constraints and not has_semantic_intent:
+                graceful_message = (
+                    "Search could not run because the prompt did not contain supported hard constraints or recognizable semantic intent."
+                )
+                if job_constraints.get("unapplied_constraints"):
+                    friendly_labels = {
+                        "min_sea_service": "minimum sea service",
+                        "vessel_type": "vessel type",
+                        "availability": "availability",
+                        "stcw_endorsement": "STCW endorsement",
+                    }
+                    unapplied_labels = [
+                        friendly_labels.get(constraint_id, constraint_id)
+                        for constraint_id in job_constraints.get("unapplied_constraints", [])
+                    ]
+                    graceful_message = (
+                        "Search could not run because the prompt only contained recognized but currently unsupported constraints: "
+                        + ", ".join(unapplied_labels)
+                        + "."
+                    )
+                yield {
+                    "type": "graceful_failure",
+                    "message": graceful_message,
+                    "applied_constraints": job_constraints.get("applied_constraints", []),
+                    "unapplied_constraints": job_constraints.get("unapplied_constraints", []),
+                    "parsing_notes": job_constraints.get("parsing_notes", []),
+                }
+                return
             
             # Parse query to detect compound logic
             is_compound, operator, sub_queries = self._parse_compound_query(user_prompt)
             
-            if structured_only_prompt and job_constraints.get("hard_constraints"):
-                yield {"type": "status", "message": "Structured-only prompt detected. Evaluating all resumes in selected rank folder..."}
+            if has_actionable_constraints:
+                status_message = "Supported hard constraints detected. Evaluating all resumes in selected rank folder..."
+                if has_semantic_intent:
+                    status_message = "Mixed query detected. Evaluating all resumes in selected rank folder before semantic reasoning..."
+                elif structured_only_prompt:
+                    status_message = "Structured-only prompt detected. Evaluating all resumes in selected rank folder..."
+                yield {"type": "status", "message": status_message}
                 candidates = self._enumerate_rank_candidates(target_folder, rank)
             elif is_compound:
                 yield {"type": "status", "message": f"Detected compound query: {operator} logic with {len(sub_queries)} conditions"}
@@ -2488,11 +3885,25 @@ Examples of GOOD responses:
             # Deterministic hard filter gate
             past_feedback = self.feedback.get_recent_feedback(user_prompt)
             text_cache = {}
+            perf_state = {}
+            candidate_paths = {}
+            path_index_started_at = time.perf_counter()
+            for resume_id, chunks in candidates.items():
+                chunk_list = chunks or []
+                source_path = str(((chunk_list[0].get("metadata") or {}).get("source_path") or "")).strip() if chunk_list else ""
+                if source_path:
+                    candidate_paths[resume_id] = Path(source_path)
+            self._record_perf_timing(perf_state, "candidate_path_index", time.perf_counter() - path_index_started_at)
             
             verified_matches = []
             uncertain_matches = []
             unknown_matches = []
             hard_filter_audit = []
+            partial_evaluation = {
+                "occurred": False,
+                "reasons": [],
+                "candidates": [],
+            }
             hard_filter_summary = {
                 "scanned": total_candidates,
                 "passed": 0,
@@ -2500,16 +3911,19 @@ Examples of GOOD responses:
                 "unknown": 0,
                 "matched": 0,
             }
+            search_state = {"sync_reextract_count": 0}
+            search_started_at = time.perf_counter()
             
             for i, (resume_id, chunks) in enumerate(candidates.items(), 1):
-                original_path = next((p for p in target_folder.glob("*.pdf") 
-                                    if self.registry.get_resume_id(str(p)) == resume_id), None)
+                candidate_started_at = time.perf_counter()
+                original_path = candidate_paths.get(resume_id)
                 filename = original_path.name if original_path else resume_id[:8]
                 
                 yield {"type": "progress", "current": i, "total": total_candidates, 
                        "message": f"Analyzing: {filename}"}
 
                 prompt_for_reasoning = user_prompt
+                facts_started_at = time.perf_counter()
                 candidate_facts = self._build_candidate_facts(
                     filename,
                     rank,
@@ -2518,7 +3932,22 @@ Examples of GOOD responses:
                     text_cache=text_cache,
                     folder_metadata=folder_metadata,
                 )
+                self._record_perf_timing(perf_state, "build_candidate_facts", time.perf_counter() - facts_started_at)
+                candidate_facts, reextract_meta = self._maybe_sync_reextract_candidate(
+                    candidate_facts,
+                    job_constraints,
+                    filename,
+                    rank,
+                    chunks,
+                    original_path,
+                    text_cache,
+                    folder_metadata,
+                    search_state,
+                    perf_state=perf_state,
+                )
+                hard_filter_started_at = time.perf_counter()
                 hard_filter_result = self._evaluate_hard_filters(candidate_facts, job_constraints)
+                self._record_perf_timing(perf_state, "hard_filter_evaluation", time.perf_counter() - hard_filter_started_at)
                 age_constraint = ((job_constraints.get("hard_constraints") or {}).get("age_years"))
                 age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
                 dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
@@ -2533,29 +3962,57 @@ Examples of GOOD responses:
                     "facts_version": hard_filter_result.get("facts_version"),
                     "llm_reached": False,
                     "result_bucket": "excluded",
+                    "sync_reextract": reextract_meta,
                 }
+
+                if reextract_meta and not reextract_meta.get("succeeded"):
+                    partial_evaluation["occurred"] = True
+                    fallback_reason = str(reextract_meta.get("fallback_reason") or "").strip()
+                    if fallback_reason and fallback_reason not in partial_evaluation["reasons"]:
+                        partial_evaluation["reasons"].append(fallback_reason)
+                    partial_evaluation["candidates"].append({
+                        "candidate_id": resume_id,
+                        "filename": filename,
+                        "fallback_reason": fallback_reason,
+                    })
 
                 if hard_filter_result["decision"] == "FAIL":
                     hard_filter_summary["failed"] += 1
                     hard_filter_audit.append(audit_entry)
+                    self._record_perf_timing(perf_state, "candidate_total", time.perf_counter() - candidate_started_at)
                     print(f"[HARD FILTER] Rejecting {filename}: {hard_filter_result['results']}")
+                    if i == total_candidates or i % 10 == 0:
+                        print(
+                            "[PERF] Candidate progress "
+                            f"{i}/{total_candidates} | "
+                            f"sync_reextract_count={search_state.get('sync_reextract_count', 0)} | "
+                            f"timings={json.dumps(self._perf_snapshot(perf_state), sort_keys=True)}"
+                        )
                     continue
 
                 if hard_filter_result["decision"] == "UNKNOWN":
                     hard_filter_summary["unknown"] += 1
                     audit_entry["result_bucket"] = "needs_review"
                     hard_filter_audit.append(audit_entry)
+                    unknown_reason_types = list(dict.fromkeys(
+                        reason.get("unknown_reason")
+                        for reason in hard_filter_result["results"]
+                        if reason.get("unknown_reason")
+                    ))
                     unknown_match = {
                         "filename": filename,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
                         "hard_filter_decision": "UNKNOWN",
                         "hard_filter_reasons": hard_filter_result["results"],
+                        "unknown_reason_types": unknown_reason_types,
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
                         "experienced_ship_types": experienced_ship_types,
                         "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                         "facts_version": hard_filter_result.get("facts_version"),
+                        "partial_evaluation": bool(reextract_meta and not reextract_meta.get("succeeded")),
+                        "partial_evaluation_reason": str((reextract_meta or {}).get("fallback_reason") or ""),
                     }
                     unknown_matches.append(unknown_match)
                     yield {
@@ -2564,6 +4021,14 @@ Examples of GOOD responses:
                         "current": i,
                         "total": total_candidates,
                     }
+                    self._record_perf_timing(perf_state, "candidate_total", time.perf_counter() - candidate_started_at)
+                    if i == total_candidates or i % 10 == 0:
+                        print(
+                            "[PERF] Candidate progress "
+                            f"{i}/{total_candidates} | "
+                            f"sync_reextract_count={search_state.get('sync_reextract_count', 0)} | "
+                            f"timings={json.dumps(self._perf_snapshot(perf_state), sort_keys=True)}"
+                        )
                     continue
 
                 hard_filter_summary["passed"] += 1
@@ -2578,7 +4043,9 @@ Examples of GOOD responses:
                     )
                 
                 # LLM reasoning with confidence
+                llm_started_at = time.perf_counter()
                 llm_result = self._reason_with_llm(prompt_for_reasoning, chunks, past_feedback)
+                self._record_perf_timing(perf_state, "llm_reasoning", time.perf_counter() - llm_started_at)
                 
                 if llm_result.get('is_match'):
                     match_data = {
@@ -2609,16 +4076,44 @@ Examples of GOOD responses:
                     hard_filter_summary["matched"] += 1
                 hard_filter_audit.append(audit_entry)
                 
-                # Rate limiting
-                if i < total_candidates:
-                    time.sleep(2.5)
+                # Only pace provider-backed LLM paths; deterministic hard-filter-only
+                # candidates should not pay the same fixed delay.
+                if i < total_candidates and audit_entry["llm_reached"]:
+                    sleep_started_at = time.perf_counter()
+                    time.sleep(self.LLM_RATE_LIMIT_SLEEP_SECONDS)
+                    self._record_perf_timing(perf_state, "rate_limit_sleep", time.perf_counter() - sleep_started_at)
+                self._record_perf_timing(perf_state, "candidate_total", time.perf_counter() - candidate_started_at)
+                if i == total_candidates or i % 10 == 0:
+                    print(
+                        "[PERF] Candidate progress "
+                        f"{i}/{total_candidates} | "
+                        f"sync_reextract_count={search_state.get('sync_reextract_count', 0)} | "
+                        f"timings={json.dumps(self._perf_snapshot(perf_state), sort_keys=True)}"
+                    )
             
+            total_elapsed = time.perf_counter() - search_started_at
+            print(
+                "[PERF] Search summary "
+                f"rank={rank} total_candidates={total_candidates} "
+                f"elapsed_seconds={total_elapsed:.3f} "
+                f"sync_reextract_count={search_state.get('sync_reextract_count', 0)} "
+                f"timings={json.dumps(self._perf_snapshot(perf_state), sort_keys=True)}"
+            )
             yield {"type": "complete", 
                    "verified_matches": verified_matches,
                    "uncertain_matches": uncertain_matches,
                    "unknown_matches": unknown_matches,
+                   "applied_constraints": job_constraints.get("applied_constraints", []),
+                   "unapplied_constraints": job_constraints.get("unapplied_constraints", []),
+                   "parsing_notes": job_constraints.get("parsing_notes", []),
                    "hard_filter_audit": hard_filter_audit,
                    "hard_filter_summary": hard_filter_summary,
+                   "partial_evaluation": partial_evaluation,
+                   "partial_evaluation_notice": (
+                       "Some v1.1 candidates fell back to partial evaluation because synchronous re-extraction hit cooldown, per-search limits, timeout, failure, or concurrency guardrails."
+                       if partial_evaluation["occurred"]
+                       else ""
+                   ),
                    "message": (
                        f"Scanned {hard_filter_summary['scanned']}, "
                        f"passed hard filters {hard_filter_summary['passed']}, "
@@ -2655,6 +4150,19 @@ Examples of GOOD responses:
             elif event['type'] == 'complete':
                 message = event['message']
                 hard_filter_summary = event.get("hard_filter_summary", {})
+            elif event['type'] == 'graceful_failure':
+                return {
+                    "success": False,
+                    "graceful_failure": True,
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {},
+                    "message": event["message"],
+                    "applied_constraints": event.get("applied_constraints", []),
+                    "unapplied_constraints": event.get("unapplied_constraints", []),
+                    "parsing_notes": event.get("parsing_notes", []),
+                }
             elif event['type'] == 'error':
                 return {"success": False, "verified_matches": [], "uncertain_matches": [], "unknown_matches": [],
                         "message": event['message']}
