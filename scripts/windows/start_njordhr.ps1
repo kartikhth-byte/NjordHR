@@ -114,6 +114,30 @@ function Wait-Http([string]$url, [int]$retries = 40) {
     return $false
 }
 
+function Get-Json([string]$Url) {
+    try {
+        return Invoke-RestMethod -Uri $Url -Method GET -TimeoutSec 2 -UseBasicParsing
+    } catch {
+        return $null
+    }
+}
+
+function Stop-ProcessesOnPort([int]$Port) {
+    $connections = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    if (-not $connections) { return }
+    $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($pid in $pids) {
+        if ($pid -and $pid -ne 0) {
+            try {
+                Stop-Process -Id $pid -Force -ErrorAction Stop
+                Write-Log "Stopped process $pid on port $Port"
+            } catch {
+                Write-Log "Failed to stop process $pid on port $Port: $($_.Exception.Message)"
+            }
+        }
+    }
+}
+
 function Get-PythonInvocation {
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) {
@@ -348,9 +372,32 @@ try {
     $agentOut = Join-Path $RuntimeDir "agent.out"
     $agentErr = Join-Path $RuntimeDir "agent.err"
 
+    $restartBackend = $false
+    $backendRuntime = $null
     if (Wait-Http "$backendUrl/config/runtime" 1) {
-        Write-Log "Backend already running at $backendUrl"
-    } else {
+        $backendRuntime = Get-Json "$backendUrl/config/runtime"
+        $existingProjectDir = [string]($backendRuntime.process_identity.project_dir)
+        $existingConfigPath = [string]($backendRuntime.process_identity.config_path)
+        if (
+            [string]::IsNullOrWhiteSpace($existingProjectDir)
+            -or [string]::IsNullOrWhiteSpace($existingConfigPath)
+            -or ($existingProjectDir -ne $ProjectDir)
+            -or ($existingConfigPath -ne $ConfigPath)
+        ) {
+            $restartBackend = $true
+            Write-Log "Backend identity mismatch detected; restarting backend and agent."
+        } else {
+            Write-Log "Backend already running at $backendUrl"
+        }
+    }
+
+    if ($restartBackend) {
+        Stop-ProcessesOnPort $backendPort
+        Stop-ProcessesOnPort $agentPort
+        Start-Sleep -Milliseconds 500
+    }
+
+    if (-not (Wait-Http "$backendUrl/config/runtime" 1)) {
         Write-Log "Starting backend at $backendUrl"
         $backendVars = @{}
         foreach ($k in $runtimeVars.Keys) {

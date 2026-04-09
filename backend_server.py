@@ -1956,6 +1956,11 @@ def runtime_config():
         },
         "persistence_backend": _current_repo_backend(),
         "server_url": app_settings.server_url,
+        "process_identity": {
+            "project_dir": os.path.abspath(os.getcwd()),
+            "config_path": os.path.abspath(os.getenv("NJORDHR_CONFIG_PATH", "config.ini")),
+            "runtime_dir": os.path.abspath(os.getenv("NJORDHR_RUNTIME_DIR", "")) if os.getenv("NJORDHR_RUNTIME_DIR", "").strip() else "",
+        },
         "ui_auto_shutdown": {
             "enabled": _ui_idle_autoshutdown_enabled(),
             "idle_seconds": _ui_idle_shutdown_seconds(),
