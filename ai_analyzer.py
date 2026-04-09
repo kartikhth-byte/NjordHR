@@ -23,6 +23,11 @@ from pinecone import Pinecone, ServerlessSpec
 try:
     import pytesseract
     HAS_OCR = True
+    if os.name == "nt":
+        pytesseract.pytesseract.tesseract_cmd = os.getenv(
+            "TESSERACT_CMD",
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        )
 except ImportError:
     print("Warning: Tesseract OCR not found. OCR features will be disabled.")
     HAS_OCR = False
@@ -1394,6 +1399,10 @@ class AIResumeAnalyzer:
         if configured_matches:
             return {"required": configured_matches, "display_value": ", ".join(configured_matches), "operator": "contains_any"}
 
+        # Configured labels returned nothing; fall back to hardcoded alias table.
+        # This only happens when [ShipTypes] ship_type_options is absent from config.ini.
+        print("[WARN] _extract_vessel_type_constraint: no configured ship-type labels found; "
+              "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
         lowered = prompt.lower()
         seen = []
         for canonical, aliases in self._ship_type_aliases().items():
@@ -1491,6 +1500,7 @@ class AIResumeAnalyzer:
         experienced_ship_type = self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
+            constraints["applied_constraints"].append("experience_ship_type")
 
         sea_service_constraint = self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
@@ -1638,6 +1648,19 @@ class AIResumeAnalyzer:
         }
 
     def _ship_type_aliases(self):
+        # LEGACY FALLBACK ONLY.
+        #
+        # The authoritative ship-type vocabulary is [ShipTypes] ship_type_options
+        # in config.ini, read at process start via self.config.config.
+        # _extract_configured_ship_types() is the primary extraction path.
+        #
+        # This dict is used ONLY when the runtime config has no [ShipTypes] section
+        # (i.e. _configured_ship_type_labels() returned an empty list).  Callers
+        # that reach this path log a warning so the gap is never silent.
+        #
+        # If a term appears here but NOT in config.ini, the two paths will return
+        # different results for the same prompt.  Keep config.ini as the single
+        # source of truth and add any new aliases there instead of here.
         return {
             "tanker": [
                 "tanker", "oil tanker", "product tanker", "crude oil tanker",
@@ -1671,21 +1694,14 @@ class AIResumeAnalyzer:
         if cache is not None:
             return cache
 
+        # Use the runtime config object loaded at process start.
+        # Do NOT create a new ConfigParser or read from disk here — that would
+        # diverge from the config the process was actually started with.
         labels = []
-        for candidate in (
-            Path(__file__).resolve().parent / "config.ini",
-            Path(__file__).resolve().parent / "config.example.ini",
-        ):
-            if not candidate.exists():
-                continue
-            parser = configparser.ConfigParser()
-            parser.read(candidate, encoding="utf-8")
-            if not parser.has_section("ShipTypes") or not parser.has_option("ShipTypes", "ship_type_options"):
-                continue
-            raw_value = parser.get("ShipTypes", "ship_type_options")
+        runtime_parser = self.config.config
+        if runtime_parser.has_section("ShipTypes") and runtime_parser.has_option("ShipTypes", "ship_type_options"):
+            raw_value = runtime_parser.get("ShipTypes", "ship_type_options")
             labels = [line.strip() for line in raw_value.splitlines() if line.strip()]
-            if labels:
-                break
 
         normalized = []
         seen = set()
@@ -1730,6 +1746,9 @@ class AIResumeAnalyzer:
         configured_matches = self._extract_configured_ship_types(prompt)
         if configured_matches:
             return configured_matches[0]
+        # Configured labels returned nothing; fall back to hardcoded alias table.
+        print("[WARN] _extract_experienced_vessel_type: no configured ship-type labels found; "
+              "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
         for canonical, aliases in self._ship_type_aliases().items():
             for alias in aliases:
                 normalized_alias = self._normalize_ship_type(alias)
@@ -2000,9 +2019,18 @@ class AIResumeAnalyzer:
         residual = re.sub(r"\s+", " ", residual).strip(" ,.-")
         return bool(residual)
 
+    def _iter_pdf_files(self, folder_path):
+        folder = Path(folder_path)
+        if not folder.exists():
+            return []
+        return sorted(
+            path for path in folder.iterdir()
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        )
+
     def _enumerate_rank_candidates(self, target_folder, rank):
         candidates = {}
-        for idx, pdf_path in enumerate(sorted(target_folder.glob("*.pdf"))):
+        for idx, pdf_path in enumerate(self._iter_pdf_files(target_folder)):
             try:
                 text = self.pdf_processor.extract_text(str(pdf_path))
             except Exception:
@@ -2045,6 +2073,9 @@ class AIResumeAnalyzer:
         configured_matches = self._extract_configured_ship_types(text)
         if configured_matches:
             return configured_matches
+        # Configured labels returned nothing; fall back to hardcoded alias table.
+        print("[WARN] _extract_experienced_ship_types_from_text: no configured ship-type labels found; "
+              "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
         matched = []
         for canonical, aliases in self._ship_type_aliases().items():
             for alias in aliases:
@@ -3470,7 +3501,7 @@ class AIResumeAnalyzer:
                 results.append(self._evaluate_rank_rule(candidate_facts, rank_constraint))
 
         coc_constraint = (hard_constraints.get("certifications") or {}) if isinstance(hard_constraints.get("certifications"), dict) else {}
-        if "coc_document_gate" in applied_constraints and coc_constraint.get("coc_required"):
+        if "coc_document_gate" in applied_constraints:
             activated_rules.append("coc_document_gate")
             if facts_version == "1.1":
                 results.append(self._base_rule_result(
@@ -3502,7 +3533,7 @@ class AIResumeAnalyzer:
                 results.append(self._evaluate_stcw_basic_rule(candidate_facts, stcw_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
-        if ship_type_constraint:
+        if "applied_ship_type" in applied_constraints and ship_type_constraint:
             activated_rules.append("applied_ship_type")
             requested_ship_type = self._normalize_ship_type(ship_type_constraint)
             candidate_ship_types = [
@@ -3543,7 +3574,7 @@ class AIResumeAnalyzer:
                 ))
 
         experience_ship_type_constraint = hard_constraints.get("experience_ship_type")
-        if experience_ship_type_constraint:
+        if "experience_ship_type" in applied_constraints and experience_ship_type_constraint:
             activated_rules.append("experience_ship_type")
             requested_ship_type = self._normalize_ship_type(experience_ship_type_constraint)
             experienced_ship_types = [
@@ -3606,7 +3637,7 @@ class AIResumeAnalyzer:
 
     def _ingest_folder(self, folder_path, rank):
         print(f"[{rank}] Starting ingestion scan...")
-        pdf_paths = list(Path(folder_path).glob("*.pdf"))
+        pdf_paths = self._iter_pdf_files(folder_path)
         files_to_process = [p for p in pdf_paths if self._ingest_needs_processing(str(p), p.stat().st_mtime)]
         
         if not files_to_process:
@@ -3777,7 +3808,7 @@ class AIResumeAnalyzer:
             query_terms = [user_prompt.lower().strip()]
 
         ranked = []
-        for pdf_path in target_folder.glob("*.pdf"):
+        for pdf_path in self._iter_pdf_files(target_folder):
             try:
                 text = self.pdf_processor.extract_text(str(pdf_path))
             except Exception:
@@ -3988,8 +4019,12 @@ Examples of GOOD responses:
             job_constraints = self._extract_job_constraints(user_prompt, rank=rank)
             if str(applied_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
+                if "applied_ship_type" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("applied_ship_type")
             if str(experienced_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = str(experienced_ship_type).strip()
+                if "experience_ship_type" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("experience_ship_type")
             has_semantic_intent = self._has_semantic_intent(user_prompt, job_constraints)
             has_actionable_constraints = bool(
                 job_constraints.get("applied_constraints")

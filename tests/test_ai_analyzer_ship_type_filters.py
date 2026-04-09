@@ -1,4 +1,5 @@
 import json
+import configparser
 import sys
 import tempfile
 import types
@@ -54,6 +55,18 @@ class _FakeConfig:
     def __init__(self, download_root):
         self.download_root = str(download_root)
         self.min_similarity_score = 0.0
+        parser = configparser.ConfigParser()
+        parser["ShipTypes"] = {
+            "ship_type_options": "\n".join([
+                "Bulk Carrier",
+                "Tanker",
+                "Product Tanker",
+                "VLCC",
+                "Dredger",
+                "Survey Vessel",
+            ])
+        }
+        self.config = parser
 
 
 class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
@@ -170,6 +183,13 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         )
         self.assertEqual(constraint, "tanker")
 
+    def test_experience_ship_type_prompt_populates_applied_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Need candidates with tanker experience and valid US visa"
+        )
+        self.assertIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["experience_ship_type"], "tanker")
+
     def test_experience_ship_type_prompt_constraint_supports_configured_value(self):
         constraint = self.analyzer._extract_experience_ship_type_constraint(
             "Need candidates with dredger experience and valid US visa"
@@ -182,6 +202,7 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             "experience": {"vessel_types": ["tanker"]},
         }
         result = self.analyzer._evaluate_hard_filters(candidate_facts, {
+            "applied_constraints": ["applied_ship_type", "experience_ship_type"],
             "hard_constraints": {
                 "applied_ship_type": "Bulk Carrier",
                 "experience_ship_type": "Tanker",
@@ -254,6 +275,7 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             "experience": {"vessel_types": []},
         }
         result = self.analyzer._evaluate_hard_filters(candidate_facts, {
+            "applied_constraints": ["experience_ship_type"],
             "hard_constraints": {"experience_ship_type": "Tanker"}
         })
         self.assertEqual(result["decision"], "UNKNOWN")

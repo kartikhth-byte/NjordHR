@@ -63,7 +63,7 @@ class CSVManager:
 
     def _save_master_df(self, df):
         temp_path = f"{self.master_csv}.tmp"
-        df.to_csv(temp_path, index=False)
+        df.to_csv(temp_path, index=False, lineterminator='\n')
         os.replace(temp_path, self.master_csv)
 
     def _load_ai_search_audit_df(self):
@@ -77,7 +77,7 @@ class CSVManager:
 
     def _save_ai_search_audit_df(self, df):
         temp_path = f"{self.ai_search_audit_csv}.tmp"
-        df.to_csv(temp_path, index=False)
+        df.to_csv(temp_path, index=False, lineterminator='\n')
         os.replace(temp_path, self.ai_search_audit_csv)
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
@@ -85,7 +85,7 @@ class CSVManager:
                   ai_reason='', extracted_data=None, resume_url='', admin_override=False):
         """Append one event row to the single master CSV."""
         extracted_data = extracted_data or {}
-        timestamp = datetime.utcnow().isoformat() + 'Z'
+        timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         resolved_resume_url = str(resume_url or '').strip() or f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
 
         new_row = {
