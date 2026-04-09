@@ -184,20 +184,35 @@ if "Advanced" not in cfg:
 def normalize(v):
     return os.path.abspath(os.path.expanduser((v or "").strip()))
 
+def is_windows_unsafe_path(value):
+    raw = (value or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower()
+    if "/absolute/path/" in lowered:
+        return True
+    # Reject Unix/macOS-style absolute paths copied from another machine.
+    if raw.startswith("/") or raw.startswith("~/"):
+        return True
+    # Reject explicit /Users/... style paths even if a caller omitted the leading slash.
+    if lowered.startswith("users/") or lowered.startswith("/users/"):
+        return True
+    return False
+
 download_dir = normalize(download_dir)
 verified_dir = normalize(verified_dir)
 log_dir = normalize(log_dir)
 
 download_raw = cfg["Settings"].get("Default_Download_Folder", "")
-if (not download_raw.strip()) or "/absolute/path/" in download_raw:
+if (not download_raw.strip()) or is_windows_unsafe_path(download_raw):
     cfg["Settings"]["Default_Download_Folder"] = download_dir
 
 verified_raw = cfg["Settings"].get("Additional_Local_Folder", "")
-if (not verified_raw.strip()) or "/absolute/path/" in verified_raw:
+if (not verified_raw.strip()) or is_windows_unsafe_path(verified_raw):
     cfg["Settings"]["Additional_Local_Folder"] = verified_dir
 
 log_raw = cfg["Advanced"].get("log_dir", "")
-if (not log_raw.strip()) or "/absolute/path/" in log_raw:
+if (not log_raw.strip()) or is_windows_unsafe_path(log_raw):
     cfg["Advanced"]["log_dir"] = log_dir
 
 with open(cfg_path, "w", encoding="utf-8") as fh:
