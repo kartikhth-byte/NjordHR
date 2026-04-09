@@ -355,6 +355,21 @@ def _rank_manifest_data(rank_folder):
         return {}
 
 
+def _list_visible_rank_folders(base_folder):
+    try:
+        names = []
+        for entry in os.listdir(base_folder):
+            if not entry or entry.startswith("."):
+                continue
+            full_path = os.path.join(base_folder, entry)
+            if not os.path.isdir(full_path):
+                continue
+            names.append(entry)
+        return sorted(names)
+    except Exception:
+        return []
+
+
 def _ui_idle_autoshutdown_enabled():
     return _env_bool("NJORDHR_AUTO_SHUTDOWN_ON_UI_IDLE", default=False)
 
@@ -2617,8 +2632,8 @@ def get_rank_folders():
         return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
     
     try:
-        subfolders = [d for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))]
-        return jsonify({"success": True, "folders": sorted(subfolders)})
+        subfolders = _list_visible_rank_folders(base_folder)
+        return jsonify({"success": True, "folders": subfolders})
     except Exception as e:
         return jsonify({"success": False, "folders": [], "message": str(e)})
 
@@ -2634,7 +2649,7 @@ def get_rank_folder_summaries():
 
     try:
         summaries = []
-        for folder in sorted(d for d in os.listdir(base_folder) if os.path.isdir(os.path.join(base_folder, d))):
+        for folder in _list_visible_rank_folders(base_folder):
             folder_path = os.path.join(base_folder, folder)
             pdf_count = len([name for name in os.listdir(folder_path) if name.lower().endswith('.pdf')])
             summaries.append({
@@ -2773,6 +2788,7 @@ def analyze_stream():
                 applied_ship_type=applied_ship_type,
                 experienced_ship_type=experienced_ship_type,
             ):
+                event_to_client = progress_event
                 if progress_event.get("type") == "complete":
                     _log_ai_search_audit_rows(
                         progress_event.get("hard_filter_audit"),
@@ -2782,7 +2798,14 @@ def analyze_stream():
                         experienced_ship_type,
                         search_session_id,
                     )
-                yield f"data: {json.dumps(progress_event)}\n\n"
+                    # The frontend does not consume the raw audit rows. Excluding them
+                    # keeps the final SSE payload smaller and more reliable.
+                    event_to_client = {
+                        key: value
+                        for key, value in progress_event.items()
+                        if key != "hard_filter_audit"
+                    }
+                yield f"data: {json.dumps(event_to_client)}\n\n"
             
         except Exception as e:
             print(f"[BACKEND ERROR] {e}")

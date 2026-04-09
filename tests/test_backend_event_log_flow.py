@@ -668,6 +668,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(audit_rows[1]["Reason_Codes"], "VISA_FILTER_UNSUPPORTED")
         self.assertEqual(audit_rows[1]["Applied_Ship_Type_Filter"], "Bulk Carrier")
         self.assertEqual(audit_rows[1]["Experienced_Ship_Type_Filter"], "Tanker")
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertNotIn('"hard_filter_audit"', payload)
 
     def test_admin_settings_requires_token(self):
         with self.client.session_transaction() as sess:
@@ -736,6 +739,21 @@ class BackendEventLogFlowTests(unittest.TestCase):
         names = [item["name"] for item in body.get("entries", [])]
         self.assertIn("C:\\", names)
         self.assertIn("D:\\", names)
+
+    def test_get_rank_folders_excludes_hidden_directories(self):
+        hidden = self.download_root / ".git"
+        hidden.mkdir(parents=True, exist_ok=True)
+
+        resp = self.client.get(
+            "/get_rank_folders",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertIn(self.rank, body["folders"])
+        self.assertNotIn(".git", body["folders"])
 
     def test_admin_settings_rejects_invalid_otp_window(self):
         resp = self.client.post(
