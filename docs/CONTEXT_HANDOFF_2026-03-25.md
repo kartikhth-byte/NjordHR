@@ -66,6 +66,21 @@
 - No Windows files were modified in the latest mac packaging round.
 - Windows still needs a fresh regression smoke test after latest shared changes.
 
+### 2026-04-09 smoke note
+- A focused manual smoke run was completed after the latest shared/runtime fixes.
+- Passed flow:
+  - refresh while logged out
+  - login
+  - open Search and a rank folder
+  - confirm `Experienced Ship Type Filter` shows configured values
+  - search `having valid US visa`
+  - search `chief officer with valid US visa`
+  - search with `Dredger` experience filter
+  - confirm `Needs Review` works when present
+  - refresh while logged in
+  - logout
+- User reported all exercised paths worked properly.
+
 ## Current Git State
 - Recent packaging-related commits include:
   - `f8469a9` Rewrite absolute framework deps for any Versions/* path
@@ -161,7 +176,7 @@
 - macOS support boundary should be formalized and enforced.
 - Windows still needs a fresh smoke run after the mac packaging work.
 - The prior age bug showed that structured constraints cannot be left to LLM reasoning.
-- Current deterministic filter scope is age-only; ship type and other structured fields are not yet migrated.
+- Current deterministic filter scope now includes age, ship type, and other validated structured fields already implemented in the Phase 1 hard-filter path; the remaining caution is not missing migration, but avoiding broadening beyond the validated set without new evidence.
 - DOB parsing is still format-driven; additional real-world DOB formats should be captured with regression tests before expanding structured filters.
 - v3.4 Phase 1 follow-up: synchronous re-extraction controls still need explicit verification or implementation.
   Required controls per spec:
@@ -291,14 +306,68 @@
 
 ### Immediate next step for the next agent
 1. Leave the Pinecone indexing fix alone unless a new concrete regression appears.
-2. Return to the extraction-quality workflow for other implemented Phase 1 areas using the same diagnostic-first discipline already used for STCW.
-3. Keep Phase 1 changes narrow and traceable; do not bundle new extraction, routing, and UI work together.
+2. Treat the current extraction round as stabilized unless a new repeated corpus pattern appears.
+3. If new extraction work is needed, start again with folder-level diagnostics and keep Phase 1 changes narrow and traceable.
 
 ### Explicit non-goals for the next agent
 - Do not broaden STCW `UNKNOWN -> PASS` heuristics yet.
 - Do not add a Failed Hard Filters UI section.
 - Do not remove the Needs Review section.
 - Do not reopen Pinecone indexing changes without fresh failing evidence.
+
+## 2026-04-08 Session Addendum
+
+### Extraction-quality validation completed
+- The same diagnostic-first workflow was run beyond STCW for the currently implemented structured-extraction areas:
+  - rank normalization
+  - COC extraction
+  - DOB / age extraction
+  - visa / passport extraction
+- Diagnostic artifacts were saved under:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/`
+- A broader cross-folder rollup was produced in:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/extractor_sweep_rollup_current.json`
+
+### Rank extraction status
+- Rank extraction was tuned using folder-level diagnostics first, then broader validation.
+- Narrow parser additions were made for repeated inline availability / applied-rank text patterns and related normalization gaps.
+- Current judgment:
+  - rank extraction is materially improved across the validated folders
+  - remaining misses are small and should not trigger broader heuristic expansion without new repeated evidence
+
+### COC extraction status
+- COC extraction was tuned using repeated certificate-table row patterns observed in diagnostics.
+- Narrow alias support was added for repeated deck and engineer competency row families, then revalidated across additional folders.
+- Broader COC validation is now materially improved across the validated deck and engineer folders.
+- Remaining `Chief_Engineer` misses were reviewed manually and are mostly incomplete rows or missing-date cases rather than a clean repeated parser gap.
+- Current judgment:
+  - keep the current COC extractor as-is for now
+  - do not broaden COC parsing further unless a new repeated missed-positive row shape appears across multiple folders
+
+### DOB / age and visa / passport status
+- A full extraction sweep indicates DOB / age extraction is broadly stable in the current corpus.
+- Visa extraction also appears broadly stable in the current corpus, with only a small residual number of passport-expiry misses.
+- Current judgment:
+  - no immediate extractor changes are recommended here
+  - rerun diagnostics before making further changes
+
+### STCW status after broader review
+- STCW remains the largest conservative-unknown bucket.
+- The current recommendation is unchanged:
+  - do not broadly promote `UNKNOWN` to `PASS`
+  - prefer fixing false `FAIL` / false `expired` outcomes first if fresh repeated evidence appears
+
+### Current recommended posture
+- No more extractor broadening should be done by default.
+- The current extraction work should be treated as stable for this corpus family unless:
+  - a new repeated false-negative pattern appears in diagnostics, or
+  - a product decision is made to trade more recall for more aggressive parsing
+- If new work starts, use the same sequence:
+  1. folder-level diagnostic
+  2. narrow parser change
+  3. regression tests
+  4. rerun same-folder diagnostic
+  5. broader validation pass
 
 ## Pending UX / Product Tasks Already Noted
 - Ensure Njord logo is consistently shown in header.
@@ -449,7 +518,8 @@ curl -s http://127.0.0.1:5050/config/runtime
   - `git status --short`
 - Current focus:
   - preserve recent mac packaging fixes
-  - preserve the new deterministic AI Search age-filter work
+  - preserve the validated deterministic AI Search hard-filter work
   - do not regress Windows startup/install path
   - packaged validation of the deterministic age gate is complete
-  - next likely task is tests for DOB/age parsing, then extension to ship type or macOS minimum-version enforcement
+  - deterministic age, ship-type, audit logging, and `Needs Review` routing work are now implemented in practice
+  - the first retrieval chunking upgrade slice is now complete; any further AI-T6 work is optional follow-up rather than the current default next step

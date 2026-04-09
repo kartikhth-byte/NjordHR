@@ -41,6 +41,24 @@ Status values used below:
 - Gap:
   - no single current sign-off line here yet that states the exact validated baseline run and result artifact set
 
+## 1A. Manual Smoke Validation
+
+### 1A.1 Core recruiter smoke flow
+- Status: `met`
+- Current evidence:
+  - manual smoke pass completed on 2026-04-09 for this fast-path set:
+    - refresh while logged out
+    - login
+    - open Search and a rank folder
+    - confirm `Experienced Ship Type Filter` loads configured values
+    - search `having valid US visa`
+    - search `chief officer with valid US visa`
+    - search with `Dredger` experience filter
+    - confirm `Needs Review` works when present
+    - refresh while logged in
+    - logout
+  - operator reported all exercised flows worked properly
+
 ## 2. Extraction Quality
 
 ### 2.1 Rank extraction quality

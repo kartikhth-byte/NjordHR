@@ -272,6 +272,17 @@ Suggested overlap:
   - spot-check fails
   - spot-check needs-review samples
 - `P1` If further STCW work is needed, prioritize false `FAIL` / false `expired` corrections over promoting more `UNKNOWN` cases to `PASS`
+- `P1` Treat the current rank / COC / DOB / visa extraction round as validated unless new repeated corpus evidence appears:
+  - full diagnostic sweep has been run across the currently implemented extraction areas
+  - rank extraction is materially improved across the validated folders
+  - COC extraction is materially improved across the validated deck and engineer folders
+  - DOB / age and visa / passport extraction appear broadly stable in the current corpus
+  - remaining small residual buckets should not trigger broad parser expansion by default
+- `P1` If future extraction tuning resumes:
+  - start again with a folder-level diagnostic
+  - save the artifact
+  - patch only the repeated observed pattern
+  - rerun the same-folder diagnostic before any broader validation
 
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).
@@ -385,13 +396,49 @@ Suggested overlap:
 - Unlabeled dates elsewhere in the resume must not be used as DOB fallbacks.
 
 ### 7.3 Next tasks in this workstream
-- `AI-T1` Add regression cases for age range prompts and DOB edge cases.
-- `AI-T2` Ensure `FAIL` candidates never reach LLM reasoning.
-- `AI-T3` Decide UI behavior for `UNKNOWN`:
-  - separate review bucket only
-  - or optional inclusion toggle.
-- `AI-T4` Extend deterministic constraint extraction/evaluation to ship type.
-- `AI-T5` Add deterministic/audit logging for hard-filter outcomes.
+- `AI-T1` Completed in current implementation:
+  - regression coverage exists for age range prompts, DOB parsing edge cases, and the exact birthday boundary in age computation
+- `AI-T2` Completed in current implementation:
+  - deterministic `FAIL` / `UNKNOWN` candidates are kept out of LLM reasoning and this behavior is covered by the current test suite
+- `AI-T3` Completed in current implementation:
+  - `UNKNOWN` candidates are rendered in a separate `Needs Review` bucket
+  - no inclusion toggle is currently implemented or required for the validated Phase 1 flow
+- `AI-T4` Completed in current implementation:
+  - deterministic ship-type extraction/evaluation is wired for both applied ship type and experienced ship type
+  - backend, UI controls, and regression coverage are present
+  - follow-up still open:
+    - prompt-side ship-type normalization is currently broader-bucket oriented and does not yet align to the full configured `ShipTypes.ship_type_options` catalog in `config.ini`
+    - treat config-aligned ship-type prompt recognition as a separate narrow implementation unit rather than mixing it into unrelated parser work
+- `AI-T5` Completed in current implementation:
+  - deterministic/audit logging for hard-filter outcomes is emitted, persisted, and surfaced in the current flow
+- `AI-T6` Retrieval chunking upgrade is partially completed in current implementation:
+  - completed:
+    - the main indexed chunker no longer uses only fixed whitespace-only token windows
+    - paragraph/blank-line boundaries are preferred where feasible
+    - short table-like multiline blocks are preserved more carefully
+    - direct chunking regressions now exist
+  - deferred / optional follow-up:
+    - keyword-fallback pseudo-chunking can be improved later if fallback retrieval quality becomes a practical concern
+  - keep any further retrieval-quality work out of the deterministic Phase 1 change set so retrieval changes do not get mixed with hard-filter correctness work
+
+### 7.3.1 Extraction-quality status after diagnostics
+- Completed validation work:
+  - diagnostic-first tuning and validation has now been run for:
+    - STCW
+    - rank normalization
+    - COC extraction
+    - DOB / age extraction
+    - visa / passport extraction
+- Current quality judgment:
+  - STCW remains intentionally conservative and still has the largest unresolved unknown bucket
+  - rank extraction is in a materially better state for the current corpus family
+  - COC extraction is in a materially better state for the current corpus family
+  - remaining COC misses are now mostly incomplete-source or narrower folder-specific issues rather than one broad missing alias family
+  - DOB / age and visa / passport extraction do not currently need broadening work
+- Recommended next-step posture:
+  - do not continue broad extractor expansion by default
+  - use the saved diagnostic artifacts as the baseline for future regressions
+  - only reopen extractor tuning when a new repeated pattern appears in diagnostics or manual review
 
 ### 7.4 Acceptance criteria
 - Prompt `between 30 and 50 years old` excludes candidates older than 50 or younger than 30.
