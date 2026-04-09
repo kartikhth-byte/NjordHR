@@ -6,6 +6,8 @@ Purpose:
 - record which v3.4 Phase 1 exit criteria are already evidenced by the current implementation
 - separate implemented behavior from still-missing sign-off evidence
 - give the next operator a concrete readiness view without re-reading the whole spec
+- see also:
+  - `/Users/kartikraghavan/Tools/NjordHR/docs/AI_SEARCH_V3_4_PHASE1_SIGNOFF_STATUS_2026-04-09.md`
 
 Primary specs:
 - `/Users/kartikraghavan/Tools/NjordHR/docs/candidate-intelligence-architecture-v3.4.md`
