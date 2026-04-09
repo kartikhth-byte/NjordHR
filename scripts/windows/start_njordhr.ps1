@@ -125,14 +125,14 @@ function Get-Json([string]$Url) {
 function Stop-ProcessesOnPort([int]$Port) {
     $connections = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
     if (-not $connections) { return }
-    $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
-    foreach ($pid in $pids) {
-        if ($pid -and $pid -ne 0) {
+    $owningPids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($procId in $owningPids) {
+        if ($procId -and $procId -ne 0) {
             try {
-                Stop-Process -Id $pid -Force -ErrorAction Stop
-                Write-Log "Stopped process $pid on port $Port"
+                Stop-Process -Id $procId -Force -ErrorAction Stop
+                Write-Log "Stopped process $procId on port $Port"
             } catch {
-                Write-Log "Failed to stop process $pid on port $Port: $($_.Exception.Message)"
+                Write-Log "Failed to stop process $procId on port $Port: $($_.Exception.Message)"
             }
         }
     }
