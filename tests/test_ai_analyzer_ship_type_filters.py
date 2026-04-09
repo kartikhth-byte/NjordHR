@@ -156,13 +156,25 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
             "Sea Service: Chief Officer on Product Tanker, VLCC and Bulk Carrier vessels."
         )
-        self.assertEqual(vessel_types, ["bulk carrier", "tanker"])
+        self.assertEqual(vessel_types, ["product tanker", "vlcc", "bulk carrier"])
+
+    def test_configured_ship_type_constraint_preserves_exact_config_value(self):
+        constraint = self.analyzer._extract_vessel_type_constraint(
+            "Need chief officer for Dredger and Survey Vessel"
+        )
+        self.assertEqual(constraint["required"], ["dredger", "survey vessel"])
 
     def test_experience_ship_type_prompt_constraint_is_extracted(self):
         constraint = self.analyzer._extract_experience_ship_type_constraint(
             "Need candidates with tanker experience and valid US visa"
         )
         self.assertEqual(constraint, "tanker")
+
+    def test_experience_ship_type_prompt_constraint_supports_configured_value(self):
+        constraint = self.analyzer._extract_experience_ship_type_constraint(
+            "Need candidates with dredger experience and valid US visa"
+        )
+        self.assertEqual(constraint, "dredger")
 
     def test_experience_ship_type_hard_filter_is_separate_from_applied_ship_type(self):
         candidate_facts = {
@@ -189,7 +201,52 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             [{"metadata": {"raw_text": "Sea Service on Product Tanker and Bulk Carrier"}}],
             folder_metadata={},
         )
-        self.assertEqual(facts["experience"]["vessel_types"], ["bulk carrier", "tanker"])
+        self.assertEqual(facts["facts_version"], AIResumeAnalyzer.FACTS_VERSION)
+        self.assertEqual(facts["identity"], {"full_name": None, "nationality": None})
+        self.assertEqual(
+            facts["role"],
+            {
+                "current_rank_raw": None,
+                "current_rank_normalized": None,
+                "applied_rank_raw": self.rank,
+                "applied_rank_normalized": "2nd_engineer",
+                "department": "engine",
+                "seniority_bucket": "senior_officer",
+            },
+        )
+        self.assertEqual(
+            facts["certifications"],
+            {
+                "coc": {
+                    "grade": None,
+                    "expiry_date": None,
+                    "expiry_status": "MISSING",
+                    "status": "MISSING",
+                },
+                "stcw_basic_all_valid": None,
+                "endorsements": {
+                    "tanker_oil": "unknown",
+                    "tanker_chemical": "unknown",
+                    "tanker_gas": "unknown",
+                    "dp_operational": "unknown",
+                    "gmdss": "unknown",
+                },
+            },
+        )
+        self.assertEqual(
+            facts["logistics"],
+            {
+                "passport_expiry_date": None,
+                "passport_valid": None,
+                "us_visa_valid": None,
+                "us_visa_status": None,
+                "us_visa_expiry_date": None,
+                "availability_date": None,
+                "salary_expectation_usd": None,
+            },
+        )
+        self.assertTrue(facts["derived"]["age_is_cached"])
+        self.assertEqual(facts["experience"]["vessel_types"], ["product tanker", "bulk carrier"])
 
     def test_experience_ship_type_missing_is_unknown(self):
         candidate_facts = {

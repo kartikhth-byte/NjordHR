@@ -2605,6 +2605,19 @@ def get_rank_folder_ship_types():
                     ship_types.add(normalized)
     return jsonify({"success": True, "ship_types": sorted(ship_types)})
 
+
+@app.route('/get_config_ship_types', methods=['GET'])
+def get_config_ship_types():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    try:
+        ship_types_str = config.get('ShipTypes', 'ship_type_options', fallback='').strip()
+        ship_types = [s.strip() for s in ship_types_str.split('\n') if s.strip()]
+        return jsonify({"success": True, "ship_types": ship_types})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e), "ship_types": []}), 500
+
 @app.route('/analyze_stream', methods=['GET'])
 def analyze_stream():
     """Stream analysis progress using Server-Sent Events"""

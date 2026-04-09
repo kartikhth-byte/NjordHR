@@ -424,6 +424,7 @@
                 if (!authUser) return;
                 fetchRankFolders(authUser);
                 fetchDownloadFolderSummaries(authUser);
+                fetchConfiguredShipTypes();
             }, [authUser, downloadLog]);
 
             useEffect(() => {
@@ -857,6 +858,25 @@
                     console.error("Could not fetch rank folder ship types", error);
                     setRankFolderShipTypes([]);
                     setSelectedSearchShipType('');
+                }
+            };
+
+            const fetchConfiguredShipTypes = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_config_ship_types`);
+                    const data = await response.json();
+                    if (data.success) {
+                        const nextShipTypes = data.ship_types || [];
+                        setShipTypes(nextShipTypes);
+                        setSelectedExperienceShipType(prev => (prev && nextShipTypes.includes(prev) ? prev : ''));
+                    } else {
+                        setShipTypes([]);
+                        setSelectedExperienceShipType('');
+                    }
+                } catch (error) {
+                    console.error("Could not fetch configured ship types", error);
+                    setShipTypes([]);
+                    setSelectedExperienceShipType('');
                 }
             };
 
@@ -1904,18 +1924,6 @@
                 } catch(error) { handleSendMessage('error', 'Failed to disconnect session cleanly.'); }
                 setIsDisconnecting(false);
             };
-
-            const EXPERIENCE_SHIP_TYPE_OPTIONS = [
-                'Tanker',
-                'Bulk Carrier',
-                'Container',
-                'Offshore',
-                'LNG',
-                'LPG',
-                'Ro-Ro',
-                'Car Carrier',
-            ];
-
             const handleAnalyze = async () => {
                 if (!selectedRankFolder) return handleSendMessage('error', 'Please select a rank folder to analyze.');
                 if (!aiPrompt.trim()) return handleSendMessage('error', 'AI prompt cannot be empty.');
@@ -3684,7 +3692,7 @@
                                                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
                                             >
                                                 <option value="">Any experienced ship type</option>
-                                                {EXPERIENCE_SHIP_TYPE_OPTIONS.map(shipType => <option key={shipType} value={shipType}>{shipType}</option>)}
+                                                {shipTypes.map(shipType => <option key={shipType} value={shipType}>{shipType}</option>)}
                                             </select>
                                             <p className="mt-1 text-xs text-gray-500">Derived conservatively from resume vessel references. Missing or unclear evidence is treated as needs review.</p>
                                         </div>

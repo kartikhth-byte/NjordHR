@@ -77,6 +77,25 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         constraints = self.analyzer._extract_job_constraints("2nd engineer between 30 and 50 years old", rank=self.rank)
         self.assertEqual(constraints["applied_constraints"], ["age_range", "rank_match"])
 
+    def test_configured_supported_rank_prompts_populate_rank_match(self):
+        prompts = {
+            "electrical officer": "electrical_officer",
+            "bosun": "bosun",
+            "pumpman": "pumpman",
+            "fitter": "fitter",
+            "oiler": "oiler",
+            "chief cook": "chief_cook",
+            "deck cadet": "deck_cadet",
+            "junior engineer": "junior_engineer",
+        }
+        for prompt, expected_rank in prompts.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertEqual(constraints["applied_constraints"], ["rank_match"])
+                self.assertEqual(constraints["hard_constraints"]["rank"]["applied_rank_normalized"], [expected_rank])
+                self.assertEqual(constraints["unapplied_constraints"], [])
+                self.assertEqual(constraints["parsing_notes"], [])
+
     def test_age_and_sea_service_query_populates_unapplied(self):
         constraints = self.analyzer._extract_job_constraints("between 30 and 50 with 7+ years sea service", rank=self.rank)
         self.assertIn("min_sea_service", constraints["unapplied_constraints"])

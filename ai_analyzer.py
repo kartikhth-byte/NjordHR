@@ -6,6 +6,7 @@ import json
 import time
 import hashlib
 import sqlite3
+import configparser
 import re
 import io
 import threading
@@ -978,6 +979,21 @@ class AIResumeAnalyzer:
             "department": "engine",
             "seniority_bucket": "junior_officer",
         },
+        "deck cadet": {
+            "canonical_id": "deck_cadet",
+            "department": "deck",
+            "seniority_bucket": "cadet",
+        },
+        "junior engineer": {
+            "canonical_id": "junior_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_engineer",
+        },
+        "electrical officer": {
+            "canonical_id": "electrical_officer",
+            "department": "engine",
+            "seniority_bucket": "specialist_officer",
+        },
         "eto": {
             "canonical_id": "electro_technical_officer",
             "department": "engine",
@@ -987,6 +1003,31 @@ class AIResumeAnalyzer:
             "canonical_id": "electro_technical_officer",
             "department": "engine",
             "seniority_bucket": "specialist_officer",
+        },
+        "bosun": {
+            "canonical_id": "bosun",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "pumpman": {
+            "canonical_id": "pumpman",
+            "department": "engine",
+            "seniority_bucket": "rating",
+        },
+        "fitter": {
+            "canonical_id": "fitter",
+            "department": "engine",
+            "seniority_bucket": "rating",
+        },
+        "chief cook": {
+            "canonical_id": "chief_cook",
+            "department": "hotel",
+            "seniority_bucket": "rating",
+        },
+        "oiler": {
+            "canonical_id": "oiler",
+            "department": "engine",
+            "seniority_bucket": "rating",
         },
     }
     
@@ -1349,6 +1390,10 @@ class AIResumeAnalyzer:
 
     def _extract_vessel_type_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
+        configured_matches = self._extract_configured_ship_types(prompt)
+        if configured_matches:
+            return {"required": configured_matches, "display_value": ", ".join(configured_matches), "operator": "contains_any"}
+
         lowered = prompt.lower()
         seen = []
         for canonical, aliases in self._ship_type_aliases().items():
@@ -1621,12 +1666,70 @@ class AIResumeAnalyzer:
             ],
         }
 
+    def _configured_ship_type_labels(self):
+        cache = getattr(self, "_configured_ship_type_labels_cache", None)
+        if cache is not None:
+            return cache
+
+        labels = []
+        for candidate in (
+            Path(__file__).resolve().parent / "config.ini",
+            Path(__file__).resolve().parent / "config.example.ini",
+        ):
+            if not candidate.exists():
+                continue
+            parser = configparser.ConfigParser()
+            parser.read(candidate, encoding="utf-8")
+            if not parser.has_section("ShipTypes") or not parser.has_option("ShipTypes", "ship_type_options"):
+                continue
+            raw_value = parser.get("ShipTypes", "ship_type_options")
+            labels = [line.strip() for line in raw_value.splitlines() if line.strip()]
+            if labels:
+                break
+
+        normalized = []
+        seen = set()
+        for label in labels:
+            clean = self._normalize_ship_type(label)
+            if clean and clean not in seen:
+                normalized.append(clean)
+                seen.add(clean)
+
+        self._configured_ship_type_labels_cache = normalized
+        return normalized
+
+    def _extract_configured_ship_types(self, raw_text):
+        original_text = str(raw_text or "")
+        if not original_text.strip():
+            return []
+        lowered = original_text.lower()
+
+        matches = []
+        occupied = []
+        labels = sorted(self._configured_ship_type_labels(), key=len, reverse=True)
+        for label in labels:
+            alias_pattern = re.escape(label).replace(r"\ ", r"[\s./()\-]+")
+            pattern = rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9-])"
+            match = re.search(pattern, lowered)
+            if not match:
+                continue
+            span = match.span()
+            if any(not (span[1] <= start or span[0] >= end) for start, end in occupied):
+                continue
+            occupied.append(span)
+            matches.append((span[0], label))
+
+        return [label for _, label in sorted(matches, key=lambda item: item[0])]
+
     def _extract_experience_ship_type_constraint(self, user_prompt):
         prompt = self._normalize_ship_type(user_prompt)
         if not prompt:
             return None
         if not any(token in prompt for token in ("experience", "experienced", "sailed", "worked on", "vessel", "ship")):
             return None
+        configured_matches = self._extract_configured_ship_types(prompt)
+        if configured_matches:
+            return configured_matches[0]
         for canonical, aliases in self._ship_type_aliases().items():
             for alias in aliases:
                 normalized_alias = self._normalize_ship_type(alias)
@@ -1939,6 +2042,9 @@ class AIResumeAnalyzer:
         text = self._normalize_ship_type(raw_text)
         if not text:
             return []
+        configured_matches = self._extract_configured_ship_types(text)
+        if configured_matches:
+            return configured_matches
         matched = []
         for canonical, aliases in self._ship_type_aliases().items():
             for alias in aliases:

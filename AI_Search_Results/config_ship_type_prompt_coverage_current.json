@@ -1,0 +1,840 @@
+{
+  "total_configured_ship_types": 104,
+  "covered_by_prompt_and_experience_constraints": 104,
+  "missed_count": 0,
+  "covered": [
+    {
+      "configured_label": "Accommodation Barge",
+      "normalized_label": "accommodation barge",
+      "vessel_type_constraint": [
+        "accommodation barge"
+      ],
+      "experience_ship_type_constraint": "accommodation barge"
+    },
+    {
+      "configured_label": "AHT",
+      "normalized_label": "aht",
+      "vessel_type_constraint": [
+        "aht"
+      ],
+      "experience_ship_type_constraint": "aht"
+    },
+    {
+      "configured_label": "AHTS",
+      "normalized_label": "ahts",
+      "vessel_type_constraint": [
+        "ahts"
+      ],
+      "experience_ship_type_constraint": "ahts"
+    },
+    {
+      "configured_label": "AHTS DP-I",
+      "normalized_label": "ahts dp i",
+      "vessel_type_constraint": [
+        "ahts dp i"
+      ],
+      "experience_ship_type_constraint": "ahts dp i"
+    },
+    {
+      "configured_label": "AHTS DP-II",
+      "normalized_label": "ahts dp ii",
+      "vessel_type_constraint": [
+        "ahts dp ii"
+      ],
+      "experience_ship_type_constraint": "ahts dp ii"
+    },
+    {
+      "configured_label": "AHTS DP-III",
+      "normalized_label": "ahts dp iii",
+      "vessel_type_constraint": [
+        "ahts dp iii"
+      ],
+      "experience_ship_type_constraint": "ahts dp iii"
+    },
+    {
+      "configured_label": "Bitumen Tanker",
+      "normalized_label": "bitumen tanker",
+      "vessel_type_constraint": [
+        "bitumen tanker"
+      ],
+      "experience_ship_type_constraint": "bitumen tanker"
+    },
+    {
+      "configured_label": "Bulk Carrier",
+      "normalized_label": "bulk carrier",
+      "vessel_type_constraint": [
+        "bulk carrier"
+      ],
+      "experience_ship_type_constraint": "bulk carrier"
+    },
+    {
+      "configured_label": "BUNKER TANKER",
+      "normalized_label": "bunker tanker",
+      "vessel_type_constraint": [
+        "bunker tanker"
+      ],
+      "experience_ship_type_constraint": "bunker tanker"
+    },
+    {
+      "configured_label": "CAPE.Bulk",
+      "normalized_label": "cape bulk",
+      "vessel_type_constraint": [
+        "cape bulk"
+      ],
+      "experience_ship_type_constraint": "cape bulk"
+    },
+    {
+      "configured_label": "Car Carrier",
+      "normalized_label": "car carrier",
+      "vessel_type_constraint": [
+        "car carrier"
+      ],
+      "experience_ship_type_constraint": "car carrier"
+    },
+    {
+      "configured_label": "CELLULAR CONTAINER",
+      "normalized_label": "cellular container",
+      "vessel_type_constraint": [
+        "cellular container"
+      ],
+      "experience_ship_type_constraint": "cellular container"
+    },
+    {
+      "configured_label": "Cement Carrier",
+      "normalized_label": "cement carrier",
+      "vessel_type_constraint": [
+        "cement carrier"
+      ],
+      "experience_ship_type_constraint": "cement carrier"
+    },
+    {
+      "configured_label": "Chemical Tanker",
+      "normalized_label": "chemical tanker",
+      "vessel_type_constraint": [
+        "chemical tanker"
+      ],
+      "experience_ship_type_constraint": "chemical tanker"
+    },
+    {
+      "configured_label": "Coastal Vessel",
+      "normalized_label": "coastal vessel",
+      "vessel_type_constraint": [
+        "coastal vessel"
+      ],
+      "experience_ship_type_constraint": "coastal vessel"
+    },
+    {
+      "configured_label": "Container",
+      "normalized_label": "container",
+      "vessel_type_constraint": [
+        "container"
+      ],
+      "experience_ship_type_constraint": "container"
+    },
+    {
+      "configured_label": "Container Vessel",
+      "normalized_label": "container vessel",
+      "vessel_type_constraint": [
+        "container vessel"
+      ],
+      "experience_ship_type_constraint": "container vessel"
+    },
+    {
+      "configured_label": "Crude Oil Tanker",
+      "normalized_label": "crude oil tanker",
+      "vessel_type_constraint": [
+        "crude oil tanker"
+      ],
+      "experience_ship_type_constraint": "crude oil tanker"
+    },
+    {
+      "configured_label": "Cruise Ship",
+      "normalized_label": "cruise ship",
+      "vessel_type_constraint": [
+        "cruise ship"
+      ],
+      "experience_ship_type_constraint": "cruise ship"
+    },
+    {
+      "configured_label": "DEMOLITION VESSEL",
+      "normalized_label": "demolition vessel",
+      "vessel_type_constraint": [
+        "demolition vessel"
+      ],
+      "experience_ship_type_constraint": "demolition vessel"
+    },
+    {
+      "configured_label": "DP",
+      "normalized_label": "dp",
+      "vessel_type_constraint": [
+        "dp"
+      ],
+      "experience_ship_type_constraint": "dp"
+    },
+    {
+      "configured_label": "DP-I",
+      "normalized_label": "dp i",
+      "vessel_type_constraint": [
+        "dp i"
+      ],
+      "experience_ship_type_constraint": "dp i"
+    },
+    {
+      "configured_label": "DP-II",
+      "normalized_label": "dp ii",
+      "vessel_type_constraint": [
+        "dp ii"
+      ],
+      "experience_ship_type_constraint": "dp ii"
+    },
+    {
+      "configured_label": "DP-III",
+      "normalized_label": "dp iii",
+      "vessel_type_constraint": [
+        "dp iii"
+      ],
+      "experience_ship_type_constraint": "dp iii"
+    },
+    {
+      "configured_label": "DPII ROV",
+      "normalized_label": "dpii rov",
+      "vessel_type_constraint": [
+        "dpii rov"
+      ],
+      "experience_ship_type_constraint": "dpii rov"
+    },
+    {
+      "configured_label": "Dredger",
+      "normalized_label": "dredger",
+      "vessel_type_constraint": [
+        "dredger"
+      ],
+      "experience_ship_type_constraint": "dredger"
+    },
+    {
+      "configured_label": "DREDGER",
+      "normalized_label": "dredger",
+      "vessel_type_constraint": [
+        "dredger"
+      ],
+      "experience_ship_type_constraint": "dredger"
+    },
+    {
+      "configured_label": "DRILL SHIP DP-I",
+      "normalized_label": "drill ship dp i",
+      "vessel_type_constraint": [
+        "drill ship dp i"
+      ],
+      "experience_ship_type_constraint": "drill ship dp i"
+    },
+    {
+      "configured_label": "DRILL SHIP DP-II",
+      "normalized_label": "drill ship dp ii",
+      "vessel_type_constraint": [
+        "drill ship dp ii"
+      ],
+      "experience_ship_type_constraint": "drill ship dp ii"
+    },
+    {
+      "configured_label": "DRILL SHIP DP-III",
+      "normalized_label": "drill ship dp iii",
+      "vessel_type_constraint": [
+        "drill ship dp iii"
+      ],
+      "experience_ship_type_constraint": "drill ship dp iii"
+    },
+    {
+      "configured_label": "Drilling Rig",
+      "normalized_label": "drilling rig",
+      "vessel_type_constraint": [
+        "drilling rig"
+      ],
+      "experience_ship_type_constraint": "drilling rig"
+    },
+    {
+      "configured_label": "DRILLSHIP",
+      "normalized_label": "drillship",
+      "vessel_type_constraint": [
+        "drillship"
+      ],
+      "experience_ship_type_constraint": "drillship"
+    },
+    {
+      "configured_label": "Dry Cargo",
+      "normalized_label": "dry cargo",
+      "vessel_type_constraint": [
+        "dry cargo"
+      ],
+      "experience_ship_type_constraint": "dry cargo"
+    },
+    {
+      "configured_label": "Dry Cargo Vessel",
+      "normalized_label": "dry cargo vessel",
+      "vessel_type_constraint": [
+        "dry cargo vessel"
+      ],
+      "experience_ship_type_constraint": "dry cargo vessel"
+    },
+    {
+      "configured_label": "DSV",
+      "normalized_label": "dsv",
+      "vessel_type_constraint": [
+        "dsv"
+      ],
+      "experience_ship_type_constraint": "dsv"
+    },
+    {
+      "configured_label": "DSV DP-I",
+      "normalized_label": "dsv dp i",
+      "vessel_type_constraint": [
+        "dsv dp i"
+      ],
+      "experience_ship_type_constraint": "dsv dp i"
+    },
+    {
+      "configured_label": "DSV DP-II",
+      "normalized_label": "dsv dp ii",
+      "vessel_type_constraint": [
+        "dsv dp ii"
+      ],
+      "experience_ship_type_constraint": "dsv dp ii"
+    },
+    {
+      "configured_label": "DSV DP-III",
+      "normalized_label": "dsv dp iii",
+      "vessel_type_constraint": [
+        "dsv dp iii"
+      ],
+      "experience_ship_type_constraint": "dsv dp iii"
+    },
+    {
+      "configured_label": "FFSV",
+      "normalized_label": "ffsv",
+      "vessel_type_constraint": [
+        "ffsv"
+      ],
+      "experience_ship_type_constraint": "ffsv"
+    },
+    {
+      "configured_label": "Fishing Vessel",
+      "normalized_label": "fishing vessel",
+      "vessel_type_constraint": [
+        "fishing vessel"
+      ],
+      "experience_ship_type_constraint": "fishing vessel"
+    },
+    {
+      "configured_label": "FPSO",
+      "normalized_label": "fpso",
+      "vessel_type_constraint": [
+        "fpso"
+      ],
+      "experience_ship_type_constraint": "fpso"
+    },
+    {
+      "configured_label": "FSO",
+      "normalized_label": "fso",
+      "vessel_type_constraint": [
+        "fso"
+      ],
+      "experience_ship_type_constraint": "fso"
+    },
+    {
+      "configured_label": "Gear Bulk",
+      "normalized_label": "gear bulk",
+      "vessel_type_constraint": [
+        "gear bulk"
+      ],
+      "experience_ship_type_constraint": "gear bulk"
+    },
+    {
+      "configured_label": "General Cargo",
+      "normalized_label": "general cargo",
+      "vessel_type_constraint": [
+        "general cargo"
+      ],
+      "experience_ship_type_constraint": "general cargo"
+    },
+    {
+      "configured_label": "GTV",
+      "normalized_label": "gtv",
+      "vessel_type_constraint": [
+        "gtv"
+      ],
+      "experience_ship_type_constraint": "gtv"
+    },
+    {
+      "configured_label": "Heavy-Lift",
+      "normalized_label": "heavy lift",
+      "vessel_type_constraint": [
+        "heavy lift"
+      ],
+      "experience_ship_type_constraint": "heavy lift"
+    },
+    {
+      "configured_label": "HOPPER BARGE",
+      "normalized_label": "hopper barge",
+      "vessel_type_constraint": [
+        "hopper barge"
+      ],
+      "experience_ship_type_constraint": "hopper barge"
+    },
+    {
+      "configured_label": "JACK UP BARGE",
+      "normalized_label": "jack up barge",
+      "vessel_type_constraint": [
+        "jack up barge"
+      ],
+      "experience_ship_type_constraint": "jack up barge"
+    },
+    {
+      "configured_label": "JACK UP RIG",
+      "normalized_label": "jack up rig",
+      "vessel_type_constraint": [
+        "jack up rig"
+      ],
+      "experience_ship_type_constraint": "jack up rig"
+    },
+    {
+      "configured_label": "LEGC (ETHYLENE CARRIERS)",
+      "normalized_label": "legc ethylene carriers",
+      "vessel_type_constraint": [
+        "legc ethylene carriers"
+      ],
+      "experience_ship_type_constraint": "legc ethylene carriers"
+    },
+    {
+      "configured_label": "Livestock Carrier",
+      "normalized_label": "livestock carrier",
+      "vessel_type_constraint": [
+        "livestock carrier"
+      ],
+      "experience_ship_type_constraint": "livestock carrier"
+    },
+    {
+      "configured_label": "LNG Carrier",
+      "normalized_label": "lng carrier",
+      "vessel_type_constraint": [
+        "lng carrier"
+      ],
+      "experience_ship_type_constraint": "lng carrier"
+    },
+    {
+      "configured_label": "LPG Carrier",
+      "normalized_label": "lpg carrier",
+      "vessel_type_constraint": [
+        "lpg carrier"
+      ],
+      "experience_ship_type_constraint": "lpg carrier"
+    },
+    {
+      "configured_label": "LUXURY YACHT",
+      "normalized_label": "luxury yacht",
+      "vessel_type_constraint": [
+        "luxury yacht"
+      ],
+      "experience_ship_type_constraint": "luxury yacht"
+    },
+    {
+      "configured_label": "Mini Bulk Carrier",
+      "normalized_label": "mini bulk carrier",
+      "vessel_type_constraint": [
+        "mini bulk carrier"
+      ],
+      "experience_ship_type_constraint": "mini bulk carrier"
+    },
+    {
+      "configured_label": "MLP",
+      "normalized_label": "mlp",
+      "vessel_type_constraint": [
+        "mlp"
+      ],
+      "experience_ship_type_constraint": "mlp"
+    },
+    {
+      "configured_label": "MR Tanker",
+      "normalized_label": "mr tanker",
+      "vessel_type_constraint": [
+        "mr tanker"
+      ],
+      "experience_ship_type_constraint": "mr tanker"
+    },
+    {
+      "configured_label": "MSV",
+      "normalized_label": "msv",
+      "vessel_type_constraint": [
+        "msv"
+      ],
+      "experience_ship_type_constraint": "msv"
+    },
+    {
+      "configured_label": "MSV DP-I",
+      "normalized_label": "msv dp i",
+      "vessel_type_constraint": [
+        "msv dp i"
+      ],
+      "experience_ship_type_constraint": "msv dp i"
+    },
+    {
+      "configured_label": "MSV DP-II",
+      "normalized_label": "msv dp ii",
+      "vessel_type_constraint": [
+        "msv dp ii"
+      ],
+      "experience_ship_type_constraint": "msv dp ii"
+    },
+    {
+      "configured_label": "MSV DP-III",
+      "normalized_label": "msv dp iii",
+      "vessel_type_constraint": [
+        "msv dp iii"
+      ],
+      "experience_ship_type_constraint": "msv dp iii"
+    },
+    {
+      "configured_label": "Multi Purpose",
+      "normalized_label": "multi purpose",
+      "vessel_type_constraint": [
+        "multi purpose"
+      ],
+      "experience_ship_type_constraint": "multi purpose"
+    },
+    {
+      "configured_label": "OBO",
+      "normalized_label": "obo",
+      "vessel_type_constraint": [
+        "obo"
+      ],
+      "experience_ship_type_constraint": "obo"
+    },
+    {
+      "configured_label": "OFFSHORE RESEARCH VESSEL",
+      "normalized_label": "offshore research vessel",
+      "vessel_type_constraint": [
+        "offshore research vessel"
+      ],
+      "experience_ship_type_constraint": "offshore research vessel"
+    },
+    {
+      "configured_label": "Offshore Supply",
+      "normalized_label": "offshore supply",
+      "vessel_type_constraint": [
+        "offshore supply"
+      ],
+      "experience_ship_type_constraint": "offshore supply"
+    },
+    {
+      "configured_label": "Offshore Supply Vessel",
+      "normalized_label": "offshore supply vessel",
+      "vessel_type_constraint": [
+        "offshore supply vessel"
+      ],
+      "experience_ship_type_constraint": "offshore supply vessel"
+    },
+    {
+      "configured_label": "Oil Tanker",
+      "normalized_label": "oil tanker",
+      "vessel_type_constraint": [
+        "oil tanker"
+      ],
+      "experience_ship_type_constraint": "oil tanker"
+    },
+    {
+      "configured_label": "Oil/Chem Tanker",
+      "normalized_label": "oil chem tanker",
+      "vessel_type_constraint": [
+        "oil chem tanker"
+      ],
+      "experience_ship_type_constraint": "oil chem tanker"
+    },
+    {
+      "configured_label": "OSV",
+      "normalized_label": "osv",
+      "vessel_type_constraint": [
+        "osv"
+      ],
+      "experience_ship_type_constraint": "osv"
+    },
+    {
+      "configured_label": "OSV DP-I",
+      "normalized_label": "osv dp i",
+      "vessel_type_constraint": [
+        "osv dp i"
+      ],
+      "experience_ship_type_constraint": "osv dp i"
+    },
+    {
+      "configured_label": "OSV DP-II",
+      "normalized_label": "osv dp ii",
+      "vessel_type_constraint": [
+        "osv dp ii"
+      ],
+      "experience_ship_type_constraint": "osv dp ii"
+    },
+    {
+      "configured_label": "OSV DP-III",
+      "normalized_label": "osv dp iii",
+      "vessel_type_constraint": [
+        "osv dp iii"
+      ],
+      "experience_ship_type_constraint": "osv dp iii"
+    },
+    {
+      "configured_label": "Passenger Ship",
+      "normalized_label": "passenger ship",
+      "vessel_type_constraint": [
+        "passenger ship"
+      ],
+      "experience_ship_type_constraint": "passenger ship"
+    },
+    {
+      "configured_label": "Passenger/Cruise Vessel",
+      "normalized_label": "passenger cruise vessel",
+      "vessel_type_constraint": [
+        "passenger cruise vessel"
+      ],
+      "experience_ship_type_constraint": "passenger cruise vessel"
+    },
+    {
+      "configured_label": "Pipelaying Vessel",
+      "normalized_label": "pipelaying vessel",
+      "vessel_type_constraint": [
+        "pipelaying vessel"
+      ],
+      "experience_ship_type_constraint": "pipelaying vessel"
+    },
+    {
+      "configured_label": "Product Tanker",
+      "normalized_label": "product tanker",
+      "vessel_type_constraint": [
+        "product tanker"
+      ],
+      "experience_ship_type_constraint": "product tanker"
+    },
+    {
+      "configured_label": "PSV",
+      "normalized_label": "psv",
+      "vessel_type_constraint": [
+        "psv"
+      ],
+      "experience_ship_type_constraint": "psv"
+    },
+    {
+      "configured_label": "PSV DP-I",
+      "normalized_label": "psv dp i",
+      "vessel_type_constraint": [
+        "psv dp i"
+      ],
+      "experience_ship_type_constraint": "psv dp i"
+    },
+    {
+      "configured_label": "PSV DP-II",
+      "normalized_label": "psv dp ii",
+      "vessel_type_constraint": [
+        "psv dp ii"
+      ],
+      "experience_ship_type_constraint": "psv dp ii"
+    },
+    {
+      "configured_label": "PSV DP-III",
+      "normalized_label": "psv dp iii",
+      "vessel_type_constraint": [
+        "psv dp iii"
+      ],
+      "experience_ship_type_constraint": "psv dp iii"
+    },
+    {
+      "configured_label": "PURE CAR TRUCK CARRIER",
+      "normalized_label": "pure car truck carrier",
+      "vessel_type_constraint": [
+        "pure car truck carrier"
+      ],
+      "experience_ship_type_constraint": "pure car truck carrier"
+    },
+    {
+      "configured_label": "Reefer",
+      "normalized_label": "reefer",
+      "vessel_type_constraint": [
+        "reefer"
+      ],
+      "experience_ship_type_constraint": "reefer"
+    },
+    {
+      "configured_label": "Reefer Container",
+      "normalized_label": "reefer container",
+      "vessel_type_constraint": [
+        "reefer container"
+      ],
+      "experience_ship_type_constraint": "reefer container"
+    },
+    {
+      "configured_label": "Reefer Container Vessel",
+      "normalized_label": "reefer container vessel",
+      "vessel_type_constraint": [
+        "reefer container vessel"
+      ],
+      "experience_ship_type_constraint": "reefer container vessel"
+    },
+    {
+      "configured_label": "Reefer Vessel",
+      "normalized_label": "reefer vessel",
+      "vessel_type_constraint": [
+        "reefer vessel"
+      ],
+      "experience_ship_type_constraint": "reefer vessel"
+    },
+    {
+      "configured_label": "RIG",
+      "normalized_label": "rig",
+      "vessel_type_constraint": [
+        "rig"
+      ],
+      "experience_ship_type_constraint": "rig"
+    },
+    {
+      "configured_label": "Ro-Ro Vessel",
+      "normalized_label": "ro ro vessel",
+      "vessel_type_constraint": [
+        "ro ro vessel"
+      ],
+      "experience_ship_type_constraint": "ro ro vessel"
+    },
+    {
+      "configured_label": "ROPAX VESSEL",
+      "normalized_label": "ropax vessel",
+      "vessel_type_constraint": [
+        "ropax vessel"
+      ],
+      "experience_ship_type_constraint": "ropax vessel"
+    },
+    {
+      "configured_label": "RORO/PASSENGER",
+      "normalized_label": "roro passenger",
+      "vessel_type_constraint": [
+        "roro passenger"
+      ],
+      "experience_ship_type_constraint": "roro passenger"
+    },
+    {
+      "configured_label": "Sand Barge",
+      "normalized_label": "sand barge",
+      "vessel_type_constraint": [
+        "sand barge"
+      ],
+      "experience_ship_type_constraint": "sand barge"
+    },
+    {
+      "configured_label": "Self Unloader Bulk Vessel",
+      "normalized_label": "self unloader bulk vessel",
+      "vessel_type_constraint": [
+        "self unloader bulk vessel"
+      ],
+      "experience_ship_type_constraint": "self unloader bulk vessel"
+    },
+    {
+      "configured_label": "Sp. Survey Vessel",
+      "normalized_label": "sp survey vessel",
+      "vessel_type_constraint": [
+        "sp survey vessel"
+      ],
+      "experience_ship_type_constraint": "sp survey vessel"
+    },
+    {
+      "configured_label": "SUPPLY AND UTILITY VESSEL",
+      "normalized_label": "supply and utility vessel",
+      "vessel_type_constraint": [
+        "supply and utility vessel"
+      ],
+      "experience_ship_type_constraint": "supply and utility vessel"
+    },
+    {
+      "configured_label": "Survey Vessel",
+      "normalized_label": "survey vessel",
+      "vessel_type_constraint": [
+        "survey vessel"
+      ],
+      "experience_ship_type_constraint": "survey vessel"
+    },
+    {
+      "configured_label": "TNC",
+      "normalized_label": "tnc",
+      "vessel_type_constraint": [
+        "tnc"
+      ],
+      "experience_ship_type_constraint": "tnc"
+    },
+    {
+      "configured_label": "Transhipper",
+      "normalized_label": "transhipper",
+      "vessel_type_constraint": [
+        "transhipper"
+      ],
+      "experience_ship_type_constraint": "transhipper"
+    },
+    {
+      "configured_label": "TUG",
+      "normalized_label": "tug",
+      "vessel_type_constraint": [
+        "tug"
+      ],
+      "experience_ship_type_constraint": "tug"
+    },
+    {
+      "configured_label": "ULCC",
+      "normalized_label": "ulcc",
+      "vessel_type_constraint": [
+        "ulcc"
+      ],
+      "experience_ship_type_constraint": "ulcc"
+    },
+    {
+      "configured_label": "VLCC",
+      "normalized_label": "vlcc",
+      "vessel_type_constraint": [
+        "vlcc"
+      ],
+      "experience_ship_type_constraint": "vlcc"
+    },
+    {
+      "configured_label": "VLEC",
+      "normalized_label": "vlec",
+      "vessel_type_constraint": [
+        "vlec"
+      ],
+      "experience_ship_type_constraint": "vlec"
+    },
+    {
+      "configured_label": "VLGC",
+      "normalized_label": "vlgc",
+      "vessel_type_constraint": [
+        "vlgc"
+      ],
+      "experience_ship_type_constraint": "vlgc"
+    },
+    {
+      "configured_label": "VLOC",
+      "normalized_label": "vloc",
+      "vessel_type_constraint": [
+        "vloc"
+      ],
+      "experience_ship_type_constraint": "vloc"
+    },
+    {
+      "configured_label": "WAR SHIP",
+      "normalized_label": "war ship",
+      "vessel_type_constraint": [
+        "war ship"
+      ],
+      "experience_ship_type_constraint": "war ship"
+    },
+    {
+      "configured_label": "Wood/Log Carrier",
+      "normalized_label": "wood log carrier",
+      "vessel_type_constraint": [
+        "wood log carrier"
+      ],
+      "experience_ship_type_constraint": "wood log carrier"
+    }
+  ],
+  "missed": []
+}
