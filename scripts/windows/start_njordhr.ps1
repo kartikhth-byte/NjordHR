@@ -323,6 +323,7 @@ try {
 
     $backendUrl = "http://127.0.0.1:$backendPort"
     $agentUrl = "http://127.0.0.1:$agentPort"
+    $browserUrl = "http://localhost:$backendPort"
     $pythonLauncherForCmd = ('"' + $venvPython + '"').Trim()
     $provisionedEnv = Read-EnvFile $DefaultRuntimeEnvPath
     if ($provisionedEnv.Count -gt 0) {
@@ -438,11 +439,12 @@ try {
     }
 
     if (-not $NoOpen) {
-        Start-Process $backendUrl | Out-Null
+        Start-Process $browserUrl | Out-Null
     }
 
     Write-Log "Ready."
     Write-Log "Backend: $backendUrl"
+    Write-Log "Browser: $browserUrl"
     Write-Log "Agent: $agentUrl"
     Write-Log "Config: $ConfigPath"
     Write-Log "Logs: $RuntimeDir"
