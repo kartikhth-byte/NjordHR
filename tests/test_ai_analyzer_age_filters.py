@@ -2,8 +2,10 @@ import sys
 import tempfile
 import types
 import unittest
+import configparser
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 
 def _stub_ai_dependencies():
@@ -34,7 +36,7 @@ def _stub_ai_dependencies():
 
 
 _stub_ai_dependencies()
-from ai_analyzer import AIResumeAnalyzer  # noqa: E402
+from ai_analyzer import AIResumeAnalyzer, SupabaseFileRegistry  # noqa: E402
 
 
 REAL_AGE_VALIDATION_SET = [
@@ -63,6 +65,18 @@ class _FakeConfig:
     def __init__(self, download_root):
         self.download_root = str(download_root)
         self.min_similarity_score = 0.0
+        parser = configparser.ConfigParser()
+        parser["ShipTypes"] = {
+            "ship_type_options": "\n".join([
+                "Bulk Carrier",
+                "Tanker",
+                "Product Tanker",
+                "VLCC",
+                "Dredger",
+                "Survey Vessel",
+            ])
+        }
+        self.config = parser
 
 
 class AIAnalyzerAgeFilterTests(unittest.TestCase):
@@ -338,7 +352,10 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
                 "derived": {"age_years": 36},
                 "fact_meta": {"derived.age_years": {"confidence": 0.99}},
             },
-            {"hard_constraints": {"age_years": {"min_age": 30, "max_age": 50}}},
+            {
+                "applied_constraints": ["age_range"],
+                "hard_constraints": {"age_years": {"min_age": 30, "max_age": 50}},
+            },
         )
         self.assertEqual(result["decision"], "PASS")
         self.assertIn("evaluation_date_used", result)
@@ -440,6 +457,37 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
     def test_evaluate_rule_raises_on_unsupported_operator(self):
         with self.assertRaises(ValueError):
             self.analyzer._evaluate_rule("fuzzy_match", "tanker", "tanker")
+
+
+class SupabaseFileRegistryTests(unittest.TestCase):
+    @patch("ai_analyzer.requests.request")
+    def test_upsert_file_record_uses_merge_duplicates_prefer_header(self, request_mock):
+        class _Resp:
+            status_code = 201
+            text = ""
+
+            def json(self):
+                return []
+
+        request_mock.return_value = _Resp()
+
+        with patch.dict(
+            "os.environ",
+            {
+                "SUPABASE_URL": "https://example.supabase.co",
+                "SUPABASE_SECRET_KEY": "secret",
+            },
+            clear=False,
+        ):
+            registry = SupabaseFileRegistry()
+            registry.upsert_file_record("/tmp/2nd_Engineer_288.pdf", 123.0, "resume-1")
+
+        kwargs = request_mock.call_args.kwargs
+        self.assertEqual(kwargs["params"], {"on_conflict": "file_key"})
+        self.assertEqual(
+            kwargs["headers"]["Prefer"],
+            "resolution=merge-duplicates,return=minimal",
+        )
 
 
 if __name__ == "__main__":

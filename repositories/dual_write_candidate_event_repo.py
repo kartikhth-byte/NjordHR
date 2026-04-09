@@ -3,7 +3,7 @@ import json
 import os
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 
 from repositories.candidate_event_repo import CandidateEventRepo
 
@@ -51,7 +51,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         with self._lock:
             self._conn.execute(
                 "INSERT OR IGNORE INTO idempotency_keys(key, created_at) VALUES (?, ?)",
-                (key, datetime.utcnow().isoformat() + "Z")
+                (key, datetime.now(UTC).isoformat().replace("+00:00", "Z"))
             )
             self._conn.commit()
 
@@ -162,6 +162,39 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
             if not secondary_ok:
                 print("[DUAL-WRITE] Secondary note_added write failed")
         return primary_ok
+
+    def log_ai_search_audit(self, *args, **kwargs):
+        """
+        AI-search audit rows remain anchored to the primary store for now.
+        The secondary mirror may not implement the audit schema yet.
+        """
+        primary_logger = getattr(self.primary_repo, "log_ai_search_audit", None)
+        if not callable(primary_logger):
+            raise AttributeError("Primary repo does not support log_ai_search_audit")
+
+        primary_ok = primary_logger(*args, **kwargs)
+
+        secondary_logger = getattr(self.secondary_repo, "log_ai_search_audit", None)
+        if primary_ok and callable(secondary_logger):
+            secondary_ok = secondary_logger(*args, **kwargs)
+            if not secondary_ok:
+                print("[DUAL-WRITE] Secondary AI search audit write failed")
+
+        return primary_ok
+
+    def get_ai_search_audit_rows(self, *args, **kwargs):
+        preferred_reader = getattr(self.read_repo, "get_ai_search_audit_rows", None)
+        if callable(preferred_reader):
+            rows = preferred_reader(*args, **kwargs)
+            if self.read_repo is not self.secondary_repo or rows:
+                return rows
+
+        primary_reader = getattr(self.primary_repo, "get_ai_search_audit_rows", None)
+        if callable(primary_reader):
+            if self.read_repo is self.secondary_repo:
+                print("[DUAL-WRITE] AI-audit fallback engaged: using primary repo due to empty secondary read.")
+            return primary_reader(*args, **kwargs)
+        return []
 
     def get_rank_counts(self, *args, **kwargs):
         preferred = self.read_repo.get_rank_counts(*args, **kwargs)

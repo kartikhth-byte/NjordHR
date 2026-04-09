@@ -5,13 +5,14 @@ import io
 import os
 import re
 import sys
+import string
 import uuid
 import json
 import zipfile
 import logging
 import threading
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 from queue import Queue, Empty
 import requests
 from urllib.parse import quote
@@ -136,8 +137,23 @@ def _pinecone_api_key():
     return _credential_value("Pinecone_API_Key", "PINECONE_API_KEY", "")
 
 
+def _supabase_secret_key():
+    return _credential_value("Supabase_Secret_Key", "SUPABASE_SECRET_KEY", "")
+
+
+def _supabase_service_role_key():
+    return _credential_value("Supabase_Service_Role_Key", "SUPABASE_SERVICE_ROLE_KEY", "")
+
+
+def _supabase_url():
+    env_value = os.getenv("SUPABASE_URL", "").strip()
+    if env_value:
+        return env_value.rstrip("/")
+    return config.get("Advanced", "supabase_url", fallback="").strip().rstrip("/")
+
+
 def _supabase_runtime_config_endpoint():
-    supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_url = _supabase_url()
     supabase_key = resolve_supabase_api_key()
     if not supabase_url or not supabase_key:
         return "", {}
@@ -180,7 +196,7 @@ def _supabase_runtime_config_set(pairs):
     if not endpoint:
         raise RuntimeError("Supabase runtime config unavailable")
     body = []
-    now_iso = datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     for key, value in (pairs or {}).items():
         if key is None:
             continue
@@ -250,6 +266,49 @@ def _release_root_dir():
     if raw:
         return Path(os.path.abspath(os.path.expanduser(raw)))
     return Path(PROJECT_ROOT) / "release"
+
+
+def _is_windows():
+    return os.name == "nt"
+
+
+def _list_windows_drive_entries():
+    if not _is_windows():
+        return []
+
+    drive_paths = []
+    try:
+        import ctypes
+
+        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+        for letter in string.ascii_uppercase:
+            if bitmask & 1:
+                drive_paths.append(f"{letter}:\\")
+            bitmask >>= 1
+    except Exception:
+        for letter in string.ascii_uppercase:
+            drive = f"{letter}:\\"
+            if os.path.isdir(drive):
+                drive_paths.append(drive)
+
+    entries = []
+    seen = set()
+    for drive in drive_paths:
+        normalized = os.path.abspath(drive)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        entries.append({"name": drive, "path": normalized})
+    return entries
+
+
+def _is_windows_drive_root(path):
+    if not _is_windows():
+        return False
+    drive, tail = os.path.splitdrive(path)
+    if not drive:
+        return False
+    return tail in ("\\", "/")
 
 
 def _release_public_base_url():
@@ -650,7 +709,7 @@ def _auth_upsert_user(username, role, password):
             "role": role,
             "password_hash": password_hash,
             "is_active": True,
-            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }]
         _supabase_users_request(
             method="POST",
@@ -870,7 +929,7 @@ def _ingest_store_idempotency(key, endpoint):
     try:
         conn.execute(
             "INSERT OR IGNORE INTO ingest_idempotency(idempotency_key, endpoint, created_at) VALUES (?, ?, ?)",
-            (key, endpoint, datetime.utcnow().isoformat() + "Z"),
+            (key, endpoint, datetime.now(UTC).isoformat().replace("+00:00", "Z")),
         )
         conn.commit()
     finally:
@@ -884,7 +943,7 @@ def _append_agent_sync_jsonl(kind, payload):
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({
             "kind": kind,
-            "received_at": datetime.utcnow().isoformat() + "Z",
+            "received_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "payload": payload or {},
         }) + "\n")
 
@@ -898,7 +957,7 @@ def _usage_log_path():
 def _log_usage(action, summary="", extra=None):
     try:
         row = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "username": _session_username() or "anonymous",
             "role": _session_role() or "anonymous",
             "action": str(action or "").strip(),
@@ -955,7 +1014,7 @@ def _settings_payload(include_plain_secrets=False):
             "embedding_model_name": config.get("Advanced", "embedding_model_name", fallback=""),
             "reasoning_model_name": config.get("Advanced", "reasoning_model_name", fallback=""),
             "min_similarity_score": config.get("Advanced", "min_similarity_score", fallback="0.25"),
-            "supabase_url": os.getenv("SUPABASE_URL", ""),
+            "supabase_url": _supabase_url(),
             "use_supabase_db": bool(feature_flags.use_supabase_db),
             "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
             "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
@@ -968,6 +1027,7 @@ def _settings_payload(include_plain_secrets=False):
             "gemini_api_key": _mask_secret(_gemini_api_key()),
             "pinecone_api_key": _mask_secret(_pinecone_api_key()),
             "supabase_secret_key": _mask_secret(resolve_supabase_api_key()),
+            "supabase_service_role_key": _mask_secret(_supabase_service_role_key()),
         }
     }
     if include_plain_secrets:
@@ -977,6 +1037,7 @@ def _settings_payload(include_plain_secrets=False):
             "gemini_api_key": _gemini_api_key(),
             "pinecone_api_key": _pinecone_api_key(),
             "supabase_secret_key": resolve_supabase_api_key(),
+            "supabase_service_role_key": _supabase_service_role_key(),
         }
     return payload
 
@@ -2185,8 +2246,12 @@ def test_admin_supabase():
         return jsonify({"success": False, "message": reason}), 401
 
     data = request.json or {}
-    supabase_url = str(data.get("supabase_url", "") or os.getenv("SUPABASE_URL", "")).strip()
-    supabase_secret_key = str(data.get("supabase_secret_key", "") or resolve_supabase_api_key()).strip()
+    supabase_url = str(data.get("supabase_url", "") or _supabase_url()).strip()
+    supabase_secret_key = str(
+        data.get("supabase_secret_key", "")
+        or data.get("supabase_service_role_key", "")
+        or resolve_supabase_api_key()
+    ).strip()
     if not supabase_url or not supabase_secret_key:
         return jsonify({"success": False, "message": "supabase_url and supabase_secret_key are required"}), 400
 
@@ -2235,7 +2300,8 @@ def save_admin_settings():
             if value:
                 _config_set_literal(config, section, key, value)
 
-    # Sensitive credentials are kept in runtime env / cloud runtime config, not persisted in local config.ini.
+    # Credentials are applied to the running process immediately and also persisted
+    # for future manual terminal starts via config.ini.
     sensitive_pairs = {}
     if "seajob_username" in payload:
         val = str(payload.get("seajob_username", "")).strip()
@@ -2285,18 +2351,24 @@ def save_admin_settings():
             return jsonify({"success": False, "message": "otp_window_seconds must be an integer between 30 and 900"}), 400
         _config_set_literal(config, "Advanced", "otp_window_seconds", str(otp_seconds))
 
-    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
-    with open(config_path, "w", encoding="utf-8") as fh:
-        config.write(fh)
-
     if "supabase_url" in payload:
-        os.environ["SUPABASE_URL"] = str(payload.get("supabase_url", "")).strip()
+        supabase_url = str(payload.get("supabase_url", "")).strip()
+        _config_set_literal(config, "Advanced", "supabase_url", supabase_url)
+        os.environ["SUPABASE_URL"] = supabase_url
+        sensitive_pairs["supabase_url"] = supabase_url
     if "supabase_secret_key" in payload:
         sup_key = str(payload.get("supabase_secret_key", "")).strip()
         if sup_key:
+            _config_set_literal(config, "Credentials", "Supabase_Secret_Key", sup_key)
             os.environ["SUPABASE_SECRET_KEY"] = sup_key
             os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
             sensitive_pairs["supabase_secret_key"] = sup_key
+    if "supabase_service_role_key" in payload:
+        legacy_key = str(payload.get("supabase_service_role_key", "")).strip()
+        if legacy_key:
+            _config_set_literal(config, "Credentials", "Supabase_Service_Role_Key", legacy_key)
+            os.environ["SUPABASE_SERVICE_ROLE_KEY"] = legacy_key
+            sensitive_pairs["supabase_service_role_key"] = legacy_key
 
     # Persist sensitive runtime config centrally in Supabase when available.
     if sensitive_pairs and bool(getattr(feature_flags, "use_supabase_db", False)):
@@ -2316,7 +2388,12 @@ def save_admin_settings():
     for flag_name in env_flags:
         if flag_name in payload:
             env_name = flag_name.upper()
+            _config_set_literal(config, "Advanced", env_name.lower(), "true" if bool(payload.get(flag_name)) else "false")
             os.environ[env_name] = "true" if bool(payload.get(flag_name)) else "false"
+
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    with open(config_path, "w", encoding="utf-8") as fh:
+        config.write(fh)
 
     try:
         app_settings = load_app_settings()
@@ -2381,6 +2458,15 @@ def admin_list_directories():
                 })
     except Exception as exc:
         return jsonify({"success": False, "message": f"Failed to list directories: {exc}"}), 500
+
+    if _is_windows():
+        include_drive_entries = not requested_path or _is_windows_drive_root(target_path)
+        if include_drive_entries:
+            existing_paths = {item["path"] for item in entries}
+            for drive_entry in _list_windows_drive_entries():
+                if drive_entry["path"] in existing_paths:
+                    continue
+                entries.append(drive_entry)
 
     entries.sort(key=lambda item: item["name"].lower())
     parent_path = os.path.dirname(target_path)
@@ -2631,7 +2717,7 @@ def analyze_stream():
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
-    search_session_id = datetime.utcnow().strftime("search-%Y%m%d%H%M%S%f")
+    search_session_id = str(uuid.uuid4())
 
     def _log_ai_search_audit_rows(audit_rows, rank_folder, prompt, applied_ship_type, experienced_ship_type, search_session_id):
         for row in audit_rows or []:
@@ -2855,6 +2941,14 @@ def get_resume(rank_folder, filename):
         return reason, 403
     if _cloud_data_required():
         return jsonify({"success": False, "message": "Direct local resume path is disabled in cloud mode."}), 410
+    return _serve_local_resume(rank_folder, filename)
+
+
+@app.route('/preview_downloaded_resume/<path:rank_folder>/<path:filename>')
+def preview_downloaded_resume(rank_folder, filename):
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return reason, 403
     return _serve_local_resume(rank_folder, filename)
 
 @app.route('/verify_resumes', methods=['POST'])

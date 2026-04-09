@@ -715,6 +715,28 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("A", names)
         self.assertIn("B", names)
 
+    def test_admin_folder_browser_exposes_windows_drive_roots(self):
+        with patch.object(backend_server, "_is_windows", return_value=True), \
+             patch.object(
+                 backend_server,
+                 "_list_windows_drive_entries",
+                 return_value=[
+                     {"name": "C:\\", "path": "C:\\"},
+                     {"name": "D:\\", "path": "D:\\"},
+                 ],
+             ):
+            resp = self.client.get(
+                "/admin/fs/list",
+                headers={"X-Admin-Token": "test-admin-token"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        names = [item["name"] for item in body.get("entries", [])]
+        self.assertIn("C:\\", names)
+        self.assertIn("D:\\", names)
+
     def test_admin_settings_rejects_invalid_otp_window(self):
         resp = self.client.post(
             "/admin/settings",

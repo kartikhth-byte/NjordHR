@@ -132,6 +132,17 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "AGE_DOB_AMBIGUOUS_FORMAT")
         self.assertIn("ambiguous numeric format", result["message"])
 
+    def test_calculate_age_handles_exact_birthday_boundary(self):
+        dob = date(1989, 11, 4)
+        self.assertEqual(
+            self.analyzer._calculate_age(dob, reference_date=date(2026, 11, 3)),
+            36,
+        )
+        self.assertEqual(
+            self.analyzer._calculate_age(dob, reference_date=date(2026, 11, 4)),
+            37,
+        )
+
     def test_resolved_candidate_age_extracts_explicit_stated_age(self):
         raw_text = "Date of Birth: 04-Nov-1989\nAge: 36\nNationality: Indian"
         age_info = self.analyzer._resolve_candidate_age(
