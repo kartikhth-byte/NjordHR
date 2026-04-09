@@ -29,3 +29,11 @@ class CandidateEventRepo(ABC):
     @abstractmethod
     def get_csv_stats(self, *args, **kwargs):
         raise NotImplementedError
+
+    @abstractmethod
+    def log_ai_search_audit(self, *args, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_ai_search_audit_rows(self, *args, **kwargs):
+        raise NotImplementedError
