@@ -364,6 +364,14 @@ def _list_visible_rank_folders(base_folder):
             full_path = os.path.join(base_folder, entry)
             if not os.path.isdir(full_path):
                 continue
+            try:
+                child_names = os.listdir(full_path)
+            except Exception:
+                continue
+            has_manifest = "manifest.json" in child_names
+            has_pdf = any(str(name).lower().endswith(".pdf") for name in child_names)
+            if not has_manifest and not has_pdf:
+                continue
             names.append(entry)
         return sorted(names)
     except Exception:
@@ -2790,14 +2798,17 @@ def analyze_stream():
             ):
                 event_to_client = progress_event
                 if progress_event.get("type") == "complete":
-                    _log_ai_search_audit_rows(
-                        progress_event.get("hard_filter_audit"),
-                        rank_folder,
-                        prompt,
-                        applied_ship_type,
-                        experienced_ship_type,
-                        search_session_id,
-                    )
+                    try:
+                        _log_ai_search_audit_rows(
+                            progress_event.get("hard_filter_audit"),
+                            rank_folder,
+                            prompt,
+                            applied_ship_type,
+                            experienced_ship_type,
+                            search_session_id,
+                        )
+                    except Exception as audit_exc:
+                        print(f"[BACKEND WARN] Failed to persist AI search audit rows: {audit_exc}")
                     # The frontend does not consume the raw audit rows. Excluding them
                     # keeps the final SSE payload smaller and more reliable.
                     event_to_client = {

@@ -741,8 +741,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("D:\\", names)
 
     def test_get_rank_folders_excludes_hidden_directories(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
         hidden = self.download_root / ".git"
         hidden.mkdir(parents=True, exist_ok=True)
+        stray = self.download_root / "git"
+        stray.mkdir(parents=True, exist_ok=True)
 
         resp = self.client.get(
             "/get_rank_folders",
@@ -754,6 +757,51 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(body["success"])
         self.assertIn(self.rank, body["folders"])
         self.assertNotIn(".git", body["folders"])
+        self.assertNotIn("git", body["folders"])
+
+    def test_analyze_stream_still_completes_when_audit_logging_fails(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+                yield {
+                    "type": "complete",
+                    "verified_matches": [
+                        {
+                            "filename": "Chief_Officer_1001.pdf",
+                            "reason": "Match found.",
+                            "confidence": 0.91,
+                        }
+                    ],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_audit": [
+                        {
+                            "candidate_id": "1001",
+                            "filename": "Chief_Officer_1001.pdf",
+                            "hard_filter_decision": "PASS",
+                            "hard_filter_reasons": [],
+                            "llm_reached": True,
+                            "result_bucket": "verified_match",
+                        }
+                    ],
+                    "hard_filter_summary": {"scanned": 1, "passed": 1, "failed": 0, "unknown": 0, "matched": 1},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch.object(backend_server.csv_manager, "log_ai_search_audit", side_effect=RuntimeError("disk busy")):
+            resp = self.client.get(
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=having%20valid%20US%20visa"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertIn('"verified_matches"', payload)
 
     def test_admin_settings_rejects_invalid_otp_window(self):
         resp = self.client.post(
