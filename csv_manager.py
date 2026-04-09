@@ -2,7 +2,7 @@
 
 import os
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 import pandas as pd
 
 
@@ -32,6 +32,7 @@ class CSVManager:
         'Search_Session_ID',
         'Candidate_ID',
         'Filename',
+        'Facts_Version',
         'Rank_Applied_For',
         'AI_Search_Prompt',
         'Applied_Ship_Type_Filter',
@@ -121,6 +122,7 @@ class CSVManager:
         search_session_id,
         candidate_id,
         filename,
+        facts_version='',
         rank_applied_for='',
         ai_prompt='',
         applied_ship_type_filter='',
@@ -131,12 +133,13 @@ class CSVManager:
         llm_reached=False,
         result_bucket='',
     ):
-        timestamp = datetime.utcnow().isoformat() + 'Z'
+        timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         new_row = {
             'Timestamp': timestamp,
             'Search_Session_ID': str(search_session_id or ''),
             'Candidate_ID': str(candidate_id or ''),
             'Filename': str(filename or ''),
+            'Facts_Version': str(facts_version or ''),
             'Rank_Applied_For': str(rank_applied_for or ''),
             'AI_Search_Prompt': str(ai_prompt or ''),
             'Applied_Ship_Type_Filter': str(applied_ship_type_filter or ''),

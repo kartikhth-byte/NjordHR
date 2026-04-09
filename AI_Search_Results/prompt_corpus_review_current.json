@@ -1,0 +1,430 @@
+{
+  "success": true,
+  "audit_row_count": 1644,
+  "stored_prompt_count": 14,
+  "core_supported_families": [
+    "age_range",
+    "us_visa",
+    "rank_match",
+    "coc_document_gate",
+    "stcw_basic"
+  ],
+  "primary_family_counts": {
+    "us_visa": 3,
+    "stcw_basic": 11
+  },
+  "supported_family_counts_for_20_prompt_gate": {
+    "us_visa": 3,
+    "stcw_basic": 11
+  },
+  "unsupported_family_counts": {},
+  "threshold_status": {
+    "age_range": {
+      "stored_prompt_count": 0,
+      "meets_20_prompt_gate": false
+    },
+    "us_visa": {
+      "stored_prompt_count": 3,
+      "meets_20_prompt_gate": false
+    },
+    "rank_match": {
+      "stored_prompt_count": 0,
+      "meets_20_prompt_gate": false
+    },
+    "coc_document_gate": {
+      "stored_prompt_count": 0,
+      "meets_20_prompt_gate": false
+    },
+    "stcw_basic": {
+      "stored_prompt_count": 11,
+      "meets_20_prompt_gate": false
+    }
+  },
+  "mixed_supported_prompt_count": 0,
+  "mixed_supported_prompt_examples": [],
+  "no_supported_family_prompt_count": 0,
+  "prompts_by_family": {
+    "stcw_basic": [
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260406150650315617",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 132,
+          "FAIL": 15
+        },
+        "result_buckets": {
+          "needs_review": 132,
+          "excluded": 15
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260406170324702850",
+        "rank_folders": [
+          "Junior_4th_Engineer"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 16,
+          "FAIL": 1
+        },
+        "result_buckets": {
+          "needs_review": 16,
+          "excluded": 1
+        },
+        "candidate_rows": 17
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260406173727317794",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 132,
+          "FAIL": 15
+        },
+        "result_buckets": {
+          "needs_review": 132,
+          "excluded": 15
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407035314937690",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 55,
+          "PASS": 77,
+          "FAIL": 15
+        },
+        "result_buckets": {
+          "needs_review": 55,
+          "verified_match": 74,
+          "llm_no_match": 3,
+          "excluded": 15
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407045432434307",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 55,
+          "PASS": 77,
+          "FAIL": 15
+        },
+        "result_buckets": {
+          "needs_review": 55,
+          "verified_match": 74,
+          "llm_no_match": 3,
+          "excluded": 15
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407093139212969",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 56,
+          "PASS": 86,
+          "FAIL": 5
+        },
+        "result_buckets": {
+          "needs_review": 56,
+          "verified_match": 82,
+          "llm_no_match": 3,
+          "uncertain_match": 1,
+          "excluded": 5
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407121153735444",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 56,
+          "PASS": 86,
+          "FAIL": 5
+        },
+        "result_buckets": {
+          "needs_review": 56,
+          "verified_match": 83,
+          "llm_no_match": 3,
+          "excluded": 5
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407122536274320",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 56,
+          "PASS": 86,
+          "FAIL": 5
+        },
+        "result_buckets": {
+          "needs_review": 56,
+          "verified_match": 82,
+          "llm_no_match": 4,
+          "excluded": 5
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407125405382321",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 56,
+          "PASS": 86,
+          "FAIL": 5
+        },
+        "result_buckets": {
+          "needs_review": 56,
+          "verified_match": 82,
+          "llm_no_match": 4,
+          "excluded": 5
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407131019219298",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 56,
+          "PASS": 86,
+          "FAIL": 5
+        },
+        "result_buckets": {
+          "needs_review": 56,
+          "verified_match": 83,
+          "llm_no_match": 3,
+          "excluded": 5
+        },
+        "candidate_rows": 147
+      },
+      {
+        "prompt": "with valid STCW basic safety",
+        "search_session_id": "search-20260407132028777771",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "stcw_basic"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "UNKNOWN": 56,
+          "PASS": 86,
+          "FAIL": 5
+        },
+        "result_buckets": {
+          "needs_review": 56,
+          "verified_match": 83,
+          "llm_no_match": 3,
+          "excluded": 5
+        },
+        "candidate_rows": 147
+      }
+    ],
+    "us_visa": [
+      {
+        "prompt": "having a valid US visa",
+        "search_session_id": "search-20260406101610299105",
+        "rank_folders": [
+          "2nd_Engineer"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "us_visa"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "PASS": 3,
+          "FAIL": 2
+        },
+        "result_buckets": {
+          "verified_match": 3,
+          "excluded": 2
+        },
+        "candidate_rows": 5
+      },
+      {
+        "prompt": "having valid US visa",
+        "search_session_id": "search-20260406092703367199",
+        "rank_folders": [
+          "2nd_Engineer"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "us_visa"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "PASS": 3,
+          "FAIL": 2
+        },
+        "result_buckets": {
+          "verified_match": 3,
+          "excluded": 2
+        },
+        "candidate_rows": 5
+      },
+      {
+        "prompt": "having valid US visa",
+        "search_session_id": "search-20260407160008697019",
+        "rank_folders": [
+          "Master"
+        ],
+        "applied_ship_type_filters": [],
+        "experienced_ship_type_filters": [],
+        "parser_view": {
+          "applied_constraints": [
+            "us_visa"
+          ],
+          "unapplied_constraints": [],
+          "parsing_notes": []
+        },
+        "hard_filter_decisions": {
+          "PASS": 83,
+          "FAIL": 58,
+          "UNKNOWN": 6
+        },
+        "result_buckets": {
+          "verified_match": 82,
+          "excluded": 58,
+          "needs_review": 6,
+          "llm_no_match": 1
+        },
+        "candidate_rows": 147
+      }
+    ]
+  }
+}

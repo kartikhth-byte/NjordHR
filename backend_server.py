@@ -2654,6 +2654,7 @@ def analyze_stream():
                 search_session_id=search_session_id,
                 candidate_id=candidate_id,
                 filename=filename,
+                facts_version=str(row.get("facts_version", "")).strip(),
                 rank_applied_for=rank_folder,
                 ai_prompt=prompt,
                 applied_ship_type_filter=applied_ship_type,

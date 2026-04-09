@@ -11,6 +11,7 @@ class _InMemoryRepo(CandidateEventRepo):
     def __init__(self, fail_writes=False):
         self.fail_writes = fail_writes
         self.events = []
+        self.ai_search_audits = []
         self.status_changes = []
         self.note_changes = []
         self.rank_counts = []
@@ -52,6 +53,15 @@ class _InMemoryRepo(CandidateEventRepo):
 
     def get_csv_stats(self, *args, **kwargs):
         return {"master_csv_rows": len(self.events)}
+
+    def log_ai_search_audit(self, *args, **kwargs):
+        if self.fail_writes:
+            return False
+        self.ai_search_audits.append(kwargs)
+        return True
+
+    def get_ai_search_audit_rows(self, *args, **kwargs):
+        return list(self.ai_search_audits)
 
 
 class DualWriteRepoTests(unittest.TestCase):
@@ -138,6 +148,27 @@ class DualWriteRepoTests(unittest.TestCase):
         latest = repo.get_latest_status_per_candidate()
         self.assertEqual(len(latest), 1)
         self.assertEqual(str(latest.iloc[0]["Candidate_ID"]), "3001")
+
+    def test_ai_search_audit_defaults_to_primary_store(self):
+        ok = self.repo.log_ai_search_audit(
+            search_session_id="search-1",
+            candidate_id="123",
+            filename="Chief_Officer_123.pdf",
+            facts_version="2.0",
+            rank_applied_for="Chief Officer",
+            ai_prompt="having valid US visa",
+            hard_filter_decision="PASS",
+            llm_reached=True,
+            result_bucket="verified_match",
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(len(self.primary.ai_search_audits), 1)
+        self.assertEqual(len(self.secondary.ai_search_audits), 1)
+        rows = self.repo.get_ai_search_audit_rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["candidate_id"], "123")
+        self.assertEqual(rows[0]["facts_version"], "2.0")
 
 
 if __name__ == "__main__":

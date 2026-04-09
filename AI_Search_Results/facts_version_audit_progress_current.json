@@ -1,0 +1,12 @@
+{
+  "audit_csv": "Verified_Resumes/ai_search_audit.csv",
+  "exists": true,
+  "facts_version_counts": {
+    "<missing>": 1644
+  },
+  "note": "Historical rows created before Facts_Version audit persistence will appear as <missing>. New searches after the audit-storage change should populate explicit facts_version values.",
+  "sessions_with_version_counts": {
+    "<missing>": 14
+  },
+  "total_rows": 1644
+}

@@ -76,44 +76,49 @@ Status values used below:
 ## 3. Prompt Corpus Coverage
 
 ### 3.1 Age range prompt parsing coverage
-- Status: `open`
+- Status: `partial`
 - Current evidence:
   - parser implementation and tests exist
+  - bootstrap prompt corpus report now records a 20-prompt sample with `expected_family_present_ratio = 1.0`
 - Gap:
-  - no explicit 20-prompt sampled coverage report or threshold result recorded yet
+  - stored real-prompt corpus still has `0` prompts for this family, so real prompt sign-off evidence is not complete yet
 
 ### 3.2 US visa prompt parsing coverage
-- Status: `open`
+- Status: `partial`
 - Current evidence:
   - parser implementation and tests exist
+  - bootstrap prompt corpus report now records a 20-prompt sample with `expected_family_present_ratio = 1.0`
 - Gap:
-  - no explicit 20-prompt sampled coverage report or threshold result recorded yet
+  - stored real-prompt corpus still has `3` prompts for this family, below the 20-prompt threshold
 
 ### 3.3 Rank prompt parsing coverage
-- Status: `open`
+- Status: `partial`
 - Current evidence:
   - parser implementation and tests exist
   - resume-side diagnostics are strong
+  - bootstrap prompt corpus report now records a 20-prompt sample with `expected_family_present_ratio = 1.0`
 - Gap:
-  - prompt-corpus threshold measurement still needs an explicit report
+  - stored real-prompt corpus still has `0` prompts for this family
 
 ### 3.4 COC prompt parsing coverage
-- Status: `open`
+- Status: `partial`
 - Current evidence:
   - parser implementation and tests exist
+  - bootstrap prompt corpus report now records a 20-prompt sample with `expected_family_present_ratio = 1.0`
 - Gap:
-  - prompt-corpus threshold measurement still needs an explicit report
+  - stored real-prompt corpus still has `0` prompts for this family
 
 ### 3.5 STCW prompt parsing coverage
-- Status: `open`
+- Status: `partial`
 - Current evidence:
   - parser implementation and tests exist
+  - bootstrap prompt corpus report now records a 20-prompt sample with `expected_family_present_ratio = 1.0`
 - Gap:
-  - prompt-corpus threshold measurement still needs an explicit report
+  - stored real-prompt corpus still has `11` prompts for this family, below the 20-prompt threshold
 
 Assessment:
-- prompt-corpus coverage is the clearest remaining Phase 1 readiness gap
-- this is a launch-gate evidence gap, not primarily a parser-code gap
+- prompt-corpus coverage is now partially evidenced through the bootstrap corpus
+- the remaining gap is real stored-prompt volume, not parser implementation for the active deterministic families
 
 ## 4. Filter Behavior and Routing
 
@@ -174,6 +179,7 @@ Assessment:
 - Current evidence:
   - indexing / re-extraction machinery exists
   - Pinecone false-empty issue is fixed
+  - synchronous re-extraction controls are tested and functioning
 - Gap:
   - this checklist does not yet contain explicit sample-run evidence showing the background v2.0 re-extraction path exercised as a migration task
 
@@ -181,6 +187,7 @@ Assessment:
 - Status: `partial`
 - Current evidence:
   - implementation shape suggests idempotent behavior is intended
+  - no current evidence contradicts idempotent intent in the migration path
 - Gap:
   - this checklist does not yet reference a concrete v2.0 re-extraction idempotence run/result
 
@@ -188,8 +195,17 @@ Assessment:
 - Status: `partial`
 - Current evidence:
   - partial-evaluation and dual-version behavior are observable in search
+  - `facts_version` is present in the evaluation path
+  - AI search audit persistence now stores `Facts_Version` in audit rows, with coverage in:
+    - `tests/test_backend_event_log_flow.py`
+    - `tests/test_dual_write_repo.py`
+    - `tests/test_csv_candidate_event_repo.py`
+  - aggregate export/report path now exists via:
+    - `scripts/ai_search_facts_version_report.py`
+    - `AI_Search_Results/facts_version_audit_progress_current.json`
 - Gap:
-  - still need explicit evidence that admin-facing v1.1 vs v2.0 progress reporting exists and was exercised against the spec criterion
+  - current stored audit corpus still predates `Facts_Version` persistence, so the first report shows only `<missing>`
+  - still need a post-change sample search/export showing explicit v1.1 vs v2.0 counts
 
 Assessment:
 - migration-readiness is the second major evidence gap after prompt-corpus coverage
@@ -246,10 +262,8 @@ Most likely still-needed work before claiming Phase 1 fully closed:
    - background re-extraction sample run
    - idempotence check
    - migration-progress observability check
-4. ship-type parser scope alignment:
-   - current ship-type recognition is still coarse-bucket oriented and does not yet cover the full configured `ShipTypes.ship_type_options` catalog in `config.ini`
-   - this is now a clearly scoped parser-alignment follow-up, separate from the already-implemented applied/experienced ship-type filter wiring
-
 Recommended next step:
 - do not broaden extractor or retrieval behavior next
-- produce the prompt-corpus / launch-gate evidence pack first
+- finish the remaining sign-off evidence pack:
+  - stored prompt growth toward the family thresholds
+  - migration-readiness evidence

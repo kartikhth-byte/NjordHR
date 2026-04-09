@@ -620,6 +620,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                         {
                             "candidate_id": "1001",
                             "filename": "Chief_Officer_1001.pdf",
+                            "facts_version": "1.1",
                             "hard_filter_decision": "FAIL",
                             "hard_filter_reasons": [
                                 {
@@ -633,6 +634,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                         {
                             "candidate_id": "1002",
                             "filename": "Chief_Officer_1002.pdf",
+                            "facts_version": "2.0",
                             "hard_filter_decision": "UNKNOWN",
                             "hard_filter_reasons": [
                                 {
@@ -657,9 +659,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
         audit_rows = backend_server.csv_manager.get_ai_search_audit_rows()
         self.assertEqual(len(audit_rows), 2)
         self.assertEqual(audit_rows[0]["Candidate_ID"], "1001")
+        self.assertEqual(audit_rows[0]["Facts_Version"], "1.1")
         self.assertEqual(audit_rows[0]["Hard_Filter_Decision"], "FAIL")
         self.assertEqual(audit_rows[0]["Reason_Codes"], "US_VISA_EXPIRED")
         self.assertEqual(audit_rows[0]["Result_Bucket"], "excluded")
+        self.assertEqual(audit_rows[1]["Facts_Version"], "2.0")
         self.assertEqual(audit_rows[1]["Hard_Filter_Decision"], "UNKNOWN")
         self.assertEqual(audit_rows[1]["Reason_Codes"], "VISA_FILTER_UNSUPPORTED")
         self.assertEqual(audit_rows[1]["Applied_Ship_Type_Filter"], "Bulk Carrier")
