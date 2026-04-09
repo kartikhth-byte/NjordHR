@@ -203,6 +203,7 @@ download_dir = normalize(download_dir)
 verified_dir = normalize(verified_dir)
 log_dir = normalize(log_dir)
 project_dir = normalize(project_dir)
+legacy_download_root = normalize(os.path.dirname(download_dir))
 
 download_raw = cfg["Settings"].get("Default_Download_Folder", "")
 download_norm = normalize(download_raw) if download_raw.strip() else ""
@@ -210,6 +211,7 @@ if (
     (not download_raw.strip())
     or is_windows_unsafe_path(download_raw)
     or download_norm == project_dir
+    or download_norm == legacy_download_root
 ):
     cfg["Settings"]["Default_Download_Folder"] = download_dir
 
