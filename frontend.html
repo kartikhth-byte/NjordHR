@@ -109,6 +109,7 @@
             const [bootstrapChecking, setBootstrapChecking] = useState(true);
             const [bootstrapRequired, setBootstrapRequired] = useState(false);
             const [bootstrapReason, setBootstrapReason] = useState('');
+            const [showAuthCheckingCard, setShowAuthCheckingCard] = useState(false);
             const [bootstrapUsername, setBootstrapUsername] = useState('admin');
             const [bootstrapPassword, setBootstrapPassword] = useState('');
             const [bootstrapConfirmPassword, setBootstrapConfirmPassword] = useState('');
@@ -299,14 +300,11 @@
                     const response = await fetch(`${API_BASE_URL}/auth/me`);
                     const data = await response.json();
                     if (data.success && data.authenticated && data.user) {
-                        setAuthUser(data.user);
-                    } else {
-                        setAuthUser(null);
+                        return data.user;
                     }
+                    return null;
                 } catch (_error) {
-                    setAuthUser(null);
-                } finally {
-                    setAuthChecking(false);
+                    return null;
                 }
             };
 
@@ -315,16 +313,14 @@
                     const response = await fetch(`${API_BASE_URL}/auth/bootstrap_status`);
                     const data = await response.json();
                     if (data.success) {
-                        const needed = Boolean(data.bootstrap_required);
-                        setBootstrapRequired(needed);
-                        setBootstrapReason(data.reason || '');
-                        return needed;
+                        return {
+                            required: Boolean(data.bootstrap_required),
+                            reason: data.reason || '',
+                        };
                     }
-                    return false;
+                    return { required: false, reason: '' };
                 } catch (_error) {
-                    return false;
-                } finally {
-                    setBootstrapChecking(false);
+                    return { required: false, reason: '' };
                 }
             };
 
@@ -433,14 +429,33 @@
             }, [authUser, selectedRankFolder]);
 
             useEffect(() => {
+                if (!authChecking && !bootstrapChecking) {
+                    setShowAuthCheckingCard(false);
+                    return undefined;
+                }
+                const timer = setTimeout(() => setShowAuthCheckingCard(true), 250);
+                return () => clearTimeout(timer);
+            }, [authChecking, bootstrapChecking]);
+
+            useEffect(() => {
                 const initAuth = async () => {
-                    const needed = await fetchBootstrapStatus();
-                    if (needed) {
+                    setAuthChecking(true);
+                    setBootstrapChecking(true);
+                    const [bootstrapStatus, currentUser] = await Promise.all([
+                        fetchBootstrapStatus(),
+                        fetchAuthMe(),
+                    ]);
+                    setBootstrapRequired(Boolean(bootstrapStatus.required));
+                    setBootstrapReason(bootstrapStatus.reason || '');
+                    if (bootstrapStatus.required) {
                         setAuthUser(null);
                         setAuthChecking(false);
+                        setBootstrapChecking(false);
                         return;
                     }
-                    await fetchAuthMe();
+                    setAuthUser(currentUser);
+                    setAuthChecking(false);
+                    setBootstrapChecking(false);
                 };
                 initAuth();
             }, []);
@@ -3569,7 +3584,7 @@
                                 )}
                             </div>
                         </header>
-                        {(authChecking || bootstrapChecking) && (
+                        {showAuthCheckingCard && (authChecking || bootstrapChecking) && (
                             <div className="bg-white p-8 rounded-xl shadow-lg text-center text-gray-600 mb-6">Checking login...</div>
                         )}
                         {!authChecking && !bootstrapChecking && !authUser && bootstrapRequired && (
