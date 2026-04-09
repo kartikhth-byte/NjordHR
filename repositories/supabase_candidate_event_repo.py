@@ -4,6 +4,7 @@ from datetime import datetime
 import pandas as pd
 import requests
 
+from csv_manager import CSVManager
 from repositories.candidate_event_repo import CandidateEventRepo
 
 
@@ -37,10 +38,18 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         'Mobile_No'
     ]
 
-    def __init__(self, supabase_url, service_role_key, server_url='http://127.0.0.1:5000', timeout_seconds=20):
+    def __init__(
+        self,
+        supabase_url,
+        service_role_key,
+        server_url='http://127.0.0.1:5000',
+        timeout_seconds=20,
+        audit_base_folder='Verified_Resumes',
+    ):
         self.supabase_url = supabase_url.rstrip('/')
         self.server_url = server_url
         self.timeout_seconds = timeout_seconds
+        self._audit_manager = CSVManager(base_folder=audit_base_folder, server_url=server_url)
         self.headers = {
             "apikey": service_role_key,
             "Authorization": f"Bearer {service_role_key}",
@@ -287,6 +296,12 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
             "latest_candidates": len(latest),
             "rank_breakdown": self.get_rank_counts(),
         }
+
+    def log_ai_search_audit(self, *args, **kwargs):
+        return self._audit_manager.log_ai_search_audit(*args, **kwargs)
+
+    def get_ai_search_audit_rows(self, *args, **kwargs):
+        return self._audit_manager.get_ai_search_audit_rows(*args, **kwargs)
 
 
 def can_enable_supabase_repo():

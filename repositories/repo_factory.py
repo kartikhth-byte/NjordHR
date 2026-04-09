@@ -33,7 +33,8 @@ def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url
     supabase_repo = SupabaseCandidateEventRepo(
         supabase_url=os.getenv("SUPABASE_URL", ""),
         service_role_key=supabase_api_key,
-        server_url=server_url
+        server_url=server_url,
+        audit_base_folder=base_folder,
     )
 
     if getattr(flags, "use_dual_write", False):

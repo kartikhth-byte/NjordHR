@@ -10,7 +10,7 @@ $RuntimeDir = Join-Path $AppDataDir "runtime"
 $VenvDir = Join-Path $RuntimeDir "venv"
 $ConfigPath = Join-Path $AppDataDir "config.ini"
 $DefaultRuntimeEnvPath = Join-Path $ProjectDir "default_runtime.env"
-$DefaultDownloadDir = Join-Path $env:USERPROFILE "Downloads\NjordHR"
+$DefaultDownloadDir = Join-Path $env:USERPROFILE "Downloads\NjordHR\Downloaded_Resumes"
 $DefaultVerifiedDir = Join-Path $AppDataDir "Verified_Resumes"
 $DefaultLogDir = Join-Path $AppDataDir "logs"
 New-Item -Path $RuntimeDir -ItemType Directory -Force | Out-Null
@@ -170,7 +170,7 @@ import configparser
 import os
 import sys
 
-cfg_path, download_dir, verified_dir, log_dir = sys.argv[1:5]
+cfg_path, project_dir, download_dir, verified_dir, log_dir = sys.argv[1:6]
 cfg = configparser.ConfigParser()
 cfg.read(cfg_path)
 
@@ -202,9 +202,15 @@ def is_windows_unsafe_path(value):
 download_dir = normalize(download_dir)
 verified_dir = normalize(verified_dir)
 log_dir = normalize(log_dir)
+project_dir = normalize(project_dir)
 
 download_raw = cfg["Settings"].get("Default_Download_Folder", "")
-if (not download_raw.strip()) or is_windows_unsafe_path(download_raw):
+download_norm = normalize(download_raw) if download_raw.strip() else ""
+if (
+    (not download_raw.strip())
+    or is_windows_unsafe_path(download_raw)
+    or download_norm == project_dir
+):
     cfg["Settings"]["Default_Download_Folder"] = download_dir
 
 verified_raw = cfg["Settings"].get("Additional_Local_Folder", "")
@@ -221,7 +227,7 @@ with open(cfg_path, "w", encoding="utf-8") as fh:
     $tmpScript = Join-Path $RuntimeDir "ensure_config.py"
     Set-Content -Path $tmpScript -Value $script -Encoding UTF8
     try {
-        Invoke-Python $Py @($tmpScript, $ConfigPath, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
+        Invoke-Python $Py @($tmpScript, $ConfigPath, $ProjectDir, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
     } finally {
         Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
     }
