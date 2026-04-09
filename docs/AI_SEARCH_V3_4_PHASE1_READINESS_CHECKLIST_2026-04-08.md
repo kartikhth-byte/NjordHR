@@ -180,16 +180,24 @@ Assessment:
   - indexing / re-extraction machinery exists
   - Pinecone false-empty issue is fixed
   - synchronous re-extraction controls are tested and functioning
+  - offline real-PDF extraction-path sample exists via:
+    - `scripts/background_reextract_sample.py`
+    - `AI_Search_Results/background_reextract_sample_current.json`
+    - current result: `11/11` processed rows produced `facts_version = 2.0`
 - Gap:
-  - this checklist does not yet contain explicit sample-run evidence showing the background v2.0 re-extraction path exercised as a migration task
+  - this does not yet evidence the full networked/background migration runner or ingestion orchestration path
 
 ### 5.4 Re-extraction idempotent
 - Status: `partial`
 - Current evidence:
   - implementation shape suggests idempotent behavior is intended
   - no current evidence contradicts idempotent intent in the migration path
+  - offline real-PDF rerun evidence exists via:
+    - `scripts/background_reextract_sample.py`
+    - `AI_Search_Results/background_reextract_sample_current.json`
+    - current result: `11/11` processed rows were idempotent on immediate rerun
 - Gap:
-  - this checklist does not yet reference a concrete v2.0 re-extraction idempotence run/result
+  - this does not yet evidence idempotence for the full background migration runner/orchestration path
 
 ### 5.5 Migration progress observable
 - Status: `partial`
@@ -203,9 +211,17 @@ Assessment:
   - aggregate export/report path now exists via:
     - `scripts/ai_search_facts_version_report.py`
     - `AI_Search_Results/facts_version_audit_progress_current.json`
+  - fresh sample-run proof now exists via:
+    - `scripts/generate_facts_version_audit_sample.py`
+    - `AI_Search_Results/facts_version_audit_sample_current.json`
+  - real main-audit sample now exists via:
+    - `scripts/run_real_facts_version_audit_search.py`
+    - `AI_Search_Results/facts_version_audit_progress_current.json`
+    - current main-audit report includes explicit `2.0: 11` rows in the persisted audit log
 - Gap:
-  - current stored audit corpus still predates `Facts_Version` persistence, so the first report shows only `<missing>`
-  - still need a post-change sample search/export showing explicit v1.1 vs v2.0 counts
+  - historical pre-change rows still dominate the audit log as `<missing>`
+  - the current real main-audit sample shows explicit `2.0` rows, but not yet mixed `1.1` / `2.0` counts from the live corpus
+  - still need background re-extraction evidence and broader post-change search traffic before calling migration observability fully closed
 
 Assessment:
 - migration-readiness is the second major evidence gap after prompt-corpus coverage

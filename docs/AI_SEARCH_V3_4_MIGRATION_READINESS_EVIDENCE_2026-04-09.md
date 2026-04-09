@@ -68,24 +68,32 @@ Judgment:
 Current evidence:
 - code paths and registry/indexing machinery exist
 - synchronous re-extraction path is validated
+- offline real-PDF extraction-path sample now exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/scripts/background_reextract_sample.py`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_reextract_sample_current.json`
+  - current result: `11/11` processed rows produced `facts_version = 2.0`
 
 Missing evidence:
-- no documented representative batch run showing background re-extraction of at least a sample set of resumes to v2.0
+- no documented networked/background scheduler run showing the full ingestion-orchestrated migration path over a sample corpus
 
 Current judgment:
-- implementation appears present enough to support this, but the sign-off artifact is still missing
+- partially met: the underlying v2.0 extraction path is evidenced on a representative real-PDF sample, but the full background migration runner/orchestration path is still not evidenced
 
 ### 2.2 Re-extraction idempotence
 
 Current evidence:
 - implementation shape suggests idempotent behavior is intended
 - registry/indexing discipline is in place
+- offline real-PDF rerun evidence now exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/scripts/background_reextract_sample.py`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_reextract_sample_current.json`
+  - current result: `11/11` processed rows produced identical digests on immediate rerun
 
 Missing evidence:
-- no documented run showing the same resume set re-extracted twice with identical v2.0 outcome
+- no documented idempotence run yet for the full background migration runner/orchestration path
 
 Current judgment:
-- still a sign-off evidence gap
+- partially met: the underlying v2.0 fact-building path is idempotent on the sampled real-PDF set, but the full background migration runner/orchestration path is still not evidenced
 
 ### 2.3 Migration progress observability
 
@@ -96,17 +104,26 @@ Current evidence:
 - aggregated audit export/report path now exists via:
   - `/Users/kartikraghavan/Tools/NjordHR/scripts/ai_search_facts_version_report.py`
   - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_current.json`
+- post-change sample audit proof now exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/scripts/generate_facts_version_audit_sample.py`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_sample_current.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_sample_run/ai_search_audit.csv`
+- real main-audit proof now exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/scripts/run_real_facts_version_audit_search.py`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_current.json`
+  - current main-audit counts now include explicit `2.0: 11` rows alongside historical `<missing>: 1644`
 - CSV/dual-write/backend audit-storage coverage exists in:
   - `tests/test_backend_event_log_flow.py`
   - `tests/test_dual_write_repo.py`
   - `tests/test_csv_candidate_event_repo.py`
 
 Missing evidence:
-- current exported report shows only `<missing>` rows because the existing audit corpus predates `Facts_Version` persistence
-- no post-change search sample has been run yet to populate explicit `1.1` / `2.0` values in the stored audit rows
+- the historical pre-change corpus still dominates the audit log as `<missing>`
+- the current real main-audit sample only demonstrates explicit `2.0` rows; it does not yet show mixed `1.1` and `2.0` counts from the live corpus
+- the real sample run skipped ingestion and external LLM calls so it could execute in the offline sandbox; it is valid for audit-shape evidence, but not for proving background re-extraction behavior
 
 Current judgment:
-- partially met: audit-shape support and export/report tooling now exist, but the stored corpus still needs post-change searches to populate explicit version values
+- partially met: audit-shape support, export/report tooling, and a real main-audit sample now exist, but the corpus still needs broader post-change search traffic and background re-extraction evidence
 
 ## 3. Overall Migration Readiness Judgment
 
@@ -115,9 +132,9 @@ Current overall judgment:
 - the remaining migration-readiness gap is operational evidence, not the synchronous control path itself
 
 The strongest remaining migration evidence tasks are:
-1. run a representative background re-extraction sample and record the result
-2. rerun the same sample and record idempotence
-3. capture/report v1.1 vs v2.0 progress counts in an operator-visible form
+1. evidence the full background migration runner/orchestration path in a network-enabled environment
+2. rerun that same migration path for idempotence evidence at the orchestration level
+3. continue capturing/reporting v1.1 vs v2.0 progress counts as real post-change search traffic accumulates
 
 ## 4. Recommended Next Step
 

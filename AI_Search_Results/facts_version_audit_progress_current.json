@@ -2,11 +2,22 @@
   "audit_csv": "Verified_Resumes/ai_search_audit.csv",
   "exists": true,
   "facts_version_counts": {
+    "2.0": 11,
     "<missing>": 1644
+  },
+  "latest_real_search_sample": {
+    "failed": 1,
+    "passed": 10,
+    "prompt": "having valid US visa",
+    "rank_folder": "Chief_Officer",
+    "scanned": 11,
+    "search_session_id": "real-search-facts-version-sample",
+    "unknown": 0
   },
   "note": "Historical rows created before Facts_Version audit persistence will appear as <missing>. New searches after the audit-storage change should populate explicit facts_version values.",
   "sessions_with_version_counts": {
+    "2.0": 1,
     "<missing>": 14
   },
-  "total_rows": 1644
+  "total_rows": 1655
 }
