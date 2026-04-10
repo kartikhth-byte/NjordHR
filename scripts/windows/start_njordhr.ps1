@@ -141,6 +141,31 @@ function Wait-Http([string]$url, [int]$retries = 40) {
     return $false
 }
 
+function Start-AgentSettingsSync([string]$AgentUrl, [string]$BackendUrl) {
+    $syncScript = @"
+try {
+    for (`$i = 0; `$i -lt 60; `$i++) {
+        try {
+            Invoke-WebRequest -Uri "$AgentUrl/health" -Method GET -TimeoutSec 2 -UseBasicParsing | Out-Null
+            break
+        } catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    `$payload = @{ api_base_url = "$BackendUrl"; cloud_sync_enabled = `$true } | ConvertTo-Json
+    Invoke-RestMethod -Method Put -Uri "$AgentUrl/settings" -ContentType "application/json" -Body `$payload | Out-Null
+} catch {
+    # best effort
+}
+"@
+    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-WindowStyle", "Hidden",
+        "-Command", $syncScript
+    ) -WindowStyle Hidden | Out-Null
+}
+
 function Get-Json([string]$Url) {
     try {
         return Invoke-RestMethod -Uri $Url -Method GET -TimeoutSec 2 -UseBasicParsing
@@ -450,7 +475,6 @@ try {
         Write-Log "Agent already running at $agentUrl"
     } else {
         Write-Log "Starting local agent at $agentUrl"
-        Set-StartupStatus -State "starting" -Message "Starting local sync agent..."
         $agentVars = @{}
         foreach ($k in $runtimeVars.Keys) {
             $agentVars[$k] = $runtimeVars[$k]
@@ -460,17 +484,9 @@ try {
         $agentPrefix = Build-CmdEnvPrefix $agentVars
         $agentCmd = "$agentPrefix&& $pythonLauncherForCmd agent_server.py"
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c $agentCmd" -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $agentOut -RedirectStandardError $agentErr | Out-Null
-        if (-not (Wait-Http "$agentUrl/health" 100)) {
-            throw "Agent failed to start. Check $agentErr"
-        }
     }
 
-    try {
-        $payload = @{ api_base_url = $backendUrl; cloud_sync_enabled = $true } | ConvertTo-Json
-        Invoke-RestMethod -Method Put -Uri "$agentUrl/settings" -ContentType "application/json" -Body $payload | Out-Null
-    } catch {
-        # best effort
-    }
+    Start-AgentSettingsSync -AgentUrl $agentUrl -BackendUrl $backendUrl
 
     if (-not $NoOpen) {
         Set-StartupStatus -State "starting" -Message "Opening NjordHR in your browser..." -BrowserUrl $browserUrl -LogPath $RuntimeDir
