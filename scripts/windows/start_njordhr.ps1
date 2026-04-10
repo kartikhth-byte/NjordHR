@@ -19,6 +19,7 @@ New-Item -Path $DefaultVerifiedDir -ItemType Directory -Force | Out-Null
 New-Item -Path $DefaultLogDir -ItemType Directory -Force | Out-Null
 
 $LauncherLogPath = Join-Path $RuntimeDir "launcher.log"
+$StartupStatusPath = Join-Path $RuntimeDir "startup_status.txt"
 function Write-Log([string]$Message) {
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
     $line = "[$ts] $Message"
@@ -26,10 +27,27 @@ function Write-Log([string]$Message) {
     Add-Content -Path $LauncherLogPath -Value $line -Encoding UTF8
 }
 
+function Set-StartupStatus(
+    [string]$State,
+    [string]$Message,
+    [string]$BrowserUrl = "",
+    [string]$LogPath = ""
+) {
+    $lines = @(
+        "state=$State",
+        "message=$Message",
+        "browser_url=$BrowserUrl",
+        "log_path=$LogPath",
+        "updated_at=$(Get-Date -Format s)"
+    )
+    Set-Content -Path $StartupStatusPath -Value $lines -Encoding UTF8
+}
+
 Write-Log "Launcher started."
 Write-Log "ProjectDir=$ProjectDir"
 Write-Log "ConfigPath=$ConfigPath"
 Write-Log "RuntimeDir=$RuntimeDir"
+Set-StartupStatus -State "starting" -Message "Preparing NjordHR runtime..."
 
 function Cleanup-Lock {
     # No-op: launch lock removed to avoid false-positive "already running" loops.
@@ -266,6 +284,7 @@ function Ensure-Venv([hashtable]$Py) {
     $requirementsHash = (Get-FileHash -Path $requirementsPath -Algorithm SHA256).Hash
 
     if (-not (Test-Path $venvPython)) {
+        Set-StartupStatus -State "starting" -Message "Creating local Python runtime..."
         Write-Host "[NjordHR] Creating local Python runtime..."
         Invoke-Python $Py @("-m", "venv", $VenvDir) | Out-Null
     }
@@ -279,6 +298,7 @@ function Ensure-Venv([hashtable]$Py) {
     }
 
     if ($needsInstall) {
+        Set-StartupStatus -State "starting" -Message "Installing Python dependencies..."
         Write-Host "[NjordHR] Installing Python dependencies..."
         & $venvPython -m pip install --upgrade pip setuptools wheel | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -297,7 +317,9 @@ function Ensure-Venv([hashtable]$Py) {
 try {
     $py = Get-PythonInvocation
     Write-Log "Python launcher selected: $($py.Display)"
+    Set-StartupStatus -State "starting" -Message "Preparing application settings..."
     Ensure-Config $py
+    Set-StartupStatus -State "starting" -Message "Preparing application runtime..."
     $venvPython = Ensure-Venv $py
     Write-Log "Venv Python: $venvPython"
 
@@ -393,6 +415,7 @@ try {
     }
 
     if ($restartBackend) {
+        Set-StartupStatus -State "starting" -Message "Refreshing background services..."
         Stop-ProcessesOnPort $backendPort
         Stop-ProcessesOnPort $agentPort
         Start-Sleep -Milliseconds 500
@@ -400,6 +423,7 @@ try {
 
     if (-not (Wait-Http "$backendUrl/config/runtime" 1)) {
         Write-Log "Starting backend at $backendUrl"
+        Set-StartupStatus -State "starting" -Message "Starting backend service..."
         $backendVars = @{}
         foreach ($k in $runtimeVars.Keys) {
             $backendVars[$k] = $runtimeVars[$k]
@@ -417,6 +441,7 @@ try {
         Write-Log "Agent already running at $agentUrl"
     } else {
         Write-Log "Starting local agent at $agentUrl"
+        Set-StartupStatus -State "starting" -Message "Starting local sync agent..."
         $agentVars = @{}
         foreach ($k in $runtimeVars.Keys) {
             $agentVars[$k] = $runtimeVars[$k]
@@ -439,9 +464,11 @@ try {
     }
 
     if (-not $NoOpen) {
+        Set-StartupStatus -State "starting" -Message "Opening NjordHR in your browser..." -BrowserUrl $browserUrl -LogPath $RuntimeDir
         Start-Process $browserUrl | Out-Null
     }
 
+    Set-StartupStatus -State "ready" -Message "NjordHR is ready." -BrowserUrl $browserUrl -LogPath $RuntimeDir
     Write-Log "Ready."
     Write-Log "Backend: $backendUrl"
     Write-Log "Browser: $browserUrl"
@@ -449,6 +476,7 @@ try {
     Write-Log "Config: $ConfigPath"
     Write-Log "Logs: $RuntimeDir"
 } catch {
+    Set-StartupStatus -State "error" -Message $_.Exception.Message -LogPath $RuntimeDir
     Write-Log "FATAL: $($_.Exception.Message)"
     Write-Log "Stack: $($_.ScriptStackTrace)"
     throw
