@@ -379,12 +379,12 @@ try {
         $backendRuntime = Get-Json "$backendUrl/config/runtime"
         $existingProjectDir = [string]($backendRuntime.process_identity.project_dir)
         $existingConfigPath = [string]($backendRuntime.process_identity.config_path)
-        if (
-            [string]::IsNullOrWhiteSpace($existingProjectDir)
-            -or [string]::IsNullOrWhiteSpace($existingConfigPath)
-            -or ($existingProjectDir -ne $ProjectDir)
-            -or ($existingConfigPath -ne $ConfigPath)
-        ) {
+        $backendIdentityMismatch =
+            [string]::IsNullOrWhiteSpace($existingProjectDir) -or
+            [string]::IsNullOrWhiteSpace($existingConfigPath) -or
+            ($existingProjectDir -ne $ProjectDir) -or
+            ($existingConfigPath -ne $ConfigPath)
+        if ($backendIdentityMismatch) {
             $restartBackend = $true
             Write-Log "Backend identity mismatch detected; restarting backend and agent."
         } else {
