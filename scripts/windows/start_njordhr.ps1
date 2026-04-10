@@ -40,7 +40,16 @@ function Set-StartupStatus(
         "log_path=$LogPath",
         "updated_at=$(Get-Date -Format s)"
     )
-    Set-Content -Path $StartupStatusPath -Value $lines -Encoding UTF8
+    $content = ($lines -join [Environment]::NewLine)
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        try {
+            [System.IO.File]::WriteAllText($StartupStatusPath, $content, [System.Text.Encoding]::UTF8)
+            return
+        } catch [System.IO.IOException] {
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    throw "Could not update startup status at $StartupStatusPath after multiple retries."
 }
 
 Write-Log "Launcher started."

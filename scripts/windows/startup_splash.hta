@@ -4,13 +4,15 @@
     <hta:application
         id="njordhrStartup"
         applicationname="NjordHR Startup"
-        border="thin"
-        caption="yes"
+        border="none"
+        caption="no"
         maximizebutton="no"
         minimizebutton="no"
         showintaskbar="yes"
         singleinstance="yes"
-        sysmenu="yes"
+        sysmenu="no"
+        scroll="no"
+        navigable="no"
         windowstate="normal"
     />
     <meta http-equiv="x-ua-compatible" content="IE=9" />
@@ -20,10 +22,11 @@
             background: #f4f7fb;
             font-family: "Segoe UI", Arial, sans-serif;
             color: #172033;
+            overflow: hidden;
         }
         .shell {
             width: 520px;
-            min-height: 240px;
+            min-height: 220px;
             margin: 0 auto;
             padding: 28px 30px 24px;
             box-sizing: border-box;
@@ -184,10 +187,12 @@
         }
 
         function init() {
-            window.resizeTo(560, 320);
+            document.body.scroll = "no";
+            document.documentElement.style.overflow = "hidden";
+            window.resizeTo(560, 280);
             window.moveTo(
                 Math.max(0, (screen.availWidth - 560) / 2),
-                Math.max(0, (screen.availHeight - 320) / 2)
+                Math.max(0, (screen.availHeight - 280) / 2)
             );
             pollStatus();
             window.setInterval(pollStatus, 400);
