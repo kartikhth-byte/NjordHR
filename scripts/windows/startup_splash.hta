@@ -125,7 +125,6 @@
         var appData = shell.ExpandEnvironmentStrings("%APPDATA%");
         var runtimeDir = appData + "\\NjordHR\\runtime";
         var statusPath = runtimeDir + "\\startup_status.txt";
-        var opened = false;
         var lastState = "";
 
         function parseStatus(text) {
@@ -153,7 +152,6 @@
         function applyState(data) {
             var state = data["state"] || "starting";
             var message = data["message"] || "Preparing NjordHR...";
-            var browserUrl = data["browser_url"] || "";
             document.getElementById("status").innerText = state === "error" ? "Startup failed" : state === "ready" ? "Opening NjordHR" : "Starting NjordHR";
             document.getElementById("detail").innerText = message;
             document.getElementById("hint").innerText = state === "error"
@@ -163,9 +161,7 @@
             document.body.className = "shell " + state;
             lastState = state;
 
-            if (state === "ready" && browserUrl && !opened) {
-                opened = true;
-                shell.Run(browserUrl, 1, false);
+            if (state === "ready") {
                 window.setTimeout(closeSplash, 1500);
             }
         }
