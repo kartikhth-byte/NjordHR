@@ -130,9 +130,9 @@ function Stop-ProcessesOnPort([int]$Port) {
         if ($procId -and $procId -ne 0) {
             try {
                 Stop-Process -Id $procId -Force -ErrorAction Stop
-                Write-Log "Stopped process $procId on port $Port"
+                Write-Log "Stopped process ${procId} on port ${Port}"
             } catch {
-                Write-Log "Failed to stop process $procId on port $Port: $($_.Exception.Message)"
+                Write-Log "Failed to stop process ${procId} on port ${Port}: $($_.Exception.Message)"
             }
         }
     }
