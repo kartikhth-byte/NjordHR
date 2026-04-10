@@ -74,7 +74,7 @@ SolidCompression=yes
 Source: "$escapedStage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.bat"
+Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.vbs"
 "@ | Set-Content -Path $IssPath -Encoding ASCII
 
 & $iscc.Source $IssPath

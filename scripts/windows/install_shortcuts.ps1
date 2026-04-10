@@ -5,7 +5,7 @@ Param(
 $ErrorActionPreference = "Stop"
 
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
-$Launcher = Join-Path $ProjectDir "start_njordhr.bat"
+$Launcher = Join-Path $ProjectDir "start_njordhr.vbs"
 if (-not (Test-Path $Launcher)) {
     throw "Launcher not found: $Launcher"
 }
@@ -16,7 +16,7 @@ function New-Shortcut([string]$path) {
     $shortcut = $WshShell.CreateShortcut($path)
     $shortcut.TargetPath = $Launcher
     $shortcut.WorkingDirectory = $ProjectDir
-    $shortcut.WindowStyle = 1
+    $shortcut.WindowStyle = 7
     $shortcut.Description = "Open NjordHR"
     $shortcut.Save()
 }
@@ -36,4 +36,3 @@ if (-not $DesktopOnly) {
 }
 
 Write-Host "[NjordHR] Users can open NjordHR from icon; no localhost URL typing needed."
-
