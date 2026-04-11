@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+PYTHON_PACKAGES = ROOT / ".python-packages"
+if str(PYTHON_PACKAGES) not in sys.path:
+    sys.path.insert(0, str(PYTHON_PACKAGES))
 
 from PIL import Image
 
 
-ROOT = Path(__file__).resolve().parents[2]
 SOURCE_LOGO = ROOT / "Truncated_Njord_logo.jpg"
 BUILD_RESOURCES = ROOT / "electron" / "buildResources"
 MASTER_PNG = BUILD_RESOURCES / "NjordHR.icon.png"

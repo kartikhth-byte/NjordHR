@@ -6,7 +6,7 @@
   "author": "NjordHR",
   "main": "src/main/main.js",
   "scripts": {
-    "generate:icons": "PYTHONPATH=../.python-packages python3 ./scripts/generate-icons.py",
+    "generate:icons": "node ./scripts/run-generate-icons.js",
     "stage:runtime": "node ./scripts/stage-packaged-runtime.js",
     "dev": "electron .",
     "start": "electron .",
