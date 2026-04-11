@@ -149,3 +149,48 @@ test("ensureBackendStarted fails early when spawned backend exits before readine
     /Backend process exited before readiness check completed/
   );
 });
+
+test("ensureBackendStarted fails early when spawned backend errors before readiness", async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-backend-error-"));
+  const paths = createPaths(tempRoot);
+  const ports = createPorts(6400, 6401);
+  let waitCallCount = 0;
+  const child = new EventEmitter();
+  child.pid = 54321;
+  child.stdout = null;
+  child.stderr = null;
+  child.kill = () => true;
+
+  const manager = new ProcessManager({
+    app: {},
+    paths,
+    ports,
+    python: { command: "python3", args: [] },
+    env: {
+      USE_SUPABASE_DB: "false",
+      USE_DUAL_WRITE: "false",
+      USE_SUPABASE_READS: "false",
+      USE_LOCAL_AGENT: "true",
+      NJORDHR_AUTH_MODE: "local"
+    },
+    launchId: "launch-3",
+    hooks: {
+      waitForJson: async () => {
+        waitCallCount += 1;
+        if (waitCallCount === 1) {
+          throw new Error("No reusable backend");
+        }
+        return new Promise(() => {});
+      },
+      spawn: () => {
+        setImmediate(() => child.emit("error", new Error("spawn ENOENT")));
+        return child;
+      }
+    }
+  });
+
+  await assert.rejects(
+    manager.ensureBackendStarted(),
+    /Backend process failed to launch/
+  );
+});

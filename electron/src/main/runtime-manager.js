@@ -292,7 +292,7 @@ function resolvePythonCommand(app) {
   if (app.isPackaged) {
     if (process.platform === "win32") {
       return {
-        command: path.join(process.resourcesPath, "python", "Scripts", "python.exe"),
+        command: path.join(process.resourcesPath, "python", "python.exe"),
         args: []
       };
     }

@@ -104,7 +104,7 @@ test("resolvePythonCommand uses packaged runtime path when app is packaged", () 
   try {
     const python = resolvePythonCommand({ isPackaged: true });
     if (process.platform === "win32") {
-      assert.equal(python.command, path.join(process.resourcesPath, "python", "Scripts", "python.exe"));
+      assert.equal(python.command, path.join(process.resourcesPath, "python", "python.exe"));
     } else {
       assert.equal(python.command, path.join(process.resourcesPath, "python", "bin", "python3"));
     }

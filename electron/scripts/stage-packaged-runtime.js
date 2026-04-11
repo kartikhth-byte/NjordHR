@@ -127,6 +127,10 @@ function runOrThrow(command, args, options = {}) {
 
 function pythonExecutable(root) {
   if (process.platform === "win32") {
+    const rootPython = path.join(root, "python.exe");
+    if (fs.existsSync(rootPython)) {
+      return rootPython;
+    }
     return path.join(root, "Scripts", "python.exe");
   }
   return path.join(root, "bin", "python3");
@@ -166,6 +170,45 @@ function copyDirectoryContents(sourceDir, targetDir) {
   }
 }
 
+function copyWindowsEmbeddedRuntime(buildPython, targetRoot) {
+  const runtimeMeta = runPythonJson(buildPython.command, [
+    ...buildPython.args,
+    "-c",
+    "import json, os, sys; print(json.dumps({'base_prefix': sys.base_prefix, 'executable_dir': os.path.dirname(sys.executable)}))"
+  ]);
+  const basePrefix = runtimeMeta.base_prefix;
+  const executableDir = runtimeMeta.executable_dir;
+  const rootFiles = fs.readdirSync(basePrefix, { withFileTypes: true });
+
+  for (const entry of rootFiles) {
+    const sourcePath = path.join(basePrefix, entry.name);
+    const lower = entry.name.toLowerCase();
+    if (entry.isDirectory()) {
+      if (entry.name === "DLLs" || entry.name === "libs" || entry.name === "Tools") {
+        copyRecursive(sourcePath, path.join(targetRoot, entry.name));
+      }
+      continue;
+    }
+    if (
+      lower === "python.exe" ||
+      lower === "pythonw.exe" ||
+      lower === "python3.dll" ||
+      /^python\d+\.dll$/.test(lower) ||
+      lower.startsWith("vcruntime") ||
+      lower.startsWith("msvcp")
+    ) {
+      copyRecursive(sourcePath, path.join(targetRoot, entry.name));
+    }
+  }
+
+  const sourceScripts = path.join(basePrefix, "Scripts");
+  if (fs.existsSync(sourceScripts)) {
+    copyRecursive(sourceScripts, path.join(targetRoot, "Scripts"));
+  } else if (fs.existsSync(executableDir) && executableDir !== basePrefix) {
+    copyRecursive(executableDir, path.join(targetRoot, "Scripts"));
+  }
+}
+
 function pipModuleArgs(root, extraArgs) {
   return ["-m", "pip", ...extraArgs];
 }
@@ -189,10 +232,19 @@ function stagePythonRuntime() {
   removeDir(stagePythonRoot);
 
   const buildPython = resolveBuildPython();
-  const venvArgs = process.platform === "win32"
-    ? [...buildPython.args, "-m", "venv", stagePythonRoot]
-    : [...buildPython.args, "-m", "venv", "--copies", stagePythonRoot];
+  if (process.platform === "win32") {
+    ensureDir(stagePythonRoot);
+    copyWindowsEmbeddedRuntime(buildPython, stagePythonRoot);
 
+    const pythonBin = pythonExecutable(stagePythonRoot);
+    runOrThrow(
+      pythonBin,
+      pipModuleArgs(stagePythonRoot, ["install", "-r", path.join(stageAppRoot, "requirements.txt")])
+    );
+    return;
+  }
+
+  const venvArgs = [...buildPython.args, "-m", "venv", "--copies", stagePythonRoot];
   runOrThrow(buildPython.command, venvArgs);
 
   if (pythonPathExists(sourceVenvRoot)) {

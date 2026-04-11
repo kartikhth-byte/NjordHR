@@ -188,6 +188,9 @@ class ProcessManager {
     writePidFile(path.join(this.paths.runtimeDir, "backend.pid"), child);
     const readyPromise = this.waitForJson(readyUrl, READY_TIMEOUT_MS);
     const crashPromise = new Promise((_, reject) => {
+      child.once("error", (error) => {
+        reject(new Error(`Backend process failed to launch. Check ${backendErr} for details. ${error.message}`));
+      });
       child.once("exit", (code, signal) => {
         if (code === 0 || signal === "SIGTERM") {
           return;
@@ -218,6 +221,9 @@ class ProcessManager {
         );
         this.agentProcess = createManagedProcess(child, agentOut, agentErr);
         writePidFile(path.join(this.paths.runtimeDir, "agent.pid"), child);
+        child.once("error", () => {
+          // Best effort in E0/E3; diagnostics will surface the failed launch.
+        });
         this.waitForJson(healthUrl, AGENT_SETTINGS_TIMEOUT_MS)
           .then(() => this.configureAgent())
           .catch(() => {
