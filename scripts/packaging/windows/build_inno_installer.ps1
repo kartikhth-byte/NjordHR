@@ -8,6 +8,7 @@ $BuildDir = Join-Path $ProjectDir "build\windows"
 $StageDir = Join-Path $BuildDir "inno_stage"
 $IssPath = Join-Path $BuildDir "NjordHR.iss"
 $DefaultRuntimeEnvPath = Join-Path $StageDir "default_runtime.env"
+$IconPath = Join-Path $ProjectDir "electron\buildResources\NjordHR.ico"
 
 function Get-DefaultEnv([string]$Name, [string]$Fallback = "") {
     $value = [Environment]::GetEnvironmentVariable($Name)
@@ -24,6 +25,10 @@ if (-not $iscc) {
     Write-Host "[NjordHR] Inno Setup (iscc.exe) not found."
     Write-Host "[NjordHR] Install Inno Setup, then re-run."
     exit 1
+}
+
+if (-not (Test-Path $IconPath)) {
+    throw "Installer icon not found: $IconPath. Run the Electron icon generation step first."
 }
 
 if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
@@ -58,6 +63,7 @@ SUPABASE_SERVICE_ROLE_KEY=$(Get-DefaultEnv "NJORDHR_DEFAULT_SUPABASE_SERVICE_ROL
 "@ | Set-Content -Path $DefaultRuntimeEnvPath -Encoding ASCII
 
 $escapedStage = $StageDir -replace "\\", "\\"
+$escapedIcon = $IconPath -replace "\\", "\\"
 
 @"
 [Setup]
@@ -69,12 +75,14 @@ PrivilegesRequired=lowest
 OutputBaseFilename=NjordHR-$AppVersion-setup
 Compression=lzma
 SolidCompression=yes
+SetupIconFile=$escapedIcon
+UninstallDisplayIcon={app}\electron\buildResources\NjordHR.ico
 
 [Files]
 Source: "$escapedStage\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.vbs"
+Name: "{group}\NjordHR"; Filename: "{app}\start_njordhr.vbs"; IconFilename: "{app}\electron\buildResources\NjordHR.ico"
 "@ | Set-Content -Path $IssPath -Encoding ASCII
 
 & $iscc.Source $IssPath

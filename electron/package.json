@@ -3,12 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "description": "Electron desktop shell for NjordHR",
+  "author": "NjordHR",
   "main": "src/main/main.js",
   "scripts": {
+    "generate:icons": "PYTHONPATH=../.python-packages python3 ./scripts/generate-icons.py",
+    "stage:runtime": "node ./scripts/stage-packaged-runtime.js",
     "dev": "electron .",
     "start": "electron .",
     "test:node": "node --test",
-    "test:electron": "playwright test"
+    "test:electron": "playwright test",
+    "dist:mac": "npm run generate:icons && npm run stage:runtime && electron-builder --mac",
+    "dist:win": "npm run generate:icons && npm run stage:runtime && electron-builder --win nsis",
+    "dist:win:dir": "npm run generate:icons && npm run stage:runtime && electron-builder --win dir",
+    "dist": "npm run generate:icons && npm run stage:runtime && electron-builder",
+    "dist:dir": "npm run generate:icons && npm run stage:runtime && electron-builder --dir"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

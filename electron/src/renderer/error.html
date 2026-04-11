@@ -21,6 +21,18 @@
       box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
       padding: 22px;
     }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #fff7ed;
+      color: #9a3412;
+      font-size: 12px;
+      font-weight: 600;
+    }
     h1 {
       margin: 0 0 12px;
       font-size: 22px;
@@ -43,6 +55,36 @@
     .meta-item strong {
       color: #0f172a;
     }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    button {
+      appearance: none;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: #ffffff;
+      color: #172033;
+      padding: 10px 14px;
+      font: 600 14px Inter, "Segoe UI", sans-serif;
+      cursor: pointer;
+    }
+    button.primary {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #ffffff;
+    }
+    button:hover {
+      border-color: #94a3b8;
+    }
+    .status {
+      margin-top: 12px;
+      min-height: 20px;
+      font-size: 13px;
+      color: #475569;
+    }
     .log {
       margin-top: 18px;
       padding: 14px;
@@ -59,47 +101,147 @@
 <body>
   <div class="shell">
     <div class="card">
+      <div class="eyebrow">Startup Failure</div>
       <h1>NjordHR could not start</h1>
       <p id="message"></p>
       <div class="meta" id="meta"></div>
+      <div class="actions">
+        <button class="primary" id="retry-button" type="button">Retry Startup</button>
+        <button id="open-logs-button" type="button">Open Logs</button>
+        <button id="copy-button" type="button">Copy Diagnostics</button>
+        <button id="close-button" type="button">Close</button>
+      </div>
+      <div class="status" id="status"></div>
       <div class="log" id="backend-log" hidden></div>
       <div class="log" id="agent-log" hidden></div>
     </div>
   </div>
   <script>
-    const params = new URLSearchParams(window.location.search);
-    let details = { message: "Unknown startup error." };
-    try {
-      details = JSON.parse(params.get("details") || "{}");
-    } catch (_error) {}
-
-    document.getElementById("message").textContent = details.message || "Unknown startup error.";
-
     const meta = document.getElementById("meta");
-    const metaItems = [
-      ["Launch ID", details.launchId],
-      ["Backend", details.backendUrl],
-      ["Agent", details.agentUrl],
-      ["Python", details.pythonCommand],
-      ["Config", details.configPath],
-      ["Logs", details.runtimeDir]
-    ].filter(([, value]) => Boolean(value));
+    let details = { message: "Unknown startup error." };
+    const statusNode = document.getElementById("status");
+    function setStatus(message) {
+      statusNode.textContent = message || "";
+    }
 
-    meta.innerHTML = metaItems
-      .map(([label, value]) => `<div class="meta-item"><strong>${label}:</strong> ${value}</div>`)
-      .join("");
+    function renderMeta() {
+      meta.replaceChildren();
+      const items = [
+        ["Launch ID", details.launchId],
+        ["Backend", details.backendUrl],
+        ["Agent", details.agentUrl],
+        ["Python", details.pythonCommand],
+        ["Config", details.configPath],
+        ["Logs", details.runtimeDir]
+      ].filter(([, value]) => Boolean(value));
+
+      for (const [label, value] of items) {
+        const row = document.createElement("div");
+        row.className = "meta-item";
+        const strong = document.createElement("strong");
+        strong.textContent = `${label}:`;
+        row.append(strong, ` ${value}`);
+        meta.append(row);
+      }
+    }
+
+    function buildDiagnosticsText() {
+      const fields = [
+        ["Message", details.message],
+        ["Launch ID", details.launchId],
+        ["Backend URL", details.backendUrl],
+        ["Browser URL", details.browserUrl],
+        ["Agent URL", details.agentUrl],
+        ["Python", details.pythonCommand],
+        ["Config Path", details.configPath],
+        ["Runtime Dir", details.runtimeDir],
+        ["Diagnostics File", details.diagnosticsPath]
+      ];
+      const sections = [
+        fields
+          .filter(([, value]) => Boolean(value))
+          .map(([label, value]) => `${label}: ${value}`)
+          .join("\n")
+      ];
+      if (details.backendErrTail) {
+        sections.push(`Backend error tail:\n${details.backendErrTail}`);
+      }
+      if (details.agentErrTail) {
+        sections.push(`Agent error tail:\n${details.agentErrTail}`);
+      }
+      return sections.filter(Boolean).join("\n\n");
+    }
 
     const backendLog = document.getElementById("backend-log");
-    if (details.backendErrTail) {
-      backendLog.hidden = false;
-      backendLog.textContent = `Backend error tail\n\n${details.backendErrTail}`;
+    const agentLog = document.getElementById("agent-log");
+    function renderErrorDetails(nextDetails) {
+      details = nextDetails || { message: "Unknown startup error." };
+      document.getElementById("message").textContent = details.message || "Unknown startup error.";
+      renderMeta();
+
+      if (details.backendErrTail) {
+        backendLog.hidden = false;
+        backendLog.textContent = `Backend error tail\n\n${details.backendErrTail}`;
+      } else {
+        backendLog.hidden = true;
+        backendLog.textContent = "";
+      }
+
+      if (details.agentErrTail) {
+        agentLog.hidden = false;
+        agentLog.textContent = `Agent error tail\n\n${details.agentErrTail}`;
+      } else {
+        agentLog.hidden = true;
+        agentLog.textContent = "";
+      }
     }
 
-    const agentLog = document.getElementById("agent-log");
-    if (details.agentErrTail) {
-      agentLog.hidden = false;
-      agentLog.textContent = `Agent error tail\n\n${details.agentErrTail}`;
+    if (window.NjordDesktop?.onStartupErrorDetails) {
+      window.NjordDesktop.onStartupErrorDetails(renderErrorDetails);
     }
+    if (window.NjordDesktop?.startupErrorDetails) {
+      window.NjordDesktop.startupErrorDetails()
+        .then(renderErrorDetails)
+        .catch(() => renderErrorDetails(details));
+    } else {
+      renderErrorDetails(details);
+    }
+
+    document.getElementById("retry-button").addEventListener("click", async () => {
+      setStatus("Retrying startup...");
+      try {
+        await window.NjordDesktop.retryStartup();
+      } catch (error) {
+        setStatus(error?.message || "Retry failed.");
+      }
+    });
+
+    document.getElementById("open-logs-button").addEventListener("click", async () => {
+      setStatus("Opening logs folder...");
+      try {
+        await window.NjordDesktop.openLogs();
+        setStatus("Logs folder opened.");
+      } catch (error) {
+        setStatus(error?.message || "Could not open logs.");
+      }
+    });
+
+    document.getElementById("copy-button").addEventListener("click", async () => {
+      try {
+        await window.NjordDesktop.copyText(buildDiagnosticsText());
+        setStatus("Diagnostics copied.");
+      } catch (error) {
+        setStatus(error?.message || "Could not copy diagnostics.");
+      }
+    });
+
+    document.getElementById("close-button").addEventListener("click", async () => {
+      try {
+        await window.NjordDesktop.closeWindow();
+      } catch (error) {
+        setStatus(error?.message || "Could not close this window.");
+      }
+    });
   </script>
 </body>
 </html>

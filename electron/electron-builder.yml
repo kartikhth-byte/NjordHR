@@ -3,21 +3,24 @@ productName: NjordHR
 directories:
   output: ../build/electron
   buildResources: buildResources
+icon: buildResources/NjordHR.icon.png
+electronDist: node_modules/electron/dist
 files:
   - src/**/*
 extraResources:
-  - from: ../backend_server.py
-    to: app/backend_server.py
-  - from: ../agent_server.py
-    to: app/agent_server.py
-  - from: ../frontend.html
-    to: app/frontend.html
-  - from: ../requirements.txt
-    to: app/requirements.txt
+  - from: ../build/electron-stage/app
+    to: app
+  - from: ../build/electron-stage/python
+    to: python
 artifactName: NjordHR-Electron-${version}-${os}.${ext}
 mac:
   category: public.app-category.business
+  icon: buildResources/NjordHR.icns
+  hardenedRuntime: true
+  entitlements: buildResources/entitlements.mac.plist
+  entitlementsInherit: buildResources/entitlements.mac.inherit.plist
 win:
+  icon: buildResources/NjordHR.ico
   target:
     - nsis
 nsis:

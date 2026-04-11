@@ -5,6 +5,9 @@ const { shell } = require("electron");
 function buildDiagnostics(paths, ports, extras = {}) {
   return {
     launchId: extras.launchId || "",
+    appVersion: extras.appVersion || "",
+    platform: extras.platform || "",
+    packaged: extras.packaged ?? null,
     runtimeDir: paths.runtimeDir,
     configPath: paths.configPath,
     backendPort: ports.backendPort,
@@ -43,13 +46,16 @@ function tailFile(filePath, lineCount = 40) {
 function buildStartupErrorDetails(paths, diagnostics, error) {
   const backendErrPath = path.join(paths.runtimeDir, "backend.err");
   const agentErrPath = path.join(paths.runtimeDir, "agent.err");
+  const diagnosticsPath = path.join(paths.runtimeDir, "startup_diagnostics.json");
   return {
     message: error && error.message ? error.message : "Startup failed.",
     launchId: diagnostics.launchId || "",
     backendUrl: diagnostics.backendUrl || "",
+    browserUrl: diagnostics.browserUrl || "",
     agentUrl: diagnostics.agentUrl || "",
     runtimeDir: diagnostics.runtimeDir || "",
     configPath: diagnostics.configPath || "",
+    diagnosticsPath,
     pythonCommand: diagnostics.pythonCommand || "",
     backendErrTail: tailFile(backendErrPath, 24),
     agentErrTail: tailFile(agentErrPath, 24)

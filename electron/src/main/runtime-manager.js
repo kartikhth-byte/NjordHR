@@ -78,6 +78,39 @@ function resolveRuntimePaths(app) {
   };
 }
 
+function bootstrapConfigFile(paths, env = {}) {
+  if (fs.existsSync(paths.configPath)) {
+    return paths.configPath;
+  }
+
+  const templatePath = path.join(paths.repoRoot, "config.example.ini");
+  if (!fs.existsSync(templatePath)) {
+    throw new Error(`Missing config template: ${templatePath}`);
+  }
+
+  const adminToken = String(env.NJORDHR_ADMIN_TOKEN || "your-admin-token").trim() || "your-admin-token";
+  const template = fs.readFileSync(templatePath, "utf8");
+  const lines = template.split(/\r?\n/).map((line) => {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("Username = ")) return "Username =";
+    if (trimmed.startsWith("Password = ")) return "Password =";
+    if (trimmed.startsWith("Gemini_API_Key = ")) return "Gemini_API_Key =";
+    if (trimmed.startsWith("Pinecone_API_Key = ")) return "Pinecone_API_Key =";
+    if (trimmed.startsWith("Default_Download_Folder = ")) return `Default_Download_Folder = ${paths.downloadDir}`;
+    if (trimmed.startsWith("Additional_Local_Folder = ")) return `Additional_Local_Folder = ${paths.verifiedDir}`;
+    if (trimmed.startsWith("admin_password = ")) return "admin_password =";
+    if (trimmed.startsWith("recruiter_password = ")) return "recruiter_password =";
+    if (trimmed.startsWith("admin_token = ")) return `admin_token = ${adminToken}`;
+    if (trimmed.startsWith("log_dir = ")) return `log_dir = ${paths.logsDir}`;
+    if (trimmed.startsWith("registry_db_path = ")) return `registry_db_path = ${path.join(paths.runtimeDir, "registry.db")}`;
+    if (trimmed.startsWith("feedback_db_path = ")) return `feedback_db_path = ${path.join(paths.runtimeDir, "feedback.db")}`;
+    return line;
+  });
+
+  fs.writeFileSync(paths.configPath, `${lines.join("\n")}\n`, "utf8");
+  return paths.configPath;
+}
+
 function probePort(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -175,21 +208,6 @@ function readyIdentityMatches(paths, runtimeReady) {
   );
 }
 
-async function pickFreePort(start, end) {
-  for (let port = start; port <= end; port += 1) {
-    // A successful bind means the port is currently free.
-    // We close immediately and reserve it for the child launch that follows.
-    // This mirrors the existing launcher behavior closely enough for E0.
-    // A later E1 pass can tighten reservation guarantees if needed.
-    // eslint-disable-next-line no-await-in-loop
-    const free = await probePort(port);
-    if (free) {
-      return port;
-    }
-  }
-  throw new Error(`No free port found in range ${start}-${end}`);
-}
-
 async function choosePort(preferredPort, start, end, excludedPorts = new Set(), isPortFreeFn = isPortFree) {
   if (preferredPort && !excludedPorts.has(preferredPort) && await isPortFreeFn(preferredPort)) {
     return preferredPort;
@@ -274,7 +292,7 @@ function resolvePythonCommand(app) {
   if (app.isPackaged) {
     if (process.platform === "win32") {
       return {
-        command: path.join(process.resourcesPath, "python", "python.exe"),
+        command: path.join(process.resourcesPath, "python", "Scripts", "python.exe"),
         args: []
       };
     }
@@ -307,9 +325,6 @@ function resolvePythonCommand(app) {
     return { command: repoVenvPython, args: [] };
   }
 
-  if (process.platform === "win32") {
-    return { command: "py", args: ["-3.11"] };
-  }
   return { command: "python3", args: [] };
 }
 
@@ -398,6 +413,7 @@ function persistRuntimeEnvironment(paths, ports, env) {
 }
 
 module.exports = {
+  bootstrapConfigFile,
   resolveRuntimePaths,
   choosePorts,
   resolvePythonCommand,

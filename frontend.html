@@ -126,6 +126,9 @@
             const [runtimeConfig, setRuntimeConfig] = useState(null);
             const [isRuntimeRefreshing, setIsRuntimeRefreshing] = useState(false);
             const [runtimeConfigRefreshedAt, setRuntimeConfigRefreshedAt] = useState(null);
+            const [desktopDiagnostics, setDesktopDiagnostics] = useState(null);
+            const [desktopDiagnosticsError, setDesktopDiagnosticsError] = useState('');
+            const [isDesktopDiagnosticsLoading, setIsDesktopDiagnosticsLoading] = useState(false);
             const [isOtpSending, setIsOtpSending] = useState(false);
             const [isOtpVerifying, setIsOtpVerifying] = useState(false);
             const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -493,6 +496,29 @@
                     setBootstrapChecking(false);
                 };
                 initAuth();
+            }, []);
+
+            useEffect(() => {
+                const loadDesktopDiagnostics = async () => {
+                    if (!window.NjordDesktop || typeof window.NjordDesktop.diagnostics !== 'function') {
+                        setDesktopDiagnostics(null);
+                        setDesktopDiagnosticsError('');
+                        return;
+                    }
+                    setIsDesktopDiagnosticsLoading(true);
+                    try {
+                        const data = await window.NjordDesktop.diagnostics();
+                        setDesktopDiagnostics(data || null);
+                        setDesktopDiagnosticsError('');
+                    } catch (error) {
+                        console.error('Could not load desktop diagnostics', error);
+                        setDesktopDiagnostics(null);
+                        setDesktopDiagnosticsError(error?.message || 'Desktop diagnostics unavailable.');
+                    } finally {
+                        setIsDesktopDiagnosticsLoading(false);
+                    }
+                };
+                loadDesktopDiagnostics();
             }, []);
 
             useEffect(() => {
@@ -3541,6 +3567,7 @@
                 const modeLabel = runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only';
                 const installers = setupManifest?.installers || {};
                 const osInstallers = detectedOS === 'windows' ? installers.windows : installers.macos;
+                const desktopAvailable = Boolean(desktopDiagnostics);
 
                 return (
                     <div>
@@ -3637,6 +3664,54 @@
                                     <p className="text-green-700 text-xs">Ready: install/setup complete.</p>
                                 )}
                             </div>
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                                <p className="text-sm font-semibold">4) Desktop Diagnostics</p>
+                                {desktopAvailable && window.NjordDesktop?.openLogs && (
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                await window.NjordDesktop.openLogs();
+                                                handleSendMessage('success', 'Opened runtime logs folder.');
+                                            } catch (error) {
+                                                handleSendMessage('error', error?.message || 'Could not open runtime logs folder.');
+                                            }
+                                        }}
+                                        className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                                    >
+                                        Open Logs Folder
+                                    </button>
+                                )}
+                            </div>
+                            {isDesktopDiagnosticsLoading ? (
+                                <p className="text-sm text-gray-500">Loading desktop diagnostics...</p>
+                            ) : desktopAvailable ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                    <div className="space-y-1">
+                                        <p><span className="font-medium">App version:</span> {desktopDiagnostics.appVersion || '-'}</p>
+                                        <p><span className="font-medium">Platform:</span> {desktopDiagnostics.platform || '-'}</p>
+                                        <p><span className="font-medium">Packaged build:</span> {desktopDiagnostics.packaged ? 'Yes' : 'No'}</p>
+                                        <p><span className="font-medium">Launch ID:</span> {desktopDiagnostics.launchId || '-'}</p>
+                                        <p><span className="font-medium">Browser URL:</span> {desktopDiagnostics.browserUrl || '-'}</p>
+                                    </div>
+                                    <div className="space-y-1 break-all">
+                                        <p><span className="font-medium">Runtime dir:</span> {desktopDiagnostics.runtimeDir || '-'}</p>
+                                        <p><span className="font-medium">Config path:</span> {desktopDiagnostics.configPath || '-'}</p>
+                                        <p><span className="font-medium">Backend URL:</span> {desktopDiagnostics.backendUrl || '-'}</p>
+                                        <p><span className="font-medium">Agent URL:</span> {desktopDiagnostics.agentUrl || '-'}</p>
+                                        <p><span className="font-medium">Python:</span> {desktopDiagnostics.pythonCommand || '-'}</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="text-sm text-gray-500">Desktop diagnostics are only available inside the Electron shell.</p>
+                                    {desktopDiagnosticsError && (
+                                        <p className="text-xs text-red-600 mt-2">{desktopDiagnosticsError}</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 );

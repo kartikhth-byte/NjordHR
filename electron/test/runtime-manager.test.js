@@ -4,13 +4,21 @@ const path = require("path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { buildEnvironment, choosePorts, persistRuntimeEnvironment, resolvePythonCommand } = require("../src/main/runtime-manager");
+const {
+  bootstrapConfigFile,
+  buildEnvironment,
+  choosePorts,
+  persistRuntimeEnvironment,
+  resolvePythonCommand
+} = require("../src/main/runtime-manager");
 
 function createPaths(tempRoot) {
   const runtimeDir = path.join(tempRoot, "runtime");
+  const repoRoot = path.join(tempRoot, "repo");
+  fs.mkdirSync(repoRoot, { recursive: true });
   fs.mkdirSync(runtimeDir, { recursive: true });
   return {
-    repoRoot: path.join(tempRoot, "repo"),
+    repoRoot,
     runtimeDir,
     configPath: path.join(tempRoot, "config.ini")
   };
@@ -45,6 +53,33 @@ test("persistRuntimeEnvironment writes clean compatibility keys and ports", () =
   assert.doesNotMatch(content, /^export /m);
 });
 
+test("bootstrapConfigFile creates first-run config.ini from the template with runtime paths", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-config-"));
+  const paths = createPaths(tempRoot);
+  paths.downloadDir = path.join(tempRoot, "Downloaded_Resumes");
+  paths.verifiedDir = path.join(tempRoot, "Verified_Resumes");
+  paths.logsDir = path.join(tempRoot, "logs");
+  fs.mkdirSync(paths.downloadDir, { recursive: true });
+  fs.mkdirSync(paths.verifiedDir, { recursive: true });
+  fs.mkdirSync(paths.logsDir, { recursive: true });
+  fs.copyFileSync(
+    path.join(process.cwd(), "..", "config.example.ini"),
+    path.join(paths.repoRoot, "config.example.ini")
+  );
+
+  bootstrapConfigFile(paths, {});
+  const content = fs.readFileSync(paths.configPath, "utf8");
+
+  assert.match(content, /^\[Credentials\]$/m);
+  assert.match(content, /^Default_Download_Folder = .*Downloaded_Resumes$/m);
+  assert.match(content, /^Additional_Local_Folder = .*Verified_Resumes$/m);
+  assert.match(content, /^admin_password =$/m);
+  assert.match(content, /^admin_token = your-admin-token$/m);
+  assert.match(content, /^log_dir = .*\/logs$/m);
+  assert.match(content, /^registry_db_path = .*\/runtime\/registry\.db$/m);
+  assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
+});
+
 test("resolvePythonCommand prefers the repo virtualenv in dev mode when present", () => {
   const app = {
     isPackaged: false
@@ -56,6 +91,28 @@ test("resolvePythonCommand prefers the repo virtualenv in dev mode when present"
     assert.match(python.command, /(\.venv\\Scripts\\python\.exe|^py$)/);
   } else {
     assert.match(python.command, /(\.venv\/bin\/python3|\.venv\/bin\/python|^python3$)/);
+  }
+});
+
+test("resolvePythonCommand uses packaged runtime path when app is packaged", () => {
+  const originalResourcesPath = process.resourcesPath;
+  Object.defineProperty(process, "resourcesPath", {
+    value: path.join("/tmp", "njordhr-resources"),
+    configurable: true
+  });
+
+  try {
+    const python = resolvePythonCommand({ isPackaged: true });
+    if (process.platform === "win32") {
+      assert.equal(python.command, path.join(process.resourcesPath, "python", "Scripts", "python.exe"));
+    } else {
+      assert.equal(python.command, path.join(process.resourcesPath, "python", "bin", "python3"));
+    }
+  } finally {
+    Object.defineProperty(process, "resourcesPath", {
+      value: originalResourcesPath,
+      configurable: true
+    });
   }
 });
 

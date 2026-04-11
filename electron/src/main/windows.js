@@ -21,7 +21,7 @@ function createSplashWindow() {
   return splash;
 }
 
-function createErrorWindow(details) {
+function createErrorWindow(details, preloadPath) {
   const errorWindow = new BrowserWindow({
     width: 760,
     height: 620,
@@ -30,12 +30,14 @@ function createErrorWindow(details) {
     minimizable: false,
     backgroundColor: "#ffffff",
     webPreferences: {
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false
     }
   });
-  errorWindow.loadFile(path.join(__dirname, "..", "renderer", "error.html"), {
-    query: { details: JSON.stringify(details || { message: "Startup failed." }) }
+  errorWindow.loadFile(path.join(__dirname, "..", "renderer", "error.html"));
+  errorWindow.webContents.once("did-finish-load", () => {
+    errorWindow.webContents.send("njordhr:error-details", details || { message: "Startup failed." });
   });
   errorWindow.once("ready-to-show", () => errorWindow.show());
   return errorWindow;

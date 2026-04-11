@@ -505,6 +505,13 @@ class BackendEventLogFlowTests(unittest.TestCase):
             else:
                 os.environ["NJORDHR_RUNTIME_DIR"] = old_runtime_dir
 
+    def test_runtime_ready_rejects_non_local_requests(self):
+        resp = self.client.get("/runtime/ready", environ_base={"REMOTE_ADDR": "203.0.113.10"})
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertFalse(data["success"])
+        self.assertEqual(data["error"], "Forbidden")
+
     def test_local_agent_base_url_prefers_runtime_agent_fallbacks(self):
         old_base = os.environ.get("NJORDHR_AGENT_BASE_URL")
         old_url = os.environ.get("NJORDHR_AGENT_URL")

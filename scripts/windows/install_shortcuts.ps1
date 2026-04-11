@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $ProjectDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 $Launcher = Join-Path $ProjectDir "start_njordhr.vbs"
+$IconPath = Join-Path $ProjectDir "electron\buildResources\NjordHR.ico"
 if (-not (Test-Path $Launcher)) {
     throw "Launcher not found: $Launcher"
 }
@@ -18,6 +19,9 @@ function New-Shortcut([string]$path) {
     $shortcut.WorkingDirectory = $ProjectDir
     $shortcut.WindowStyle = 7
     $shortcut.Description = "Open NjordHR"
+    if (Test-Path $IconPath) {
+        $shortcut.IconLocation = $IconPath
+    }
     $shortcut.Save()
 }
 

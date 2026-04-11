@@ -47,7 +47,7 @@ function waitForJson(url, timeoutMs = READY_TIMEOUT_MS) {
   });
 }
 
-function postJson(url, payload, timeoutMs = AGENT_SETTINGS_TIMEOUT_MS) {
+function putJson(url, payload, timeoutMs = AGENT_SETTINGS_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const body = Buffer.from(JSON.stringify(payload), "utf8");
     const target = new URL(url);
@@ -133,7 +133,7 @@ function runtimeStateMatches(expected, actual) {
 }
 
 class ProcessManager {
-  constructor({ app, paths, ports, python, env, launchId }) {
+  constructor({ app, paths, ports, python, env, launchId, hooks = {} }) {
     this.app = app;
     this.paths = paths;
     this.ports = ports;
@@ -142,12 +142,15 @@ class ProcessManager {
     this.launchId = launchId;
     this.backendProcess = null;
     this.agentProcess = null;
+    this.waitForJson = hooks.waitForJson || waitForJson;
+    this.putJson = hooks.putJson || putJson;
+    this.spawnProcess = hooks.spawn || spawn;
   }
 
   async ensureBackendStarted() {
     const readyUrl = `${this.ports.backendUrl}/runtime/ready`;
     try {
-      const runtime = await waitForJson(readyUrl, 1500);
+      const runtime = await this.waitForJson(readyUrl, 1500);
       if (identityMatches(
         {
           projectDir: this.paths.repoRoot,
@@ -172,7 +175,7 @@ class ProcessManager {
     const backendErr = path.join(this.paths.runtimeDir, "backend.err");
     appendLaunchMarker(backendOut, this.launchId, `Launching backend on ${this.ports.backendUrl}`);
     appendLaunchMarker(backendErr, this.launchId, `Launching backend on ${this.ports.backendUrl}`);
-    const child = spawn(
+    const child = this.spawnProcess(
       this.python.command,
       [...this.python.args, "backend_server.py"],
       {
@@ -183,19 +186,28 @@ class ProcessManager {
     );
     this.backendProcess = createManagedProcess(child, backendOut, backendErr);
     writePidFile(path.join(this.paths.runtimeDir, "backend.pid"), child);
-    return waitForJson(readyUrl, READY_TIMEOUT_MS);
+    const readyPromise = this.waitForJson(readyUrl, READY_TIMEOUT_MS);
+    const crashPromise = new Promise((_, reject) => {
+      child.once("exit", (code, signal) => {
+        if (code === 0 || signal === "SIGTERM") {
+          return;
+        }
+        reject(new Error(`Backend process exited before readiness check completed. Check ${backendErr} for details.`));
+      });
+    });
+    return Promise.race([readyPromise, crashPromise]);
   }
 
   ensureAgentStarted() {
     const healthUrl = `${this.ports.agentUrl}/health`;
-    waitForJson(healthUrl, 1500)
+    this.waitForJson(healthUrl, 1500)
       .then(() => this.configureAgent())
       .catch(() => {
         const agentOut = path.join(this.paths.runtimeDir, "agent.out");
         const agentErr = path.join(this.paths.runtimeDir, "agent.err");
         appendLaunchMarker(agentOut, this.launchId, `Launching agent on ${this.ports.agentUrl}`);
         appendLaunchMarker(agentErr, this.launchId, `Launching agent on ${this.ports.agentUrl}`);
-        const child = spawn(
+        const child = this.spawnProcess(
           this.python.command,
           [...this.python.args, "agent_server.py"],
           {
@@ -206,7 +218,7 @@ class ProcessManager {
         );
         this.agentProcess = createManagedProcess(child, agentOut, agentErr);
         writePidFile(path.join(this.paths.runtimeDir, "agent.pid"), child);
-        waitForJson(healthUrl, AGENT_SETTINGS_TIMEOUT_MS)
+        this.waitForJson(healthUrl, AGENT_SETTINGS_TIMEOUT_MS)
           .then(() => this.configureAgent())
           .catch(() => {
             // Best effort in E0; the renderer banner will surface delayed agent state.
@@ -215,20 +227,16 @@ class ProcessManager {
   }
 
   async configureAgent() {
-    await postJson(`${this.ports.agentUrl}/settings`, {
+    await this.putJson(`${this.ports.agentUrl}/settings`, {
       api_base_url: this.ports.backendUrl,
-      cloud_sync_enabled: true
+      cloud_sync_enabled: String(this.env.USE_SUPABASE_DB || "").trim().toLowerCase() === "true"
     });
   }
 
   async shutdown() {
     const children = [this.agentProcess, this.backendProcess].filter(Boolean);
     for (const child of children) {
-      try {
-        child.kill();
-      } catch (_error) {
-        // best effort
-      }
+      await stopChildGracefully(child);
     }
     for (const pidFile of ["agent.pid", "backend.pid"]) {
       const pidPath = path.join(this.paths.runtimeDir, pidFile);
@@ -239,8 +247,45 @@ class ProcessManager {
   }
 }
 
+function stopChildGracefully(child, timeoutMs = 3000) {
+  if (!child || typeof child.kill !== "function" || child.killed) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    child.once("exit", finish);
+
+    try {
+      child.kill("SIGTERM");
+    } catch (_error) {
+      finish();
+      return;
+    }
+
+    setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      try {
+        child.kill("SIGKILL");
+      } catch (_error) {
+        // best effort
+      }
+      finish();
+    }, timeoutMs);
+  });
+}
+
 module.exports = {
   ProcessManager,
   waitForJson,
-  runtimeStateMatches
+  runtimeStateMatches,
+  stopChildGracefully
 };
