@@ -7,6 +7,11 @@ const { spawnSync } = require("child_process");
 const electronRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(electronRoot, "..");
 const scriptPath = path.join(electronRoot, "scripts", "generate-icons.py");
+const requiredIcons = [
+  path.join(electronRoot, "buildResources", "NjordHR.icon.png"),
+  path.join(electronRoot, "buildResources", "NjordHR.icns"),
+  path.join(electronRoot, "buildResources", "NjordHR.ico")
+];
 
 function commandExists(command) {
   const probe = process.platform === "win32" ? "where" : "which";
@@ -51,6 +56,11 @@ function resolvePythonCommand() {
 }
 
 function main() {
+  if (requiredIcons.every((iconPath) => fs.existsSync(iconPath))) {
+    console.log("[NjordHR] Reusing committed icon assets.");
+    return;
+  }
+
   const python = resolvePythonCommand();
   const result = spawnSync(python.command, [...python.args, scriptPath], {
     cwd: projectRoot,
