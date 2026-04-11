@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NjordHR Startup Error</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", sans-serif;
+      background: #f8fafc;
+      color: #172033;
+    }
+    .shell {
+      padding: 28px;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+      padding: 22px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 22px;
+    }
+    p {
+      margin: 0;
+      line-height: 1.55;
+      color: #475569;
+      white-space: pre-wrap;
+    }
+    .meta {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+    .meta-item {
+      font-size: 13px;
+      color: #334155;
+    }
+    .meta-item strong {
+      color: #0f172a;
+    }
+    .log {
+      margin-top: 18px;
+      padding: 14px;
+      border-radius: 12px;
+      background: #0f172a;
+      color: #dbe4f0;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      max-height: 160px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="card">
+      <h1>NjordHR could not start</h1>
+      <p id="message"></p>
+      <div class="meta" id="meta"></div>
+      <div class="log" id="backend-log" hidden></div>
+      <div class="log" id="agent-log" hidden></div>
+    </div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    let details = { message: "Unknown startup error." };
+    try {
+      details = JSON.parse(params.get("details") || "{}");
+    } catch (_error) {}
+
+    document.getElementById("message").textContent = details.message || "Unknown startup error.";
+
+    const meta = document.getElementById("meta");
+    const metaItems = [
+      ["Launch ID", details.launchId],
+      ["Backend", details.backendUrl],
+      ["Agent", details.agentUrl],
+      ["Python", details.pythonCommand],
+      ["Config", details.configPath],
+      ["Logs", details.runtimeDir]
+    ].filter(([, value]) => Boolean(value));
+
+    meta.innerHTML = metaItems
+      .map(([label, value]) => `<div class="meta-item"><strong>${label}:</strong> ${value}</div>`)
+      .join("");
+
+    const backendLog = document.getElementById("backend-log");
+    if (details.backendErrTail) {
+      backendLog.hidden = false;
+      backendLog.textContent = `Backend error tail\n\n${details.backendErrTail}`;
+    }
+
+    const agentLog = document.getElementById("agent-log");
+    if (details.agentErrTail) {
+      agentLog.hidden = false;
+      agentLog.textContent = `Agent error tail\n\n${details.agentErrTail}`;
+    }
+  </script>
+</body>
+</html>

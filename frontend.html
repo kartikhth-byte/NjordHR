@@ -469,10 +469,17 @@
                 const initAuth = async () => {
                     setAuthChecking(true);
                     setBootstrapChecking(true);
-                    const [bootstrapStatus, currentUser] = await Promise.all([
+                    const [bootstrapStatus, currentUser, runtimeStatus] = await Promise.all([
                         fetchBootstrapStatus(),
                         fetchAuthMe(),
+                        fetch(`${API_BASE_URL}/config/runtime`)
+                            .then(response => response.json())
+                            .catch(() => null),
                     ]);
+                    if (runtimeStatus && runtimeStatus.success) {
+                        setRuntimeConfig(runtimeStatus);
+                        setRuntimeConfigRefreshedAt(new Date());
+                    }
                     setBootstrapRequired(Boolean(bootstrapStatus.required));
                     setBootstrapReason(bootstrapStatus.reason || '');
                     if (bootstrapStatus.required) {
@@ -957,6 +964,23 @@
                     setIsRuntimeRefreshing(false);
                 }
             };
+
+            const authRuntimeSummary = (() => {
+                const bootstrap = runtimeConfig?.bootstrap || {};
+                const authBackend = runtimeConfig?.auth_backend || {};
+                const featureFlags = runtimeConfig?.feature_flags || {};
+                const effectiveAuthMode = bootstrap.auth_mode || (authBackend.mode === 'cloud_error' ? 'cloud' : (authBackend.mode || 'unknown'));
+                const localFallbackActive = effectiveAuthMode === 'local' && featureFlags.use_supabase_db === false;
+                return {
+                    effectiveAuthMode,
+                    localFallbackActive,
+                    bootstrapReason: bootstrap.reason || '',
+                    validUserCount: Number(bootstrap.valid_user_count || 0),
+                    cloudState: authBackend.mode || 'unknown',
+                    cloudReason: authBackend.reason || '',
+                    runtimeLabel: featureFlags.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only',
+                };
+            })();
 
             const fetchSetupManifest = async () => {
                 setIsSetupLoading(true);
@@ -2452,8 +2476,13 @@
                             </div>
                             <div>
                                 <h3 className="text-lg font-medium text-gray-800 mb-2">Download Log</h3>
+                                <p className="text-sm text-gray-600 mb-3">Live scraper output and backend status updates.</p>
                                 <div className="bg-gray-800 text-white font-mono text-sm p-4 rounded-lg log-area overflow-y-auto" role="log" aria-live="polite" aria-label="Download progress log">
-                                    {downloadLog.map((line, i) => <p key={i} className="whitespace-pre-wrap">{line}</p>)}
+                                    {downloadLog.length > 0 ? (
+                                        downloadLog.map((line, i) => <p key={i} className="whitespace-pre-wrap">{line}</p>)
+                                    ) : (
+                                        <p className="whitespace-pre-wrap text-slate-300">No download activity yet. Start a connection or run a download to stream logs here.</p>
+                                    )}
                                 </div>
                                 {logFile && (
                                     <p className="text-center text-sm text-green-700 mt-2">
@@ -3658,6 +3687,16 @@
                                 <p className="text-sm text-gray-600 mb-4">
                                     First-time setup is required before users can sign in.
                                 </p>
+                                {runtimeConfig && (
+                                    <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                                        <p><span className="font-semibold">Auth mode:</span> {authRuntimeSummary.effectiveAuthMode}</p>
+                                        <p><span className="font-semibold">Configured users:</span> {authRuntimeSummary.validUserCount}</p>
+                                        <p><span className="font-semibold">Runtime:</span> {authRuntimeSummary.runtimeLabel}</p>
+                                        {authRuntimeSummary.localFallbackActive && (
+                                            <p className="mt-1 text-blue-800">This shell is running in safe local fallback mode because provisioned cloud runtime settings are not fully available.</p>
+                                        )}
+                                    </div>
+                                )}
                                 {bootstrapReason && (
                                     <p className="text-xs text-gray-500 mb-4">Reason: {bootstrapReason}</p>
                                 )}
@@ -3683,6 +3722,25 @@
                         {!authChecking && !bootstrapChecking && !authUser && !bootstrapRequired && (
                             <main className="bg-white p-8 rounded-xl shadow-lg max-w-lg mx-auto mb-6">
                                 <h2 className="text-2xl font-semibold mb-4">Login</h2>
+                                {runtimeConfig && (
+                                    <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                                        <p><span className="font-semibold">Auth mode:</span> {authRuntimeSummary.effectiveAuthMode}</p>
+                                        <p><span className="font-semibold">Configured users:</span> {authRuntimeSummary.validUserCount}</p>
+                                        <p><span className="font-semibold">Runtime:</span> {authRuntimeSummary.runtimeLabel}</p>
+                                        {authRuntimeSummary.bootstrapReason && (
+                                            <p><span className="font-semibold">Bootstrap state:</span> {authRuntimeSummary.bootstrapReason}</p>
+                                        )}
+                                        {authRuntimeSummary.localFallbackActive && (
+                                            <p className="mt-1 text-amber-700">This shell is using safe local fallback mode rather than provisioned cloud auth.</p>
+                                        )}
+                                        {authRuntimeSummary.cloudState === 'cloud' && authRuntimeSummary.validUserCount === 0 && (
+                                            <p className="mt-1 text-amber-700">Cloud auth is active, but the backend currently sees zero valid users.</p>
+                                        )}
+                                        {authRuntimeSummary.cloudState === 'cloud_error' && authRuntimeSummary.cloudReason && (
+                                            <p className="mt-1 text-red-700">Cloud auth error: {authRuntimeSummary.cloudReason}</p>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>

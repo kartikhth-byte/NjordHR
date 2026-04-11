@@ -1108,7 +1108,16 @@ def _extract_candidate_id_from_filename(filename):
 
 
 def _local_agent_base_url():
-    return os.getenv("NJORDHR_AGENT_BASE_URL", "http://127.0.0.1:5051").rstrip("/")
+    explicit = os.getenv("NJORDHR_AGENT_BASE_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    url = os.getenv("NJORDHR_AGENT_URL", "").strip()
+    if url:
+        return url.rstrip("/")
+    port = os.getenv("NJORDHR_AGENT_RUNTIME_PORT", "").strip() or os.getenv("NJORDHR_AGENT_PORT", "").strip()
+    if port.isdigit():
+        return f"http://127.0.0.1:{port}"
+    return "http://127.0.0.1:5051"
 
 
 def _use_local_agent():
@@ -1924,11 +1933,22 @@ def session_health():
 @app.route('/config/runtime', methods=['GET'])
 def runtime_config():
     """Expose safe runtime mode information for diagnostics/UI."""
+    bootstrap = _bootstrap_status()
+    auth_backend = _cloud_auth_state(force_refresh=False)
     if not _is_authenticated():
         return jsonify({
             "success": True,
             "feature_flags": {
+                "use_supabase_db": bool(feature_flags.use_supabase_db),
                 "use_local_agent": bool(feature_flags.use_local_agent),
+            },
+            "auth_backend": auth_backend,
+            "bootstrap": {
+                "required": bool(bootstrap.get("bootstrap_required")),
+                "completed": bool(bootstrap.get("bootstrap_completed")),
+                "reason": bootstrap.get("reason", ""),
+                "valid_user_count": int(bootstrap.get("valid_user_count", 0) or 0),
+                "auth_mode": bootstrap.get("auth_mode", _auth_mode()),
             },
             "ui_auto_shutdown": {
                 "enabled": _ui_idle_autoshutdown_enabled(),
@@ -1976,13 +1996,57 @@ def runtime_config():
             "required": bool(_agent_sync_token()),
         },
         "admin_settings_enabled": bool(_admin_token()),
-        "auth_backend": _cloud_auth_state(force_refresh=False),
+        "auth_backend": auth_backend,
+        "bootstrap": {
+            "required": bool(bootstrap.get("bootstrap_required")),
+            "completed": bool(bootstrap.get("bootstrap_completed")),
+            "reason": bootstrap.get("reason", ""),
+            "valid_user_count": int(bootstrap.get("valid_user_count", 0) or 0),
+            "auth_mode": bootstrap.get("auth_mode", _auth_mode()),
+        },
         "local_agent": _agent_health_summary() if _use_local_agent() else {
             "configured": False,
             "reachable": False,
             "base_url": _local_agent_base_url(),
         },
     })
+
+
+@app.route('/runtime/ready', methods=['GET'])
+def runtime_ready():
+    """Local unauthenticated readiness + identity endpoint for desktop shell startup."""
+    backend_port = int(os.getenv("NJORDHR_PORT", "5000"))
+    agent_port_raw = os.getenv("NJORDHR_AGENT_RUNTIME_PORT", "").strip() or os.getenv("NJORDHR_AGENT_PORT", "").strip()
+    bootstrap = _bootstrap_status()
+    payload = {
+        "success": True,
+        "backend_ready": True,
+        "process_identity": {
+            "project_dir": os.path.abspath(os.getcwd()),
+            "config_path": os.path.abspath(os.getenv("NJORDHR_CONFIG_PATH", "config.ini")),
+            "runtime_dir": os.path.abspath(os.getenv("NJORDHR_RUNTIME_DIR", "")) if os.getenv("NJORDHR_RUNTIME_DIR", "").strip() else "",
+        },
+        "ports": {
+            "backend_port": backend_port,
+            "agent_port": int(agent_port_raw) if agent_port_raw.isdigit() else None,
+        },
+        "runtime": {
+            "feature_flags": {
+                "use_supabase_db": bool(feature_flags.use_supabase_db),
+                "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
+                "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
+                "use_local_agent": bool(feature_flags.use_local_agent),
+                "use_cloud_export": bool(feature_flags.use_cloud_export),
+            },
+            "auth_mode": bootstrap.get("auth_mode", _auth_mode()),
+            "bootstrap_required": bool(bootstrap.get("bootstrap_required")),
+            "bootstrap_reason": bootstrap.get("reason", ""),
+        },
+        "version": {
+            "backend": "python-backend",
+        },
+    }
+    return jsonify(payload)
 
 
 @app.route('/setup/manifest', methods=['GET'])

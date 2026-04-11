@@ -40,6 +40,25 @@ Windows startup behavior:
 - Updates agent `api_base_url` to active backend URL.
 - Opens browser to active backend URL (unless `-NoOpen` is passed).
 
+## Electron Desktop Shell Prototype (E0)
+An initial Electron shell scaffold now exists under:
+- `electron/`
+
+Developer run:
+```bash
+cd electron
+npm install
+npm run dev
+```
+
+Notes:
+- The Electron shell starts or reuses the Python backend and opens NjordHR in an Electron window.
+- For development, you can override the Python executable with:
+  - `NJORDHR_ELECTRON_PYTHON=/path/to/python3`
+- In packaged mode, the shell is designed to launch a bundled Python runtime from app resources.
+- Backend readiness for the shell uses:
+  - `GET /runtime/ready`
+
 ## Windows Auto-Start on Login (Task Scheduler)
 Install:
 ```powershell
@@ -225,6 +244,19 @@ Setup Wizard installer URL overrides (optional):
 - Current runtime remains CSV by default.
 - Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (preferred) to enable Supabase repository.
 - Legacy fallback: `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Electron Shell Runtime Defaults
+For the Electron desktop shell, distinguish between two cases:
+- Provisioned packaged runtime:
+  - the shell should honor provisioned Supabase and auth settings when the required runtime values are present
+- Unprovisioned local/dev runtime:
+  - the shell falls back to `USE_LOCAL_AGENT=true` and `NJORDHR_AUTH_MODE=local`
+  - if `USE_SUPABASE_DB=true` is requested but `SUPABASE_URL` plus a Supabase secret key are missing, the shell forces:
+    - `USE_SUPABASE_DB=false`
+    - `USE_SUPABASE_READS=false`
+    - `USE_DUAL_WRITE=false`
+
+This fallback exists to prevent a startup crash in the Electron shell when Supabase mode is requested without the credentials needed to initialize the backend repository layer. It is a safe local-shell fallback, not the intended packaged production default.
 
 ## Migration Runbook
 Use the migration helper to convert legacy CSV layouts into the single master event-log CSV.

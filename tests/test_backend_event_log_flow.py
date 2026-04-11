@@ -469,6 +469,74 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("use_supabase_db", data["feature_flags"])
         self.assertIn("use_supabase_reads", data["feature_flags"])
 
+    def test_runtime_ready_reports_unauthenticated_backend_identity(self):
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        old_port = os.environ.get("NJORDHR_PORT")
+        old_agent_port = os.environ.get("NJORDHR_AGENT_RUNTIME_PORT")
+        old_runtime_dir = os.environ.get("NJORDHR_RUNTIME_DIR")
+        try:
+            os.environ["NJORDHR_PORT"] = "5057"
+            os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = "5058"
+            os.environ["NJORDHR_RUNTIME_DIR"] = self.temp_dir.name
+
+            resp = self.client.get("/runtime/ready")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data["success"])
+            self.assertTrue(data["backend_ready"])
+            self.assertEqual(data["ports"]["backend_port"], 5057)
+            self.assertEqual(data["ports"]["agent_port"], 5058)
+            self.assertEqual(data["process_identity"]["runtime_dir"], os.path.abspath(self.temp_dir.name))
+            self.assertEqual(data["process_identity"]["config_path"], os.path.abspath(self.temp_config_path))
+            self.assertTrue(data["process_identity"]["project_dir"])
+        finally:
+            if old_port is None:
+                os.environ.pop("NJORDHR_PORT", None)
+            else:
+                os.environ["NJORDHR_PORT"] = old_port
+            if old_agent_port is None:
+                os.environ.pop("NJORDHR_AGENT_RUNTIME_PORT", None)
+            else:
+                os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = old_agent_port
+            if old_runtime_dir is None:
+                os.environ.pop("NJORDHR_RUNTIME_DIR", None)
+            else:
+                os.environ["NJORDHR_RUNTIME_DIR"] = old_runtime_dir
+
+    def test_local_agent_base_url_prefers_runtime_agent_fallbacks(self):
+        old_base = os.environ.get("NJORDHR_AGENT_BASE_URL")
+        old_url = os.environ.get("NJORDHR_AGENT_URL")
+        old_runtime_port = os.environ.get("NJORDHR_AGENT_RUNTIME_PORT")
+        old_agent_port = os.environ.get("NJORDHR_AGENT_PORT")
+        try:
+            os.environ.pop("NJORDHR_AGENT_BASE_URL", None)
+            os.environ["NJORDHR_AGENT_URL"] = "http://127.0.0.1:5053"
+            os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = "5053"
+            os.environ["NJORDHR_AGENT_PORT"] = "5051"
+            self.assertEqual(backend_server._local_agent_base_url(), "http://127.0.0.1:5053")
+
+            os.environ.pop("NJORDHR_AGENT_URL", None)
+            self.assertEqual(backend_server._local_agent_base_url(), "http://127.0.0.1:5053")
+        finally:
+            if old_base is None:
+                os.environ.pop("NJORDHR_AGENT_BASE_URL", None)
+            else:
+                os.environ["NJORDHR_AGENT_BASE_URL"] = old_base
+            if old_url is None:
+                os.environ.pop("NJORDHR_AGENT_URL", None)
+            else:
+                os.environ["NJORDHR_AGENT_URL"] = old_url
+            if old_runtime_port is None:
+                os.environ.pop("NJORDHR_AGENT_RUNTIME_PORT", None)
+            else:
+                os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = old_runtime_port
+            if old_agent_port is None:
+                os.environ.pop("NJORDHR_AGENT_PORT", None)
+            else:
+                os.environ["NJORDHR_AGENT_PORT"] = old_agent_port
+
     def test_sensitive_endpoints_require_authentication(self):
         with self.client.session_transaction() as sess:
             sess.clear()
