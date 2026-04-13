@@ -4429,13 +4429,16 @@ class Analyzer:
     """Backward-compatible wrapper"""
     _instance = None
 
-    def __init__(self, gemini_api_key):
+    def __init__(self, config_source):
         print("\n*** RUNNING with Multi-Stage Retrieval + Learning ***\n")
         if Analyzer._instance is None:
-            import configparser
-            config = configparser.ConfigParser()
-            config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
-            config.read(config_path)
+            if hasattr(config_source, "get") and hasattr(config_source, "has_section"):
+                config = config_source
+            else:
+                import configparser
+                config = configparser.ConfigParser()
+                config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+                config.read(config_path)
             Analyzer._instance = AIResumeAnalyzer(config)
 
     def run_analysis(self, target_folder, prompt, applied_ship_type=None, experienced_ship_type=None):

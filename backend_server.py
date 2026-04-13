@@ -64,7 +64,7 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 def _build_analyzer():
     from ai_analyzer import Analyzer
-    return Analyzer(_gemini_api_key())
+    return Analyzer(config)
 
 
 def _resolve_verified_resumes_dir():
