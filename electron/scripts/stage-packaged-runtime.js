@@ -184,7 +184,7 @@ function copyWindowsEmbeddedRuntime(buildPython, targetRoot) {
     const sourcePath = path.join(basePrefix, entry.name);
     const lower = entry.name.toLowerCase();
     if (entry.isDirectory()) {
-      if (entry.name === "DLLs" || entry.name === "libs" || entry.name === "Tools") {
+      if (entry.name === "DLLs" || entry.name === "libs" || entry.name === "Lib" || entry.name === "Tools") {
         copyRecursive(sourcePath, path.join(targetRoot, entry.name));
       }
       continue;
