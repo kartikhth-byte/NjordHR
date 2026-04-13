@@ -149,6 +149,8 @@ test("buildEnvironment disables Supabase mode when credentials are incomplete", 
     assert.equal(env.USE_DUAL_WRITE, "false");
     assert.equal(env.USE_LOCAL_AGENT, "true");
     assert.equal(env.NJORDHR_AUTH_MODE, "local");
+    assert.equal(env.PYTHONUNBUFFERED, "1");
+    assert.equal(env.PYTHONIOENCODING, "utf-8");
   } finally {
     for (const [key, value] of Object.entries(original)) {
       if (value === undefined) {
@@ -158,6 +160,34 @@ test("buildEnvironment disables Supabase mode when credentials are incomplete", 
       }
     }
   }
+});
+
+test("buildEnvironment sets packaged Windows PYTHONHOME to the bundled runtime root", () => {
+  if (process.platform !== "win32") {
+    return;
+  }
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-pythonhome-"));
+  const paths = createPaths(tempRoot);
+  const ports = {
+    backendPort: 6200,
+    agentPort: 6201,
+    backendUrl: "http://127.0.0.1:6200",
+    agentUrl: "http://127.0.0.1:6201"
+  };
+
+  const env = buildEnvironment(paths, ports, {
+    packaged: true,
+    python: {
+      command: path.join("C:\\", "Programs", "NjordHR", "resources", "python", "python.exe"),
+      args: []
+    }
+  });
+
+  assert.equal(
+    env.PYTHONHOME,
+    path.join("C:\\", "Programs", "NjordHR", "resources", "python")
+  );
 });
 
 test("choosePorts reuses the persisted backend when runtime identity matches", async () => {

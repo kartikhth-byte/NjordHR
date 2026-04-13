@@ -44,7 +44,10 @@ async function launchApp() {
   bootstrapConfigFile(paths, process.env);
   const ports = await choosePorts(paths);
   const python = resolvePythonCommand(app);
-  const env = buildEnvironment(paths, ports);
+  const env = buildEnvironment(paths, ports, {
+    packaged: app.isPackaged,
+    python
+  });
   persistRuntimeEnvironment(paths, ports, env);
 
   diagnostics = buildDiagnostics(paths, ports, {

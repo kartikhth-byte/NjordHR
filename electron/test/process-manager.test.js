@@ -148,6 +148,9 @@ test("ensureBackendStarted fails early when spawned backend exits before readine
     manager.ensureBackendStarted(),
     /Backend process exited before readiness check completed/
   );
+
+  const backendErr = fs.readFileSync(path.join(paths.runtimeDir, "backend.err"), "utf8");
+  assert.match(backendErr, /Backend exited before readiness/);
 });
 
 test("ensureBackendStarted fails early when spawned backend errors before readiness", async () => {
@@ -193,4 +196,7 @@ test("ensureBackendStarted fails early when spawned backend errors before readin
     manager.ensureBackendStarted(),
     /Backend process failed to launch/
   );
+
+  const backendErr = fs.readFileSync(path.join(paths.runtimeDir, "backend.err"), "utf8");
+  assert.match(backendErr, /Backend launch error: spawn ENOENT/);
 });

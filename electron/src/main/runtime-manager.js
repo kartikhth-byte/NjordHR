@@ -328,7 +328,7 @@ function resolvePythonCommand(app) {
   return { command: "python3", args: [] };
 }
 
-function buildEnvironment(paths, ports) {
+function buildEnvironment(paths, ports, options = {}) {
   const envDefaults = {
     ...readEnvFile(path.join(paths.repoRoot, ".env")),
     ...readEnvFile(path.join(paths.repoRoot, "default_runtime.env"))
@@ -343,6 +343,8 @@ function buildEnvironment(paths, ports) {
     ...envDefaults,
     ...process.env,
     PYTHONPATH: pythonPathEntries.join(path.delimiter),
+    PYTHONUNBUFFERED: "1",
+    PYTHONIOENCODING: "utf-8",
     NJORDHR_PORT: String(ports.backendPort),
     NJORDHR_AGENT_PORT: String(ports.agentPort),
     NJORDHR_AGENT_RUNTIME_PORT: String(ports.agentPort),
@@ -377,6 +379,10 @@ function buildEnvironment(paths, ports) {
   }
   if (!env.NJORDHR_AUTH_MODE) {
     env.NJORDHR_AUTH_MODE = "local";
+  }
+
+  if (options.packaged && options.python && process.platform === "win32") {
+    env.PYTHONHOME = path.dirname(options.python.command);
   }
 
   return env;

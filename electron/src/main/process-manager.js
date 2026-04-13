@@ -97,6 +97,11 @@ function appendLaunchMarker(filePath, launchId, label) {
   );
 }
 
+function appendProcessFailure(filePath, launchId, label, details = "") {
+  const message = details ? `${label}: ${details}` : label;
+  appendLaunchMarker(filePath, launchId, message);
+}
+
 function writePidFile(pidPath, child) {
   if (!child || !child.pid) {
     return;
@@ -177,7 +182,7 @@ class ProcessManager {
     appendLaunchMarker(backendErr, this.launchId, `Launching backend on ${this.ports.backendUrl}`);
     const child = this.spawnProcess(
       this.python.command,
-      [...this.python.args, "backend_server.py"],
+      [...this.python.args, "-X", "faulthandler", "-u", path.join(this.paths.repoRoot, "backend_server.py")],
       {
         cwd: this.paths.repoRoot,
         env: this.env,
@@ -189,12 +194,19 @@ class ProcessManager {
     const readyPromise = this.waitForJson(readyUrl, READY_TIMEOUT_MS);
     const crashPromise = new Promise((_, reject) => {
       child.once("error", (error) => {
+        appendProcessFailure(backendErr, this.launchId, "Backend launch error", error.message);
         reject(new Error(`Backend process failed to launch. Check ${backendErr} for details. ${error.message}`));
       });
       child.once("exit", (code, signal) => {
         if (code === 0 || signal === "SIGTERM") {
           return;
         }
+        appendProcessFailure(
+          backendErr,
+          this.launchId,
+          "Backend exited before readiness",
+          `code=${code ?? "null"} signal=${signal ?? "null"}`
+        );
         reject(new Error(`Backend process exited before readiness check completed. Check ${backendErr} for details.`));
       });
     });
@@ -212,7 +224,7 @@ class ProcessManager {
         appendLaunchMarker(agentErr, this.launchId, `Launching agent on ${this.ports.agentUrl}`);
         const child = this.spawnProcess(
           this.python.command,
-          [...this.python.args, "agent_server.py"],
+          [...this.python.args, "-X", "faulthandler", "-u", path.join(this.paths.repoRoot, "agent_server.py")],
           {
             cwd: this.paths.repoRoot,
             env: this.env,
@@ -221,8 +233,19 @@ class ProcessManager {
         );
         this.agentProcess = createManagedProcess(child, agentOut, agentErr);
         writePidFile(path.join(this.paths.runtimeDir, "agent.pid"), child);
-        child.once("error", () => {
-          // Best effort in E0/E3; diagnostics will surface the failed launch.
+        child.once("error", (error) => {
+          appendProcessFailure(agentErr, this.launchId, "Agent launch error", error.message);
+        });
+        child.once("exit", (code, signal) => {
+          if (code === 0 || signal === "SIGTERM") {
+            return;
+          }
+          appendProcessFailure(
+            agentErr,
+            this.launchId,
+            "Agent exited before health check",
+            `code=${code ?? "null"} signal=${signal ?? "null"}`
+          );
         });
         this.waitForJson(healthUrl, AGENT_SETTINGS_TIMEOUT_MS)
           .then(() => this.configureAgent())
