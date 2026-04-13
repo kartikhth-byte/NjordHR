@@ -251,7 +251,6 @@ function stagePythonRuntime() {
       pipModuleArgs(stagePythonRoot, ["install", "-r", path.join(stageAppRoot, "requirements.txt")])
     );
     precompilePythonArtifacts(pythonBin, [
-      path.join(stagePythonRoot, "Lib"),
       path.join(stagePythonRoot, "Lib", "site-packages"),
       stageAppRoot
     ]);
