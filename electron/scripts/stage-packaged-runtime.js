@@ -32,6 +32,24 @@ const APP_DIRS = [
   "supabase"
 ];
 
+function resolveDefaultConfigSource() {
+  const override = (process.env.NJORDHR_DEFAULT_CONFIG_PATH || "").trim();
+  if (override) {
+    const absoluteOverride = path.resolve(projectRoot, override);
+    if (!fs.existsSync(absoluteOverride)) {
+      throw new Error(`Default config override not found: ${absoluteOverride}`);
+    }
+    return absoluteOverride;
+  }
+
+  const projectConfig = path.join(projectRoot, "config.ini");
+  if (fs.existsSync(projectConfig)) {
+    return projectConfig;
+  }
+
+  return path.join(projectRoot, "config.example.ini");
+}
+
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
@@ -233,6 +251,8 @@ function stageAppPayload() {
   for (const relativePath of APP_DIRS) {
     copyRecursive(path.join(projectRoot, relativePath), path.join(stageAppRoot, relativePath));
   }
+
+  copyRecursive(resolveDefaultConfigSource(), path.join(stageAppRoot, "default_config.ini"));
 
   writeDefaultRuntimeEnv();
 }

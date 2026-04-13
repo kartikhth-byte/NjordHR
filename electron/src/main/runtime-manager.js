@@ -83,23 +83,27 @@ function bootstrapConfigFile(paths, env = {}) {
     return paths.configPath;
   }
 
-  const templatePath = path.join(paths.repoRoot, "config.example.ini");
+  const defaultConfigPath = path.join(paths.repoRoot, "default_config.ini");
+  const templatePath = fs.existsSync(defaultConfigPath)
+    ? defaultConfigPath
+    : path.join(paths.repoRoot, "config.example.ini");
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Missing config template: ${templatePath}`);
   }
 
   const adminToken = String(env.NJORDHR_ADMIN_TOKEN || "your-admin-token").trim() || "your-admin-token";
+  const usingExampleTemplate = path.basename(templatePath).toLowerCase() === "config.example.ini";
   const template = fs.readFileSync(templatePath, "utf8");
   const lines = template.split(/\r?\n/).map((line) => {
     const trimmed = line.trimStart();
-    if (trimmed.startsWith("Username = ")) return "Username =";
-    if (trimmed.startsWith("Password = ")) return "Password =";
-    if (trimmed.startsWith("Gemini_API_Key = ")) return "Gemini_API_Key =";
-    if (trimmed.startsWith("Pinecone_API_Key = ")) return "Pinecone_API_Key =";
+    if (usingExampleTemplate && trimmed.startsWith("Username = ")) return "Username =";
+    if (usingExampleTemplate && trimmed.startsWith("Password = ")) return "Password =";
+    if (usingExampleTemplate && trimmed.startsWith("Gemini_API_Key = ")) return "Gemini_API_Key =";
+    if (usingExampleTemplate && trimmed.startsWith("Pinecone_API_Key = ")) return "Pinecone_API_Key =";
     if (trimmed.startsWith("Default_Download_Folder = ")) return `Default_Download_Folder = ${paths.downloadDir}`;
     if (trimmed.startsWith("Additional_Local_Folder = ")) return `Additional_Local_Folder = ${paths.verifiedDir}`;
-    if (trimmed.startsWith("admin_password = ")) return "admin_password =";
-    if (trimmed.startsWith("recruiter_password = ")) return "recruiter_password =";
+    if (usingExampleTemplate && trimmed.startsWith("admin_password = ")) return "admin_password =";
+    if (usingExampleTemplate && trimmed.startsWith("recruiter_password = ")) return "recruiter_password =";
     if (trimmed.startsWith("admin_token = ")) return `admin_token = ${adminToken}`;
     if (trimmed.startsWith("log_dir = ")) return `log_dir = ${paths.logsDir}`;
     if (trimmed.startsWith("registry_db_path = ")) return `registry_db_path = ${path.join(paths.runtimeDir, "registry.db")}`;

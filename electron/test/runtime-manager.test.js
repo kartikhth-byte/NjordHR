@@ -80,6 +80,58 @@ test("bootstrapConfigFile creates first-run config.ini from the template with ru
   assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
 });
 
+test("bootstrapConfigFile prefers bundled default_config.ini and preserves provisioned auth values", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-default-config-"));
+  const paths = createPaths(tempRoot);
+  paths.downloadDir = path.join(tempRoot, "Downloaded_Resumes");
+  paths.verifiedDir = path.join(tempRoot, "Verified_Resumes");
+  paths.logsDir = path.join(tempRoot, "logs");
+  fs.mkdirSync(paths.downloadDir, { recursive: true });
+  fs.mkdirSync(paths.verifiedDir, { recursive: true });
+  fs.mkdirSync(paths.logsDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(paths.repoRoot, "default_config.ini"),
+    [
+      "[Credentials]",
+      "Username = provisioned-user",
+      "Password = provisioned-pass",
+      "",
+      "[Settings]",
+      "Default_Download_Folder = C:\\legacy\\downloads",
+      "Additional_Local_Folder = C:\\legacy\\verified",
+      "",
+      "[Auth]",
+      "admin_username = admin",
+      "admin_password = keep-me",
+      "recruiter_username = recruiter",
+      "recruiter_password = keep-recruiter",
+      "",
+      "[Advanced]",
+      "admin_token = keep-token",
+      "log_dir = C:\\legacy\\logs",
+      "registry_db_path = C:\\legacy\\registry.db",
+      "feedback_db_path = C:\\legacy\\feedback.db",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+
+  bootstrapConfigFile(paths, {});
+  const content = fs.readFileSync(paths.configPath, "utf8");
+
+  assert.match(content, /^Username = provisioned-user$/m);
+  assert.match(content, /^Password = provisioned-pass$/m);
+  assert.match(content, /^Default_Download_Folder = .*Downloaded_Resumes$/m);
+  assert.match(content, /^Additional_Local_Folder = .*Verified_Resumes$/m);
+  assert.match(content, /^admin_password = keep-me$/m);
+  assert.match(content, /^recruiter_password = keep-recruiter$/m);
+  assert.match(content, /^admin_token = your-admin-token$/m);
+  assert.match(content, /^log_dir = .*\/logs$/m);
+  assert.match(content, /^registry_db_path = .*\/runtime\/registry\.db$/m);
+  assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
+});
+
 test("resolvePythonCommand prefers the repo virtualenv in dev mode when present", () => {
   const app = {
     isPackaged: false
