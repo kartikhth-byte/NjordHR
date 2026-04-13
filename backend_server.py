@@ -515,9 +515,12 @@ def _enforce_seajobs_idle_timeout():
 
 def _admin_token():
     token = os.getenv("NJORDHR_ADMIN_TOKEN", "").strip()
-    if token:
+    if token and not _is_placeholder_password(token):
         return token
-    return config.get("Advanced", "admin_token", fallback="").strip()
+    configured = config.get("Advanced", "admin_token", fallback="").strip()
+    if _is_placeholder_password(configured):
+        return ""
+    return configured
 
 
 def _is_placeholder_password(value):
