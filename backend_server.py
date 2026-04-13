@@ -29,7 +29,6 @@ except ImportError:
     sys.exit(1)
 
 from scraper_engine import Scraper
-from ai_analyzer import Analyzer
 from logger_config import setup_logger
 from resume_extractor import ResumeExtractor
 from app_settings import load_app_settings, FeatureFlags
@@ -61,6 +60,11 @@ cloud_auth_state_cache = {"ts": 0, "mode": "local", "reason": "not_checked"}
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _build_analyzer():
+    from ai_analyzer import Analyzer
+    return Analyzer(_gemini_api_key())
 
 
 def _resolve_verified_resumes_dir():
@@ -2858,7 +2862,7 @@ def analyze_stream():
                 return
             
             # Create analyzer and run streaming analysis
-            analyzer = Analyzer(_gemini_api_key())
+            analyzer = _build_analyzer()
             
             # Stream progress events
             for progress_event in analyzer.run_analysis_stream(
@@ -2920,7 +2924,7 @@ def analyze():
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
         
-        analyzer = Analyzer(_gemini_api_key())
+        analyzer = _build_analyzer()
         result = analyzer.run_analysis(
             rank_folder,
             prompt,
@@ -2951,7 +2955,7 @@ def submit_feedback():
     try:
         data = request.json
         
-        analyzer = Analyzer(_gemini_api_key())
+        analyzer = _build_analyzer()
         analyzer.store_feedback(
             filename=data.get('filename'),
             query=data.get('query'),
