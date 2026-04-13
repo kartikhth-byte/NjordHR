@@ -213,6 +213,15 @@ function pipModuleArgs(root, extraArgs) {
   return ["-m", "pip", ...extraArgs];
 }
 
+function precompilePythonArtifacts(pythonBin, targets) {
+  for (const target of targets) {
+    if (!target || !fs.existsSync(target)) {
+      continue;
+    }
+    runOrThrow(pythonBin, ["-m", "compileall", "-q", target]);
+  }
+}
+
 function stageAppPayload() {
   removeDir(stageAppRoot);
   ensureDir(stageAppRoot);
@@ -241,6 +250,11 @@ function stagePythonRuntime() {
       pythonBin,
       pipModuleArgs(stagePythonRoot, ["install", "-r", path.join(stageAppRoot, "requirements.txt")])
     );
+    precompilePythonArtifacts(pythonBin, [
+      path.join(stagePythonRoot, "Lib"),
+      path.join(stagePythonRoot, "Lib", "site-packages"),
+      stageAppRoot
+    ]);
     return;
   }
 
@@ -262,6 +276,10 @@ function stagePythonRuntime() {
     pythonBin,
     pipModuleArgs(stagePythonRoot, ["install", "-r", path.join(stageAppRoot, "requirements.txt")])
   );
+  precompilePythonArtifacts(pythonBin, [
+    path.join(stagePythonRoot, "lib"),
+    stageAppRoot
+  ]);
 }
 
 function writeStageManifest() {

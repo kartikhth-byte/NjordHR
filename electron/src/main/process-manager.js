@@ -4,6 +4,7 @@ const http = require("http");
 const { spawn } = require("child_process");
 
 const READY_TIMEOUT_MS = 30000;
+const PACKAGED_WINDOWS_READY_TIMEOUT_MS = 120000;
 const AGENT_SETTINGS_TIMEOUT_MS = 30000;
 
 function waitForJson(url, timeoutMs = READY_TIMEOUT_MS) {
@@ -152,6 +153,13 @@ class ProcessManager {
     this.spawnProcess = hooks.spawn || spawn;
   }
 
+  backendReadyTimeoutMs() {
+    if (this.app?.isPackaged && process.platform === "win32") {
+      return PACKAGED_WINDOWS_READY_TIMEOUT_MS;
+    }
+    return READY_TIMEOUT_MS;
+  }
+
   async ensureBackendStarted() {
     const readyUrl = `${this.ports.backendUrl}/runtime/ready`;
     try {
@@ -191,7 +199,7 @@ class ProcessManager {
     );
     this.backendProcess = createManagedProcess(child, backendOut, backendErr);
     writePidFile(path.join(this.paths.runtimeDir, "backend.pid"), child);
-    const readyPromise = this.waitForJson(readyUrl, READY_TIMEOUT_MS);
+    const readyPromise = this.waitForJson(readyUrl, this.backendReadyTimeoutMs());
     const crashPromise = new Promise((_, reject) => {
       child.once("error", (error) => {
         appendProcessFailure(backendErr, this.launchId, "Backend launch error", error.message);
