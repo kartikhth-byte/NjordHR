@@ -132,6 +132,19 @@ test("bootstrapConfigFile prefers bundled default_config.ini and preserves provi
   assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
 });
 
+test("committed packaged baseline config exists for reproducible Electron builds", () => {
+  const baselinePath = path.join(process.cwd(), "..", "deploy", "shared", "default_config.ini");
+  assert.equal(fs.existsSync(baselinePath), true);
+  const content = fs.readFileSync(baselinePath, "utf8");
+
+  assert.match(content, /^\[Credentials\]$/m);
+  assert.match(content, /^Username =$/m);
+  assert.match(content, /^Password =$/m);
+  assert.match(content, /^\[Auth\]$/m);
+  assert.match(content, /^admin_username = admin$/m);
+  assert.match(content, /^admin_password =$/m);
+});
+
 test("resolvePythonCommand prefers the repo virtualenv in dev mode when present", () => {
   const app = {
     isPackaged: false

@@ -42,6 +42,11 @@ function resolveDefaultConfigSource() {
     return absoluteOverride;
   }
 
+  const committedDefault = path.join(projectRoot, "deploy", "shared", "default_config.ini");
+  if (fs.existsSync(committedDefault)) {
+    return committedDefault;
+  }
+
   const projectConfig = path.join(projectRoot, "config.ini");
   if (fs.existsSync(projectConfig)) {
     return projectConfig;
