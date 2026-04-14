@@ -2026,7 +2026,13 @@ def runtime_ready():
         return jsonify({"success": False, "error": "Forbidden"}), 403
     backend_port = int(os.getenv("NJORDHR_PORT", "5000"))
     agent_port_raw = os.getenv("NJORDHR_AGENT_RUNTIME_PORT", "").strip() or os.getenv("NJORDHR_AGENT_PORT", "").strip()
-    bootstrap = _bootstrap_status()
+    auth_pref = _auth_mode_preference()
+    if bool(getattr(feature_flags, "use_supabase_db", False)) or auth_pref == "cloud":
+        auth_mode = "cloud"
+    elif auth_pref == "local":
+        auth_mode = "local"
+    else:
+        auth_mode = "local"
     payload = {
         "success": True,
         "backend_ready": True,
@@ -2047,9 +2053,12 @@ def runtime_ready():
                 "use_local_agent": bool(feature_flags.use_local_agent),
                 "use_cloud_export": bool(feature_flags.use_cloud_export),
             },
-            "auth_mode": bootstrap.get("auth_mode", _auth_mode()),
-            "bootstrap_required": bool(bootstrap.get("bootstrap_required")),
-            "bootstrap_reason": bootstrap.get("reason", ""),
+            # Keep /runtime/ready fast and local-only. Heavy cloud/bootstrap checks
+            # belong to the authenticated runtime/bootstrap endpoints, not the shell
+            # readiness handshake used during startup.
+            "auth_mode": auth_mode,
+            "bootstrap_required": False,
+            "bootstrap_reason": "startup_ready",
         },
         "version": {
             "backend": "python-backend",
