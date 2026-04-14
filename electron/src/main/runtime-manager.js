@@ -21,6 +21,20 @@ const RUNTIME_ENV_COMPAT_KEYS = [
   "NJORDHR_DEFAULT_SUPABASE_SERVICE_ROLE_KEY"
 ];
 
+const QUOTE_LIKE_CODEPOINTS = /[\u2018\u2019\u201A\u201B\u201C\u201D\u201E\u201F\u00AB\u00BB\u2032\u2033]/g;
+
+function normalizeEnvValue(rawValue) {
+  if (rawValue === undefined || rawValue === null) {
+    return "";
+  }
+
+  return String(rawValue)
+    .trim()
+    .replace(QUOTE_LIKE_CODEPOINTS, "\"")
+    .replace(/^"+|"+$/g, "")
+    .trim();
+}
+
 function readEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
     return {};
@@ -39,7 +53,7 @@ function readEnvFile(filePath) {
     }
     const key = trimmed.slice(0, separatorIndex).trim();
     const value = trimmed.slice(separatorIndex + 1).trim();
-    values[key] = unescapeShellValue(value);
+    values[key] = normalizeEnvValue(unescapeShellValue(value));
   }
   return values;
 }
@@ -180,7 +194,7 @@ function readRuntimeEnv(runtimeDir) {
     }
     const key = line.slice(0, separatorIndex).trim();
     const value = line.slice(separatorIndex + 1);
-    values[key] = unescapeShellValue(value);
+    values[key] = normalizeEnvValue(unescapeShellValue(value));
   }
   return values;
 }
@@ -359,6 +373,10 @@ function buildEnvironment(paths, ports, options = {}) {
     NJORDHR_RUNTIME_DIR: paths.runtimeDir
   };
 
+  for (const [key, value] of Object.entries(env)) {
+    env[key] = normalizeEnvValue(value);
+  }
+
   const supabaseUrl = String(env.SUPABASE_URL || "").trim();
   const supabaseKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   const wantsSupabase = String(env.USE_SUPABASE_DB || "").trim().toLowerCase() === "true";
@@ -429,5 +447,6 @@ module.exports = {
   resolvePythonCommand,
   buildEnvironment,
   persistRuntimeEnvironment,
-  readRuntimeEnv
+  readRuntimeEnv,
+  normalizeEnvValue
 };

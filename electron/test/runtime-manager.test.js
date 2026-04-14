@@ -9,7 +9,8 @@ const {
   buildEnvironment,
   choosePorts,
   persistRuntimeEnvironment,
-  resolvePythonCommand
+  resolvePythonCommand,
+  normalizeEnvValue
 } = require("../src/main/runtime-manager");
 
 function createPaths(tempRoot) {
@@ -74,7 +75,7 @@ test("bootstrapConfigFile creates first-run config.ini from the template with ru
   assert.match(content, /^Default_Download_Folder = .*Downloaded_Resumes$/m);
   assert.match(content, /^Additional_Local_Folder = .*Verified_Resumes$/m);
   assert.match(content, /^admin_password =$/m);
-  assert.match(content, /^admin_token = your-admin-token$/m);
+  assert.match(content, /^admin_token =$/m);
   assert.match(content, /^log_dir = .*\/logs$/m);
   assert.match(content, /^registry_db_path = .*\/runtime\/registry\.db$/m);
   assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
@@ -126,7 +127,7 @@ test("bootstrapConfigFile prefers bundled default_config.ini and preserves provi
   assert.match(content, /^Additional_Local_Folder = .*Verified_Resumes$/m);
   assert.match(content, /^admin_password = keep-me$/m);
   assert.match(content, /^recruiter_password = keep-recruiter$/m);
-  assert.match(content, /^admin_token = your-admin-token$/m);
+  assert.match(content, /^admin_token =$/m);
   assert.match(content, /^log_dir = .*\/logs$/m);
   assert.match(content, /^registry_db_path = .*\/runtime\/registry\.db$/m);
   assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
@@ -216,6 +217,48 @@ test("buildEnvironment disables Supabase mode when credentials are incomplete", 
     assert.equal(env.NJORDHR_AUTH_MODE, "local");
     assert.equal(env.PYTHONUNBUFFERED, "1");
     assert.equal(env.PYTHONIOENCODING, "utf-8");
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
+test("normalizeEnvValue strips pasted smart quotes around URLs", () => {
+  assert.equal(
+    normalizeEnvValue("“https://ljmhkweutnnrdglvetjr.supabase.co”"),
+    "https://ljmhkweutnnrdglvetjr.supabase.co"
+  );
+});
+
+test("buildEnvironment sanitizes smart-quoted Supabase URL values", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-env-sanitize-"));
+  const paths = createPaths(tempRoot);
+  const ports = {
+    backendPort: 6200,
+    agentPort: 6201,
+    backendUrl: "http://127.0.0.1:6200",
+    agentUrl: "http://127.0.0.1:6201"
+  };
+
+  const original = {
+    USE_SUPABASE_DB: process.env.USE_SUPABASE_DB,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY
+  };
+
+  process.env.USE_SUPABASE_DB = "true";
+  process.env.SUPABASE_URL = "“https://ljmhkweutnnrdglvetjr.supabase.co”";
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_test";
+
+  try {
+    const env = buildEnvironment(paths, ports);
+    assert.equal(env.SUPABASE_URL, "https://ljmhkweutnnrdglvetjr.supabase.co");
+    assert.equal(env.USE_SUPABASE_DB, "true");
   } finally {
     for (const [key, value] of Object.entries(original)) {
       if (value === undefined) {
