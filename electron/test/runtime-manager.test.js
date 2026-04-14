@@ -270,6 +270,68 @@ test("buildEnvironment sanitizes smart-quoted Supabase URL values", () => {
   }
 });
 
+test("buildEnvironment prefers packaged provisioned auth settings over ambient shell overrides", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-packaged-precedence-"));
+  const paths = createPaths(tempRoot);
+  const ports = {
+    backendPort: 6200,
+    agentPort: 6201,
+    backendUrl: "http://127.0.0.1:6200",
+    agentUrl: "http://127.0.0.1:6201"
+  };
+  const runtimeDefaultsPath = path.join(paths.repoRoot, "default_runtime.env");
+  fs.writeFileSync(
+    runtimeDefaultsPath,
+    [
+      "USE_SUPABASE_DB=true",
+      "USE_SUPABASE_READS=true",
+      "USE_DUAL_WRITE=false",
+      "USE_LOCAL_AGENT=true",
+      "NJORDHR_AUTH_MODE=cloud",
+      "SUPABASE_URL=https://ljmhkweutnnrdglvetjr.supabase.co",
+      "SUPABASE_SECRET_KEY=sb_secret_packaged"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const original = {
+    USE_SUPABASE_DB: process.env.USE_SUPABASE_DB,
+    USE_SUPABASE_READS: process.env.USE_SUPABASE_READS,
+    USE_DUAL_WRITE: process.env.USE_DUAL_WRITE,
+    USE_LOCAL_AGENT: process.env.USE_LOCAL_AGENT,
+    NJORDHR_AUTH_MODE: process.env.NJORDHR_AUTH_MODE,
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY
+  };
+
+  process.env.USE_SUPABASE_DB = "false";
+  process.env.USE_SUPABASE_READS = "false";
+  process.env.USE_DUAL_WRITE = "true";
+  process.env.USE_LOCAL_AGENT = "false";
+  process.env.NJORDHR_AUTH_MODE = "local";
+  process.env.SUPABASE_URL = "“https://bad-shell-value.example.com”";
+  process.env.SUPABASE_SECRET_KEY = "sb_secret_shell";
+
+  try {
+    const env = buildEnvironment(paths, ports, { packaged: true });
+    assert.equal(env.USE_SUPABASE_DB, "true");
+    assert.equal(env.USE_SUPABASE_READS, "true");
+    assert.equal(env.USE_DUAL_WRITE, "false");
+    assert.equal(env.USE_LOCAL_AGENT, "true");
+    assert.equal(env.NJORDHR_AUTH_MODE, "cloud");
+    assert.equal(env.SUPABASE_URL, "https://ljmhkweutnnrdglvetjr.supabase.co");
+    assert.equal(env.SUPABASE_SECRET_KEY, "sb_secret_packaged");
+  } finally {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});
+
 test("buildEnvironment sets packaged Windows PYTHONHOME to the bundled runtime root", () => {
   if (process.platform !== "win32") {
     return;

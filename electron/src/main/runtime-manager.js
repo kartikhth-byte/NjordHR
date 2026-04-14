@@ -377,6 +377,17 @@ function buildEnvironment(paths, ports, options = {}) {
     env[key] = normalizeEnvValue(value);
   }
 
+  // Packaged desktop builds should honor their provisioned runtime defaults
+  // over any stale shell/session variables inherited from the host machine.
+  if (options.packaged) {
+    for (const key of RUNTIME_ENV_COMPAT_KEYS) {
+      const provisionedValue = normalizeEnvValue(envDefaults[key]);
+      if (provisionedValue) {
+        env[key] = provisionedValue;
+      }
+    }
+  }
+
   const supabaseUrl = String(env.SUPABASE_URL || "").trim();
   const supabaseKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   const wantsSupabase = String(env.USE_SUPABASE_DB || "").trim().toLowerCase() === "true";
