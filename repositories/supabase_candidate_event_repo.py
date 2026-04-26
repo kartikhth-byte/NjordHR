@@ -6,13 +6,14 @@ import requests
 
 from csv_manager import CSVManager
 from repositories.candidate_event_repo import CandidateEventRepo
+from runtime_env import normalize_env_value, normalized_url
 
 
 def resolve_supabase_api_key():
     """Prefer modern Supabase secret key, fallback to legacy service role key."""
     return (
-        os.getenv("SUPABASE_SECRET_KEY", "").strip()
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
 
 
@@ -46,7 +47,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         timeout_seconds=20,
         audit_base_folder='Verified_Resumes',
     ):
-        self.supabase_url = supabase_url.rstrip('/')
+        self.supabase_url = normalized_url(supabase_url)
         self.server_url = server_url
         self.timeout_seconds = timeout_seconds
         self._audit_manager = CSVManager(base_folder=audit_base_folder, server_url=server_url)
@@ -305,4 +306,4 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
 
 def can_enable_supabase_repo():
-    return bool(os.getenv("SUPABASE_URL") and resolve_supabase_api_key())
+    return bool(normalized_url(os.getenv("SUPABASE_URL", "")) and resolve_supabase_api_key())

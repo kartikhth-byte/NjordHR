@@ -34,6 +34,7 @@ from resume_extractor import ResumeExtractor
 from app_settings import load_app_settings, FeatureFlags
 from repositories.repo_factory import build_candidate_event_repo
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
+from runtime_env import normalize_env_value, normalized_url
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -119,10 +120,10 @@ def _advanced_value(name, fallback=""):
 
 
 def _credential_value(config_key, env_name, fallback=""):
-    env_value = os.getenv(env_name, "").strip()
+    env_value = normalize_env_value(os.getenv(env_name, ""))
     if env_value:
         return env_value
-    return creds.get(config_key, fallback=fallback)
+    return normalize_env_value(creds.get(config_key, fallback=fallback))
 
 
 def _seajob_username():
@@ -150,10 +151,10 @@ def _supabase_service_role_key():
 
 
 def _supabase_url():
-    env_value = os.getenv("SUPABASE_URL", "").strip()
+    env_value = normalized_url(os.getenv("SUPABASE_URL", ""))
     if env_value:
-        return env_value.rstrip("/")
-    return config.get("Advanced", "supabase_url", fallback="").strip().rstrip("/")
+        return env_value
+    return normalized_url(config.get("Advanced", "supabase_url", fallback=""))
 
 
 def _supabase_runtime_config_endpoint():
@@ -207,9 +208,10 @@ def _supabase_runtime_config_set(pairs):
         key_s = str(key).strip()
         if not key_s:
             continue
+        value_s = normalize_env_value(value)
         body.append({
             "key": key_s,
-            "value": str(value or ""),
+            "value": value_s,
             "updated_at": now_iso,
         })
     if not body:
@@ -236,7 +238,7 @@ def _load_runtime_secrets_from_cloud():
         "pinecone_api_key": "PINECONE_API_KEY",
     }
     for key, env_name in mapping.items():
-        val = str(cfg.get(key, "")).strip()
+        val = normalize_env_value(cfg.get(key, ""))
         if val:
             os.environ[env_name] = val
 
@@ -577,7 +579,7 @@ def _auth_user_list_local(include_placeholder_passwords=False):
 
 
 def _auth_mode_preference():
-    raw = os.getenv("NJORDHR_AUTH_MODE", "auto").strip().lower()
+    raw = normalize_env_value(os.getenv("NJORDHR_AUTH_MODE", "auto")).lower()
     if raw in {"cloud", "local", "auto"}:
         return raw
     return "auto"
@@ -593,7 +595,7 @@ def _cloud_auth_required():
 
 def _password_hash_method():
     # Use PBKDF2 by default for compatibility with Python builds lacking hashlib.scrypt.
-    return os.getenv("NJORDHR_PASSWORD_HASH_METHOD", "pbkdf2:sha256:600000").strip() or "pbkdf2:sha256:600000"
+    return normalize_env_value(os.getenv("NJORDHR_PASSWORD_HASH_METHOD", "pbkdf2:sha256:600000")) or "pbkdf2:sha256:600000"
 
 
 def _hash_password(password):
@@ -613,7 +615,7 @@ def _check_password(stored_hash, password):
 
 
 def _supabase_auth_endpoint():
-    supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_url = _supabase_url()
     supabase_key = resolve_supabase_api_key()
     if not supabase_url or not supabase_key:
         return "", {}
@@ -1161,7 +1163,7 @@ def _build_runtime_resume_url(rank_applied_for, filename):
 
 
 def _storage_bucket_name():
-    return os.getenv("SUPABASE_RESUME_BUCKET", "resumes").strip() or "resumes"
+    return normalize_env_value(os.getenv("SUPABASE_RESUME_BUCKET", "resumes")) or "resumes"
 
 
 def _safe_storage_segment(value):
@@ -1170,13 +1172,13 @@ def _safe_storage_segment(value):
 
 
 def _supabase_storage_upload(file_bytes, object_path, content_type="application/pdf"):
-    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_url = _supabase_url()
     supabase_key = resolve_supabase_api_key()
     if not supabase_url or not supabase_key:
         return None, "Supabase credentials not configured"
 
     bucket = _storage_bucket_name()
-    endpoint = f"{supabase_url.rstrip('/')}/storage/v1/object/{bucket}/{object_path}"
+    endpoint = f"{supabase_url}/storage/v1/object/{bucket}/{object_path}"
     headers = {
         "apikey": supabase_key,
         "Authorization": f"Bearer {supabase_key}",
@@ -1196,7 +1198,7 @@ def _supabase_storage_signed_url(storage_url, expires_in=600):
     if not storage_url or not storage_url.startswith("storage://"):
         return "", "Invalid storage URL"
 
-    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_url = _supabase_url()
     supabase_key = resolve_supabase_api_key()
     if not supabase_url or not supabase_key:
         return "", "Supabase credentials not configured"
@@ -1212,7 +1214,7 @@ def _supabase_storage_signed_url(storage_url, expires_in=600):
     if not re.fullmatch(r"[A-Za-z0-9._/-]+", object_path):
         return "", "Invalid storage object path"
 
-    endpoint = f"{supabase_url.rstrip('/')}/storage/v1/object/sign/{bucket}/{object_path}"
+    endpoint = f"{supabase_url}/storage/v1/object/sign/{bucket}/{object_path}"
     headers = {
         "apikey": supabase_key,
         "Authorization": f"Bearer {supabase_key}",
@@ -1965,9 +1967,9 @@ def runtime_config():
         })
 
     key_source = "none"
-    if os.getenv("SUPABASE_SECRET_KEY", "").strip():
+    if normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", "")):
         key_source = "secret"
-    elif os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip():
+    elif normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")):
         key_source = "legacy_service_role"
     supabase_key = resolve_supabase_api_key()
     key_hint = f"{supabase_key[:12]}..." if supabase_key else ""
@@ -1997,7 +1999,7 @@ def runtime_config():
         "supabase_auth": {
             "key_source": key_source,
             "key_hint": key_hint,
-            "url_configured": bool(os.getenv("SUPABASE_URL", "").strip()),
+            "url_configured": bool(_supabase_url()),
         },
         "agent_ingest_auth": {
             "required": bool(_agent_sync_token()),
@@ -2356,12 +2358,13 @@ def test_admin_supabase():
         return jsonify({"success": False, "message": reason}), 401
 
     data = request.json or {}
-    supabase_url = str(data.get("supabase_url", "") or _supabase_url()).strip()
+    supabase_url = normalized_url(data.get("supabase_url", "") or _supabase_url())
     supabase_secret_key = str(
         data.get("supabase_secret_key", "")
         or data.get("supabase_service_role_key", "")
         or resolve_supabase_api_key()
-    ).strip()
+    )
+    supabase_secret_key = normalize_env_value(supabase_secret_key)
     if not supabase_url or not supabase_secret_key:
         return jsonify({"success": False, "message": "supabase_url and supabase_secret_key are required"}), 400
 
@@ -2406,7 +2409,7 @@ def save_admin_settings():
 
     def _set_if_present(section, key, payload_key):
         if payload_key in payload:
-            value = str(payload.get(payload_key, "")).strip()
+            value = normalize_env_value(payload.get(payload_key, ""))
             if value:
                 _config_set_literal(config, section, key, value)
 
@@ -2414,22 +2417,22 @@ def save_admin_settings():
     # for future manual terminal starts via config.ini.
     sensitive_pairs = {}
     if "seajob_username" in payload:
-        val = str(payload.get("seajob_username", "")).strip()
+        val = normalize_env_value(payload.get("seajob_username", ""))
         if val:
             os.environ["SEAJOB_USERNAME"] = val
             sensitive_pairs["seajob_username"] = val
     if "seajob_password" in payload:
-        val = str(payload.get("seajob_password", "")).strip()
+        val = normalize_env_value(payload.get("seajob_password", ""))
         if val:
             os.environ["SEAJOB_PASSWORD"] = val
             sensitive_pairs["seajob_password"] = val
     if "gemini_api_key" in payload:
-        val = str(payload.get("gemini_api_key", "")).strip()
+        val = normalize_env_value(payload.get("gemini_api_key", ""))
         if val:
             os.environ["GEMINI_API_KEY"] = val
             sensitive_pairs["gemini_api_key"] = val
     if "pinecone_api_key" in payload:
-        val = str(payload.get("pinecone_api_key", "")).strip()
+        val = normalize_env_value(payload.get("pinecone_api_key", ""))
         if val:
             os.environ["PINECONE_API_KEY"] = val
             sensitive_pairs["pinecone_api_key"] = val
@@ -2462,19 +2465,19 @@ def save_admin_settings():
         _config_set_literal(config, "Advanced", "otp_window_seconds", str(otp_seconds))
 
     if "supabase_url" in payload:
-        supabase_url = str(payload.get("supabase_url", "")).strip()
+        supabase_url = normalized_url(payload.get("supabase_url", ""))
         _config_set_literal(config, "Advanced", "supabase_url", supabase_url)
         os.environ["SUPABASE_URL"] = supabase_url
         sensitive_pairs["supabase_url"] = supabase_url
     if "supabase_secret_key" in payload:
-        sup_key = str(payload.get("supabase_secret_key", "")).strip()
+        sup_key = normalize_env_value(payload.get("supabase_secret_key", ""))
         if sup_key:
             _config_set_literal(config, "Credentials", "Supabase_Secret_Key", sup_key)
             os.environ["SUPABASE_SECRET_KEY"] = sup_key
             os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
             sensitive_pairs["supabase_secret_key"] = sup_key
     if "supabase_service_role_key" in payload:
-        legacy_key = str(payload.get("supabase_service_role_key", "")).strip()
+        legacy_key = normalize_env_value(payload.get("supabase_service_role_key", ""))
         if legacy_key:
             _config_set_literal(config, "Credentials", "Supabase_Service_Role_Key", legacy_key)
             os.environ["SUPABASE_SERVICE_ROLE_KEY"] = legacy_key
