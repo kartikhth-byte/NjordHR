@@ -3,6 +3,7 @@ import configparser
 import hashlib
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -228,6 +229,37 @@ class OutlookEmailIntakeManagerTests(unittest.TestCase):
                     self.assertTrue(status["converter_available"])
                     self.assertEqual(status["converter_source"], "bundled")
 
+    def test_convert_to_pdf_retries_via_open_for_macos_app_bundle(self):
+        source_path = Path(self.temp_dir.name) / "sample.docx"
+        source_path.write_bytes(b"docx")
+
+        direct_result = subprocess.CompletedProcess(
+            args=["/Applications/LibreOffice.app/Contents/MacOS/soffice"],
+            returncode=-6,
+            stdout="",
+            stderr="",
+        )
+
+        def fake_run(command, **_kwargs):
+            if command[:1] == ["open"]:
+                outdir = Path(command[10])
+                pdf_path = outdir / f"{source_path.stem}.pdf"
+                pdf_path.write_bytes(b"%PDF-1.4 retry success")
+                return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+            return direct_result
+
+        with mock.patch.object(self.manager, "_resolve_soffice_details", return_value=("/Applications/LibreOffice.app/Contents/MacOS/soffice", "system_app_bundle")):
+            with mock.patch("agent.email_intake.sys.platform", "darwin"):
+                with mock.patch.object(self.manager, "_run_converter_command", side_effect=fake_run) as run_mock:
+                    pdf_path, error = self.manager._convert_to_pdf(source_path)
+
+        self.assertEqual(error, "")
+        self.assertTrue(pdf_path.exists())
+        self.assertEqual(run_mock.call_count, 2)
+        retry_command = run_mock.call_args_list[1].args[0]
+        self.assertEqual(retry_command[:4], ["open", "-W", "-n", "-a"])
+        self.assertEqual(retry_command[4], "/Applications/LibreOffice.app")
+
     def test_fetch_from_outlook_keeps_unique_names_for_same_message_pdf_and_docx(self):
         pdf_bytes = base64.b64encode(b"%PDF-1.4 sibling pdf").decode("ascii")
         docx_bytes = base64.b64encode(b"docx-bytes").decode("ascii")
@@ -269,6 +301,43 @@ class OutlookEmailIntakeManagerTests(unittest.TestCase):
         self.assertNotEqual(saved[0], saved[1])
         self.assertTrue(saved[0].startswith("EMAIL_20260426_100000_msg-1_BABLU_WIPER_NEW_CV"))
         self.assertTrue(saved[1].startswith("EMAIL_20260426_100000_msg-1_BABLU_WIPER_NEW_CV"))
+
+    def test_fetch_from_outlook_routes_docx_conversion_failure_to_failed_queue(self):
+        docx_bytes = base64.b64encode(b"docx-bytes").decode("ascii")
+        attachments = [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "id": "att-docx",
+                "name": "STEWARD_AS.docx",
+                "isInline": False,
+                "contentBytes": docx_bytes,
+            },
+        ]
+        manager = OutlookEmailIntakeManager(
+            self.store,
+            _FakeAuth(),
+            self.parser,
+            http_client=_FakeHttpClient(attachments=attachments),
+            analyzer_factory=lambda: _FakeAnalyzer(),
+        )
+
+        with mock.patch.object(
+            manager,
+            "_convert_to_pdf",
+            return_value=(None, "LibreOffice did not produce a PDF for STEWARD_AS.docx."),
+        ):
+            result = manager.fetch_from_outlook(lambda *_args: None)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["imported"], 0)
+        self.assertEqual(result["manual_review"], 0)
+        self.assertEqual(result["failed"], 1)
+        failed_dir = Path(self.temp_dir.name) / "downloads" / "_EmailInbox_Failed"
+        failed_docx = failed_dir / "STEWARD_AS.docx"
+        self.assertTrue(failed_docx.exists())
+        sidecar = json.loads(Path(f"{failed_docx}.json").read_text(encoding="utf-8"))
+        self.assertEqual(sidecar["attachment_name"], "STEWARD_AS.docx")
+        self.assertIn("did not produce a PDF", sidecar["reason"])
 
     def test_classify_rank_routes_non_configured_resolved_rank_to_manual_review(self):
         with mock.patch.object(

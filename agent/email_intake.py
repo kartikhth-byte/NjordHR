@@ -311,23 +311,79 @@ class OutlookEmailIntakeManager:
                 return str(bundle_path), "system_app_bundle"
         return "", ""
 
+    def _macos_app_bundle_root(self, soffice_path):
+        path = Path(str(soffice_path or ""))
+        parts = path.parts
+        for index, part in enumerate(parts):
+            if part.endswith(".app"):
+                return str(Path(*parts[: index + 1]))
+        return ""
+
+    def _run_converter_command(self, command):
+        return subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=120,
+        )
+
+    def _convert_via_open_app_bundle(self, app_bundle_root, source_path, output_dir):
+        if not app_bundle_root:
+            return None
+        return self._run_converter_command(
+            [
+                "open",
+                "-W",
+                "-n",
+                "-a",
+                app_bundle_root,
+                "--args",
+                "--headless",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                str(output_dir),
+                str(source_path),
+            ]
+        )
+
+    def _format_converter_failure(self, command_result, source_path):
+        parts = []
+        if command_result is not None:
+            parts.append(f"Converter exited with code {command_result.returncode}.")
+            stdout_text = str(command_result.stdout or "").strip()
+            stderr_text = str(command_result.stderr or "").strip()
+            if stdout_text:
+                parts.append(f"stdout: {stdout_text[:300]}")
+            if stderr_text:
+                parts.append(f"stderr: {stderr_text[:300]}")
+        if not parts:
+            return f"LibreOffice did not produce a PDF for {source_path.name}."
+        return f"LibreOffice did not produce a PDF for {source_path.name}. {' '.join(parts)}"
+
     def _convert_to_pdf(self, source_path):
-        soffice = self._resolve_soffice_path()
+        soffice, source = self._resolve_soffice_details()
         if not soffice:
             return None, "LibreOffice (soffice) is not available."
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
-            subprocess.run(
+            result = self._run_converter_command(
                 [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(tmp_dir), str(source_path)],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=120,
             )
             pdf_path = tmp_dir / f"{source_path.stem}.pdf"
+            if (
+                not pdf_path.exists()
+                and sys.platform == "darwin"
+                and source == "system_app_bundle"
+            ):
+                app_bundle_root = self._macos_app_bundle_root(soffice)
+                retry_result = self._convert_via_open_app_bundle(app_bundle_root, source_path, tmp_dir)
+                if retry_result is not None:
+                    result = retry_result
             if not pdf_path.exists():
-                return None, f"LibreOffice did not produce a PDF for {source_path.name}."
+                return None, self._format_converter_failure(result, source_path)
             target = source_path.with_suffix(".pdf")
             target.write_bytes(pdf_path.read_bytes())
             return target, ""
