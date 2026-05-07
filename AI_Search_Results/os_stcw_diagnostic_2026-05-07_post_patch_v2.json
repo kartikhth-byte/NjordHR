@@ -1,0 +1,337 @@
+{
+  "folder": "/Users/kartikraghavan/Library/Application Support/NjordHR/Resumes/OS",
+  "generated_at": "2026-05-07T11:57:23.274035+00:00",
+  "rows": [
+    {
+      "filename": "EMAIL_20260330_165652_AAMkADI5NjU4_MAKSON_NEW_RESUME_-_26.pdf",
+      "label_snippets": [
+        "CORIN FPFF 4060306122260046 12/03/2026 11/03/2031 TUTICORIN PST 4060306112260045 11/03/2026 10/03/2031 TUTICORIN O.T.C.T.O 40602951112100215 17/09/2021 LIFE CHENNAI O.T.C.T [DCE] COPDGSOAC2150358 23/09/2021 LIFE MUMBAI S.T.S.D.S.D 40201766212101213 06/08/2021 LIFE PONDICHERY PSCRB 4",
+        "D AT STCW BASIC 40201161012102412 29/09/2022 LIFE TUTICORIN FPFF 4060306122260046 12/03/2026 11/03/2031 TUTICORIN PST 4060306112260045 11/03/2026 10/03/2031 TUTICORIN O.T.C.T.O 40602951112100215 17/09/2021 LIFE CHENNAI O.T.C.T [DCE] COPDGSOAC2150358 23/09/2021 LIFE MUMBAI S.T.S.D.S.D"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "unknown",
+          "pst": "unknown"
+        },
+        "confidence": null,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "MISSING",
+        "stcw_basic_all_valid": null
+      },
+      "text_chars": 2851,
+      "text_words": 368
+    },
+    {
+      "filename": "EMAIL_20260402_101553_AAMkADI5NjU4_CHANTI_OS.pdf",
+      "label_snippets": [
+        "ED HAZMAT GIME/MUM/HMT/25C/001 01.03.2025 MUMBAI 28.02.2030 PSSR AMENDMENT ADU957075932 17.12.2025 MUMBAI NA SEA EXPERIENCE COMPANY VESSEL NAME TYPE GRT RANK FROM TO NAME MARLOW MV STAMATIS B CONTAINER 40952 OS 05.03.2025 27.11.2025 NAVIGATION MSI SHIPPING MT WAWASAN TOPAZ OIL / CHEM"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "absent",
+          "pst": "unknown"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": false
+      },
+      "text_chars": 2057,
+      "text_words": 274
+    },
+    {
+      "filename": "EMAIL_20260415_052513_AAMkADI5NjU4_ABHISHEK_CHAUHAN-2_1.pdf",
+      "label_snippets": [
+        "& CHEMICAL DC COPDGSOAC2275509 01/07/2021 UNLIMITED MUMBAI PSSR AMENDMENT 2026 ADU-957-091307 22/12/2025 UNLIMITED CHENNAI PRE SEA TRAINING GP RATING B.P. MARINE 2010028101210035 16/03/2022 NAVI MUMBAI GP RATING DG SHIPPING EXAM TRUST G2106B02096/JUN21/79015 23/02/2022 MUMBAI SEA SE"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "present",
+          "fpff": "present",
+          "pssr": "present",
+          "pst": "present"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": true
+      },
+      "text_chars": 2180,
+      "text_words": 307
+    },
+    {
+      "filename": "EMAIL_20260420_034250_AAMkADI5NjU4_suresh_vasupalli.pdf",
+      "label_snippets": [
+        "3/12/2021 CHENNAI PSSR 40100761012102117 13/12/2021 CHENNAI PST 40100761012102117 13/12/2021 CHENNAI EFA 40100761012102117 13/12/2021 CHENNAI STSDSD 40100766212102914 14/12/2021 CHENNAI OCTCO 20301651112300822 27/02/2023 MUMBAI OCTCO DCE COPDGSOAC23104733 19/06/2023 MUMBAI SEA EXPER",
+        "ISSUE GP RATING G2112M10063/DEC21/80631 23/05/2022 CHENNAI FPFF 40100761012102117 13/12/2021 CHENNAI PSSR 40100761012102117 13/12/2021 CHENNAI PST 40100761012102117 13/12/2021 CHENNAI EFA 40100761012102117 13/12/2021 CHENNAI STSDSD 40100766212102914 14/12/2021 CHENNAI OCTCO 20301651",
+        "13/12/2021 CHENNAI PST 40100761012102117 13/12/2021 CHENNAI EFA 40100761012102117 13/12/2021 CHENNAI STSDSD 40100766212102914 14/12/2021 CHENNAI OCTCO 20301651112300822 27/02/2023 MUMBAI OCTCO DCE COPDGSOAC23104733 19/06/2023 MUMBAI SEA EXPERIENCE:- COMPANY NAME VESSEL NAME RANK TYP",
+        "3/05/2022 CHENNAI FPFF 40100761012102117 13/12/2021 CHENNAI PSSR 40100761012102117 13/12/2021 CHENNAI PST 40100761012102117 13/12/2021 CHENNAI EFA 40100761012102117 13/12/2021 CHENNAI STSDSD 40100766212102914 14/12/2021 CHENNAI OCTCO 20301651112300822 27/02/2023 MUMBAI OCTCO DCE COPD"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "present",
+          "fpff": "present",
+          "pssr": "present",
+          "pst": "present"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": true
+      },
+      "text_chars": 1604,
+      "text_words": 199
+    },
+    {
+      "filename": "EMAIL_20260420_050814_AAMkADI5NjU4_new_cv_upendera_071656.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "present",
+          "fpff": "present",
+          "pssr": "present",
+          "pst": "present"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": true
+      },
+      "text_chars": 1854,
+      "text_words": 241
+    },
+    {
+      "filename": "EMAIL_20260426_082750_AAMkADI5NjU4_ASHWANTH_S_2026_CV_NEW.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "present",
+          "fpff": "present",
+          "pssr": "present",
+          "pst": "present"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": true
+      },
+      "text_chars": 2518,
+      "text_words": 376
+    },
+    {
+      "filename": "EMAIL_20260427_033730_AAMkADI5NjU4_Sahil_Tandel_TR_Seaman_Resume.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "unknown",
+          "pst": "unknown"
+        },
+        "confidence": null,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "MISSING",
+        "stcw_basic_all_valid": null
+      },
+      "text_chars": 2191,
+      "text_words": 289
+    },
+    {
+      "filename": "EMAIL_20260427_063332_AAMkADI5NjU4_ABN26016959.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "unknown",
+          "pst": "unknown"
+        },
+        "confidence": null,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "MISSING",
+        "stcw_basic_all_valid": null
+      },
+      "text_chars": 2306,
+      "text_words": 341
+    },
+    {
+      "filename": "EMAIL_20260427_063332_AAMkADI5NjU4_PRASANTH_OS_03.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "unknown",
+          "pst": "unknown"
+        },
+        "confidence": null,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "MISSING",
+        "stcw_basic_all_valid": null
+      },
+      "text_chars": 2139,
+      "text_words": 278
+    },
+    {
+      "filename": "EMAIL_20260428_065754_AAMkADI5NjU4_IBRAHIM_CVV.pdf",
+      "label_snippets": [
+        "E (OIL & COPDGSOAC2310997 11.04.2023 UNLIMITED MUMBAI CHEM) PSSR ADU-957-186838 05.02.2026 UNLIMITED MUMBAI AMENDMEN T 2026 WORK EXPERINCE: COMPANY VESSEL IMO GRT/NRT DWT MAIN PORT PORT NAME NAME NO. TONNAGE ENGINE AND AND AND TYPE DATE DATE OF TYPE OF DISEMBA ENGAG RK E EASTAWAY XPR"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "absent",
+          "pst": "unknown"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": false
+      },
+      "text_chars": 1961,
+      "text_words": 289
+    },
+    {
+      "filename": "EMAIL_20260429_052641_AAMkADI5NjU4_ABN26016959.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "unknown",
+          "pst": "unknown"
+        },
+        "confidence": null,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "MISSING",
+        "stcw_basic_all_valid": null
+      },
+      "text_chars": 2306,
+      "text_words": 341
+    },
+    {
+      "filename": "EMAIL_20260429_052641_AAMkADI5NjU4_PRASANTH_OS_03.pdf",
+      "label_snippets": [],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "unknown",
+          "pst": "unknown"
+        },
+        "confidence": null,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "MISSING",
+        "stcw_basic_all_valid": null
+      },
+      "text_chars": 2139,
+      "text_words": 278
+    },
+    {
+      "filename": "EMAIL_20260430_052704_AAMkADI5NjU4_IBRAHIM_CV1.pdf",
+      "label_snippets": [
+        "E (OIL & COPDGSOAC2310997 11.04.2023 UNLIMITED MUMBAI CHEM) PSSR ADU-957-186838 05.02.2026 UNLIMITED MUMBAI AMENDMEN T 2026 WORK EXPERINCE: COMPANY VESSEL IMO GRT/NRT DWT MAIN PORT PORT NAME NAME NO. TONNAGE ENGINE AND AND AND TYPE DATE DATE OF TYPE OF DISEMBA ENGAG RK E EASTAWAY XPR"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "absent",
+          "pst": "unknown"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": false
+      },
+      "text_chars": 1995,
+      "text_words": 293
+    },
+    {
+      "filename": "EMAIL_20260430_052704_AAMkADI5NjU4_IBRAHIM_CV1_1.pdf",
+      "label_snippets": [
+        "E (OIL & COPDGSOAC2310997 11.04.2023 UNLIMITED MUMBAI CHEM) PSSR ADU-957-186838 05.02.2026 UNLIMITED MUMBAI AMENDMEN T 2026 WORK EXPERINCE: COMPANY VESSEL IMO GRT/NRT DWT MAIN PORT PORT NAME NAME NO. TONNAGE ENGINE AND AND AND TYPE DATE DATE OF TYPE OF DISEMBA ENGAG RK E EASTAWAY XPR"
+      ],
+      "source_type": "email",
+      "stcw_fact": {
+        "certificates": {
+          "efa": "unknown",
+          "fpff": "unknown",
+          "pssr": "absent",
+          "pst": "unknown"
+        },
+        "confidence": 0.9,
+        "extraction_method": "keyword_regex",
+        "source_label": "stcw_basic",
+        "status": "PARSED",
+        "stcw_basic_all_valid": false
+      },
+      "text_chars": 1995,
+      "text_words": 293
+    }
+  ],
+  "summary_by_source_type": {
+    "email": {
+      "certificate_state_counts": {
+        "efa": {
+          "present": 4,
+          "unknown": 10
+        },
+        "fpff": {
+          "present": 4,
+          "unknown": 10
+        },
+        "pssr": {
+          "absent": 4,
+          "present": 4,
+          "unknown": 6
+        },
+        "pst": {
+          "present": 4,
+          "unknown": 10
+        }
+      },
+      "count": 14,
+      "outcome_counts": {
+        "False": 4,
+        "None": 6,
+        "True": 4
+      },
+      "status_counts": {
+        "MISSING": 6,
+        "PARSED": 8
+      }
+    }
+  }
+}

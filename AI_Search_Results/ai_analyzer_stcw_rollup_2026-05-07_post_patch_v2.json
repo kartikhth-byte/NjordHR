@@ -1,0 +1,2379 @@
+{
+  "folders": [
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260331_114019_AAMkADI5NjU4_DocScanner_1_Feb_2026_15-28.pdf",
+          "label_snippets": [
+            "MBAI  FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI  PST 1010026112250293 21/11/2025 20/11/2030 VARANASI  EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI  OT",
+            "CCMC C1306B02028/JUN-13/5424 24/07/2013 UNLIMITED MUMBAI  FPFF (A) FPFF(A)/043/16-17/19 21/01/2017 UNLIMITED MUMBAI  FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI  PST 1010026112250293 21/11/2025 20/11/2030 VARANASI  EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMB",
+            "306B02028/JUN-13/5424 24/07/2013 UNLIMITED MUMBAI  FPFF (A) FPFF(A)/043/16-17/19 21/01/2017 UNLIMITED MUMBAI  FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI  PST 1010026112250293 21/11/2025 20/11/2030 VARANASI  EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR",
+            "FPFF (A) FPFF(A)/043/16-17/19 21/01/2017 UNLIMITED MUMBAI  FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI  PST 1010026112250293 21/11/2025 20/11/2030 VARANASI  EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSS",
+            "ANASI  PST 1010026112250293 21/11/2025 20/11/2030 VARANASI  EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI  OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBA  OTFC",
+            "ST 1010026112250293 21/11/2025 20/11/2030 VARANASI  EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI  OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBA  OTFC (DC) CMM",
+            "A SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI  OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBA  OTFC (DC) CMMI/OIL/1 7/23899 27/01/2017 LIFETIME MUMBA  STSDSD CORAL",
+            "2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI  OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBA  OTFC (DC) CMMI/OIL/1 7/23899 27/01/2017 LIFETIME MUMBA  STSDSD CORAL/STSDSD/18",
+            "MUMBAI  PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBA  PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI  OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBA  OTFC (DC) CMMI/OIL/1 7/23899 27/01/2017 LIFETIME MUMBA  STSDSD CORAL/STSDSD/18-19/03/0052 07/04/2018 LIFETIME MUMBA  BIG"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260331_114019_AAMkADI5NjU4_MOHAMMED_ALTAF_RESUME_2.pdf",
+          "label_snippets": [
+            "MUMBAI FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI PST 1010026112250293 21/11/2025 20/11/2030 VARANASI EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI OTFC",
+            "AI CCMC C1306B02028/JUN-13/5424 24/07/2013 UNLIMITED MUMBAI FPFF (A) FPFF(A)/043/16-17/19 21/01/2017 UNLIMITED MUMBAI FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI PST 1010026112250293 21/11/2025 20/11/2030 VARANASI EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI",
+            "1306B02028/JUN-13/5424 24/07/2013 UNLIMITED MUMBAI FPFF (A) FPFF(A)/043/16-17/19 21/01/2017 UNLIMITED MUMBAI FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI PST 1010026112250293 21/11/2025 20/11/2030 VARANASI EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA",
+            "I FPFF (A) FPFF(A)/043/16-17/19 21/01/2017 UNLIMITED MUMBAI FPFF 1010026122250273 22/11/2025 21/11/2030 VARANASI PST 1010026112250293 21/11/2025 20/11/2030 VARANASI EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (",
+            "ARANASI PST 1010026112250293 21/11/2025 20/11/2030 VARANASI EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBAI OTFC (D",
+            "PST 1010026112250293 21/11/2025 20/11/2030 VARANASI EFA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBAI OTFC (DC) CMMI/",
+            "FA SGA/EFA/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBAI OTFC (DC) CMMI/OIL/17/23899 27/01/2017 LIFETIME MUMBAI STSDSD CORAL/S",
+            "/2017-1407-18957 18/01/2017 UNLIMITED NAVI MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBAI OTFC (DC) CMMI/OIL/17/23899 27/01/2017 LIFETIME MUMBAI STSDSD CORAL/STSDSD/18-1",
+            "MUMBAI PSSR BPMA/PSSR/1996/2018 11/04/2018 LIFETIME MUMBAI PSSR (A) ADU-957-005262 03/12/2025 LIFE TIME CHENNAI OTFC BPMA/TFC/158/2015 20/03/2015 LIFETIME MUMBAI OTFC (DC) CMMI/OIL/17/23899 27/01/2017 LIFETIME MUMBAI STSDSD CORAL/STSDSD/18-19/03/0052 07/04/2018 LIFETIME MUMBAI BIGF"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 2,
+      "rank_folder": "2nd_Cook",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 2
+            },
+            "fpff": {
+              "present": 2
+            },
+            "pssr": {
+              "present": 2
+            },
+            "pst": {
+              "present": 2
+            }
+          },
+          "count": 2,
+          "outcome_counts": {
+            "True": 2
+          },
+          "status_counts": {
+            "PARSED": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260425_125559_AAMkADI5NjU4_MANISH_RESUME.pdf",
+          "label_snippets": [
+            "OIDA 13.10.2023 REF-PSCRB 1010046212230342 NOIDA 12.10.2023 PSSR 14101004358829 MUMBAI 23.10.2014 STSDSD 15189000881619 MUMBAI 07.07.2015 HIGH VOLTAGE(MNGT) 1050233223230381 NOIDA 16.12.2023 ER SIMULATOR (MNGT)-CEO 1010043241230212 NOIDA 09.10.2023 H2S B1/H2S/04/10/2017 NAVI MUMBAI 0"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_080520_AAMkADI5NjU4_2.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_094417_AAMkADI5NjU4_CV_2Eng_Ievgen_Bakanurskyi.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260415_074230_AAMkADI5NjU4_sekhar_Vitchula_s_Resume.pdf",
+          "label_snippets": [
+            "entary First Aid (EFA) \uf076 Fire Prevention and Fire Fighting (FPFF) \uf076 Medical First Aid (MFA) \uf076 Personal Safety & Social Responsibility (PSSR) \uf076 Personal Survival Technique/PSCRB \uf076 Ship Security Officer(SSO) \uf076 GASCO \uf076 TASCO \uf076 Engine Room Resource Management(ERRM) \uf076 FRAMO \uf076 Engine Room",
+            "CHEMCO \uf076 Ship safety course \uf076 Elementary First Aid (EFA) \uf076 Fire Prevention and Fire Fighting (FPFF) \uf076 Medical First Aid (MFA) \uf076 Personal Safety & Social Responsibility (PSSR) \uf076 Personal Survival Technique/PSCRB \uf076 Ship Security Officer(SSO) \uf076 GASCO \uf076 TASCO \uf076 Engine Room Resource Management(ERRM) \uf076 FRAMO \uf076 Engine",
+            "enger \uf076 CHEMCO \uf076 Ship safety course \uf076 Elementary First Aid (EFA) \uf076 Fire Prevention and Fire Fighting (FPFF) \uf076 Medical First Aid (MFA) \uf076 Personal Safety & Social Responsibility (PSSR) \uf076 Personal Survival Technique/PSCRB \uf076 Ship Security Officer(SSO) \uf076 GASCO \uf076 TASCO \uf076 Engine Room Resou",
+            "(AFF) \uf076 Advanced passenger \uf076 CHEMCO \uf076 Ship safety course \uf076 Elementary First Aid (EFA) \uf076 Fire Prevention and Fire Fighting (FPFF) \uf076 Medical First Aid (MFA) \uf076 Personal Safety & Social Responsibility (PSSR) \uf076 Personal Survival Technique/PSCRB \uf076 Ship Security Officer(SSO) \uf076 GASCO \uf076 TASCO \uf076 Engine Room",
+            "First Aid (MFA) \uf076 Personal Safety & Social Responsibility (PSSR) \uf076 Personal Survival Technique/PSCRB \uf076 Ship Security Officer(SSO) \uf076 GASCO \uf076 TASCO \uf076 Engine Room Resource Management(ERRM) \uf076 FRAMO \uf076 Engine Room Simulator \uf076 Tanker Vetting \uf076 Risk Management/Loss Prevention \uf076 ISM Course 5"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "absent",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_080520_AAMkADI5NjU4_1._Anubhav_Kumar_s_Resume_CV_as_on_28.01.pdf",
+          "label_snippets": [
+            "RST AID (EFA) EFA/BMS/224 02. PERSONAL SURVIVAL TECHNIQUES (PST) PST/BMS/224 03. REFRESHER TRAINING IN PERSONAL SURVIVAL TECHNIQUES (PST) BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BP",
+            "ID (EFA) EFA/BMS/224 02. PERSONAL SURVIVAL TECHNIQUES (PST) PST/BMS/224 03. REFRESHER TRAINING IN PERSONAL SURVIVAL TECHNIQUES (PST) BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FP",
+            "224 03. REFRESHER TRAINING IN PERSONAL SURVIVAL TECHNIQUES (PST) BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RESPONSI",
+            "FRESHER TRAINING IN PERSONAL SURVIVAL TECHNIQUES (PST) BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RESPONSIBILITIES (",
+            "1010036122220527 27. Refresher Training for Proficiency in PST 1010036112220539 28. Refresher and Updating Training Course for all Engineers 1010031118220179 29. ENGINE ROOM SIMULATOR (ERS MANAGEMENT LEVEL) 1010043221230023 30. HIGH VOLTAGE SAFETY & SWITCH GEAR COURSE (HVSSGC) MANA",
+            "ICATE NUMBER 01. ELEMENTARY FIRST AID (EFA) EFA/BMS/224 02. PERSONAL SURVIVAL TECHNIQUES (PST) PST/BMS/224 03. REFRESHER TRAINING IN PERSONAL SURVIVAL TECHNIQUES (PST) BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPF",
+            "IVAL TECHNIQUES (PST) PST/BMS/224 03. REFRESHER TRAINING IN PERSONAL SURVIVAL TECHNIQUES (PST) BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RES",
+            "BPMA/PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RESPONSIBILITIES (PSSR) PSSR/BMS/224 07. PROFICIENCY IN SECURITY TRAINING",
+            "PST-RF/2486/2016 04. FIRE PREVENTION & FIRE FIGHTING (FPFF) FPFF/BMS/224 05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RESPONSIBILITIES (PSSR) PSSR/BMS/224 07. PROFICIENCY IN SECURITY TRAINING FOR S",
+            "05. REFRESHER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RESPONSIBILITIES (PSSR) PSSR/BMS/224 07. PROFICIENCY IN SECURITY TRAINING FOR SEAFARERS WITH DESIGNATED SECURITY BPMA/STS/3406/2014 DUTIES (STSDSD) 08.",
+            "HER TRAINING IN FIRE PREVENTION & FIRE FIGHTING (FPFF) BPMA/FPFF-RF/2017/2016 06. PROFICIENCY IN PERSONAL SAFETY & SOCIAL RESPONSIBILITIES (PSSR) PSSR/BMS/224 07. PROFICIENCY IN SECURITY TRAINING FOR SEAFARERS WITH DESIGNATED SECURITY BPMA/STS/3406/2014 DUTIES (STSDSD) 08. OIL TANKER",
+            "HTING OPERATIONS IN BASIC TRAINING FOR OIL,CHEMICAL SMI/AUG/FPFF/1110/2015 AND LIQUEFIED GAS TANKER CARGO OPERATIONS 10. MEDICAL FIRST AID (MFA) BPMA/MFA/742/2015 11. ADVANCED FIRE FIGHTING (AFF) 3170 12. PROFICIENCY IN SURVIVAL CRAFT AND RESCUE BOATS \u2013OTHER THAN FAST RESCUE 150416 B"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 11,
+      "rank_folder": "2nd_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "absent": 1,
+              "present": 1,
+              "unknown": 4
+            },
+            "fpff": {
+              "present": 1,
+              "unknown": 5
+            },
+            "pssr": {
+              "absent": 1,
+              "present": 1,
+              "unknown": 4
+            },
+            "pst": {
+              "absent": 1,
+              "present": 1,
+              "unknown": 4
+            }
+          },
+          "count": 6,
+          "outcome_counts": {
+            "False": 2,
+            "None": 3,
+            "True": 1
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 3
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 4,
+              "unknown": 1
+            },
+            "fpff": {
+              "present": 4,
+              "unknown": 1
+            },
+            "pssr": {
+              "present": 4,
+              "unknown": 1
+            },
+            "pst": {
+              "present": 4,
+              "unknown": 1
+            }
+          },
+          "count": 5,
+          "outcome_counts": {
+            "None": 1,
+            "True": 4
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260317_184243_AAMkADI5NjU4_2nd_OFF_-_Misbah-CV.pdf",
+          "label_snippets": [
+            "AI AFF (REF) 20100163122525214 16/10/2025 15/10/2030 MUMBAI PSSR 2010 BPMA/PSSR/2900/2016 21/05/2016 - MUMBAI PSSR 2026 ADU-957-114070 29/12/2025 - MUMBAI ISPS ISPS / L-705 / 2007 31/12/2007 - MUMBAI ISM ARK / ISM / 0560111 24/05/2011 - MUMBAI SSO 2070436511230221 29/07/2023 - MUMBAI",
+            "100163122525214 16/10/2025 15/10/2030 MUMBAI PSSR 2010 BPMA/PSSR/2900/2016 21/05/2016 - MUMBAI PSSR 2026 ADU-957-114070 29/12/2025 - MUMBAI ISPS ISPS / L-705 / 2007 31/12/2007 - MUMBAI ISM ARK / ISM / 0560111 24/05/2011 - MUMBAI SSO 2070436511230221 29/07/2023 - MUMBAI SAFETY OFFICER",
+            "30 MUMBAI PSSR 2010 BPMA/PSSR/2900/2016 21/05/2016 - MUMBAI PSSR 2026 ADU-957-114070 29/12/2025 - MUMBAI ISPS ISPS / L-705 / 2007 31/12/2007 - MUMBAI ISM ARK / ISM / 0560111 24/05/2011 - MUMBAI SSO 2070436511230221 29/07/2023 - MUMBAI SAFETY OFFICER PMTRI/SSO/41/02/2023 25/07/2023 -"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260327_181605_AAMkADI5NjU4_Ashish_Singh_Resume.pdf",
+          "label_snippets": [
+            "2015 Personal Safety & Social Responsibility Proficiency In PST 2010016212221977 B.P. Marine 25 / 07/ 2022 Efficient Deck Hand 1111932F South Tyneside 30 /11/2012 College U.K. Naest 18044NAEST MP 867 South Tyneside 16 /11/ 2012 Management College U.K. ECDIS 1111961/ 848 South Tynesi",
+            "B.P. Marine 22/12/2023 Medical Carrier Proficiency In BPMA/PSSR/1639/2015 B.P. Marine 28 / 05 / 2015 Personal Safety & Social Responsibility Proficiency In PST 2010016212221977 B.P. Marine 25 / 07/ 2022 Efficient Deck Hand 1111932F South Tyneside 30 /11/2012 College U.K. Naest 18044"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260402_063603_AAMkADI5NjU4_RESUME_2ND_OFF_GAURAV_GOYAL.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260312_105944_AAMkADI5NjU4_Arvind_Jaiswal_-_Resume.pdf",
+          "label_snippets": [
+            "bility (Pssr) 5158 31/03/2015 Personal Survival Techniques (Pst) 3985 31/03/2015 (Refresher) Personal Survival Techniques (Pst) 201001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/0",
+            ") 3985 31/03/2015 (Refresher) Personal Survival Techniques (Pst) 201001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training",
+            "nal Safety and Social Responsibility (Pssr) 5158 31/03/2015 Personal Survival Techniques (Pst) 3985 31/03/2015 (Refresher) Personal Survival Techniques (Pst) 201001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912",
+            "sonal Survival Techniques (Pst) 3985 31/03/2015 (Refresher) Personal Survival Techniques (Pst) 201001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Tra",
+            "1001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training for Seafarers with Designated Security 289 31/03/2015 Duties (Stsds",
+            "3 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training for Seafarers with Designated Security 289 31/03/2015 Duties (Stsdsd) Basic Training for Oil Tanker Cargo Operation (Otfc) MMC/OTF/2015/",
+            "rsonal Survival Techniques (Pst) 201001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training for Seafarers with Designated Security 289 31/03/2015 Duties",
+            "ention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Prevention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training for Seafarers with Designated Security 289 31/03/2015 Duties (Stsdsd) Basic Training for Oil Tanker Cargo Operation (Otfc) MMC/OTF",
+            "hting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training for Seafarers with Designated Security 289 31/03/2015 Duties (Stsdsd) Basic Training for Oil Tanker Cargo Operation (Otfc) MMC/OTF/2015/093 24/07/2015 TASCO 2030100801943 14/03/2019 Medica",
+            "revention and Fire Fighting (Fpff) 2040661521912 12/08/2019 Elementary First Aid (Efa) 3416 31/03/2015 Ship Training for Seafarers with Designated Security 289 31/03/2015 Duties (Stsdsd) Basic Training for Oil Tanker Cargo Operation (Otfc) MMC/OTF/2015/093 24/07/2015 TASCO 2030100801943 14/03/2019 M",
+            "1169 19/01/2016 Personal Safety and Social Responsibility (Pssr) 5158 31/03/2015 Personal Survival Techniques (Pst) 3985 31/03/2015 (Refresher) Personal Survival Techniques (Pst) 201001151192504 12/11/2019 Fire Prevention and Fire Fighting (Fpff) 3453 31/03/2015 (Refresher) Fire Pre"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "absent",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260402_025733_AAMkADI5NjU4_ANTONY_RODRIGUES_CV.pdf",
+          "label_snippets": [
+            "9 BP MARINE 07/03/2026 06/03/2031 ACADEMY, NAVI MUMBAI 4 RF PST 2010016112230316 BP MARINE 07/02/2023 06/02/2028 ACADEMY, NAVI MUMBAI 5 RF FPFF 2010016122230308 BP MARINE 06/02/2023 05/02/2028 ACADEMY, NAVI MUMBAI 6 STSDSD 0610760022017 TS RAHAMAN, 20/06/2017 UNLIMITED PANVE L 7 ARP",
+            "6 BP MARINE 07/02/2023 06/02/2028 ACADEMY, NAVI MUMBAI 5 RF FPFF 2010016122230308 BP MARINE 06/02/2023 05/02/2028 ACADEMY, NAVI MUMBAI 6 STSDSD 0610760022017 TS RAHAMAN, 20/06/2017 UNLIMITED PANVE L 7 ARPA 20100121222101411 BP MARINE 17/09/2021 NA ACADEMY, NAVI MUMBAI 9 ROC 201001212"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 79,
+      "rank_folder": "2nd_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1,
+              "unknown": 4
+            },
+            "fpff": {
+              "absent": 1,
+              "present": 1,
+              "unknown": 3
+            },
+            "pssr": {
+              "present": 1,
+              "unknown": 4
+            },
+            "pst": {
+              "present": 1,
+              "unknown": 4
+            }
+          },
+          "count": 5,
+          "outcome_counts": {
+            "False": 1,
+            "None": 3,
+            "True": 1
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 2
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 61,
+              "unknown": 13
+            },
+            "fpff": {
+              "present": 61,
+              "unknown": 13
+            },
+            "pssr": {
+              "present": 61,
+              "unknown": 13
+            },
+            "pst": {
+              "present": 61,
+              "unknown": 13
+            }
+          },
+          "count": 74,
+          "outcome_counts": {
+            "None": 13,
+            "True": 61
+          },
+          "status_counts": {
+            "MISSING": 13,
+            "PARSED": 61
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260423_065629_AAMkADI5NjU4_CV_3_ENG_Dmytro_Ivanov.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_050410_AAMkADI5NjU4_CV_3rd_Engineer_Kostiantyn_Fomin.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_110922_AAMkADI5NjU4_CV_FOR_3rd_ENG.pdf",
+          "label_snippets": [
+            "BAI STCW(COMBO) AIIMT/MUM/BSSTC/2018/0445 17/07/2018 MUMBAI PST(R) 2010016112232166 08/09/2023 MUMBAI FPFF (R) 2010016122231965 25/08/2023 MUMBAI MFA BPMA/MFA/338/2023 07/09/2023 MUMBAI PSCRB BPMA/PSCRB/313/2023 31/08/2023 MUMBAI ATOTCO BPMA/ATOTCO/196/23 15/09/2023 MUMBAI ATCTCO BP",
+            "17/07/2018 MUMBAI PST(R) 2010016112232166 08/09/2023 MUMBAI FPFF (R) 2010016122231965 25/08/2023 MUMBAI MFA BPMA/MFA/338/2023 07/09/2023 MUMBAI PSCRB BPMA/PSCRB/313/2023 31/08/2023 MUMBAI ATOTCO BPMA/ATOTCO/196/23 15/09/2023 MUMBAI ATCTCO BPMA/ATCTCO/164/2023 22/09/2023 MUMBAI COT BP"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260318_102954_AAMkADI5NjU4_chinnu_alexander_cv.pdf",
+          "label_snippets": [
+            "ES FPFF-RF 20100161222216111 08/07/2022 07/07/2027 \uf0d8 2 DRYD PST-RF 2010016112221531 25/06/2022 07/07/2027 OCK EFA ME/14/17 22/11/2017 UNLIMITED EXPE STSDSD ME/14/17 25/11/2017 UNLIMITED RIEN CES AUGFF ME/14/17 11/11/2017 UNLIMITED \uf0d8 COPT TFC 40302107618502 15/12/2018 UNLIMITED EXPE",
+            "DATE EXPE ISSUE RIEN PSSR ME/14/17 08/11/2017 UNLIMITED CES FPFF-RF 20100161222216111 08/07/2022 07/07/2027 \uf0d8 2 DRYD PST-RF 2010016112221531 25/06/2022 07/07/2027 OCK EFA ME/14/17 22/11/2017 UNLIMITED EXPE STSDSD ME/14/17 25/11/2017 UNLIMITED RIEN CES AUGFF ME/14/17 11/11/2017 UNLIMI",
+            "\uf0d8 2 DRYD PST-RF 2010016112221531 25/06/2022 07/07/2027 OCK EFA ME/14/17 22/11/2017 UNLIMITED EXPE STSDSD ME/14/17 25/11/2017 UNLIMITED RIEN CES AUGFF ME/14/17 11/11/2017 UNLIMITED \uf0d8 COPT TFC 40302107618502 15/12/2018 UNLIMITED EXPE MFA 2010016411200153 10/12/2020 UNLIMITED RIEN CES",
+            "I NE COURSE CERTIFICATE DATE OF EXPIRY DATE EXPE ISSUE RIEN PSSR ME/14/17 08/11/2017 UNLIMITED CES FPFF-RF 20100161222216111 08/07/2022 07/07/2027 \uf0d8 2 DRYD PST-RF 2010016112221531 25/06/2022 07/07/2027 OCK EFA ME/14/17 22/11/2017 UNLIMITED EXPE STSDSD ME/14/17 25/11/2017 UNLIMITED RI"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "3rd_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1,
+              "unknown": 3
+            },
+            "fpff": {
+              "present": 1,
+              "unknown": 3
+            },
+            "pssr": {
+              "present": 1,
+              "unknown": 3
+            },
+            "pst": {
+              "present": 1,
+              "unknown": 3
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "None": 3,
+            "True": 1
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260331_091346_AAMkADI5NjU4_Resume_Rawinder_singh.pdf",
+          "label_snippets": [
+            "-11-2022 UNLIMITED MCA / SOLENT SIGNALS MARITIME UNIVERSITY PSSR 2026 ADU ADU-957-227583 19.03.2026 UNLIMITED ADU ACADEMY INDIA WORK EXPERIENCE: SHIPS COMPANY G.R.T. BHP/ VOY RANK FROM TO VESSEL NAME KW TYPE MV SPIL ASIA PACIFIC 26638 21510 FGN 3RD 31.07.2025 09.02.2026 CONTAINER NIR"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260410_065918_AAMkADI5NjU4_SHRUTUJ_DWIVEDI_CV.pdf",
+          "label_snippets": [
+            "LUCKNOW STSDSD SIMS LONAVALA 10/03/2021 LONAVALA REFRESHER PST CMET NOIDA 31/03/2026 NOIDA REFRESHER FPFF CMET NOIDA 01/04/2026 NOIDA BTOCT SIMS LONAVALA 31/08/2021 LONAVALA BTGT SIMS LONAVALA 01/09/2021 LONAVALA ADDITIONAL SKILLS Languages Known: Hindi, English, Punjabi Computer S",
+            "ONAVALA REFRESHER PST CMET NOIDA 31/03/2026 NOIDA REFRESHER FPFF CMET NOIDA 01/04/2026 NOIDA BTOCT SIMS LONAVALA 31/08/2021 LONAVALA BTGT SIMS LONAVALA 01/09/2021 LONAVALA ADDITIONAL SKILLS Languages Known: Hindi, English, Punjabi Computer Skills: Proficient in MS Office (Word, Excel"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260413_090624_AAMkADI5NjU4_CV_ABHISEK_JANA_3RD_OFFICER_TANKER.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "absent",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260403_071908_AAMkADI5NjU4_3_Off_Saurabh_CV_APR_2026.pdf",
+          "label_snippets": [
+            "FFICER(DG 20100165112203010 BP MARINE 20.07.2022 NA APPROV) PSSR(DG APPROV) 20402561012201315 SNS MARITIME 17.02.2022 NA PSSR AMENDMENT 2026 ADU-957-214579 DGS ADU 04.03.2026 NA REF PSCRB (DG APPROV) 20100162122607024 BP MARINE 28.02.2026 27.02.2031 REF MFA (DG APPROV) 20301064122201",
+            "SSR(DG APPROV) 20402561012201315 SNS MARITIME 17.02.2022 NA PSSR AMENDMENT 2026 ADU-957-214579 DGS ADU 04.03.2026 NA REF PSCRB (DG APPROV) 20100162122607024 BP MARINE 28.02.2026 27.02.2031 REF MFA (DG APPROV) 20301064122201423 ( A& B ) ASHA & BPMA 16.02.2022 15.02.2027 REF AFF (DG AP"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 186,
+      "rank_folder": "3rd_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "unknown": 4
+            },
+            "fpff": {
+              "unknown": 4
+            },
+            "pssr": {
+              "absent": 1,
+              "unknown": 3
+            },
+            "pst": {
+              "unknown": 4
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "False": 1,
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 1
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 163,
+              "unknown": 19
+            },
+            "fpff": {
+              "present": 163,
+              "unknown": 19
+            },
+            "pssr": {
+              "present": 163,
+              "unknown": 19
+            },
+            "pst": {
+              "present": 163,
+              "unknown": 19
+            }
+          },
+          "count": 182,
+          "outcome_counts": {
+            "None": 19,
+            "True": 163
+          },
+          "status_counts": {
+            "MISSING": 19,
+            "PARSED": 163
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260317_070814_AAMkADI5NjU4_Varun_Patel_CV.pdf",
+          "label_snippets": [
+            "E | DCE No: DCE02MUM24016143 - High Voltage, ERS, MFA, AFF, PST, FPFF, PSSR, TASCO, PASCRB \u2013 All Valid & Updated - Vaccinations: Covishield (2 Doses + Booster), Yellow Fever - PSSR amendment 2026 Documents - Passport: R7174963 | Valid till Dec 2027 - CDC: KOL127866 | Valid till Jan",
+            "CE No: DCE02MUM24016143 - High Voltage, ERS, MFA, AFF, PST, FPFF, PSSR, TASCO, PASCRB \u2013 All Valid & Updated - Vaccinations: Covishield (2 Doses + Booster), Yellow Fever - PSSR amendment 2026 Documents - Passport: R7174963 | Valid till Dec 2027 - CDC: KOL127866 | Valid till Jan 2032 -",
+            "DCE02MUM24016143 - High Voltage, ERS, MFA, AFF, PST, FPFF, PSSR, TASCO, PASCRB \u2013 All Valid & Updated - Vaccinations: Covishield (2 Doses + Booster), Yellow Fever - PSSR amendment 2026 Documents - Passport: R7174963 | Valid till Dec 2027 - CDC: KOL127866 | Valid till Jan 2032 - SID:",
+            "accinations: Covishield (2 Doses + Booster), Yellow Fever - PSSR amendment 2026 Documents - Passport: R7174963 | Valid till Dec 2027 - CDC: KOL127866 | Valid till Jan 2032 - SID: M32339756 | Valid till May 2032"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260415_120126_AAMkADI5NjU4_R.R._Pranav_sankar_updated_resume.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260424_074344_AAMkADI5NjU4_PRAFULLA_4thengineer_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260405_190734_AAMkADI5NjU4_PRATHIV_KANNAN_V_CV.pdf",
+          "label_snippets": [
+            "Number Date Of Institute Name Issue Basic Safety Training (PST, FPFF, EFA, 4010016101210435 29/03/2022 Academy of Maritime Education & PSSR) Training Security Training for Seafarer with 4010016621210375 20/10/2021 Academy of Maritime Education & Designated Security Duties Training",
+            "er Date Of Institute Name Issue Basic Safety Training (PST, FPFF, EFA, 4010016101210435 29/03/2022 Academy of Maritime Education & PSSR) Training Security Training for Seafarer with 4010016621210375 20/10/2021 Academy of Maritime Education & Designated Security Duties Training Basic",
+            "e Of Institute Name Issue Basic Safety Training (PST, FPFF, EFA, 4010016101210435 29/03/2022 Academy of Maritime Education & PSSR) Training Security Training for Seafarer with 4010016621210375 20/10/2021 Academy of Maritime Education & Designated Security Duties Training Basic Train",
+            "4010016101210435 29/03/2022 Academy of Maritime Education & PSSR) Training Security Training for Seafarer with 4010016621210375 20/10/2021 Academy of Maritime Education & Designated Security Duties Training Basic Training for Oil and Chemical 4020105111210353 26/01/2022 HIMT College"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 40,
+      "rank_folder": "4th_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1,
+              "unknown": 3
+            },
+            "fpff": {
+              "present": 2,
+              "unknown": 2
+            },
+            "pssr": {
+              "present": 2,
+              "unknown": 2
+            },
+            "pst": {
+              "present": 2,
+              "unknown": 2
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "None": 3,
+            "True": 1
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 2
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 33,
+              "unknown": 3
+            },
+            "fpff": {
+              "present": 33,
+              "unknown": 3
+            },
+            "pssr": {
+              "present": 33,
+              "unknown": 3
+            },
+            "pst": {
+              "present": 33,
+              "unknown": 3
+            }
+          },
+          "count": 36,
+          "outcome_counts": {
+            "None": 3,
+            "True": 33
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 33
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 4,
+      "rank_folder": "5th_Engineer",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 4
+            },
+            "fpff": {
+              "present": 4
+            },
+            "pssr": {
+              "present": 4
+            },
+            "pst": {
+              "present": 4
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "True": 4
+          },
+          "status_counts": {
+            "PARSED": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260429_061901_AAMkADI5NjU4_CESTestCertificate.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260312_085930_AAMkADI5NjU4_PRASAD_VIJAY_BHOSALE_RESUME_2026_REVISED.pdf",
+          "label_snippets": [
+            "I\u2019S fighting ACADEMY OF MERCHANT NAVY Personal survival CAA/PST/5626/2017 30/08/2017 COMMANDER ALI\u2019S techniques ACADEMY OF MERCHANT NAVY Personal safety and CAA/PSSR/5263/2017 19/08/2017 COMMANDER ALI\u2019S social responsibility ACADEMY OF MERCHANT NAVY Security training for CAA/STSDSD/",
+            "fresher training for 2010016112221323 03/06/2022 B.P.MARINE PST ACADEMY SEA EXPERIENCE :- COMPANY NAME VESSEL NAME TYPE GRT RANK FROM TO ADMIRAL MARINE SERVICES MT MARATHON CRUDE OIL 57296 AB 11/08/2025 11/12/2025 PVT. LTD TANKER ADMIRAL MARINE SERVICES M.T. SHANNON II CRUDE OIL 164",
+            "ALI\u2019S ACADEMY OF MERCHANT NAVY Fire prevention and fire CAA/FPFF/1367/2017 02/08/2017 COMMANDER ALI\u2019S fighting ACADEMY OF MERCHANT NAVY Personal survival CAA/PST/5626/2017 30/08/2017 COMMANDER ALI\u2019S techniques ACADEMY OF MERCHANT NAVY Personal safety and CAA/PSSR/5263/2017 19/08/2017",
+            "fresher training for 2010016122221302 02/06/2022 B.P.MARINE FPFF ACADEMY Refresher training for 2010016112221323 03/06/2022 B.P.MARINE PST ACADEMY SEA EXPERIENCE :- COMPANY NAME VESSEL NAME TYPE GRT RANK FROM TO ADMIRAL MARINE SERVICES MT MARATHON CRUDE OIL 57296 AB 11/08/2025 11/12/",
+            "ated security MERCHANT NAVY duties Elementary first aid CAA/EFA/5980/2017 29/07/2017 COMMANDER ALI\u2019S ACADEMY OF MERCHANT NAVY Basic training for oil & CMMI/OIL/19/46084 28/07/2019 B.P.MARINE chemical tanker cargo ACADEMY operation Refresher training for 2010016122221302 02/06/2022 B",
+            "rs with ACADEMY OF designated security MERCHANT NAVY duties Elementary first aid CAA/EFA/5980/2017 29/07/2017 COMMANDER ALI\u2019S ACADEMY OF MERCHANT NAVY Basic training for oil & CMMI/OIL/19/46084 28/07/2019 B.P.MARINE chemical tanker cargo ACADEMY operation Refresher training for 2010016122221302 02/0",
+            "techniques ACADEMY OF MERCHANT NAVY Personal safety and CAA/PSSR/5263/2017 19/08/2017 COMMANDER ALI\u2019S social responsibility ACADEMY OF MERCHANT NAVY Security training for CAA/STSDSD/2226/2017 11/08/2017 COMMANDER ALI\u2019S seafarers with ACADEMY OF designated security MERCHANT NAVY dutie"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260407_095326_AAMkADI5NjU4_RESUME_JAI_PRAKASH_1.pdf",
+          "label_snippets": [
+            "Educati and on waterwa (SHAPE ys ,Gove ) rnment of India 2. EFA CMETL/EFA/ CENTRE 20/01/ unlimit Director 681/8439 FOR 2015 ed ate MARITI General ME of EDUCA Shipping, TION Ministry AND of TRAINI shipping, NG Govern ment of India 3. RFPFF 10301061222 School 11/10/ 10/10/ Director 40",
+            "d on waterwa (SHAPE ys ,Gove ) rnment of India 2. EFA CMETL/EFA/ CENTRE 20/01/ unlimit Director 681/8439 FOR 2015 ed ate MARITI General ME of EDUCA Shipping, TION Ministry AND of TRAINI shipping, NG Govern ment of India 3. RFPFF 10301061222 School 11/10/ 10/10/ Director 40322 of 202",
+            "onal shipping, Educati Govern on ment of (SHAPE India ) 4. PSSR CMETL/ CENTRE 10/02/ unlimit Director PSSR/1119 FOR 2018 ed ate /18366 MARITI General ME of EDUCA Shipping, TION Ministry AND of TRAINI shipping, NG Govern ment of India 5. STSD BPMA/STS/ BP 27/05/ unlimit Director 1322",
+            "SHAPE India ) 4. PSSR CMETL/ CENTRE 10/02/ unlimit Director PSSR/1119 FOR 2018 ed ate /18366 MARITI General ME of EDUCA Shipping, TION Ministry AND of TRAINI shipping, NG Govern ment of India 5. STSD BPMA/STS/ BP 27/05/ unlimit Director 1322 MARIN 2017 ed ate /2017 E General ACADE of",
+            "AND L TRAINI DIRECTO NG RATE OF MERCHA NT MARINE, PANAMA 9 PSSR ADU-957- ADU 16/01/ Unlimit Director AMEND 162264 ACADE 2026 ed ate MENT MY General 2026 INDIA of (COURS PVT.LT Shipping, E ID D. Ministry 957) of Shipping, Govern ment of India SEA SERVICE DETAILS:- In Chronological Or"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "absent",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260414_104724_AAMkADI5NjU4_Satwant.pdf",
+          "label_snippets": [],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260427_061001_AAMkADI5NjU4_Vinod_Kumar_resume_2.pdf",
+          "label_snippets": [],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 7,
+      "rank_folder": "AB",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 5,
+              "unknown": 2
+            },
+            "fpff": {
+              "absent": 1,
+              "present": 5,
+              "unknown": 1
+            },
+            "pssr": {
+              "present": 5,
+              "unknown": 2
+            },
+            "pst": {
+              "present": 5,
+              "unknown": 2
+            }
+          },
+          "count": 7,
+          "outcome_counts": {
+            "False": 1,
+            "None": 1,
+            "True": 5
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 6
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 19,
+      "rank_folder": "Add_2nd_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 16,
+              "unknown": 3
+            },
+            "fpff": {
+              "present": 16,
+              "unknown": 3
+            },
+            "pssr": {
+              "present": 16,
+              "unknown": 3
+            },
+            "pst": {
+              "present": 16,
+              "unknown": 3
+            }
+          },
+          "count": 19,
+          "outcome_counts": {
+            "None": 3,
+            "True": 16
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 16
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 9,
+      "rank_folder": "Add_Chief_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 9
+            },
+            "fpff": {
+              "present": 9
+            },
+            "pssr": {
+              "present": 9
+            },
+            "pst": {
+              "present": 9
+            }
+          },
+          "count": 9,
+          "outcome_counts": {
+            "True": 9
+          },
+          "status_counts": {
+            "PARSED": 9
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 8,
+      "rank_folder": "Add_Master",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 4,
+              "unknown": 4
+            },
+            "fpff": {
+              "present": 4,
+              "unknown": 4
+            },
+            "pssr": {
+              "present": 4,
+              "unknown": 4
+            },
+            "pst": {
+              "present": 4,
+              "unknown": 4
+            }
+          },
+          "count": 8,
+          "outcome_counts": {
+            "None": 4,
+            "True": 4
+          },
+          "status_counts": {
+            "MISSING": 4,
+            "PARSED": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260406_095900_AAMkADI5NjU4_RESUME_RAJKUMAR_MONDAL_1.pdf",
+          "label_snippets": [
+            "3010026112250054 KOLKATA 28/11/2025 27/11/2030 E.F.A. SMCC/EFA/1840 KOLKATA 14/05/2016 UNLIMITED F.P.F.F. 3010026122250054 KOLKATA 29/11/2025 28/11/2030 P.S.S.R. SMCC/PSSR/1700 KOLKATA 11/05/2016 UNLIMITED S.D.S.D. 30300814819349 KOLKATA 15/03/2019 UNLIMITED O.C.T.O. HMI/OCTO-08/02",
+            "010026122250054 KOLKATA 29/11/2025 28/11/2030 P.S.S.R. SMCC/PSSR/1700 KOLKATA 11/05/2016 UNLIMITED S.D.S.D. 30300814819349 KOLKATA 15/03/2019 UNLIMITED O.C.T.O. HMI/OCTO-08/02/2017 KOLKATA 30/09/2017 UNLIMITED D.C.O DCN01KOL22001967 KOLKATA 07/07/2022 UNLIMITED D.C.C. DCN01KOL2200196"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260418_060459_AAMkADI5NjU4_ANIS_RESUME_NEW_WORD.pdf",
+          "label_snippets": [
+            "RF 2030166122220337 YAK , NAVI MUMBAI 29.06.2022 28.06.2027 PST-RF 2030166112210457 YAK , NAVI MUMBAI 28.06.2022 14.06.2026 PSC&RB-RF 2030106212250316 ASHA MARITIME 15.03.2025 14.03.2030 NAVI MUMBAI STSDSD 20406966212502118 OCEANA MARITIME, 19.03.2025 UNLIMITED NAVI MUMBAI COOK COC"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 2,
+      "rank_folder": "Chief_Cook",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 2
+            },
+            "fpff": {
+              "present": 2
+            },
+            "pssr": {
+              "present": 2
+            },
+            "pst": {
+              "present": 2
+            }
+          },
+          "count": 2,
+          "outcome_counts": {
+            "True": 2
+          },
+          "status_counts": {
+            "PARSED": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "absent",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260319_054352_AAMkADI5NjU4_Resume.pdf",
+          "label_snippets": [
+            "I EFA / MFA / MEDICARE 0120090022005 12.03.05 MUM TS REHMAN PST / PSCRB (Survival) 0050120022005 25.03.05 MUM TS REHMAN FP & FF / AFF (Fire 0020110022005 19.03.05 MUM TS REHMAN Fighting) AFF REFRESHER RAFF/11/66/10/16 19.11.16 MUMBAI YAK MARINE PSSR NEW PSSR/27071 03.12.2016 MUMBAI",
+            "Authority/ INSTITUTE PSSR PR03054 27.02.03 DELHI ARI DELHI EFA / MFA / MEDICARE 0120090022005 12.03.05 MUM TS REHMAN PST / PSCRB (Survival) 0050120022005 25.03.05 MUM TS REHMAN FP & FF / AFF (Fire 0020110022005 19.03.05 MUM TS REHMAN Fighting) AFF REFRESHER RAFF/11/66/10/16 19.11.1",
+            "ssuing REVISION : 1 Issue Expiry Issue Authority/ INSTITUTE PSSR PR03054 27.02.03 DELHI ARI DELHI EFA / MFA / MEDICARE 0120090022005 12.03.05 MUM TS REHMAN PST / PSCRB (Survival) 0050120022005 25.03.05 MUM TS REHMAN FP & FF / AFF (Fire 0020110022005 19.03.05 MUM TS REHMAN Fighting) A",
+            ") AFF REFRESHER RAFF/11/66/10/16 19.11.16 MUMBAI YAK MARINE PSSR NEW PSSR/27071 03.12.2016 MUMBAI YAK MARINE PSCRB REF AIIMT/MUM/REF/PSCRB 04.02.17 MUMBAI ASHA MARINE MEDICAL FIRST AID MFAR/495/2014-15 12.06.14 MUMBAI OERC REF REFRESHER & UPDATING RANSCO / NARAS SMS / NAV CONTROL IND",
+            "RESHER RAFF/11/66/10/16 19.11.16 MUMBAI YAK MARINE PSSR NEW PSSR/27071 03.12.2016 MUMBAI YAK MARINE PSCRB REF AIIMT/MUM/REF/PSCRB 04.02.17 MUMBAI ASHA MARINE MEDICAL FIRST AID MFAR/495/2014-15 12.06.14 MUMBAI OERC REF REFRESHER & UPDATING RANSCO / NARAS SMS / NAV CONTROL INDOS NO. 99"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 87,
+      "rank_folder": "Chief_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "unknown": 1
+            },
+            "fpff": {
+              "unknown": 1
+            },
+            "pssr": {
+              "absent": 1
+            },
+            "pst": {
+              "unknown": 1
+            }
+          },
+          "count": 1,
+          "outcome_counts": {
+            "False": 1
+          },
+          "status_counts": {
+            "PARSED": 1
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 56,
+              "unknown": 30
+            },
+            "fpff": {
+              "present": 56,
+              "unknown": 30
+            },
+            "pssr": {
+              "present": 56,
+              "unknown": 30
+            },
+            "pst": {
+              "present": 56,
+              "unknown": 30
+            }
+          },
+          "count": 86,
+          "outcome_counts": {
+            "None": 30,
+            "True": 56
+          },
+          "status_counts": {
+            "MISSING": 30,
+            "PARSED": 56
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260330_063212_AAMkADI5NjU4_Resume_Chief_Officer-_ANURAG_DIMRI-VLCC.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260409_061738_AAMkADI5NjU4_CHIEF_OFFICER-_RAJESH_SHINDE_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_171956_AAMkADI5NjU4_pdf.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        }
+      ],
+      "pdf_count": 52,
+      "rank_folder": "Chief_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "unknown": 3
+            },
+            "fpff": {
+              "unknown": 3
+            },
+            "pssr": {
+              "unknown": 3
+            },
+            "pst": {
+              "unknown": 3
+            }
+          },
+          "count": 3,
+          "outcome_counts": {
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 3
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 38,
+              "unknown": 11
+            },
+            "fpff": {
+              "present": 38,
+              "unknown": 11
+            },
+            "pssr": {
+              "present": 38,
+              "unknown": 11
+            },
+            "pst": {
+              "present": 38,
+              "unknown": 11
+            }
+          },
+          "count": 49,
+          "outcome_counts": {
+            "None": 11,
+            "True": 38
+          },
+          "status_counts": {
+            "MISSING": 11,
+            "PARSED": 38
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "present",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260330_082519_AAMkADI5NjU4_MELVIN_ABRAHAM_CV.pdf",
+          "label_snippets": [
+            "LLEGE STSDSD 4070486621240052 14/JUN/2024 UNLIMITED CHENNAI PSSR AMMENDMENT 2026 ADU-957-137633 05/JAN/2026 UNLIMITED Certificate of Involvement/ Non-Involvement in 152990401-2025-7-01803 26/SEPT/2025 KOTTAYAM, KERALA. UNLIMITED Offences (PCC) OCTCO 4070585111250102 01/NOV/2025 BSM M"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_072202_AAMkADI5NjU4_JOVIAL_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_072202_AAMkADI5NjU4_JOVIAL_CV_1.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260429_023012_AAMkADI5NjU4_CV_Durvang_Bhagat.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "Deck_Cadet",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "unknown": 4
+            },
+            "fpff": {
+              "unknown": 4
+            },
+            "pssr": {
+              "present": 1,
+              "unknown": 3
+            },
+            "pst": {
+              "unknown": 4
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "None": 4
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_035849_AAMkADI5NjU4_Marshal_Tandel_Assistant_ETO_Resume.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_055902_AAMkADI5NjU4_Maval_Tandel_TR-ETO_Resume.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260430_062531_AAMkADI5NjU4_APON_CHATTERJEE_1_1_1.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260406_072023_AAMkADI5NjU4_B_S_Dhaliwal_CV.pdf",
+          "label_snippets": [
+            "029 PSCRB MARINE 10301016619023 SHAPE 24/10/2019 23/10/2024 PST SCMS/PSSR/322/15 SCMS 25/03/2015 UNLIMITED PSSR \u2013 Personal Safety & Social Responsibilities MARITIME SSO \u2013 Ship Security Officers Course BPMA/HVS/480/2016 BP 10/09/2016 UNLIMITED High Voltage Course MARINE ROSC \u2013 Radar",
+            "d Date Of Expiry 2010016312241792 B P 25/07/2024 24/07/2029 FPFF / AFF MARINE 2010016412240815 B P 26/07/2024 25/07/2029 EFA / MFA / MEDICARE MARINE 2010016212241751 B P 25/07/2024 24/07/2029 PSCRB MARINE 10301016619023 SHAPE 24/10/2019 23/10/2024 PST SCMS/PSSR/322/15 SCMS 25/03/2015",
+            "PFF / AFF MARINE 2010016412240815 B P 26/07/2024 25/07/2029 EFA / MFA / MEDICARE MARINE 2010016212241751 B P 25/07/2024 24/07/2029 PSCRB MARINE 10301016619023 SHAPE 24/10/2019 23/10/2024 PST SCMS/PSSR/322/15 SCMS 25/03/2015 UNLIMITED PSSR \u2013 Personal Safety & Social Responsibilities",
+            "MARINE 10301016619023 SHAPE 24/10/2019 23/10/2024 PST SCMS/PSSR/322/15 SCMS 25/03/2015 UNLIMITED PSSR \u2013 Personal Safety & Social Responsibilities MARITIME SSO \u2013 Ship Security Officers Course BPMA/HVS/480/2016 BP 10/09/2016 UNLIMITED High Voltage Course MARINE ROSC \u2013 Radar OBS Simula",
+            "9 23/10/2024 PST SCMS/PSSR/322/15 SCMS 25/03/2015 UNLIMITED PSSR \u2013 Personal Safety & Social Responsibilities MARITIME SSO \u2013 Ship Security Officers Course BPMA/HVS/480/2016 BP 10/09/2016 UNLIMITED High Voltage Course MARINE ROSC \u2013 Radar OBS Simulator ARPA \u2013 Automatic Radar Plotting Ai",
+            "/2024 PST SCMS/PSSR/322/15 SCMS 25/03/2015 UNLIMITED PSSR \u2013 Personal Safety & Social Responsibilities MARITIME SSO \u2013 Ship Security Officers Course BPMA/HVS/480/2016 BP 10/09/2016 UNLIMITED High Voltage Course MARINE ROSC \u2013 Radar OBS Simulator ARPA \u2013 Automatic Radar Plotting Aid RANSCO \u2013 Radar, Arpa & Navigation Simulato"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "Electro_Technical_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1,
+              "unknown": 3
+            },
+            "fpff": {
+              "present": 1,
+              "unknown": 3
+            },
+            "pssr": {
+              "present": 1,
+              "unknown": 3
+            },
+            "pst": {
+              "present": 1,
+              "unknown": 3
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "None": 3,
+            "True": 1
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_094655_AAMkADI5NjU4_Manish_Tandel_Fitter_6G_Welder_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_094655_AAMkADI5NjU4_Manish_Tandel_Fitter_6G_Welder_CV_1.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260427_044050_AAMkADI5NjU4_Binder1-1.pdf",
+          "label_snippets": [
+            "MICAL TANKER (DCE) COPDGSOAC24149470 24.10.2024 NAVI MUMBAI PSSR AMENDMENT2026( ID 957) ADU-957-244982 09.04.2026 MUMBAI WELDAR TESTED CERTIFICATE DOCUMENT CERT.NO DATE OF ISSUE VALIDITY PLACE OF ISSUE LLOYD BOM2410527/27 22.10.2024 17.10.2027 MUMBAI WORK EXPERIENCE COMPANY NAME POSI"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 3,
+      "rank_folder": "Fitter",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1,
+              "unknown": 2
+            },
+            "fpff": {
+              "present": 1,
+              "unknown": 2
+            },
+            "pssr": {
+              "present": 1,
+              "unknown": 2
+            },
+            "pst": {
+              "present": 1,
+              "unknown": 2
+            }
+          },
+          "count": 3,
+          "outcome_counts": {
+            "None": 2,
+            "True": 1
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 10,
+      "rank_folder": "Junior_3rd_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 9,
+              "unknown": 1
+            },
+            "fpff": {
+              "present": 9,
+              "unknown": 1
+            },
+            "pssr": {
+              "present": 9,
+              "unknown": 1
+            },
+            "pst": {
+              "present": 9,
+              "unknown": 1
+            }
+          },
+          "count": 10,
+          "outcome_counts": {
+            "None": 1,
+            "True": 9
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 9
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 17,
+      "rank_folder": "Junior_4th_Engineer",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 15,
+              "unknown": 2
+            },
+            "fpff": {
+              "present": 15,
+              "unknown": 2
+            },
+            "pssr": {
+              "present": 15,
+              "unknown": 2
+            },
+            "pst": {
+              "present": 15,
+              "unknown": 2
+            }
+          },
+          "count": 17,
+          "outcome_counts": {
+            "None": 2,
+            "True": 15
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 15
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_043045_AAMkADI5NjU4_Aditya_Junior_Engineer.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_061337_AAMkADI5NjU4_SASIKUMAR_K__RESUME-1.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "absent",
+            "fpff": "absent",
+            "pssr": "present",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260406_113012_AAMkADI5NjU4_deepak_resume.pdf",
+          "label_snippets": [
+            "OF COURSE CERTIFICATE NO. AUTHORITY ISSUE BST ( FPFF, EFA, PST, 4020156101250193 03-DEC-2025 RLINS PSSR) STSDSD 4020156621250173 02-DEC-2025 RLINS DOCUMENTS: Document Number Issued at Issue date Valid Till PASSPORT U 2695939 VISAKHAPATNAM 06-NOV-2020 05-NOV-2030 CDC MUM 628836 MUMB",
+            "TAILS: DATE OF COURSE CERTIFICATE NO. AUTHORITY ISSUE BST ( FPFF, EFA, PST, 4020156101250193 03-DEC-2025 RLINS PSSR) STSDSD 4020156621250173 02-DEC-2025 RLINS DOCUMENTS: Document Number Issued at Issue date Valid Till PASSPORT U 2695939 VISAKHAPATNAM 06-NOV-2020 05-NOV-2030 CDC MUM 6",
+            "DATE OF COURSE CERTIFICATE NO. AUTHORITY ISSUE BST ( FPFF, EFA, PST, 4020156101250193 03-DEC-2025 RLINS PSSR) STSDSD 4020156621250173 02-DEC-2025 RLINS DOCUMENTS: Document Number Issued at Issue date Valid Till PASSPORT U 2695939 VISAKHAPATNAM 06-NOV-2020 05-NOV-2030 CDC MUM 628836",
+            "UE BST ( FPFF, EFA, PST, 4020156101250193 03-DEC-2025 RLINS PSSR) STSDSD 4020156621250173 02-DEC-2025 RLINS DOCUMENTS: Document Number Issued at Issue date Valid Till PASSPORT U 2695939 VISAKHAPATNAM 06-NOV-2020 05-NOV-2030 CDC MUM 628836 MUMBAI 16-DEC-2025 15-DEC-2035 INDOS 25EM0730"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 3,
+      "rank_folder": "Junior_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "absent": 1,
+              "unknown": 2
+            },
+            "fpff": {
+              "absent": 1,
+              "unknown": 2
+            },
+            "pssr": {
+              "present": 1,
+              "unknown": 2
+            },
+            "pst": {
+              "absent": 1,
+              "unknown": 2
+            }
+          },
+          "count": 3,
+          "outcome_counts": {
+            "False": 1,
+            "None": 2
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 1,
+      "rank_folder": "Junior_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1
+            },
+            "fpff": {
+              "present": 1
+            },
+            "pssr": {
+              "present": 1
+            },
+            "pst": {
+              "present": 1
+            }
+          },
+          "count": 1,
+          "outcome_counts": {
+            "True": 1
+          },
+          "status_counts": {
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "absent",
+            "pssr": "absent",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260319_113752_AAMkADI5NjU4_CAPT_SUDHIR_THAKUR_CV_2026.pdf",
+          "label_snippets": [
+            "xpiry Date Personal Survival Techniques G. NOIDA 23.03.2005 PST-0765 Fire Fighting \u2013 Basic ( FPFF) KOLKATA 07-07-2022 30300863122205214 06-07-2027 Elementary / Medical First Aid / KOLKATA 28-12-2012 00348(MEDICARE) NA Medical Care / Ship Captains Medicare Proficiency In Survival Cra",
+            "2 KOLKATA 20-07-2027 Place Issue Date Cert. No. Expiry Date Personal Survival Techniques G. NOIDA 23.03.2005 PST-0765 Fire Fighting \u2013 Basic ( FPFF) KOLKATA 07-07-2022 30300863122205214 06-07-2027 Elementary / Medical First Aid / KOLKATA 28-12-2012 00348(MEDICARE) NA Medical Care / Ship Captains Medicare Pro",
+            "niques G. NOIDA 23.03.2005 PST-0765 Fire Fighting \u2013 Basic ( FPFF) KOLKATA 07-07-2022 30300863122205214 06-07-2027 Elementary / Medical First Aid / KOLKATA 28-12-2012 00348(MEDICARE) NA Medical Care / Ship Captains Medicare Proficiency In Survival Craft & RB KOLKATA 05-07-2022 3030086",
+            "A 05-07-2022 30300862122205215 04-07-2027 Human Relations \u2013 PSSR G. NOIDA 08.01.2005 PSSR-0799 Security Training for Seafarers on Designated duties Ship Security Officer KOLKATA 09-10-2013 2652 NA Hazmat MUMBAI 25-11-2021 Radar Observer Course (ROC) KOLKATA 14-03-2008 00265 Automatic",
+            "05215 04-07-2027 Human Relations \u2013 PSSR G. NOIDA 08.01.2005 PSSR-0799 Security Training for Seafarers on Designated duties Ship Security Officer KOLKATA 09-10-2013 2652 NA Hazmat MUMBAI 25-11-2021 Radar Observer Course (ROC) KOLKATA 14-03-2008 00265 Automatic Radar Plotting Aids (ARP"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 148,
+      "rank_folder": "Master",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "unknown": 1
+            },
+            "fpff": {
+              "absent": 1
+            },
+            "pssr": {
+              "absent": 1
+            },
+            "pst": {
+              "absent": 1
+            }
+          },
+          "count": 1,
+          "outcome_counts": {
+            "False": 1
+          },
+          "status_counts": {
+            "PARSED": 1
+          }
+        },
+        "non_email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 86,
+              "unknown": 61
+            },
+            "fpff": {
+              "absent": 5,
+              "present": 86,
+              "unknown": 56
+            },
+            "pssr": {
+              "present": 86,
+              "unknown": 61
+            },
+            "pst": {
+              "present": 86,
+              "unknown": 61
+            }
+          },
+          "count": 147,
+          "outcome_counts": {
+            "False": 5,
+            "None": 56,
+            "True": 86
+          },
+          "status_counts": {
+            "MISSING": 56,
+            "PARSED": 91
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260314_022056_AAMkADI5NjU4_ANTONY_JACKSONmotorman.pdf",
+          "label_snippets": [],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260415_171734_AAMkADI5NjU4_MUKESH_CV.pdf",
+          "label_snippets": [
+            "MUMBAI 3. FPFF(RF) 30300861222307914 07.10.2023 KOLKATA 4. PST(RF) 3030086112230819 11.10.2023 KOLKATA 5. STSDSD 3030086621230386 13.10.2023 KOLKATA 6. PSCRB(RF) 2010016212213103 05.09.2022 MUMBAI SEA EXPERINCE: SR. COMPANY RANK VESSEL TYPE FROM TO G.R.T BHP NO. NAME NAME 1. NAZ OI",
+            "BSSTC (STCW) AIIMT/MUM/BSSTC/2018/1666 23.11.2018 MUMBAI 3. FPFF(RF) 30300861222307914 07.10.2023 KOLKATA 4. PST(RF) 3030086112230819 11.10.2023 KOLKATA 5. STSDSD 3030086621230386 13.10.2023 KOLKATA 6. PSCRB(RF) 2010016212213103 05.09.2022 MUMBAI SEA EXPERINCE: SR. COMPANY RANK VESSE"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "absent",
+            "pssr": "absent",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260427_082702_AAMkADI5NjU4_CV_Harjit_sing.pdf",
+          "label_snippets": [
+            "-06-25 NAVI MUM NA PSSR 20301561012217 01-07-25 NAVI MUM NA PST 20100161122303500 14-06-23 NAVI MUM NA FPFF 2010016122230360 14-06-23 NAVI MUM NA STSDSD STSDSD/065/13-14/02 22-09-18 NAVI MUM NA PSCRB 2010011662001320 08-01-20 NAVI MUM NA ER/WK CERT ER/MMD/MUM/3960 14-04-02 MUM NA IN",
+            "7-25 NAVI MUM NA PST 20100161122303500 14-06-23 NAVI MUM NA FPFF 2010016122230360 14-06-23 NAVI MUM NA STSDSD STSDSD/065/13-14/02 22-09-18 NAVI MUM NA PSCRB 2010011662001320 08-01-20 NAVI MUM NA ER/WK CERT ER/MMD/MUM/3960 14-04-02 MUM NA INDOS NO. 04YL0577 10-11-04 MUM NA YELLOW FEVE",
+            "ISSUE VALIDITY E F A 20301561012502200 26-06-25 NAVI MUM NA PSSR 20301561012217 01-07-25 NAVI MUM NA PST 20100161122303500 14-06-23 NAVI MUM NA FPFF 2010016122230360 14-06-23 NAVI MUM NA STSDSD STSDSD/065/13-14/02 22-09-18 NAVI MUM NA PSCRB 2010011662001320 08-01-20 NAVI MUM NA ER/WK"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "absent",
+            "pssr": "absent",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260427_082702_AAMkADI5NjU4_CV_Harjit_sing_1.pdf",
+          "label_snippets": [
+            "-06-25 NAVI MUM NA PSSR 20301561012217 01-07-25 NAVI MUM NA PST 20100161122303500 14-06-23 NAVI MUM NA FPFF 2010016122230360 14-06-23 NAVI MUM NA STSDSD STSDSD/065/13-14/02 22-09-18 NAVI MUM NA PSCRB 2010011662001320 08-01-20 NAVI MUM NA ER/WK CERT ER/MMD/MUM/3960 14-04-02 MUM NA IN",
+            "7-25 NAVI MUM NA PST 20100161122303500 14-06-23 NAVI MUM NA FPFF 2010016122230360 14-06-23 NAVI MUM NA STSDSD STSDSD/065/13-14/02 22-09-18 NAVI MUM NA PSCRB 2010011662001320 08-01-20 NAVI MUM NA ER/WK CERT ER/MMD/MUM/3960 14-04-02 MUM NA INDOS NO. 04YL0577 10-11-04 MUM NA YELLOW FEVE",
+            "ISSUE VALIDITY E F A 20301561012502200 26-06-25 NAVI MUM NA PSSR 20301561012217 01-07-25 NAVI MUM NA PST 20100161122303500 14-06-23 NAVI MUM NA FPFF 2010016122230360 14-06-23 NAVI MUM NA STSDSD STSDSD/065/13-14/02 22-09-18 NAVI MUM NA PSCRB 2010011662001320 08-01-20 NAVI MUM NA ER/WK"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "Motorman",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 1,
+              "unknown": 3
+            },
+            "fpff": {
+              "absent": 2,
+              "present": 1,
+              "unknown": 1
+            },
+            "pssr": {
+              "absent": 2,
+              "present": 1,
+              "unknown": 1
+            },
+            "pst": {
+              "absent": 3,
+              "present": 1
+            }
+          },
+          "count": 4,
+          "outcome_counts": {
+            "False": 3,
+            "True": 1
+          },
+          "status_counts": {
+            "PARSED": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260330_165652_AAMkADI5NjU4_MAKSON_NEW_RESUME_-_26.pdf",
+          "label_snippets": [
+            "CORIN FPFF 4060306122260046 12/03/2026 11/03/2031 TUTICORIN PST 4060306112260045 11/03/2026 10/03/2031 TUTICORIN O.T.C.T.O 40602951112100215 17/09/2021 LIFE CHENNAI O.T.C.T [DCE] COPDGSOAC2150358 23/09/2021 LIFE MUMBAI S.T.S.D.S.D 40201766212101213 06/08/2021 LIFE PONDICHERY PSCRB 4",
+            "D AT STCW BASIC 40201161012102412 29/09/2022 LIFE TUTICORIN FPFF 4060306122260046 12/03/2026 11/03/2031 TUTICORIN PST 4060306112260045 11/03/2026 10/03/2031 TUTICORIN O.T.C.T.O 40602951112100215 17/09/2021 LIFE CHENNAI O.T.C.T [DCE] COPDGSOAC2150358 23/09/2021 LIFE MUMBAI S.T.S.D.S.D"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_033730_AAMkADI5NjU4_Sahil_Tandel_TR_Seaman_Resume.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_063332_AAMkADI5NjU4_ABN26016959.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_063332_AAMkADI5NjU4_PRASANTH_OS_03.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260429_052641_AAMkADI5NjU4_ABN26016959.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        }
+      ],
+      "pdf_count": 14,
+      "rank_folder": "OS",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 4,
+              "unknown": 10
+            },
+            "fpff": {
+              "present": 4,
+              "unknown": 10
+            },
+            "pssr": {
+              "absent": 4,
+              "present": 4,
+              "unknown": 6
+            },
+            "pst": {
+              "present": 4,
+              "unknown": 10
+            }
+          },
+          "count": 14,
+          "outcome_counts": {
+            "False": 4,
+            "None": 6,
+            "True": 4
+          },
+          "status_counts": {
+            "MISSING": 6,
+            "PARSED": 8
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_044149_AAMkADI5NjU4_RESUME_2025_D_PDF.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260428_090024_AAMkADI5NjU4_ASHISH_RESUME_NEW.pdf",
+          "label_snippets": [
+            "INING O.C.T.C.O YAK/OCTCO(A)/09/035/20/17 06.09.2017 MUMBAI PSSR ADU ACADEMY INDIA 02.04.2026 MUMBAI AMENDMENT P.S.C.R.B 2010011662001018 07.01.2020 MUMBAI I.S.P.S ISPS/04/09/03/01/2012 10.09.2012 MUMBAI HAZMAT PMTRI/HAZMAT/18/01/2016 20.07.2016 MUMBAI Ship Steering YAK/ST/09/2/3/201"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260430_043208_AAMkADI5NjU4_RESUME_2025_D_PDF.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "absent",
+            "fpff": "absent",
+            "pssr": "absent",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260318_064621_AAMkADI5NjU4_Ashoke_cv_word_2026-1_1.pdf",
+          "label_snippets": [
+            "ATA PANAMA STSDSD E-001538283A 04/09/2024 03/09/2029 PANAMA PST,FPFF,EFA,PSSR 3030136101210331 15/11/2022 14/11/2027 KOLKATA PSCRB 2010016211230351 07/04/2023 06/04/2028 MUMBAI OCTCO 20100151112302423 25/02/2023 N/A MUMBAI PANAMA OCTCO E-001538285A 04/09/2024 03/09/2029 PANAMA SEA E",
+            "PANAMA STSDSD E-001538283A 04/09/2024 03/09/2029 PANAMA PST,FPFF,EFA,PSSR 3030136101210331 15/11/2022 14/11/2027 KOLKATA PSCRB 2010016211230351 07/04/2023 06/04/2028 MUMBAI OCTCO 20100151112302423 25/02/2023 N/A MUMBAI PANAMA OCTCO E-001538285A 04/09/2024 03/09/2029 PANAMA SEA EXPERI",
+            "A STSDSD E-001538283A 04/09/2024 03/09/2029 PANAMA PST,FPFF,EFA,PSSR 3030136101210331 15/11/2022 14/11/2027 KOLKATA PSCRB 2010016211230351 07/04/2023 06/04/2028 MUMBAI OCTCO 20100151112302423 25/02/2023 N/A MUMBAI PANAMA OCTCO E-001538285A 04/09/2024 03/09/2029 PANAMA SEA EXPERIENCE",
+            "SDSD E-001538283A 04/09/2024 03/09/2029 PANAMA PST,FPFF,EFA,PSSR 3030136101210331 15/11/2022 14/11/2027 KOLKATA PSCRB 2010016211230351 07/04/2023 06/04/2028 MUMBAI OCTCO 20100151112302423 25/02/2023 N/A MUMBAI PANAMA OCTCO E-001538285A 04/09/2024 03/09/2029 PANAMA SEA EXPERIENCE: COM"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260320_075435_AAMkADI5NjU4_Ramesh_Resume.pdf",
+          "label_snippets": [
+            "0301861122203521 23.09.2022 Chennai 22.09.2027 E.F.A. AIIMT/EFA/MUM/B88/2090 14.07.2016 Mumbai Unlimited P.S.S.R. AIIMT/PSSR/MUM/B46/951 08.07.2016. Mumbai Unlimited S.T.S.D.S.D MMA/DSD/35 26.10.2013 Chennai Life I.S.P.S ISPS/8326 03.12.2008 Mumbai Life S I D C32468741 14.07.2022 Ch",
+            "EFA/MUM/B88/2090 14.07.2016 Mumbai Unlimited P.S.S.R. AIIMT/PSSR/MUM/B46/951 08.07.2016. Mumbai Unlimited S.T.S.D.S.D MMA/DSD/35 26.10.2013 Chennai Life I.S.P.S ISPS/8326 03.12.2008 Mumbai Life S I D C32468741 14.07.2022 Chennai Life SEA EXPERIENCE: Name of Name of Vessel Type/ GRT B"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 8,
+      "rank_folder": "Oiler",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "absent": 1,
+              "present": 3,
+              "unknown": 4
+            },
+            "fpff": {
+              "absent": 1,
+              "present": 3,
+              "unknown": 4
+            },
+            "pssr": {
+              "absent": 2,
+              "present": 3,
+              "unknown": 3
+            },
+            "pst": {
+              "absent": 1,
+              "present": 3,
+              "unknown": 4
+            }
+          },
+          "count": 8,
+          "outcome_counts": {
+            "False": 2,
+            "None": 3,
+            "True": 3
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 5
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260403_094442_AAMkADI5NjU4_Dyson-updated-biodata.pdf",
+          "label_snippets": [
+            "ETAILS COURSES CERTIFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.202",
+            "(C.H.E.M) CMMI/CHEM/18/36972 20.06.2018 19.06.2023 MUMBAI R-PST 27.03.2026 26.03.2031 TUTICORIN 40603061122600617 R-FPFF 28.03.2026 27.03.2031 TUTICORIN 40603061222600617 SEA EXPERIENCE COMPANY NAME VESSAL NAME TYPE RANK GRT NRT FROM TO AET EAGLE VLCC PUMPMAN 161974 112240 21-03-202",
+            "COURSES CERTIFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.2023 UNLIM",
+            "I R-PST 27.03.2026 26.03.2031 TUTICORIN 40603061122600617 R-FPFF 28.03.2026 27.03.2031 TUTICORIN 40603061222600617 SEA EXPERIENCE COMPANY NAME VESSAL NAME TYPE RANK GRT NRT FROM TO AET EAGLE VLCC PUMPMAN 161974 112240 21-03-2024 09-10-2024 VANCOUVER AET EAGLE VALLERY VLCC PUMPMAN 158",
+            "S CERTIFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.2023 UNLIMITED C",
+            "IFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.2023 UNLIMITED CHENNAI"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260403_110040_AAMkADI5NjU4_new_bio_data_Dyson.pdf",
+          "label_snippets": [
+            "ETAILS COURSES CERTIFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.202",
+            "(C.H.E.M) CMMI/CHEM/18/36972 20.06.2018 19.06.2023 MUMBAI R-PST 27.03.2026 26.03.2031 TUTICORIN 40603061122600617 R-FPFF 28.03.2026 27.03.2031 TUTICORIN 40603061222600617 SEA EXPERIENCE COMPANY NAME VESSAL NAME TYPE RANK GRT NRT FROM TO AET EAGLE VLCC PUMPMAN 161974 112240 21-03-202",
+            "COURSES CERTIFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.2023 UNLIM",
+            "I R-PST 27.03.2026 26.03.2031 TUTICORIN 40603061122600617 R-FPFF 28.03.2026 27.03.2031 TUTICORIN 40603061222600617 SEA EXPERIENCE COMPANY NAME VESSAL NAME TYPE RANK GRT NRT FROM TO AET EAGLE VLCC PUMPMAN 161974 112240 21-03-2025 09-10-2025 VANCOUVER AET EAGLE VALLERY VLCC PUMPMAN 158",
+            "S CERTIFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.2023 UNLIMITED C",
+            "IFICATE NO ISSUE DATE VALIDITY ISSUED AT PST , FPFF , EFA , PSSR 40602961012105721 23.12.2021 VALID THOOTHUKUDI SDSD 40602966212104917 17.12.2021 LIFE CHENGALPATTU O.T.F MOTA/2010/OTF/ 20.06.2014 LIFE PONDICHIERRY 10/189/14 D.C.E (O.I.L) DCNO1CHN24003671 08.05.2023 UNLIMITED CHENNAI"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 2,
+      "rank_folder": "Pumpman",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "present": 2
+            },
+            "fpff": {
+              "present": 2
+            },
+            "pssr": {
+              "present": 2
+            },
+            "pst": {
+              "present": 2
+            }
+          },
+          "count": 2,
+          "outcome_counts": {
+            "True": 2
+          },
+          "status_counts": {
+            "PARSED": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "absent",
+            "fpff": "absent",
+            "pssr": "absent",
+            "pst": "absent"
+          },
+          "filename": "EMAIL_20260427_033251_AAMkADI5NjU4_Sudeep_Kumar_CV.pdf",
+          "label_snippets": [
+            "res:03 Feb 2031] 2. STCW Basic Safety Training | EFA, FPFF, PST, PSSR | [Issued:07 Jun 2024 - Expires:No Expiry] 3. STCW STSDSD | [Issued:07 Jun 2024 - Expires:No Expiry] 4. High Voltage Operational | [Issued:25 Oct 2025 - Expires:No Expiry] 5. Medical Fast Aid | [Issued:31 Oct 2025",
+            "- Expires:03 Feb 2031] 2. STCW Basic Safety Training | EFA, FPFF, PST, PSSR | [Issued:07 Jun 2024 - Expires:No Expiry] 3. STCW STSDSD | [Issued:07 Jun 2024 - Expires:No Expiry] 4. High Voltage Operational | [Issued:25 Oct 2025 - Expires:No Expiry] 5. Medical Fast Aid | [Issued:31 Oct",
+            "2026 - Expires:03 Feb 2031] 2. STCW Basic Safety Training | EFA, FPFF, PST, PSSR | [Issued:07 Jun 2024 - Expires:No Expiry] 3. STCW STSDSD | [Issued:07 Jun 2024 - Expires:No Expiry] 4. High Voltage Operational | [Issued:25 Oct 2025 - Expires:No Expiry] 5. Medical Fast Aid | [Issued:",
+            "3 Feb 2031] 2. STCW Basic Safety Training | EFA, FPFF, PST, PSSR | [Issued:07 Jun 2024 - Expires:No Expiry] 3. STCW STSDSD | [Issued:07 Jun 2024 - Expires:No Expiry] 4. High Voltage Operational | [Issued:25 Oct 2025 - Expires:No Expiry] 5. Medical Fast Aid | [Issued:31 Oct 2025 - Exp"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": false
+        }
+      ],
+      "pdf_count": 1,
+      "rank_folder": "Ship_Management",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "absent": 1
+            },
+            "fpff": {
+              "absent": 1
+            },
+            "pssr": {
+              "absent": 1
+            },
+            "pst": {
+              "absent": 1
+            }
+          },
+          "count": 1,
+          "outcome_counts": {
+            "False": 1
+          },
+          "status_counts": {
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260323_070653_AAMkADI5NjU4_GS_SMITKUMAR_R_TANDEL_newly_UPDATED_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260323_070742_AAMkADI5NjU4_CV_GS_GAURAVKUMAR_B_TANDEL.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260325_055720_AAMkADI5NjU4_GS_SMITKUMAR_R_TANDEL_UPDATED_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        }
+      ],
+      "pdf_count": 3,
+      "rank_folder": "Steward",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "unknown": 3
+            },
+            "fpff": {
+              "unknown": 3
+            },
+            "pssr": {
+              "unknown": 3
+            },
+            "pst": {
+              "unknown": 3
+            }
+          },
+          "count": 3,
+          "outcome_counts": {
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 3
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260314_123359_AAMkADI5NjU4_BABLU_WIPER_NEW_CV.pdf",
+          "label_snippets": [
+            ".20 EL F 90264 24 29 HI 11. 10.0 D 10100530719 06.2 6.20 EL PSSR 0263 024 29 HI G1912D0301 GP 5/ 06.1 DE RATTI SEPT22/2209 1.20 LH NG R4-0768 22 NIL I COP 09. LIFE MU (INDIA ABE2500907 12.2 TIM MB N) 0 025 E AI ENGI NE WATC 12. LIF D HKEE WKE2400954 03.2 ETI EL PING 7 022 ME HI SEA E"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260425_024459_AAMkADI5NjU4_Tandel_Mintesh_Wiper_CV.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260427_060518_AAMkADI5NjU4_Krunalkumar_Tandel_Wiper.pdf",
+          "label_snippets": [],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "unknown",
+            "fpff": "unknown",
+            "pssr": "unknown",
+            "pst": "unknown"
+          },
+          "filename": "EMAIL_20260429_074134_AAMkADI5NjU4_CURRICULUM_VITAE-1.pdf",
+          "label_snippets": [
+            "lege with Designated Security Duties Kalpakkam,09/02/2024 2 Personal Survival Techniques 40201061 01240069 HIMT College Kalpakkam,29/02/2024 3 Fire prevention & Fire Fighting 40201061 01240069 HIMT College Kalpakkam,29/02/2024 4 Elementary First Aid 40201061 01240069 HIMT College Kalpakkam,29/02/2024 5 Pers",
+            "hting 40201061 01240069 HIMT College Kalpakkam,29/02/2024 4 Elementary First Aid 40201061 01240069 HIMT College Kalpakkam,29/02/2024 5 Personal Safety and Social 40201061 01240069 HIMT College Responsibilities Kalpakkam,29/02/2024 DECLARATION I hereby declare that the above mentioned information is"
+          ],
+          "status": "MISSING",
+          "stcw_basic_all_valid": null
+        },
+        {
+          "certificates": {
+            "efa": "present",
+            "fpff": "present",
+            "pssr": "present",
+            "pst": "present"
+          },
+          "filename": "EMAIL_20260313_105638_AAMkADI5NjU4_CV_FOR_BABLU_WIPER_1.pdf",
+          "label_snippets": [
+            "DELHI F.P.F.F. 101005307190264 29.06.2024 28.06.2029 DELHI PSSR 101005307190263 11.06.2024 10.06.2029 DELHI GP RATING G1912D03015/Sept22/2209R4 06.11.2022 NL DELHI -0768 COP (INDIAN) ABE25009070 09.12.2025 LIFETIME MUMBAI ENGINE WKE24009547 12.03.2024 LIFETIME DELHI WATCHKEEPING VES"
+          ],
+          "status": "PARSED",
+          "stcw_basic_all_valid": true
+        }
+      ],
+      "pdf_count": 10,
+      "rank_folder": "Wiper",
+      "summary_by_source_type": {
+        "email": {
+          "certificate_state_counts": {
+            "efa": {
+              "absent": 3,
+              "present": 3,
+              "unknown": 4
+            },
+            "fpff": {
+              "absent": 1,
+              "present": 3,
+              "unknown": 6
+            },
+            "pssr": {
+              "absent": 3,
+              "present": 3,
+              "unknown": 4
+            },
+            "pst": {
+              "absent": 1,
+              "present": 3,
+              "unknown": 6
+            }
+          },
+          "count": 10,
+          "outcome_counts": {
+            "False": 3,
+            "None": 4,
+            "True": 3
+          },
+          "status_counts": {
+            "MISSING": 4,
+            "PARSED": 6
+          }
+        }
+      }
+    }
+  ],
+  "generated_at": "2026-05-07T11:58:18.875591+00:00",
+  "overall_summary_by_source_type": {
+    "email": {
+      "certificate_state_counts": {
+        "efa": {
+          "absent": 7,
+          "present": 28,
+          "unknown": 60
+        },
+        "fpff": {
+          "absent": 9,
+          "present": 29,
+          "unknown": 57
+        },
+        "pssr": {
+          "absent": 16,
+          "present": 31,
+          "unknown": 48
+        },
+        "pst": {
+          "absent": 9,
+          "present": 29,
+          "unknown": 57
+        }
+      },
+      "count": 95,
+      "outcome_counts": {
+        "False": 21,
+        "None": 46,
+        "True": 28
+      },
+      "status_counts": {
+        "MISSING": 44,
+        "PARSED": 51
+      }
+    },
+    "non_email": {
+      "certificate_state_counts": {
+        "efa": {
+          "present": 499,
+          "unknown": 148
+        },
+        "fpff": {
+          "absent": 5,
+          "present": 499,
+          "unknown": 143
+        },
+        "pssr": {
+          "present": 499,
+          "unknown": 148
+        },
+        "pst": {
+          "present": 499,
+          "unknown": 148
+        }
+      },
+      "count": 647,
+      "outcome_counts": {
+        "False": 5,
+        "None": 143,
+        "True": 499
+      },
+      "status_counts": {
+        "MISSING": 143,
+        "PARSED": 504
+      }
+    }
+  },
+  "resume_root": "/Users/kartikraghavan/Library/Application Support/NjordHR/Resumes",
+  "scope_note": "Horizontal STCW validation pass across live rank folders."
+}

@@ -1,0 +1,1616 @@
+{
+  "folders": [
+    {
+      "email_examples": [
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260331_114019_AAMkADI5NjU4_DocScanner_1_Feb_2026_15-28.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ME MUMBA  BIGF 2050285311250051 07/03/2025 LIFE TIME MUMBA  coc CC/MUM/2020/E004914 24/09/2020 LIFETIME MUMBA  SEA EXPERIENCE :  COMPANY NAME DISIGNATION GRT RANK FROM TO  HIGH TIDE MV ZAMIL 24 691.46 | GS 28/02/201 16/08/2011 6 6  HIGH TIDE MV ZAMIL 55 1574 GS 02/06/201 01/11/201 i i  BRIDGEVIEW MARIT"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260331_114019_AAMkADI5NjU4_MOHAMMED_ALTAF_RESUME_2.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ME MUMBAI BIGF 2050285311250051 07/03/2025 LIFE TIME MUMBAI COC CC/MUM/2020/E004914 24/09/2020 LIFETIME MUMBAI SEA EXPERIENCE : COMPANY NAME DISIGNATION GRT RANK FROM TO HIGH TIDE MV ZAMIL 24 691.46 GS 28/02/2016 16/08/2016 HIGH TIDE MV ZAMIL 55 1574 GS 02/06/2017 01/11/2017 BRIDGEVIEW MARITIME PVT LTD"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 2,
+      "rank_folder": "2nd_Cook",
+      "summary_by_source_type": {
+        "email": {
+          "count": 2,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 2
+          },
+          "grade_counts": {
+            "None": 2
+          },
+          "status_counts": {
+            "PARSED": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260415_074230_AAMkADI5NjU4_sekhar_Vitchula_s_Resume.pdf",
+          "grade": null,
+          "label_snippets": [
+            "OLKATA SID K32960901 05-Feb-2033 Certificate of competency (COC) Details 2/5 Certificate Certificate Issue Issue Expiry Indos No. No Type Authority Date Date MEO Class I 19-Aug- 18-Aug- 95W12838 Indian 05EL0034 (Motor) 2024 2029 95x-9157 Indian MEO Class 15- 21- II(Motor) Dec-2021 Nov-2026 Sea service",
+            "n CL76910 24-Nov-2026 MMD KOLKATA SID K32960901 05-Feb-2033 Certificate of competency (COC) Details 2/5 Certificate Certificate Issue Issue Expiry Indos No. No Type Authority Date Date MEO Class I 19-Aug- 18-Aug- 95W12838 Indian 05EL0034 (Motor) 2024 2029 95x-9157 Indian MEO Class 15- 21- II(Motor) Dec-2021 Nov-2026 Sea ser",
+            "SUMMARY Experienced second engineer with strong Applied For 2nd Engineer background in managing engineering- Rank related jobs and leading multidisciplinary Present Rank 2nd Engineer teams to drive operational excellence. Proven track record of success in problem From date 01-Jan 2026 solving, utilizing technic",
+            "ank related jobs and leading multidisciplinary Present Rank 2nd Engineer teams to drive operational excellence. Proven track record of success in problem From date 01-Jan 2026 solving, utilizing technical expertise and critical thinking skills. Committed to delivering high-quality results and continuously seeki",
+            "Date Date Type & Name 1 Holy angel Marine 81396/18 MAN 17- 2nd Engineer 01- services/Crude oil 660kw B&W MC-CApr-2025 Oct-202 Tanker/MT LILIANA 5 Chief 12- SCI / 18-Jul- 2 Engineer 427/2X6 Yanmar Feb- Passenger 2023 ,SCI 62 KW 2024 Ship/MV RANI CHANGA Chief 03-Feb- SCI / 19-Oct- 3 Engineer 427/2X6 Yanmar 2022",
+            "te Issue Issue Expiry Indos No. No Type Authority Date Date MEO Class I 19-Aug- 18-Aug- 95W12838 Indian 05EL0034 (Motor) 2024 2029 95x-9157 Indian MEO Class 15- 21- II(Motor) Dec-2021 Nov-2026 Sea service Experience Details Sign Sign Company # Rank Tonnage Engine In Out Name / Ship /BHP Date Date Type & Name 1"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260425_125559_AAMkADI5NjU4_MANISH_RESUME.pdf",
+          "grade": null,
+          "label_snippets": [
+            ".2024 11.09.2034 CDC MUM250274 MUMBAI 19.03.2025 18.03.2025 COC (MEO CL-2) 95X-15888 DELHI 02.02.2022 16.01.2027 INDOS 15EL0310 MUMBAI 17.03.2015 - YELLOW FEVER 07863 MUMBAI 26.08.2015 - SID M33819484 MUMBAI 19.07.2023 18.07.2033 EDUCATIONAL QUALIFICATION QUALIFICATION NAME OF INSTITUTE CERTIFICATE NUM"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260428_080520_AAMkADI5NjU4_1._Anubhav_Kumar_s_Resume_CV_as_on_28.01.pdf",
+          "grade": null,
+          "label_snippets": [
+            "tos - Takeover} CERTIFICATE OF COMPETENCY / LICENSE ( CDC / COC / DCE ) DETAILS:- S.NO TYPE OF CERTIFICATE CERTIFICATE NO. DATE OF ISSUE DATE OF EXPIRY 01. PASSPORT Z6024097 23/05/22 22/05/2032 02. CDC MUM240008 25/07/2014 05/02/2034 03. CYPRUS CDC CY232158 02/12/2014 01/12/2024 04. PANAMA CDC PA026039",
+            "PANAMA CDC PA0260393 04/07/2022 31/05/2027 05. MEO CLASS IV COC 95Z-25617 07/09/2017 31/07/2027 06. MEO CLASS II COC 95X-19822 17/11/2025 19/10/2030 07. INDoS 12PL0004 14-05-2012 N/A 08. SID M32338733 20/05/22 19/05/32 09. DCE OIL ADVANCED LEVEL II DCE02DEL22003694 23-MAY-2022 22-MAY-2027 10. DCE OIL B",
+            "ASS IV COC 95Z-25617 07/09/2017 31/07/2027 06. MEO CLASS II COC 95X-19822 17/11/2025 19/10/2030 07. INDoS 12PL0004 14-05-2012 N/A 08. SID M32338733 20/05/22 19/05/32 09. DCE OIL ADVANCED LEVEL II DCE02DEL22003694 23-MAY-2022 22-MAY-2027 10. DCE OIL BASIC LEVEL I DCE01DEL20002008 02-MAR-2020 01-MAR-2025",
+            "9100 Pvt Ltd . 58667 : PREVIOU S NAME MT Myrtos - Takeover} CERTIFICATE OF COMPETENCY / LICENSE ( CDC / COC / DCE ) DETAILS:- S.NO TYPE OF CERTIFICATE CERTIFICATE NO. DATE OF ISSUE DATE OF EXPIRY 01. PASSPORT Z6024097 23/05/22 22/05/2032 02. CDC MUM240008 25/07/2014 05/02/2034 03. CYPRUS CDC CY232158 02/12/2014 01/12/2024 0",
+            "27 05. MEO CLASS IV COC 95Z-25617 07/09/2017 31/07/2027 06. MEO CLASS II COC 95X-19822 17/11/2025 19/10/2030 07. INDoS 12PL0004 14-05-2012 N/A 08. SID M32338733 20/05/22 19/05/32 09. DCE OIL ADVANCED LEVEL II DCE02DEL22003694 23-MAY-2022 22-MAY-2027 10. DCE OIL BASIC LEVEL I DCE01DEL20002008 02-MAR-2020 01-MAR-",
+            "/12/2024 04. PANAMA CDC PA0260393 04/07/2022 31/05/2027 05. MEO CLASS IV COC 95Z-25617 07/09/2017 31/07/2027 06. MEO CLASS II COC 95X-19822 17/11/2025 19/10/2030 07. INDoS 12PL0004 14-05-2012 N/A 08. SID M32338733 20/05/22 19/05/32 09. DCE OIL ADVANCED LEVEL II DCE02DEL22003694 23-MAY-2022 22-MAY-2027 10. DCE O"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_080520_AAMkADI5NjU4_2.pdf",
+          "grade": null,
+          "label_snippets": [
+            "Thalassa Appraisee\u2019s Rank: THIRD ENGINEER Department Head: Chief Engineer S C SARKAR Highest License Held MEO CL IV Master: Capt.A.P.Anaokar (Appraisee): Nationality (Appraisee): Indian This appraisal is based on _128 days __ onboard service together with the department head. COMPLETION OF REASON FOR CONTRACT CH",
+            "isee) Name: SANKAR CHANDRA SARKAR Name: ANUBHAV KUMAR Rank: CHIEF ENGINEER Rank: THIRD ENGINEER - MT THALASSA Date: 01-Aug-23 Date: 01/08/2023 Appraisee's Comments: Page : 2 CONFIDENTIAL (This Section to be filled by Head of Department & Master. And must not to be disclosed to appraisee.) TOTAL SCORE 188 NOTE: *",
+            "ling on Short Hand . With the above observations , I as his Chief Engineer, in consultation with and deep Satisfaction of Master/Captain of this vessel , strongly recommend to promote him for the next Rank as 2nd Engineer on this Vessel \u201cMT THALASSA\u201d or for his next vessel assignment (Tanker / Bulk Carrier / Othe",
+            "nding him for promotion after having deep Consultation with Chief Engineer . He's definately an asset to the company. Very calm and composed. Reliable and trustworthy. Signature of Master Page : 3",
+            ": YES NO Reasons : Strongly Recommend him for Promotion to 2nd Engineer on board this vessel or other Company owned / managed Ships . 2. Rehire : YES NO Reasons : 3. Recommendations for development/Training: As per Company Policies 4. Additional comments by Department Head: 1) He is a very reliable Engineer wi",
+            "performed well in all the maintenance work and routines of 2nd Engineer and capable of working as 2nd Engineer on Board this Ship MT THALASSA or your other Owned / Operated / Managed Vessels. 4) He is a very harmonious person and has a good Conduct & Leadership. 5) He is very cooperative in working during all",
+            "work and routines of 2nd Engineer and capable of working as 2nd Engineer on Board this Ship MT THALASSA or your other Owned / Operated / Managed Vessels. 4) He is a very harmonious person and has a good Conduct & Leadership. 5) He is very cooperative in working during all Engine room operations and maintenance",
+            "ing all Engine room operations and maintenance and assisted 2nd Engineer from time to time along with other Engine Crew as well. 6) He is always dealing with good Seamanship On Board. 7) Most Importantly his efforts are highly appreciable in having smooth operations after taking over of above mentioned Ship MT",
+            "ALASSA (Previous Name MT NORDBAY) and During the Absence of 2nd Engineer when Vessel was sailing on Short Hand . With the above observations , I as his Chief Engineer, in consultation with and deep Satisfaction of Master/Captain of this vessel , strongly recommend to promote him for the next Rank as 2nd Enginee",
+            "el , strongly recommend to promote him for the next Rank as 2nd Engineer on this Vessel \u201cMT THALASSA\u201d or for his next vessel assignment (Tanker / Bulk Carrier / Other owned / Managed or operated Vessels). Signature of Department Head 5. Comments by Master I have found 3rd Engineer Anubhav Kumar to be a very har"
+          ],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_094417_AAMkADI5NjU4_CV_2Eng_Ievgen_Bakanurskyi.pdf",
+          "grade": null,
+          "label_snippets": [
+            "Ievgen Bakanurskyi Second Engineer| Chief Engineer OFFSHORE | MPSV (Geotechnical Drilling) | AHTS | PSV | OSV | M: +38063588786; +34613847881 E: bakanurskyi1991@gmail.com Address: Torrevieja, Spain Position: Second Engineer Desired Type of Ship: Offshore fleet Full Name: Ievgen Bakanurskyi",
+            "01.2026 AS / Norway 8960 MPSV MTU 12.08.2025- Myklebusthaug Chief Engineer Dina Polaris 6053 DP2 11.11.2025 AS / Norway 8960 MPSV MTU 27.05.2025- Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 20.07.2025 AS / Norway 8960 MPSV MTU 04.02.2025 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 10.04.2025 AS /",
+            "kW From - Till Employer: MPSV MTU 27.02.2026- Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 31.03.2026 AS / Norway 8960 MPSV MTU 03.12.2025- Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 03.01.2026 AS / Norway 8960 MPSV MTU 12.08.2025- Myklebusthaug Chief Engineer Dina Polaris 6053 DP2 11.11.2025 AS / Nor",
+            "03.2026 AS / Norway 8960 MPSV MTU 03.12.2025- Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 03.01.2026 AS / Norway 8960 MPSV MTU 12.08.2025- Myklebusthaug Chief Engineer Dina Polaris 6053 DP2 11.11.2025 AS / Norway 8960 MPSV MTU 27.05.2025- Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 20.07.2025 AS / Nor",
+            "11.2025 AS / Norway 8960 MPSV MTU 27.05.2025- Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 20.07.2025 AS / Norway 8960 MPSV MTU 04.02.2025 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 10.04.2025 AS / Norway AHTS Wartsila 18.12.2024- SEA1 Offshore 2nd Engineer Sea1 Emerald 4062 DP2 20152 22.01.202",
+            "7.2025 AS / Norway 8960 MPSV MTU 04.02.2025 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 10.04.2025 AS / Norway AHTS Wartsila 18.12.2024- SEA1 Offshore 2nd Engineer Sea1 Emerald 4062 DP2 20152 22.01.2025 AS MPSV MTU 27.09.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 30.11.2024 AS / No",
+            "04.2025 AS / Norway AHTS Wartsila 18.12.2024- SEA1 Offshore 2nd Engineer Sea1 Emerald 4062 DP2 20152 22.01.2025 AS MPSV MTU 27.09.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 30.11.2024 AS / Norway MPSV MTU 08.08.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 04.09.2024 AS / Norway",
+            "DP2 20152 22.01.2025 AS MPSV MTU 27.09.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 30.11.2024 AS / Norway MPSV MTU 08.08.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 04.09.2024 AS / Norway MPSV MTU 17.04.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 17.06.2024 AS",
+            "30.11.2024 AS / Norway MPSV MTU 08.08.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 04.09.2024 AS / Norway MPSV MTU 17.04.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 17.06.2024 AS / Norway MPSV MTU 12.12.2023 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 06.02.2024 AS",
+            "04.09.2024 AS / Norway MPSV MTU 17.04.2024 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 17.06.2024 AS / Norway MPSV MTU 12.12.2023 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 06.02.2024 AS / Norway MPSV MTU 16.08.2023 - Myklebusthaug 2nd Engineer Dina Polaris 6053 DP2 8960 20.10.2023 AS"
+          ],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "PARSED",
+          "filename": "EMAIL_20260429_063616_AAMkADI5NjU4_2e_shailendra_singh_chauhan_Resume.pdf",
+          "grade": null,
+          "label_snippets": [
+            "Certificate Details MEO Class II (Motor) Indos No 11EL2483. COC N - 95X14163 Issue Authority Indian Issue Date 2019-11-08 Availability Details Rank 2nd Engineer IMMEDIATELY Vaccine Details Vaccine Name Vaccine Date 1 - 2021-04-06 Vaccine Date 2 - 2021-01-09 Booster Date - 2023-05-24 Address Address VIL",
+            "shailendra singh chauhan 2nd Engineer shail_stallion@yahoo.co.in 8420465605 Jaipur, Rajasthan, India 1989-11-23 Indian Z6218932 Male married US visa valid Seamen Experience Details 18/04/2025 \u2013 Norse ship management 04/08/2025 2nd Engineer Raffles pride / Oil/Chem Tanker 8539G",
+            "ience Details 18/04/2025 \u2013 Norse ship management 04/08/2025 2nd Engineer Raffles pride / Oil/Chem Tanker 8539GT MAN & B&W 21/09/2024 \u2013 fleet management 14/11/2024 2nd Engineer MT GISELE / Product Tanker 40953 MAN & B&W 11/06/2023 \u2013 fleet management 23/12/2023 3rd Engineer MT NINAWA / VLCC 159000 GT MAN & B&W ME",
+            "r 8539GT MAN & B&W 21/09/2024 \u2013 fleet management 14/11/2024 2nd Engineer MT GISELE / Product Tanker 40953 MAN & B&W 11/06/2023 \u2013 fleet management 23/12/2023 3rd Engineer MT NINAWA / VLCC 159000 GT MAN & B&W ME 04/10/2021 \u2013 fleet management 02/05/2022 3rd Engineer MT MP MR TANKER 3 / Product Tanker GT 28813 MAN",
+            "rity Indian Issue Date 2019-11-08 Availability Details Rank 2nd Engineer IMMEDIATELY Vaccine Details Vaccine Name Vaccine Date 1 - 2021-04-06 Vaccine Date 2 - 2021-01-09 Booster Date - 2023-05-24 Address Address VILLA 2 ,G70 71 -GANDHI PATH WEST-NEAR SEVEN HEAVEN APPARTMENT, JAIPUR ,302021 Passport Details 10/0",
+            "r DCE Level Operational - DCE02DEL21002911 Total Experience 2nd Engineer - 6months , 3rd Engineer - 13months , 4th Engineer - 24 months",
+            "er 40953 MAN & B&W 11/06/2023 \u2013 fleet management 23/12/2023 3rd Engineer MT NINAWA / VLCC 159000 GT MAN & B&W ME 04/10/2021 \u2013 fleet management 02/05/2022 3rd Engineer MT MP MR TANKER 3 / Product Tanker GT 28813 MAN & B&W 23/10/2020 \u2013 TEEKAY TANKERS 30/12/2020 Add 3rd Engineer MT TIANLONG SPIRIT / Oil Tanker GT",
+            "00 GT MAN & B&W ME 04/10/2021 \u2013 fleet management 02/05/2022 3rd Engineer MT MP MR TANKER 3 / Product Tanker GT 28813 MAN & B&W 23/10/2020 \u2013 TEEKAY TANKERS 30/12/2020 Add 3rd Engineer MT TIANLONG SPIRIT / Oil Tanker GT 85,037 MAN & B&W 17/12/2019 \u2013 TEEKAY TANKERS 05/06/2020 Add 3rd Engineer MT LEYTE SPIRIT / Oil",
+            "28813 MAN & B&W 23/10/2020 \u2013 TEEKAY TANKERS 30/12/2020 Add 3rd Engineer MT TIANLONG SPIRIT / Oil Tanker GT 85,037 MAN & B&W 17/12/2019 \u2013 TEEKAY TANKERS 05/06/2020 Add 3rd Engineer MT LEYTE SPIRIT / Oil Tanker GT 60,193 MAN & B&W 23/04/2017 \u2013 GREAT EASTERN SHIPPING COMPANY 31/10/2017 4th Engineer MT JAG LEELA /",
+            "85,037 MAN & B&W 17/12/2019 \u2013 TEEKAY TANKERS 05/06/2020 Add 3rd Engineer MT LEYTE SPIRIT / Oil Tanker GT 60,193 MAN & B&W 23/04/2017 \u2013 GREAT EASTERN SHIPPING COMPANY 31/10/2017 4th Engineer MT JAG LEELA / Product Tanker GT 57249 MAN & B&W 26/05/2016 \u2013 great eastern shipping company 25/02/2017 4th Engineer MT JA"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 11,
+      "rank_folder": "2nd_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 6,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 1,
+            "MISSING": 4,
+            "PARSED": 1
+          },
+          "grade_counts": {
+            "None": 6
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 4
+          }
+        },
+        "non_email": {
+          "count": 5,
+          "expiry_status_counts": {
+            "PARSED": 5
+          },
+          "grade_counts": {
+            "2nd_engineer": 4,
+            "4th_engineer": 1
+          },
+          "status_counts": {
+            "PARSED": 5
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260312_105944_AAMkADI5NjU4_Arvind_Jaiswal_-_Resume.pdf",
+          "grade": null,
+          "label_snippets": [
+            "- Indian CDC MUM 251787 Mumbai 22/07/2015 21/07/2025 Indian COC IF 40437 Mumbai 09/01/2024 08/01/2029 GMDSS GOC M-10494 Mumbai 20/08/2018 24/05/2028 GOC GMDSSMUM23022955 Mumbai 21/12/2023 24/05/2028 Page 2 of 3 Endorsement Marshal Islands MH 787106 NA 03/05/2021 02/05/2026 CDC Marshal Islands 755347 NA",
+            "05/2026 CDC Marshal Islands 755347 NA 03/05/2021 08/01/2024 COC Marshal Islands 755348 NA 03/05/2021 13/01/2024 GOC Hong Kong COC NL-300840 NA 25/01/2024 08/01/2029 Hobbies \uf0d8 Cricket \uf0d8 Chess Qualities \uf0d8 Hard Working and quick learner \uf0d8 Punctual and honest towards the work \uf0d8 Believes in teamwork and alw",
+            "rshal Islands 755348 NA 03/05/2021 13/01/2024 GOC Hong Kong COC NL-300840 NA 25/01/2024 08/01/2029 Hobbies \uf0d8 Cricket \uf0d8 Chess Qualities \uf0d8 Hard Working and quick learner \uf0d8 Punctual and honest towards the work \uf0d8 Believes in teamwork and always ready to learn Personal Details Date of Birth : 15th January 1",
+            "aiswal03@gmail.com Objective 1. To be given the position of 2nd Officer where I can utilize and contribute my technical skills to fulfil the organizational objectives. 2. To give my highest standard of discipline, professionalism, excellent service, good moral character, and performance management to your comp"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260317_184243_AAMkADI5NjU4_2nd_OFF_-_Misbah-CV.pdf",
+          "grade": "2nd_officer",
+          "label_snippets": [
+            "CURRICULUM VITAE Post Applied for : 2nd OFFICER (INDIAN COC) Name : Mr. ANSARI MOHAMMED MISBAH Father\u2019s Name : ANSARI MOHAMMED IQBAL Date of Birth : 11/02/1989 Nationality : Indian Email Id : misbah.m.ansari@gmail.com PRESENT ADDRESS PERMENANT ADDRESS 82, Cyrus Avenue ,Khatija Mansion, 2nd Floor, F",
+            "08/2027 US VISA 2O223044630023 13/12/2022 MUMBAI 11/12/2027 COC (INDIAN) IF36205 20/02/2017 MUMBAI 10/03/2031 GMDSS COC (INDIAN) GMDSSMUM26029510 12/02/2026 MUMBAI 11/02/2031 GOC (INDIAN) GOC-M-9015 02/02/2026 MUMBAI 10/02/2069 INDOS NO 07GL2569 11/09/2007 MUMBAI - YELLOW FEVER 10163 17/07/2017 MUMBAI",
+            "027 COC (INDIAN) IF36205 20/02/2017 MUMBAI 10/03/2031 GMDSS COC (INDIAN) GMDSSMUM26029510 12/02/2026 MUMBAI 11/02/2031 GOC (INDIAN) GOC-M-9015 02/02/2026 MUMBAI 10/02/2069 INDOS NO 07GL2569 11/09/2007 MUMBAI - YELLOW FEVER 10163 17/07/2017 MUMBAI 16/07/2027 MARSHALL ISLAND CDC MH 863885 19/04/2022 MUMB",
+            "CDC MH 863885 19/04/2022 MUMBAI 18/04/2027 MARSHALL ISLAND COC 839235 19/04/2022 - 05/12/2026 MARSHALL ISLAND GOC 839236 19/04/2022 - 28/04/2026 STCW CERT. DETAILS (OPERATIONAL LEVEL) DATE OF DATE OF PLACE OF COURSE CERTIFICATE NO. ISSUE EXPIRY ISSUE ECDIS ECDIS/750/2016-17 06/05/2016 - MUMBAI TRANSAS",
+            "CURRICULUM VITAE Post Applied for : 2nd OFFICER (INDIAN COC) Name : Mr. ANSARI MOHAMMED MISBAH Father\u2019s Name : ANSARI MOHAMMED IQBAL Date of Birth : 11/02/1989 Nationality : Indian Email Id : misbah.m.ansari@gmail.com PRESENT ADDRESS PERMENANT ADDRESS 82, Cyrus Avenue ,Khatija Mansion,"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260327_181605_AAMkADI5NjU4_Ashish_Singh_Resume.pdf",
+          "grade": null,
+          "label_snippets": [
+            "10/04/2025 08 M 5D SHIPPING 6000 Yogi Tues PASSPORT, CDC & COC DETAILS : DOCUMENT NUMBER DATE OF ISSUE DATE OF PLACE OF EXPIRY ISSUE Pass Port Z7297044 10/07/2023 09/07/2033 Mumbai Indian CDC MUM 148199 12/ 03/ 2020 11/03/2030 Mumbai COC(2ND Mate ) COC 0069371 17/ 03/ 2026 17/ 03/ 2031 U.K. Indos 08XL",
+            "Mumbai Indian CDC MUM 148199 12/ 03/ 2020 11/03/2030 Mumbai COC(2ND Mate ) COC 0069371 17/ 03/ 2026 17/ 03/ 2031 U.K. Indos 08XL0496 05 / 12 / 2008 Unlimited Mumbai Yellow Fever Batch No. 24 / 04/ 2024 Unlimited Mumbai Vaccination 00328 SID M34443680 18/01/2024 17/01/2034 Mumbai CERTIFICATES DETAILS :",
+            "DC MUM 148199 12/ 03/ 2020 11/03/2030 Mumbai COC(2ND Mate ) COC 0069371 17/ 03/ 2026 17/ 03/ 2031 U.K. Indos 08XL0496 05 / 12 / 2008 Unlimited Mumbai Yellow Fever Batch No. 24 / 04/ 2024 Unlimited Mumbai Vaccination 00328 SID M34443680 18/01/2024 17/01/2034 Mumbai CERTIFICATES DETAILS : CERTIFICATE CER",
+            "mail.com Objective : Looking for a Seafaring Positions As a 2nd Officer on Container /Bulk Carrier Vessel Will Excel and Do Utmost Best in Performing Required Tasks and Duties in The Said Position. Profile : Reliable, Dynamic, Quick learner And Sincere Officer Holding an Unlimited 2nd Mate Certificate From UK."
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260402_025733_AAMkADI5NjU4_ANTONY_RODRIGUES_CV.pdf",
+          "grade": null,
+          "label_snippets": [
+            "T DETAILS DOCUMENTS NUMBER DATE OF VALIDITY ISSUED AT ISSUE COC(INDIAN) IF 46639 22/02/2023 11/01/2028 MUMBAI PASSPORT AP198287 09/03/2026 08/03/2036 BENGALURU CDC (INDIAN) MUM307613 04/05/2018 03/05/2028 MUMBAI INDOS NO 15NL1286 11/09/2015 - MUMBAI YELLOW FEVER 385 07/09/2018 LIFE TIME GOA STCW COURSE",
+            "10 GMDSS GMDSSMUM23020468 BP MARINE 31/01/2023 30/08/2028 (COC) ACADEMY,NAVI MUMBAI"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260402_063603_AAMkADI5NjU4_RESUME_2ND_OFF_GAURAV_GOYAL.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ofpassing Certificateno. IssueDate PlaceofIssue Expiry Date COC Country exam 2ND MATE INDIA IF-30805 30.11.2018 MUMBAI 28.11.2028 DETAILSOFCOURSES&CERTIFICATESFOROFFICERS: Courses CertificateNo. IssuedBy IssueDate Expiry Date Pre-SeaTraining/Apprenticeship \u201809190000150540 MTI-SCI 30.06.2009 NA Advanced",
+            "APPLICATIONFORM POSITION (RANK) APPLIED FOR: 2nd Officer PERSONAL DETAILS: NameasinPassport (Surname) (FirstName) (MiddleName) GOYAL GAURAV Date/Placeof Birth 08.08.1990 / GWALIOR HOUSE NO 747 MODEL TOWN NEW CITY CENTER GWALIOR Permanentaddress 474011 Currentaddress(ifany) SAME AS ABOVE Email GG"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 79,
+      "rank_folder": "2nd_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 5,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 4,
+            "MISSING": 1
+          },
+          "grade_counts": {
+            "2nd_officer": 1,
+            "None": 4
+          },
+          "status_counts": {
+            "PARSED": 5
+          }
+        },
+        "non_email": {
+          "count": 74,
+          "expiry_status_counts": {
+            "MISSING": 1,
+            "PARSED": 73
+          },
+          "grade_counts": {
+            "2nd_officer": 60,
+            "None": 1,
+            "chief_officer": 13
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 73
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260318_102954_AAMkADI5NjU4_chinnu_alexander_cv.pdf",
+          "grade": null,
+          "label_snippets": [
+            "/11/2014 obstacle YELLOW FEVER 088 MUMBAI 21/03/2019 sensor COC 95Z35313 MUMBAI 28/07/2022 This project deals with TASCO 2010015112220262 MUMBAI 07/07/2022 avoiding accidents EDUCATIONAL QUALIFICATIONS such as collision in qualification institution Year of passing percentAGE future with the help of B.T"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260423_065629_AAMkADI5NjU4_CV_3_ENG_Dmytro_Ivanov.pdf",
+          "grade": null,
+          "label_snippets": [
+            "\u203a\u2026\u203a(cid:190)\u203a\u2030 Main information PSV/JACK-UP/AHTS Position: 3rd Engineer Desired Type of Ship: /OCV/MPSV Full Name: Dmytro Ivanov Date of birth: 31.05.2001 Citizenship: Ukraine Place of birth: Ukraine Phones: +380 97 14 31 024 City/ Address: ON REQUEST dimon.ivanov20001 E-mail address: Nearest Airport: Varna Ai",
+            "ition Type of Ship DWT/ GT Employer name kW Till 14.12.2025 3rd Engineer Big Foot Pipe Layer 11171/ Alfa Navigation 26.02.2026 Man 19.05.2025 Unimor Shipping 4th Engineer Arosa Bulk Carrier 55477/ B&W Mc 29.10.2025 Agency Varna General 7601/ Man B&W 20.09.2024 Amisco Ship Oiler Lucita Cargo 5581 2800 kw 23.12.2",
+            "/ Alfa Navigation 26.02.2026 Man 19.05.2025 Unimor Shipping 4th Engineer Arosa Bulk Carrier 55477/ B&W Mc 29.10.2025 Agency Varna General 7601/ Man B&W 20.09.2024 Amisco Ship Oiler Lucita Cargo 5581 2800 kw 23.12.2024 Management Man Msc Container 67359/ 19.04.2024 Msc Shipmanagement Wiper B&W Mc Sariska V Ship"
+          ],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_050410_AAMkADI5NjU4_CV_3rd_Engineer_Kostiantyn_Fomin.pdf",
+          "grade": null,
+          "label_snippets": [
+            "KOSTIANTYN FOMIN 3rd ENGINEER Main information Full Name: Kostiantyn Fomin Date of birth: 10.08.1985 Citizenship: Ukrainian Place of birth: Ukraine Phones: +380633835155 Country of residence: Czech Republic E-mail address: konst8055@gmail.com Vienna International Engli",
+            "-10.02.2026 Layer DP 2 9L38B 2 Caterpillar 3516B- 3nd Eng C MASTER Pipe-Layer 14934/20645 12.07.2025 \u2013 02.09.2025 SUNTECH DP 2 TA/14600kW INTERNATIONAL Caterpillar 3516B- 3nd Eng C MASTER Pipe-Layer 14934/20645 18.03.2025 \u2013 04.05.2025 SUNTECH DP 2 TA/14600kW INTERNATIONAL Nohab 4 x 3nd Eng DSV WHALE 2949/",
+            "DP 2 TA/14600kW INTERNATIONAL Caterpillar 3516B- 3nd Eng C MASTER Pipe-Layer 14934/20645 18.03.2025 \u2013 04.05.2025 SUNTECH DP 2 TA/14600kW INTERNATIONAL Nohab 4 x 3nd Eng DSV WHALE 2949/4208 15.12.2024 \u2013 14.02.2025 RAL GLOBAL LLC DSV DP2 F216V/9416kW Nohab 4 x 3nd Eng DSV WHALE 2949/4208 22.07.2024 \u2013 25.08"
+          ],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260428_110922_AAMkADI5NjU4_CV_FOR_3rd_ENG.pdf",
+          "grade": null,
+          "label_snippets": [
+            "IL: DOCUMENT NO DATE OF ISSUE DATE OF EXPIRY PLACE OF ISSUE COC (UK) COC0100989 06/11/2023 08/09/2028 UNITED KINGDOM COC( MARSHALL 1058775 22/02/2024 MUMBAI ISLANDS) INDIAN(CDC) MUM240916 09/10/2023 08/10/2033 MUMBAI MARSHALL MH 1020747 22/02/2024 21/02/2029 MUMBAI ISLANDS (CDC) PANAMA(CDC) PA0215486 2",
+            "UE COC (UK) COC0100989 06/11/2023 08/09/2028 UNITED KINGDOM COC( MARSHALL 1058775 22/02/2024 MUMBAI ISLANDS) INDIAN(CDC) MUM240916 09/10/2023 08/10/2033 MUMBAI MARSHALL MH 1020747 22/02/2024 21/02/2029 MUMBAI ISLANDS (CDC) PANAMA(CDC) PA0215486 24/05/2022 20/05/2027 DELHI INDOS 14GL0404 10/02/2014 MUMB",
+            "CURRICULUM VITAE POST APPLIED : 3rd Engineer NAME : KULDEEP SINGH GREWAL FATHER NAME : SH. RAJPAL SINGH DATE OF BIRTH : 26/06/1995 MOB NO. : +918059358598, +919992159616 EMAIL : kuldeep.grewal100@gmail.com ADDRESS : 1233/11 RAINK PURA, JIND BY PASS ROHTAK HARYANA -124001 EDUCATION QU"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "3rd_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 1,
+            "MISSING": 3
+          },
+          "grade_counts": {
+            "None": 4
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260331_091346_AAMkADI5NjU4_Resume_Rawinder_singh.pdf",
+          "grade": null,
+          "label_snippets": [
+            "RAWINDER SINGH Applying for 2nd officer / 3rd officer MOB.NO. +91 7340726678 | E-MAIL: SINGHRAWINDER89@GMAIL.COM Add: House Number 1, Street number 22 , Anand Nagar b ,Patiala Punjab (INDIA ) PIN CODE 147001 Highly skilled and motivated individual with 16 years of experience in",
+            "RAWINDER SINGH Applying for 2nd officer / 3rd officer MOB.NO. +91 7340726678 | E-MAIL: SINGHRAWINDER89@GMAIL.COM Add: House Number 1, Street number 22 , Anand Nagar b ,Patiala Punjab (INDIA ) PIN CODE 147001 Highly skilled and motivated individual with 16 years of experience in the maritime i"
+          ],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "PARSED",
+          "filename": "EMAIL_20260403_071908_AAMkADI5NjU4_3_Off_Saurabh_CV_APR_2026.pdf",
+          "grade": null,
+          "label_snippets": [
+            "INDIAN CDC MUM-172083 11-MAY-2010 23-Dec-2030 MUMBAI INDIAN COC(2MFG) IF \u2013 27310 23-JUL-2012 12-Dec-2030 MUMBAI INDIAN GOC M- 5048 20-Jan-2012 30-Mar-2069 MUMBAI (GMDSS) BSID INDIAN M32300368 02-MAY-2022 01-MAY-2032 MUMBAI CHIEF MATES 1010032211251111 14-FEB-2026 N/A LUCKNOW PHASE 1 1 COVID VACCINE(2 1",
+            "-2022 N/A MUMBAI DOSE + BOOSTER) Note: Holding Valid Panama COC & GOC Endorsements. ENDORSEMENTS TYPE OF CERTIFICATE NO. ISSUING DATE OF ISSUE DATE OF EXPIRY ENDORSEMENT AUTHORITY OIL(LEVEL 1) DCN01MUM22019873 MMD MUMBAI 16-MAR-2022 15-MAR-2027 OPERATIONAL CHEM(LEVEL 1) DCN01MUM22019879 MMD MUMBAI 16-M"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260410_065918_AAMkADI5NjU4_SHRUTUJ_DWIVEDI_CV.pdf",
+          "grade": "3rd_officer",
+          "label_snippets": [
+            "EDI Third Officer (Deck) | B.Sc Nautical Science | 2nd Mate COC Applied \u260e +91 7397928009 \u2709 shrutujdwivedi00@gmail.com \u23f0 Available: 1st May 2026 \u2693 Sea Service: 1 Year 9 Months \ud83c\uddfa\ud83c\uddf8 US Visa Valid: 14/11/2026 CAREER OBJECTIVE A motivated and disciplined Deck Officer who has completed sea training aboard bul",
+            "/05/2031 MUMBAI INDOS NO. 20NM1878 \u2014 \u2014 \u2014 Applied \u2013 2ND MATE COC COCN/MMD(M)/2025/10 Mumbai MMD 008953 GOC GOC-D-9065 23/02/2024 22/02/2044 NEW DELHI DC \u2013 OIL & CHEMICAL COPDGSOAC2152893 23/10/2021 \u2014 \u2014 DC \u2013 LIQUIFIED GAS COPDGSGAS2152894 23/10/2021 \u2014 \u2014 US VISA R0566259 17/11/2021 14/11/2026 NEW DELHI ST",
+            "iner vessels, and successfully cleared the Second Mate (FG) Certificate of Competency examination. Eager to join a world-class shipping company as Third Officer, contributing strong navigational knowledge, STCW compliance, and a safety-first mindset to deliver excellence on board. PERSONAL DETAILS Post Applied For: 3rd Offi",
+            "ver excellence on board. PERSONAL DETAILS Post Applied For: 3rd Officer Date of Birth: 11th November 2000 Nationality: Indian Gender: Male Marital Status: Unmarried Father's Name: Late Mr. Ravindra Kumar Dwivedi Permanent Address: Flat No. 610B, Gulmohar Residency, New Azad Nagar, Indra Nagar Road, Kalyanpur,"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260413_090624_AAMkADI5NjU4_CV_ABHISEK_JANA_3RD_OFFICER_TANKER.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ATE NAME NUMBER ISSUED AT DATE DATE (AUTHORITY) 2ND MATE FG COC IF-33691 15-JAN-2026 12-DEC-2030 GOVT OF INDIA KOLKATA TANKER VESSEL CERTIFICATES NUMBER ISSUE DATE EXPIRY DATE OIL DCN02KOL24004197 30-AUG-2024 29-AUG-2029 CHEMICAL N/A N/A N/A GAS N/A N/A N/A 9. LANGUAGES ENGLISH FLUENT GOOD FAIR POOR IS",
+            "NUMBER/ACCOUNT PASSPORT N/A 8. PROFESSIONAL QUALIFICATION / CERTIFICATE OF COMPETENCY /WATCH KEEPING /COP ISSUE EXPIRY ISSUED BY CERTIFICATE NAME NUMBER ISSUED AT DATE DATE (AUTHORITY) 2ND MATE FG COC IF-33691 15-JAN-2026 12-DEC-2030 GOVT OF INDIA KOLKATA TANKER VESSEL CERTIFICATES NUMBER ISSUE DATE EXPIRY DATE OIL DCN02KOL",
+            "APPLICATION FOR EMPLOYMENT APPLICATION FOR POSITION AS 3RD OFFICER OTHER POSITION (IF ANY) N/A 1. PERSONAL DETAILS TITLE MR/MRS/MISS MR SEX MALE SURNAME JANA FIRST NAME ABHISEK MIDDEL NAME DATE OF BIRTH 15-OCT-1991 PLACE OF BIRTH BHABLA NATIONALITY INDIAN MARITAL STATUS MARRIED COLOUR OF EYES BLACK COLOUR"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 186,
+      "rank_folder": "3rd_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 1,
+            "MISSING": 2,
+            "PARSED": 1
+          },
+          "grade_counts": {
+            "3rd_officer": 1,
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 3
+          }
+        },
+        "non_email": {
+          "count": 182,
+          "expiry_status_counts": {
+            "MISSING": 5,
+            "PARSED": 177
+          },
+          "grade_counts": {
+            "2nd_officer": 172,
+            "None": 9,
+            "chief_officer": 1
+          },
+          "status_counts": {
+            "MISSING": 5,
+            "PARSED": 177
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260317_070814_AAMkADI5NjU4_Varun_Patel_CV.pdf",
+          "grade": "4th_engineer",
+          "label_snippets": [
+            "overhauls, and critical fault diagnosis. Holds MEO Class IV CoC with all essential safety certifications and DCE for oil tankers. Ready to contribute technical skills and a strong work ethic in a challenging sea-going role. Key Skills & Competencies - Machinery Overhauling (Separators, Compressors, Eng",
+            "ggregate: 84.5 % Certificates & Endorsements - MEO Class IV CoC | CoC No: 95Z-38710 | Valid till 06/02/2029 - Advanced Oil Tanker DCE | DCE No: DCE02MUM24016143 - High Voltage, ERS, MFA, AFF, PST, FPFF, PSSR, TASCO, PASCRB \u2013 All Valid & Updated - Vaccinations: Covishield (2 Doses + Booster), Yellow Fev",
+            "te: 84.5 % Certificates & Endorsements - MEO Class IV CoC | CoC No: 95Z-38710 | Valid till 06/02/2029 - Advanced Oil Tanker DCE | DCE No: DCE02MUM24016143 - High Voltage, ERS, MFA, AFF, PST, FPFF, PSSR, TASCO, PASCRB \u2013 All Valid & Updated - Vaccinations: Covishield (2 Doses + Booster), Yellow Fever - P",
+            "el Pumps, Injectors. -Decarb of 1 nos Auxiliary Engine with 3rd Engineer. 4th Engineer | Castle Ships Pvt Ltd (MT HARI LEELA) May 2024 \u2013 Nov 2024 | Oil Tanker | BHP: 11,640 | DWT: 45,683 - Overhauled GEA Westfalia 15 separators (bearing replacement, belt alignment, gasket renew.). - Maintained SPERE HV2-200 mai",
+            "ofessional Profile Summary Marine Engineer | MEO Class IV | 4th Engineer Experience \u2013 Oil Tankers & VLCCs Motivated and detail-oriented Marine Engineer with hands-on experience as a 4th Engineer onboard oil tankers and VLCC vessels. Proficient in the operation, maintenance, and troubleshooting of shipboard mach",
+            "tail-oriented Marine Engineer with hands-on experience as a 4th Engineer onboard oil tankers and VLCC vessels. Proficient in the operation, maintenance, and troubleshooting of shipboard machinery including separators, compressors, boilers, main and auxiliary engines. Skilled in independent watchkeeping, machine",
+            "ing - STCW Compliant | High Voltage Trained Work Experience 4th Engineer | Admiral Marine Service (CENTURION I) 29-April- 2025 to 11-Nov- 2025 | Oil Tanker | BHP: 20,658 | GRT: 62,775 -Drydock: Assisted in overhauling Auxiliary Engine Overhauling (Ship Staff). Assisted in overhauling Main sea water pumps, Boile",
+            "ctors. -Decarb of 1 nos Auxiliary Engine with 3rd Engineer. 4th Engineer | Castle Ships Pvt Ltd (MT HARI LEELA) May 2024 \u2013 Nov 2024 | Oil Tanker | BHP: 11,640 | DWT: 45,683 - Overhauled GEA Westfalia 15 separators (bearing replacement, belt alignment, gasket renew.). - Maintained SPERE HV2-200 main air compress",
+            "Varun Rakesh Patel Marine Engineer (MEO Class IV) +91 9925224354 | varun_00766@yahoo.com | pvarun708@gmail.com DoB- 23/11/1999 Professional Profile Summary Marine Engineer | MEO Class IV | 4th Engineer Experience \u2013 Oil Tankers & VLCCs Motivated and detail-oriented Marine Engineer with ha",
+            "- 23/11/1999 Professional Profile Summary Marine Engineer | MEO Class IV | 4th Engineer Experience \u2013 Oil Tankers & VLCCs Motivated and detail-oriented Marine Engineer with hands-on experience as a 4th Engineer onboard oil tankers and VLCC vessels. Proficient in the operation, maintenance, and troubleshooting of"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260405_190734_AAMkADI5NjU4_PRATHIV_KANNAN_V_CV.pdf",
+          "grade": null,
+          "label_snippets": [
+            "/05/2032 MUMBAI SID C32420129 24/06/2022 23/06/2032 CHENNAI COC (INDIAN) 95Z-41838 22/05/2025 02/04/2030 MUMBAI COVID Vaccine 37H21079A 03/10/2021 NA MADURAI Yellow Fever Vaccine 5885/2022-2023 16/09/2022 NA CHENNAI COP BASIC DETAILS COP Type Certificate No. Issue Date Date of Expiry Oil and Chemical C"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260415_120126_AAMkADI5NjU4_R.R._Pranav_sankar_updated_resume.pdf",
+          "grade": null,
+          "label_snippets": [
+            "017 - CHENNAI CDC NO MUM435512 30/07/2021 29/07/2031 MUMBAI COC (cook C-COC-1654 26/09/2023 26/09/2028 RAROTANGO, island) COOK ISLAND COC NO COC 08392372 18/09/2025 01/09/2030 UNITED (UK) KINGDOM COURSES DETAILS COURSE NAME INSTITUTE CERTIFICATE NO. ISSUE DATE VALIDITY NAME DATE INTERNATION STCW- BASIC",
+            "I CDC NO MUM435512 30/07/2021 29/07/2031 MUMBAI COC (cook C-COC-1654 26/09/2023 26/09/2028 RAROTANGO, island) COOK ISLAND COC NO COC 08392372 18/09/2025 01/09/2030 UNITED (UK) KINGDOM COURSES DETAILS COURSE NAME INSTITUTE CERTIFICATE NO. ISSUE DATE VALIDITY NAME DATE INTERNATION STCW- BASIC 40602661012",
+            "C-1654 26/09/2023 26/09/2028 RAROTANGO, island) COOK ISLAND COC NO COC 08392372 18/09/2025 01/09/2030 UNITED (UK) KINGDOM COURSES DETAILS COURSE NAME INSTITUTE CERTIFICATE NO. ISSUE DATE VALIDITY NAME DATE INTERNATION STCW- BASIC 4060266101210717 02/07/2021 Unlimited AL MARITIME ACADEMY Security Traini",
+            "26/09/2023 26/09/2028 RAROTANGO, island) COOK ISLAND COC NO COC 08392372 18/09/2025 01/09/2030 UNITED (UK) KINGDOM COURSES DETAILS COURSE NAME INSTITUTE CERTIFICATE NO. ISSUE DATE VALIDITY NAME DATE INTERNATION STCW- BASIC 4060266101210717 02/07/2021 Unlimited AL MARITIME ACADEMY Security Training for",
+            "RESUME R R PRANAV SANKAR POST APPLIED FOR : 4TH/3RD ENGINEER DATE OF BIRTH : 18/09/1999 NATIONALITY : INDIAN MARITALSTATUS : SINGLE ADDRESS : NO.39/15 SUBBURAYAN 3rd STREET NAMMALWARPET CHENNAI TAMIL NADU. PINCODE-600012 PHONENUMBER : +91-6385137302 EMAIL : pranavsankarlrb189@gmail.com CAREER OBJECT"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260424_074344_AAMkADI5NjU4_PRAFULLA_4thengineer_CV.pdf",
+          "grade": null,
+          "label_snippets": [
+            ": FOURTH ENGINEER / ADDITIONAL 4TH ENGINEER *APPLIEDFOREOOW-COC(UK,MCARECEIVEWITHIN05MAY2026)ALSOBASIC OIL/CHEMICALD.C&ADVANCEOILDC CAREER OBJECTIVE Tore-enforcetheoreticalknowledgewithpracticalexperiencetogrowwithan organizationthatprovidesampleopportunitiestolearnandimprovemyskillsona continuousbasis",
+            "endraprafulla1@gmail.com RANK: FOURTH ENGINEER / ADDITIONAL 4TH ENGINEER *APPLIEDFOREOOW-COC(UK,MCARECEIVEWITHIN05MAY2026)ALSOBASIC OIL/CHEMICALD.C&ADVANCEOILDC CAREER OBJECTIVE Tore-enforcetheoreticalknowledgewithpracticalexperiencetogrowwithan organizationthatprovidesampleopportunitiestolearnandimprovemyskill"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 40,
+      "rank_folder": "4th_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 2,
+            "MISSING": 2
+          },
+          "grade_counts": {
+            "4th_engineer": 1,
+            "None": 3
+          },
+          "status_counts": {
+            "PARSED": 4
+          }
+        },
+        "non_email": {
+          "count": 36,
+          "expiry_status_counts": {
+            "MISSING": 1,
+            "PARSED": 35
+          },
+          "grade_counts": {
+            "4th_engineer": 35,
+            "None": 1
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 35
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 4,
+      "rank_folder": "5th_Engineer",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "PARSED": 4
+          },
+          "grade_counts": {
+            "4th_engineer": 4
+          },
+          "status_counts": {
+            "PARSED": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260312_085930_AAMkADI5NjU4_PRASAD_VIJAY_BHOSALE_RESUME_2026_REVISED.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260407_095326_AAMkADI5NjU4_RESUME_JAI_PRAKASH_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260414_104724_AAMkADI5NjU4_Satwant.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_061001_AAMkADI5NjU4_Vinod_Kumar_resume_2.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_051246_AAMkADI5NjU4_RESUME_SEDHURAMAN.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260429_061901_AAMkADI5NjU4_CESTestCertificate.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260430_042141_AAMkADI5NjU4_CV_SUSHIL_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 7,
+      "rank_folder": "AB",
+      "summary_by_source_type": {
+        "email": {
+          "count": 7,
+          "expiry_status_counts": {
+            "MISSING": 7
+          },
+          "grade_counts": {
+            "None": 7
+          },
+          "status_counts": {
+            "MISSING": 7
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 19,
+      "rank_folder": "Add_2nd_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 19,
+          "expiry_status_counts": {
+            "MISSING": 2,
+            "PARSED": 17
+          },
+          "grade_counts": {
+            "2nd_officer": 14,
+            "None": 3,
+            "chief_officer": 2
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 17
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 9,
+      "rank_folder": "Add_Chief_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 9,
+          "expiry_status_counts": {
+            "PARSED": 9
+          },
+          "grade_counts": {
+            "2nd_officer": 1,
+            "chief_officer": 8
+          },
+          "status_counts": {
+            "PARSED": 9
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 8,
+      "rank_folder": "Add_Master",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 8,
+          "expiry_status_counts": {
+            "MISSING": 1,
+            "PARSED": 7
+          },
+          "grade_counts": {
+            "None": 1,
+            "chief_officer": 1,
+            "master": 6
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 7
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 0,
+      "rank_folder": "Bosun",
+      "summary_by_source_type": {}
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260406_095900_AAMkADI5NjU4_RESUME_RAJKUMAR_MONDAL_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260418_060459_AAMkADI5NjU4_ANIS_RESUME_NEW_WORD.pdf",
+          "grade": null,
+          "label_snippets": [
+            "2118 OCEANA MARITIME, 19.03.2025 UNLIMITED NAVI MUMBAI COOK COC CC/MUM/8027 MUMBAI 19.10.2015 SHIP COOK HERMES INSTITUTE 17.04.2018 COURSE SCC/17042018/01 OF MARITIME STUDY OIL/CHEM 20301051112503215 ASHA MARITIME 08.04.2025 NA TANKER NAVI MUMBAI COURSE OIL/CHEM DCE COPDGSOAC25162936 DG SHIPPING 27.04."
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 2,
+      "rank_folder": "Chief_Cook",
+      "summary_by_source_type": {
+        "email": {
+          "count": 2,
+          "expiry_status_counts": {
+            "MISSING": 2
+          },
+          "grade_counts": {
+            "None": 2
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260319_054352_AAMkADI5NjU4_Resume.pdf",
+          "grade": null,
+          "label_snippets": [
+            "maheshkorbu09@gmail.com Objective: To obtain a position as Chief Engineer/Engineer superintendent in a challenging and professional environment in which am able to improve and perfect skills in order to reach the top of my profession and contribute to the success of the organization. Qualification summary: \u2022 Ext",
+            "ss Marine Engineer (MEO Class 1), MCA UK Work experience: \u2022 Chief Engineer officer (April 2022 to Jun 2025), total sea time 14.5 months, on oil/product/VLCC tankers vessel on worldwide trade with engine up to 31040 KW \u2022 Second Engineer officer (Oct 2011 to May 2022), total sea time 51 months, on oil/product tanke"
+          ],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 87,
+      "rank_folder": "Chief_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 1,
+          "expiry_status_counts": {
+            "MISSING": 1
+          },
+          "grade_counts": {
+            "None": 1
+          },
+          "status_counts": {
+            "MISSING": 1
+          }
+        },
+        "non_email": {
+          "count": 86,
+          "expiry_status_counts": {
+            "MISSING": 10,
+            "PARSED": 76
+          },
+          "grade_counts": {
+            "2nd_engineer": 2,
+            "4th_engineer": 1,
+            "None": 10,
+            "chief_engineer": 73
+          },
+          "status_counts": {
+            "MISSING": 10,
+            "PARSED": 76
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260330_063212_AAMkADI5NjU4_Resume_Chief_Officer-_ANURAG_DIMRI-VLCC.pdf",
+          "grade": null,
+          "label_snippets": [
+            "N-122004 RANK APPLIED FOR: CHIEF OFFICER - VLCC C.O.C HELD: MASTER F.G IFOO -10201 (MMD DELHI / INDIA ) C.D.C HELD : INDIAN VALID TILL 2031 PASSPORT VALIDITY: 2034 US Visa : Sept 2030 JOINING READINESS : 01 APRIL 2026 onwards SAILING PROFESSIONAL EXPERIENCE: COMPANY RANK VESSEL TYPE DWT FROM TO PERIOD SYN",
+            "PR-10 0M 18D TANKERS OFFICER SPIRIT X/ 109,518 CRUDE TEEKAY MASTER/ FALCON DP-II/ 22-JAN-10 24-FEB-10 1M 2D 124,472 TANKERS OIM SPIRIT FSO TEEKAY CHIEF MAYON AFRAMA 31- 26-AUG-09 2M 27D TANKERS OFFICER SPIRIT X/ 98,507 MAY-09 CRUDE TEEKAY CHIEF MAYON AFRAMA 20-SEP-08 22-FEB-09 5 M 2D 98,507 TANKERS OFFICE",
+            "SOVEIRGN NEXT, SECTOR-82A, GURGAON-122004 RANK APPLIED FOR: CHIEF OFFICER - VLCC C.O.C HELD: MASTER F.G IFOO -10201 (MMD DELHI / INDIA ) C.D.C HELD : INDIAN VALID TILL 2031 PASSPORT VALIDITY: 2034 US Visa : Sept 2030 JOINING READINESS : 01 APRIL 2026 onwards SAILING PROFESSIONAL EXPERIENCE: COMPANY RANK VESSEL T",
+            "ER OPERATIONS. I HAVE Approx 90 MONTHS OF SEA EXPERIENCE AS CHIEF OFFICER AND 52 MONTHS ON VLCC AND HAVE SAILED ON DIFFERENT TYPES OF OIL TANKERS, CHARTED TO VARIOUS OIL MAJORS, IN CAPACITY OF CHOFF/2ND / 3RD OFFICER ON VOYAGE & TIME CHARTERED FOR REPUTED OIL TANKER COMPANIES.I HAVE EXPERIENCE OF DRY DOCKING/CON",
+            "WNER\u2019S AND CHARTERERS\u2019S INTEREST. THANKING YOU ANURAG DIMRI CHIEF OFFICER 9818858312",
+            ", CHARTED TO VARIOUS OIL MAJORS, IN CAPACITY OF CHOFF/2ND / 3RD OFFICER ON VOYAGE & TIME CHARTERED FOR REPUTED OIL TANKER COMPANIES.I HAVE EXPERIENCE OF DRY DOCKING/CONVERSION PROJECT OF FSO AND OFFSHORE OIL PRODUCTION. I HAVE EXPERINCE OF HANDLING DIFFERENT KINDS OF CRUDE / PRODUCT OIL INCLUDING PARAFFINATIC"
+          ],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260409_061738_AAMkADI5NjU4_CHIEF_OFFICER-_RAJESH_SHINDE_CV.pdf",
+          "grade": "master",
+          "label_snippets": [
+            "I LIFE TIME YELLOW FEVER 20079 24/05/2016 MUMBAI 23/05/2026 COC IFOO18215 26/06/2025 INDIA 15/06/2030 US VISA 20252257390007 21/08/2025 MUMBAI 12/08/2030 COC GRADE : MASTER OF FOREIGN GOING SHIP STCW COURSES COURSES NO. DATE OF ISSUE PLACE OF ISSUE P.S.S.R. 40301961012104314 09/12/2021 MUMBAI GMDSS SMC",
+            "06/2030 US VISA 20252257390007 21/08/2025 MUMBAI 12/08/2030 COC GRADE : MASTER OF FOREIGN GOING SHIP STCW COURSES COURSES NO. DATE OF ISSUE PLACE OF ISSUE P.S.S.R. 40301961012104314 09/12/2021 MUMBAI GMDSS SMC/GMDSS/3908 10/04/2012 KOLKATA RANSCO 20704202518138 19/11/2018 MUMBAI R.O.C. ROSC/0223/016/11",
+            "CURRICULUM VITAE POST APPLIED FOR : CHIEF OFFICER // MASTER NAME : SHINDE RAJESH ANANT FATHER\u2019S NAME : ANANT PANDURANG SHINDE DATE & PLACE OF BIRTH : 31/05/1987, CHIPLUN NATIONALITY : INDIAN MOBILE : 9975165793/07057119191/( Home: 09226261057) E-MAIL ID : rajeshshi@gmail.com EDUCATIONAL QUALIFICATI",
+            "ISA 20252257390007 21/08/2025 MUMBAI 12/08/2030 COC GRADE : MASTER OF FOREIGN GOING SHIP STCW COURSES COURSES NO. DATE OF ISSUE PLACE OF ISSUE P.S.S.R. 40301961012104314 09/12/2021 MUMBAI GMDSS SMC/GMDSS/3908 10/04/2012 KOLKATA RANSCO 20704202518138 19/11/2018 MUMBAI R.O.C. ROSC/0223/016/11 19/08/2011 MUM",
+            "CURRICULUM VITAE POST APPLIED FOR : CHIEF OFFICER // MASTER NAME : SHINDE RAJESH ANANT FATHER\u2019S NAME : ANANT PANDURANG SHINDE DATE & PLACE OF BIRTH : 31/05/1987, CHIPLUN NATIONALITY : INDIAN MOBILE : 9975165793/07057119191/( Home: 09226261057) E-MAIL ID : rajeshshi@gmail.com EDUCATIONAL Q",
+            "KINGS : TOTAL 10 NOS. DRYDOCKINGS / 4 NOS. OF DRYDOCKING AS CHIEF OFFICER PREPAIRED VESSELS FOR CAP-1 RATING DURING INTERMIDIATE SURVEYES. EXTENSIVE EXPERIENCE OF TANK CLEANING & PREPARATIONS FOR DRYDOCKING. *CARGOES CARRIED : CRUDE OIL / FUEL OIL / VGO / CONDENSATE / NAPTHA / GAS OIL / ATF COMPANY VESSEL TYPE G"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260428_171956_AAMkADI5NjU4_pdf.pdf",
+          "grade": "master",
+          "label_snippets": [
+            "nts are available + Medical Examination certificate, MASTER COC, verifications for GMDSS and Diploma, FURUNO and TRANSAS ECDIS certificates, PANAMA & LIBERIA and PORTUGAL seaman's book. EXPERIENCE Chief Officer - Container Ship 19.12.2025 - 15.04.2026 (4 months) Vessel Name Vessel flag ME Type Vessel o",
+            "2027 2 Seaman's Book Ukraine AC004530 22.09.2022 22.09.2027 COC & ENDORSEMENT Type of the Expiry # Position Country Number Issue Date document Date 1 Certificate of Master Ukraine 44999/2024 30.12.2024 01.12.5000 Competency 2 Endorsement Master Ukraine 44999/2024 30.12.2024 01.12.5000 CERTIFICATES Expi",
+            "documents are available + Medical Examination certificate, MASTER COC, verifications for GMDSS and Diploma, FURUNO and TRANSAS ECDIS certificates, PANAMA & LIBERIA and PORTUGAL seaman's book. EXPERIENCE Chief Officer - Container Ship 19.12.2025 - 15.04.2026 (4 months) Vessel Name Vessel flag ME Type Vess",
+            "on Country Number Issue Date document Date 1 Certificate of Master Ukraine 44999/2024 30.12.2024 01.12.5000 Competency 2 Endorsement Master Ukraine 44999/2024 30.12.2024 01.12.5000 CERTIFICATES Expiry # Certificate Certificate Number Issue Date Date 1 GMDSS 01440/2025 18.02.2025 No expiry 2 GMDSS Endorsem",
+            "e 44999/2024 30.12.2024 01.12.5000 Competency 2 Endorsement Master Ukraine 44999/2024 30.12.2024 01.12.5000 CERTIFICATES Expiry # Certificate Certificate Number Issue Date Date 1 GMDSS 01440/2025 18.02.2025 No expiry 2 GMDSS Endorsement 01440/2025 18.02.2025 10.02.2030 3 Basic Safety Training 10684/2024 3",
+            "+380934144600 Position Desired Wage Rate Employment Status Chief Officer $10,000 At sea until 15.04.2026 Citizenship Residence Closest Airport Ukraine Bucharest, Romania Henri Coanda International Airport US C1/D Visa (2026-09-20) COVID-19 Vaccination Pfizer-BioNTech About Me I am ready for the next contract an",
+            "es, PANAMA & LIBERIA and PORTUGAL seaman's book. EXPERIENCE Chief Officer - Container Ship 19.12.2025 - 15.04.2026 (4 months) Vessel Name Vessel flag ME Type Vessel owner ANL WANGARATTA Malta MAN-B&W CMA CGM Build Year DWT ME Power, kW Agency 2008 50596 36,560 MARLOW Chief Officer - Container Ship 02.06.2025 - 1",
+            "Build Year DWT ME Power, kW Agency 2008 50596 36,560 MARLOW Chief Officer - Container Ship 02.06.2025 - 19.08.2025 (3 months) Vessel Name Vessel flag ME Type Vessel owner MSC NINA F Portugal B&W MSC Build Year DWT ME Power, kW Agency 2005 9739 2nd Officer - Container Ship 04.12.2023 - 30.05.2024 (6 months) Vesse",
+            "rtugal B&W MSC Build Year DWT ME Power, kW Agency 2005 9739 2nd Officer - Container Ship 04.12.2023 - 30.05.2024 (6 months) Vessel Name Vessel flag ME Type Vessel owner MSC GENERAL IV Liberia MAN-B&W MSC Build Year DWT ME Power, kW Agency 2008 53870 36,560 MSC 2nd Officer - Container Ship 20.11.2022 - 04.07.20",
+            "SC Build Year DWT ME Power, kW Agency 2008 53870 36,560 MSC 2nd Officer - Container Ship 20.11.2022 - 04.07.2023 (7 months) Vessel Name Vessel flag ME Type Vessel owner MSC HONG KONG V Liberia MAN-B&W MSC Build Year DWT ME Power, kW Agency 2002 66686 41,130 MSC 2nd Officer - Container Ship 24.03.2022 - 26.08.2"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 52,
+      "rank_folder": "Chief_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 3,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 1,
+            "MISSING": 2
+          },
+          "grade_counts": {
+            "None": 1,
+            "master": 2
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 2
+          }
+        },
+        "non_email": {
+          "count": 49,
+          "expiry_status_counts": {
+            "PARSED": 49
+          },
+          "grade_counts": {
+            "2nd_officer": 3,
+            "chief_officer": 38,
+            "master": 8
+          },
+          "status_counts": {
+            "PARSED": 49
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260330_082519_AAMkADI5NjU4_MELVIN_ABRAHAM_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_072202_AAMkADI5NjU4_JOVIAL_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_072202_AAMkADI5NjU4_JOVIAL_CV_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260429_023012_AAMkADI5NjU4_CV_Durvang_Bhagat.pdf",
+          "grade": null,
+          "label_snippets": [
+            "he Institute\u2019s Lifeguard (2021) \uf0b7 Water polo Team coach for Master House Team in Horizon (2024) \uf0b7 Secured Second Position for Master House in Water polo (2022) \uf0b7 Appointed as the Batch Representative (BR) of Master House \uf0b7 Secured First Position for Master House in Interhouse Volleyball Competition (2021)",
+            "House Team in Horizon (2024) \uf0b7 Secured Second Position for Master House in Water polo (2022) \uf0b7 Appointed as the Batch Representative (BR) of Master House \uf0b7 Secured First Position for Master House in Interhouse Volleyball Competition (2021) \uf0b7 Active member of Management Team in Horizon (2024) * Tolani Mar",
+            "polo (2022) \uf0b7 Appointed as the Batch Representative (BR) of Master House \uf0b7 Secured First Position for Master House in Interhouse Volleyball Competition (2021) \uf0b7 Active member of Management Team in Horizon (2024) * Tolani Maritime Institute Consolidated Result of Cadet: DURVANG BHAGAT TMI ID No. 2021NS178",
+            "sentative (BR) of Master House \uf0b7 Secured First Position for Master House in Interhouse Volleyball Competition (2021) \uf0b7 Active member of Management Team in Horizon (2024) * Tolani Maritime Institute Consolidated Result of Cadet: DURVANG BHAGAT TMI ID No. 2021NS178 First Year First Semester First Year Secon"
+          ],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "Deck_Cadet",
+      "summary_by_source_type": {
+        "email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "MISSING": 4
+          },
+          "grade_counts": {
+            "None": 4
+          },
+          "status_counts": {
+            "MISSING": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260406_072023_AAMkADI5NjU4_B_S_Dhaliwal_CV.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ate Issuing Country Date Issued Place Issued Valid Until Of COC Exam No. CoEuTnOtry INDIA 12/07/2022 ETO-04208 26/02/2018 Mumbai 11/07/2027 7 Certificates Of Competency issued by other countries (Issued by countries other than in Section 6) Issuing Country Certificate No. Date Issued Place Issued Valid",
+            "/06/2013 04/06/2018 YES 2001 Punjab 6 Certificates (Highest certificate of competency held) Grade/Class Date of Passing Certificate Issuing Country Date Issued Place Issued Valid Until Of COC Exam No. CoEuTnOtry INDIA 12/07/2022 ETO-04208 26/02/2018 Mumbai 11/07/2027 7 Certificates Of Competency issued by other countries (I",
+            "ECDIS Bridge / Engine Resources Management (BRM / ERM) Ship Master Command and Control Course (SMCC) GMDSS + endorsement National License Revalidation/Refresher Course Container Operations Familiarization Electrical Familiarization for Marine Engineers 0346 WALLEM 31/01/2014 Electronics for Marine Enginee"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_035849_AAMkADI5NjU4_Marshal_Tandel_Assistant_ETO_Resume.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_055902_AAMkADI5NjU4_Maval_Tandel_TR-ETO_Resume.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260430_062531_AAMkADI5NjU4_APON_CHATTERJEE_1_1_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "Electro_Technical_Officer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "MISSING": 4
+          },
+          "grade_counts": {
+            "None": 4
+          },
+          "status_counts": {
+            "MISSING": 3,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_044050_AAMkADI5NjU4_Binder1-1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_094655_AAMkADI5NjU4_Manish_Tandel_Fitter_6G_Welder_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_094655_AAMkADI5NjU4_Manish_Tandel_Fitter_6G_Welder_CV_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 3,
+      "rank_folder": "Fitter",
+      "summary_by_source_type": {
+        "email": {
+          "count": 3,
+          "expiry_status_counts": {
+            "MISSING": 3
+          },
+          "grade_counts": {
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 3
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 10,
+      "rank_folder": "Junior_3rd_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 10,
+          "expiry_status_counts": {
+            "PARSED": 10
+          },
+          "grade_counts": {
+            "2nd_officer": 10
+          },
+          "status_counts": {
+            "PARSED": 10
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 17,
+      "rank_folder": "Junior_4th_Engineer",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 17,
+          "expiry_status_counts": {
+            "PARSED": 17
+          },
+          "grade_counts": {
+            "4th_engineer": 16,
+            "None": 1
+          },
+          "status_counts": {
+            "PARSED": 17
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260406_113012_AAMkADI5NjU4_deepak_resume.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_043045_AAMkADI5NjU4_Aditya_Junior_Engineer.pdf",
+          "grade": null,
+          "label_snippets": [
+            "02/07/2024 \uf020 \uf059 PERSONAL DETAILS:- Date of Birth 08-01-1998 COC NO. 95Z-39114 PASSPORT NO. U2169798 CDC NO. KOL 124789 INDOS NO. 18EL1438 NATIONALITY INDIAN ADDRESS WARD NO-04, NAKCHHED TOLA, JAGJIVAN NAGAR, MOTIHARI, DIST- EAST CHAMPARAN, STATE- BIHAR, PIN CODE- 845401 \uf059 DECLARATION \uf0b7 I am fully Vacci",
+            "CTIVE:- A qualified Marine Engineer with an Indian class IV Certificate of Competency, looking for opportunities as JUNIOR ENGINEER, able to adapt and work with dedication and commitment to the satisfaction and always uphold the safety and company standards. EDUCATION:- \uf020\uf059 QUALIFICATION UNIVERSITY/BOARD SESSION B.TECH (MARI"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "AMBIGUOUS_NUMERIC",
+          "filename": "EMAIL_20260427_061337_AAMkADI5NjU4_SASIKUMAR_K__RESUME-1.pdf",
+          "grade": null,
+          "label_snippets": [
+            "0/2029 MADURAI CDC CHN 110218 17/02/2023 16/02/2033 CHENNAI COC 95Z-44134 30/03/2026 03/02/2031 CHENNAI SID C33083323 14/03/2023 13/03/2033 CHENNAI INDOS NO 19EM1579 19/10/2019 - MUMBAI STCW TECHNICAL CERTIFICATIONS: INSTITUTE/UNIVERSITY/ CERTIFICATE DATE OF PLACE OF YEAR COURSE ISSUING AUTHORITY NO IS"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 3,
+      "rank_folder": "Junior_Engineer",
+      "summary_by_source_type": {
+        "email": {
+          "count": 3,
+          "expiry_status_counts": {
+            "AMBIGUOUS_NUMERIC": 1,
+            "MISSING": 2
+          },
+          "grade_counts": {
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 1,
+            "PARSED": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [],
+      "pdf_count": 1,
+      "rank_folder": "Junior_Officer",
+      "summary_by_source_type": {
+        "non_email": {
+          "count": 1,
+          "expiry_status_counts": {
+            "PARSED": 1
+          },
+          "grade_counts": {
+            "2nd_officer": 1
+          },
+          "status_counts": {
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260319_113752_AAMkADI5NjU4_CAPT_SUDHIR_THAKUR_CV_2026.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ountry Certificate No. Date Issued Place Issued Valid Until COC INDIA IF00 15542 29-05-2025 MUMBAI 28-05-2030 GMDSS INDIA GOC-K-165 24-01-2023 KOLKATA 23-01-2043 GMDSS ENDORSE INDIA 101829 22-07-2022 KOLKATA 20-07-2027 Place Issue Date Cert. No. Expiry Date Personal Survival Techniques G. NOIDA 23.03.2",
+            "7-2015 KOLKATA No expiry Holding Australian MCV NO National Certificate of Competency (Highest certificate of competency held) Class/Grade Issuing Country Certificate No. Date Issued Place Issued Valid Until COC INDIA IF00 15542 29-05-2025 MUMBAI 28-05-2030 GMDSS INDIA GOC-K-165 24-01-2023 KOLKATA 23-01-2043 GMDSS ENDORSE I",
+            "stralian MCV NO National Certificate of Competency (Highest certificate of competency held) Class/Grade Issuing Country Certificate No. Date Issued Place Issued Valid Until COC INDIA IF00 15542 29-05-2025 MUMBAI 28-05-2030 GMDSS INDIA GOC-K-165 24-01-2023 KOLKATA 23-01-2043 GMDSS ENDORSE INDIA 101829 22-07-2022 KOLKATA 20-0",
+            "m, I, CAPT. SUDHIR KUMAR THAKUR applying for the opening of Master matching my profile and experience in your organizations, I shall ensure proper implementation & maintenance of Company's policy/ QHSE System. Please find below my CV for your reference. I am dedicated, articulate, and highly skilled profe",
+            "rs sincerely, Capt. SUDHIR KUMAR THAKUR SUDHIR KUMAR THAKUR MASTER Email: sudhirthakur9801@gmail.com Contact: +91 8138824560 (whatsapp) Objective I am applying for the current opening of Master, matching my profile and experience. So as to make long term association with an organization wherein I can util",
+            "hatsapp) Objective I am applying for the current opening of Master, matching my profile and experience. So as to make long term association with an organization wherein I can utilize the experience and expertise gained in my professional life, grow professionally and be an asset to organization. I am a te",
+            "work. DOB:28/09/1986 Address: Professional Summary Holding Master(F.G) licence PLOT-38, Designation: MASTER PRAPTI ESTATE , PRESENTLY SERVING WALLEM GROUP CHIRA CHAS, Companies : VR MARITIME ,EXECUTIVE SHIP MGMT BOKARO-827013, FLEET,SYNERGY,ANGLOEASTERN JHARKHAND Cargo Type: CONTAINERS ,Oil Tanker (CRUDE",
+            "l Summary Holding Master(F.G) licence PLOT-38, Designation: MASTER PRAPTI ESTATE , PRESENTLY SERVING WALLEM GROUP CHIRA CHAS, Companies : VR MARITIME ,EXECUTIVE SHIP MGMT BOKARO-827013, FLEET,SYNERGY,ANGLOEASTERN JHARKHAND Cargo Type: CONTAINERS ,Oil Tanker (CRUDE AND PRODUCT) INDIA Duration: FROM 2008-20",
+            "s. e) dry docking for tanker/container ships at junior rank/Master .(5 Dry +91 7704818181 docks) f} Marine supervisor on 2 vessels for TOEI Shipping/ WALLEM. Capt. Einari Nenonen +79030951423 Experience with Cargo - Oil /product tanker ( Saharan , murban ) - Clean petroleum products (gas oil) Education De",
+            "Mnts Days LONG BEACH CONTAINER 54675 68463 5100 BRAVO SHIP MASTER 12/08/2025 23/11/2025 3 - Various cargo and stability programs 11 EXPRESS MGMT EVER ONWARD CONTAINER -27025Word,3 p35o0w1er po2i7n0t0 andW eAxLcLeElM -TOEI SUPTD 10/07/2025 16/07/2025 0 7 - Mutual fund Advisor(certification from AMFI) MAER"
+          ],
+          "status": "PARSED"
+        }
+      ],
+      "pdf_count": 148,
+      "rank_folder": "Master",
+      "summary_by_source_type": {
+        "email": {
+          "count": 1,
+          "expiry_status_counts": {
+            "MISSING": 1
+          },
+          "grade_counts": {
+            "None": 1
+          },
+          "status_counts": {
+            "PARSED": 1
+          }
+        },
+        "non_email": {
+          "count": 147,
+          "expiry_status_counts": {
+            "MISSING": 2,
+            "PARSED": 145
+          },
+          "grade_counts": {
+            "None": 2,
+            "chief_officer": 6,
+            "master": 139
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 145
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260314_022056_AAMkADI5NjU4_ANTONY_JACKSONmotorman.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260415_171734_AAMkADI5NjU4_MUKESH_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_082702_AAMkADI5NjU4_CV_Harjit_sing.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_082702_AAMkADI5NjU4_CV_Harjit_sing_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 4,
+      "rank_folder": "Motorman",
+      "summary_by_source_type": {
+        "email": {
+          "count": 4,
+          "expiry_status_counts": {
+            "MISSING": 4
+          },
+          "grade_counts": {
+            "None": 4
+          },
+          "status_counts": {
+            "MISSING": 4
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260330_165652_AAMkADI5NjU4_MAKSON_NEW_RESUME_-_26.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260402_101553_AAMkADI5NjU4_CHANTI_OS.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260415_052513_AAMkADI5NjU4_ABHISHEK_CHAUHAN-2_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260420_034250_AAMkADI5NjU4_suresh_vasupalli.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260420_050814_AAMkADI5NjU4_new_cv_upendera_071656.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260426_082750_AAMkADI5NjU4_ASHWANTH_S_2026_CV_NEW.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_033730_AAMkADI5NjU4_Sahil_Tandel_TR_Seaman_Resume.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_063332_AAMkADI5NjU4_ABN26016959.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_063332_AAMkADI5NjU4_PRASANTH_OS_03.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_065754_AAMkADI5NjU4_IBRAHIM_CVV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260429_052641_AAMkADI5NjU4_ABN26016959.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260429_052641_AAMkADI5NjU4_PRASANTH_OS_03.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260430_052704_AAMkADI5NjU4_IBRAHIM_CV1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260430_052704_AAMkADI5NjU4_IBRAHIM_CV1_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 14,
+      "rank_folder": "OS",
+      "summary_by_source_type": {
+        "email": {
+          "count": 14,
+          "expiry_status_counts": {
+            "MISSING": 14
+          },
+          "grade_counts": {
+            "None": 14
+          },
+          "status_counts": {
+            "MISSING": 14
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260318_064621_AAMkADI5NjU4_Ashoke_cv_word_2026-1_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260320_075435_AAMkADI5NjU4_Ramesh_Resume.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260406_064306_AAMkADI5NjU4_New_update_resume_oiler_rank.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_041533_AAMkADI5NjU4_ResumS2025S.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_044149_AAMkADI5NjU4_RESUME_2025_D_PDF.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_032911_AAMkADI5NjU4_New_update_resume_oiler_rank.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260428_090024_AAMkADI5NjU4_ASHISH_RESUME_NEW.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260430_043208_AAMkADI5NjU4_RESUME_2025_D_PDF.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 8,
+      "rank_folder": "Oiler",
+      "summary_by_source_type": {
+        "email": {
+          "count": 8,
+          "expiry_status_counts": {
+            "MISSING": 8
+          },
+          "grade_counts": {
+            "None": 8
+          },
+          "status_counts": {
+            "MISSING": 8
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260403_094442_AAMkADI5NjU4_Dyson-updated-biodata.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260403_110040_AAMkADI5NjU4_new_bio_data_Dyson.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 2,
+      "rank_folder": "Pumpman",
+      "summary_by_source_type": {
+        "email": {
+          "count": 2,
+          "expiry_status_counts": {
+            "MISSING": 2
+          },
+          "grade_counts": {
+            "None": 2
+          },
+          "status_counts": {
+            "MISSING": 2
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_033251_AAMkADI5NjU4_Sudeep_Kumar_CV.pdf",
+          "grade": null,
+          "label_snippets": [
+            "ia Reference & recommendation: Juan Junior Lopez Octaviano [Chief Engineer in Executive Ship Management] Email: octavianojuanlopez@gmail.com | Mob: +639383786396",
+            "P KUMAR GARNAYAK Officer-In-Charge of an Engineering Watch, MEO CLASS IV, STCWIII/1 Mob: +91 8260569417 | Email: garnayak.sudeep@gmail.com Linkedin: www.linkedin.com/in/sudeepkumar-4e Address: At/Po. Gobara, Dist. Anugul, Odisha, India, 759103 Brief: Having extensive experience in international waters\u2014from dryd"
+          ],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 1,
+      "rank_folder": "Ship_Management",
+      "summary_by_source_type": {
+        "email": {
+          "count": 1,
+          "expiry_status_counts": {
+            "MISSING": 1
+          },
+          "grade_counts": {
+            "None": 1
+          },
+          "status_counts": {
+            "MISSING": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260323_070653_AAMkADI5NjU4_GS_SMITKUMAR_R_TANDEL_newly_UPDATED_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260323_070742_AAMkADI5NjU4_CV_GS_GAURAVKUMAR_B_TANDEL.pdf",
+          "grade": null,
+          "label_snippets": [
+            "MESSMAN -GS / BIO-DATA/ COOK COC / ALL DCE/ BULK, CONT., TANKER experienced POST APPLIED FOR : G.S. / MESS MAN NAME : TANDEL GAURAVKUMAR BHAGUBHAI FATHER NAME : TANDEL BHAGUBHAI BAVABHAI DATE & PLACE OF BIRTH : 04/03/1992 / PARDI \u2013 VALSAD, GUJARAT ADDRESS : AT & POST UMAR"
+          ],
+          "status": "PARSED"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260325_055720_AAMkADI5NjU4_GS_SMITKUMAR_R_TANDEL_UPDATED_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 3,
+      "rank_folder": "Steward",
+      "summary_by_source_type": {
+        "email": {
+          "count": 3,
+          "expiry_status_counts": {
+            "MISSING": 3
+          },
+          "grade_counts": {
+            "None": 3
+          },
+          "status_counts": {
+            "MISSING": 2,
+            "PARSED": 1
+          }
+        }
+      }
+    },
+    {
+      "email_examples": [
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260313_105638_AAMkADI5NjU4_CV_FOR_BABLU_WIPER_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260314_123359_AAMkADI5NjU4_BABLU_WIPER_NEW_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260314_123359_AAMkADI5NjU4_BABLU_WIPER_NEW_CV_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260425_024459_AAMkADI5NjU4_Tandel_Mintesh_Wiper_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260425_093603_AAMkADI5NjU4_NAME_AMIT_RESUME.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_060518_AAMkADI5NjU4_Krunalkumar_Tandel_Wiper.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_124905_AAMkADI5NjU4_FAISAL_RAZA_ZAIDI_WIPER_1_1_1_2_1_1_2.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260427_124905_AAMkADI5NjU4_FAISAL_RAZA_ZAIDI_WIPER_1_1_1_2_1_1_2_1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260429_074134_AAMkADI5NjU4_CURRICULUM_VITAE-1.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        },
+        {
+          "expiry_status": "MISSING",
+          "filename": "EMAIL_20260430_042755_AAMkADI5NjU4_BABLU_WIPER_NEW_CV.pdf",
+          "grade": null,
+          "label_snippets": [],
+          "status": "MISSING"
+        }
+      ],
+      "pdf_count": 10,
+      "rank_folder": "Wiper",
+      "summary_by_source_type": {
+        "email": {
+          "count": 10,
+          "expiry_status_counts": {
+            "MISSING": 10
+          },
+          "grade_counts": {
+            "None": 10
+          },
+          "status_counts": {
+            "MISSING": 10
+          }
+        }
+      }
+    }
+  ],
+  "generated_at": "2026-05-07T12:02:46.601428+00:00",
+  "overall_summary_by_source_type": {
+    "email": {
+      "count": 95,
+      "expiry_status_counts": {
+        "AMBIGUOUS_NUMERIC": 13,
+        "MISSING": 80,
+        "PARSED": 2
+      },
+      "grade_counts": {
+        "2nd_officer": 1,
+        "3rd_officer": 1,
+        "4th_engineer": 1,
+        "None": 90,
+        "master": 2
+      },
+      "status_counts": {
+        "MISSING": 67,
+        "PARSED": 28
+      }
+    },
+    "non_email": {
+      "count": 647,
+      "expiry_status_counts": {
+        "MISSING": 22,
+        "PARSED": 625
+      },
+      "grade_counts": {
+        "2nd_engineer": 6,
+        "2nd_officer": 261,
+        "4th_engineer": 57,
+        "None": 28,
+        "chief_engineer": 73,
+        "chief_officer": 69,
+        "master": 153
+      },
+      "status_counts": {
+        "MISSING": 22,
+        "PARSED": 625
+      }
+    }
+  },
+  "resume_root": "/Users/kartikraghavan/Library/Application Support/NjordHR/Resumes",
+  "scope_note": "Horizontal COC validation pass across live rank folders."
+}
