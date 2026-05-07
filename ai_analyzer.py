@@ -18,6 +18,8 @@ import requests
 import fitz  # PyMuPDF
 from PIL import Image
 from pinecone import Pinecone, ServerlessSpec
+from rank_folders import rank_folder_path
+from runtime_env import normalize_env_value, normalized_url
 
 # --- Optional/Specialized Dependencies ---
 try:
@@ -218,15 +220,15 @@ class FeedbackStore:
 
 def _resolve_supabase_api_key():
     return (
-        os.getenv("SUPABASE_SECRET_KEY", "").strip()
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
 
 
 def _should_use_cloud_ai_store():
     return (
-        str(os.getenv("USE_SUPABASE_DB", "")).strip().lower() in {"1", "true", "yes", "on"}
-        and bool(os.getenv("SUPABASE_URL", "").strip())
+        normalize_env_value(os.getenv("USE_SUPABASE_DB", "")).lower() in {"1", "true", "yes", "on"}
+        and bool(normalized_url(os.getenv("SUPABASE_URL", "")))
         and bool(_resolve_supabase_api_key())
     )
 
@@ -235,7 +237,7 @@ class SupabaseStoreBase:
     DEFAULT_TIMEOUT_SECONDS = 30
 
     def __init__(self):
-        self.supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+        self.supabase_url = normalized_url(os.getenv("SUPABASE_URL", ""))
         self.api_key = _resolve_supabase_api_key()
         self.headers = {
             "apikey": self.api_key,
@@ -934,6 +936,16 @@ class AIResumeAnalyzer:
             "department": "engine",
             "seniority_bucket": "senior_officer",
         },
+        "2nd eng": {
+            "canonical_id": "2nd_engineer",
+            "department": "engine",
+            "seniority_bucket": "senior_officer",
+        },
+        "2nd engg": {
+            "canonical_id": "2nd_engineer",
+            "department": "engine",
+            "seniority_bucket": "senior_officer",
+        },
         "second engineer": {
             "canonical_id": "2nd_engineer",
             "department": "engine",
@@ -949,6 +961,21 @@ class AIResumeAnalyzer:
             "department": "engine",
             "seniority_bucket": "junior_officer",
         },
+        "3rd eng": {
+            "canonical_id": "3rd_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "3rd engg": {
+            "canonical_id": "3rd_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "3 eng": {
+            "canonical_id": "3rd_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
         "third engineer": {
             "canonical_id": "3rd_engineer",
             "department": "engine",
@@ -960,6 +987,21 @@ class AIResumeAnalyzer:
             "seniority_bucket": "junior_officer",
         },
         "4th engineer": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "4th eng": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "4th engg": {
+            "canonical_id": "4th_engineer",
+            "department": "engine",
+            "seniority_bucket": "junior_officer",
+        },
+        "4 eng": {
             "canonical_id": "4th_engineer",
             "department": "engine",
             "seniority_bucket": "junior_officer",
@@ -1012,6 +1054,46 @@ class AIResumeAnalyzer:
         "bosun": {
             "canonical_id": "bosun",
             "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "os": {
+            "canonical_id": "os",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "ordinary seaman": {
+            "canonical_id": "os",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "ab": {
+            "canonical_id": "ab",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "a b": {
+            "canonical_id": "ab",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "able seaman": {
+            "canonical_id": "ab",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "able bodied seaman": {
+            "canonical_id": "ab",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "trainee ordinary seaman": {
+            "canonical_id": "os",
+            "department": "deck",
+            "seniority_bucket": "rating",
+        },
+        "wiper": {
+            "canonical_id": "wiper",
+            "department": "engine",
             "seniority_bucket": "rating",
         },
         "pumpman": {
@@ -1542,6 +1624,7 @@ class AIResumeAnalyzer:
 
     def _normalize_rank_label(self, raw_rank):
         normalized = str(raw_rank or "").strip().lower()
+        normalized = re.sub(r'(?<=\b[a-z])[./](?=[a-z]\b)', '', normalized)
         normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
         return re.sub(r"\s+", " ", normalized).strip()
 
@@ -1574,15 +1657,37 @@ class AIResumeAnalyzer:
         present_patterns = [
             r"(?i)\bpresent\s+rank\s*[:\-]?\s*(.+?)(?=\s+(?:from\s+date|till\s+date|personal(?:\s*&\s*contact)?\s+details|name|email|availability\s+details)\b|$)",
             r"(?im)^(?:current|present)\s+rank\s*[:\-]\s*([^\n,]+)",
+            r"(?i)\bappraisee['’]s\s+rank\s*[:\-]?\s*(.+?)(?=\s+(?:department\s+head|highest\s+license\s+held|master|nationality|this\s+appraisal)\b|$)",
+            r"(?i)\bposition\s*[:\-]?\s*(.+?)(?=\s+(?:desired\s+type\s+of\s+ship|full\s+name|available|date\s+of\s+birth|citizenship|place\s+of\s+birth|phones?|email|address)\b|$)",
             r"(?im)^rank\s*[:\-]\s*([^\n,]+)",
         ]
         applied_patterns = [
             r"(?i)\bapplied\s+for\s+rank\s*[:\-]?\s*(.+?)(?=\s+(?:present\s+rank|from\s+date|till\s+date|personal(?:\s*&\s*contact)?\s+details|name|email|availability\s+details)\b|$)",
+            r"(?i)\bpost\s+applied\s+for\s*[:\-]*\s*(.+?)(?=\s*(?:\W{0,4})?(?:name|father(?:'s)?\s+name|date(?:\s*&)?\s+place\s+of\s+birth|date\s+of\s+birth|nationality|marital\s+status|gender|religion|language|languages\s+known|email|phone|mobile|contact|address|objective|personal\s+details|documents|pre[\s\-]?sea|sea\s+experience|work\s+experience)\b|$)",
+            r"(?i)\bpost\s+applied\s*[:\-]*\s*(.+?)(?=\s*(?:\W{0,4})?(?:name|surname|first\s+name|middle\s+name|father(?:'s)?\s+name|date(?:\s*&)?\s+place\s+of\s+birth|date\s+of\s+birth|nationality|marital\s+status|gender|religion|language|languages\s+known|email|phone|mobile|contact|address|objective|personal\s+details|documents|pre[\s\-]?sea|sea\s+experience|work\s+experience)\b|$)",
+            r"(?i)\bapplied\s+for\s*[:\-]*\s*(.+?)(?=\s*(?:\W{0,4})?(?:name|father(?:'s)?\s+name|date(?:\s*&)?\s+place\s+of\s+birth|date\s+of\s+birth|nationality|marital\s+status|gender|religion|language|languages\s+known|email|phone|mobile|contact|address|objective|personal\s+details|documents|pre[\s\-]?sea|sea\s+experience|work\s+experience|academic\s+performance)\b|$)",
         ]
 
         def _normalize_raw_rank(raw_rank):
             cleaned = re.sub(r"\s+", " ", str(raw_rank or "").strip(" ,:-"))
             canonical_id, department, seniority_bucket, confidence = self._normalize_rank(cleaned)
+            if canonical_id:
+                return cleaned, canonical_id, department, seniority_bucket, confidence
+
+            normalized_cleaned = self._normalize_rank_label(cleaned)
+            tokens = normalized_cleaned.split()
+            for end in range(len(tokens), 0, -1):
+                candidate_label = " ".join(tokens[:end])
+                alias_entry = self.RANK_ALIAS_TABLE.get(candidate_label)
+                if not alias_entry:
+                    continue
+                return (
+                    cleaned[: len(" ".join(cleaned.split()[:end]))].strip(" ,:-"),
+                    alias_entry["canonical_id"],
+                    alias_entry["department"],
+                    alias_entry["seniority_bucket"],
+                    0.85,
+                )
             return cleaned, canonical_id, department, seniority_bucket, confidence
 
         present_unknown = None
@@ -1698,8 +1803,8 @@ class AIResumeAnalyzer:
         # Do NOT create a new ConfigParser or read from disk here — that would
         # diverge from the config the process was actually started with.
         labels = []
-        runtime_parser = self.config.config
-        if runtime_parser.has_section("ShipTypes") and runtime_parser.has_option("ShipTypes", "ship_type_options"):
+        runtime_parser = getattr(self.config, "config", None)
+        if runtime_parser and runtime_parser.has_section("ShipTypes") and runtime_parser.has_option("ShipTypes", "ship_type_options"):
             raw_value = runtime_parser.get("ShipTypes", "ship_type_options")
             labels = [line.strip() for line in raw_value.splitlines() if line.strip()]
 
@@ -1804,7 +1909,12 @@ class AIResumeAnalyzer:
             {
                 "canonical": "MCV (Australia)",
                 "group": "australia",
-                "patterns": [r"\bmcv\s*\(\s*australia\s*\)", r"\bmcv\b"],
+                "patterns": [
+                    r"\bmcv\s*\(\s*australia\s*\)",
+                    r"\bmcv\b",
+                    r"\bonline\s+maritime\s+crew\s+visa\b",
+                    r"\bmaritime\s+crew\s+visa\b",
+                ],
             },
             {
                 "canonical": "Schengen",
@@ -2119,6 +2229,50 @@ class AIResumeAnalyzer:
             return {"date": None, "status": "AMBIGUOUS_NUMERIC"}
         return {"date": None, "status": "MISSING"}
 
+    def _extract_ordered_date_tokens(self, text):
+        snippet = str(text or "")
+        if not snippet:
+            return []
+        month_pattern = r'(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)'
+        return re.findall(
+            rf'\d{{4}}[\/\-.]\d{{1,2}}[\/\-.]\d{{1,2}}|\d{{1,2}}[\/\-.]\d{{1,2}}[\/\-.]\d{{2,4}}|\d{{1,2}}[\s\/\-.]+{month_pattern}[\s\/\-.]+\d{{2,4}}|{month_pattern}[\s\/\-.]+\d{{1,2}},?[\s\/\-.]+\d{{2,4}}',
+            snippet,
+            flags=re.IGNORECASE,
+        )
+
+    def _parse_day_first_numeric_date_token(self, token):
+        token = str(token or "").strip()
+        match = re.fullmatch(r'(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})', token)
+        if not match:
+            return None
+        return self._build_date_from_match(match.groups(), allow_future=True)
+
+    def _normalize_resume_visa_snippet(self, snippet):
+        normalized = str(snippet or "")
+        if not normalized:
+            return normalized
+        replacements = [
+            (r"\bu\s*\.?\s*s\s*\.?\s*a\s*\.?\s*visa\b", "US Visa"),
+        ]
+        for pattern, replacement in replacements:
+            normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+        return normalized
+
+    def _extract_dates_before_maritime_crew_visa_label(self, snippet):
+        text = str(snippet or "")
+        matches = list(re.finditer(r'(?:online\s+)?maritime\s+crew\s+visa\b', text, flags=re.IGNORECASE))
+        if not matches:
+            return None
+        label_match = matches[-1]
+        prefix = text[max(0, label_match.start() - 160):label_match.start()]
+        ordered_tokens = self._extract_ordered_date_tokens(prefix)
+        if len(ordered_tokens) < 2:
+            return None
+        return {
+            "issue_token": ordered_tokens[-2],
+            "expiry_token": ordered_tokens[-1],
+        }
+
     def _extract_us_visa_fact_from_text(self, raw_text):
         text = str(raw_text or "")
         if not text:
@@ -2150,13 +2304,37 @@ class AIResumeAnalyzer:
         saw_no_visa = False
 
         for snippet in snippets:
-            visa_def = self._extract_specific_visa_type_from_prompt(snippet)
+            normalized_snippet = self._normalize_resume_visa_snippet(snippet)
+            visa_def = self._extract_specific_visa_type_from_prompt(normalized_snippet)
             if visa_def:
-                expiry_snippet = snippet
-                expiry_label = re.search(r"(?:valid\s+until)", snippet, flags=re.IGNORECASE)
+                nearby_dates = None
+                if visa_def.get("canonical") == "MCV (Australia)":
+                    nearby_dates = self._extract_dates_before_maritime_crew_visa_label(normalized_snippet)
+                    if not nearby_dates:
+                        nearby_dates = self._extract_dates_before_maritime_crew_visa_label(text)
+                expiry_snippet = normalized_snippet
+                expiry_label = re.search(r"(?:valid\s+until)", normalized_snippet, flags=re.IGNORECASE)
                 if expiry_label:
-                    expiry_snippet = snippet[expiry_label.start():]
-                expiry_fact = self._extract_date_fact_from_snippet(expiry_snippet)
+                    expiry_snippet = normalized_snippet[expiry_label.start():]
+                else:
+                    visa_anchor = re.search(
+                        r"\bvisa\b|\bc1\s*/\s*d\b|\bc1\s+visa\b|\bd\s+visa\b|\bb1\s*/\s*b2\b|\bmcv\b|\bschengen\b",
+                        normalized_snippet,
+                        flags=re.IGNORECASE,
+                    )
+                    if visa_anchor:
+                        expiry_snippet = normalized_snippet[visa_anchor.start():]
+                if nearby_dates:
+                    parsed = self._parse_day_first_numeric_date_token(nearby_dates["expiry_token"])
+                    expiry_fact = {"date": parsed, "status": "PARSED"} if parsed else {"date": None, "status": "MISSING"}
+                else:
+                    expiry_fact = self._extract_date_fact_from_snippet(expiry_snippet)
+                if expiry_fact.get("status") == "AMBIGUOUS_NUMERIC":
+                    ordered_tokens = self._extract_ordered_date_tokens(expiry_snippet)
+                    if len(ordered_tokens) >= 2:
+                        parsed = self._parse_day_first_numeric_date_token(ordered_tokens[1])
+                        if parsed:
+                            expiry_fact = {"date": parsed, "status": "PARSED"}
                 visa_records.append({
                     "status": "PARSED",
                     "visa_type": visa_def["canonical"],
@@ -2166,8 +2344,8 @@ class AIResumeAnalyzer:
                 })
                 continue
 
-            normalized_snippet = snippet.lower()
-            if any(re.search(no_visa_pattern, normalized_snippet, flags=re.IGNORECASE) for no_visa_pattern in no_visa_patterns):
+            lowered_snippet = normalized_snippet.lower()
+            if any(re.search(no_visa_pattern, lowered_snippet, flags=re.IGNORECASE) for no_visa_pattern in no_visa_patterns):
                 saw_no_visa = True
 
         deduped_records = []
@@ -2242,6 +2420,14 @@ class AIResumeAnalyzer:
 
         for snippet in snippets:
             expiry_fact = self._extract_date_fact_from_snippet(snippet)
+            if expiry_fact.get("status") == "AMBIGUOUS_NUMERIC":
+                passport_match = re.search(r"passport\b", snippet, flags=re.IGNORECASE)
+                scoped_snippet = snippet[passport_match.start():] if passport_match else snippet
+                ordered_tokens = self._extract_ordered_date_tokens(scoped_snippet)
+                if len(ordered_tokens) >= 2:
+                    parsed = self._parse_day_first_numeric_date_token(ordered_tokens[1])
+                    if parsed:
+                        expiry_fact = {"date": parsed, "status": "PARSED"}
             if expiry_fact.get("status") in {"PARSED", "AMBIGUOUS_NUMERIC", "INVALID"}:
                 return {
                     "expiry_date": expiry_fact.get("date"),
@@ -2321,17 +2507,23 @@ class AIResumeAnalyzer:
 
         lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
         snippets = []
+        coc_label_pattern = r"\bc\s*\.?\s*o\s*\.?\s*c\b|certificate\s+of\s+competency|highest\s+license\s+held"
         table_grade_patterns = [
             r"master\s*\((?:fg|ncv)\)",
+            r"master\s+f\.?g\b|master\s+fg\b",
             r"chief\s+officer\s*\((?:fg|ncv)\)",
             r"chief\s+mate\s*\((?:fg|ncv)\)",
             r"first\s+mate\s*\((?:fg|ncv)\)",
+            r"chief\s+mate\s+fg|first\s+mate\s+fg",
             r"second\s+mate\s*\((?:fg|ncv)\)|second\s+officer\s*\((?:fg|ncv)\)|2nd\s+officer\s*\((?:fg|ncv)\)",
+            r"second\s+mate\s+fg|2nd\s+mate\s+fg",
             r"third\s+officer\s*\((?:fg|ncv)\)|3rd\s+officer\s*\((?:fg|ncv)\)",
+            r"third\s+mate\s+fg|3rd\s+mate\s+fg",
             r"chief\s+engineer\s*\((?:fg|ncv)\)",
             r"second\s+engineer\s*\((?:fg|ncv)\)|2nd\s+engineer\s*\((?:fg|ncv)\)",
             r"third\s+engineer\s*\((?:fg|ncv)\)|3rd\s+engineer\s*\((?:fg|ncv)\)",
             r"fourth\s+engineer\s*\((?:fg|ncv)\)|4th\s+engineer\s*\((?:fg|ncv)\)",
+            r"meo\s+cl(?:ass)?[-\s]*(?:i{1,3}|iv|1|2|3|4)\b",
             r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b",
             r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b",
             r"meo\s+class\s+iv\b",
@@ -2342,7 +2534,7 @@ class AIResumeAnalyzer:
             r"|[A-Za-z]{3,9}[\s\/\-.]+\d{1,2},?[\s\/\-.]+\d{2,4}"
         )
         for idx, line in enumerate(lines):
-            if re.search(r"\bcoc\b|certificate\s+of\s+competency", line, flags=re.IGNORECASE):
+            if re.search(coc_label_pattern, line, flags=re.IGNORECASE):
                 snippets.append(" ".join(lines[idx:idx + 4]))
                 continue
             if (
@@ -2353,7 +2545,7 @@ class AIResumeAnalyzer:
                 snippets.append(" ".join(lines[context_start:idx + 1]))
 
         if not snippets:
-            for match in re.finditer(r"\bcoc\b|certificate\s+of\s+competency", text, flags=re.IGNORECASE):
+            for match in re.finditer(coc_label_pattern, text, flags=re.IGNORECASE):
                 snippets.append(text[max(0, match.start() - 30):match.start() + 220])
 
         if not snippets:
@@ -2368,24 +2560,33 @@ class AIResumeAnalyzer:
             }
 
         grade_patterns = [
+            (r"meo\s+cl(?:ass)?[-\s]*4\b|meo\s+cl(?:ass)?[-\s]*iv\b", "4th_engineer"),
+            (r"meo\s+cl(?:ass)?[-\s]*2\b|meo\s+cl(?:ass)?[-\s]*ii\b", "2nd_engineer"),
+            (r"meo\s+cl(?:ass)?[-\s]*1\b|meo\s+cl(?:ass)?[-\s]*i\b", "chief_engineer"),
+            (r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b", "chief_engineer"),
+            (r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b", "2nd_engineer"),
+            (r"meo\s+class\s+iv\b", "4th_engineer"),
             (r"chief\s+engineer", "chief_engineer"),
             (r"second\s+engineer|2nd\s+engineer", "2nd_engineer"),
             (r"third\s+engineer|3rd\s+engineer", "3rd_engineer"),
             (r"fourth\s+engineer|4th\s+engineer", "4th_engineer"),
-            (r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b", "chief_engineer"),
-            (r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b", "2nd_engineer"),
-            (r"meo\s+class\s+iv\b", "4th_engineer"),
-            (r"master", "master"),
-            (r"first\s+mate|chief\s+mate|chief\s+officer", "chief_officer"),
-            (r"second\s+mate|2nd\s+officer|second\s+officer", "2nd_officer"),
-            (r"third\s+mate|3rd\s+officer|third\s+officer", "3rd_officer"),
+            (r"master\s+f\.?g\b|master\s+fg\b|master", "master"),
+            (r"first\s+mate\s+fg|chief\s+mate\s+fg|first\s+mate|chief\s+mate|chief\s+officer", "chief_officer"),
+            (r"second\s+mate\s+fg|2nd\s+mate\s+fg|second\s+mate|2nd\s+officer|second\s+officer", "2nd_officer"),
+            (r"third\s+mate\s+fg|3rd\s+mate\s+fg|third\s+mate|3rd\s+officer|third\s+officer", "3rd_officer"),
         ]
 
         for snippet in snippets:
             normalized_snippet = snippet.lower()
+            grade_scan_snippet = normalized_snippet
+            for cue_pattern in [r"highest\s+license\s+held", r"c\s*\.?\s*o\s*\.?\s*c\s+held"]:
+                cue_match = re.search(cue_pattern, grade_scan_snippet)
+                if cue_match:
+                    grade_scan_snippet = grade_scan_snippet[cue_match.start():cue_match.start() + 120]
+                    break
             grade = None
             for pattern, canonical_grade in grade_patterns:
-                if re.search(pattern, normalized_snippet):
+                if re.search(pattern, grade_scan_snippet):
                     grade = canonical_grade
                     break
 
@@ -2456,7 +2657,9 @@ class AIResumeAnalyzer:
             local_window = text[max(0, match.start() - 20):min(len(text), match.end() + 80)]
             lowered = snippet.lower()
             lowered_local = local_window.lower()
-            if re.search(r"\b(no|not held|n/?a|none|absent)\b", lowered):
+            if re.search(r"\b(?:not held|n/?a|none|absent)\b", lowered):
+                return "absent"
+            if re.search(r"\bno\b(?!\s*\.?\s*(?:date|cert(?:ificate)?|number|place|of|issue)\b)", lowered):
                 return "absent"
             if re.search(r"\b(expired|lapsed|out of date)\b", lowered_local):
                 return "expired"
@@ -2498,10 +2701,17 @@ class AIResumeAnalyzer:
     def _extract_stcw_fact_from_text(self, raw_text):
         text = str(raw_text or "")
         certificate_aliases = {
-            "pst": ["pst", "personal survival techniques"],
-            "fpff": ["fpff", "fire prevention and fire fighting"],
-            "efa": ["efa", "elementary first aid"],
-            "pssr": ["pssr", "personal safety and social responsibilities"],
+            "pst": ["pst", "p.s.t", "personal survival techniques", "personal survival technique"],
+            "fpff": ["fpff", "f.p.f.f", "fire prevention and fire fighting", "fire prevention & fire fighting"],
+            "efa": ["efa", "e.f.a", "elementary first aid"],
+            "pssr": [
+                "pssr",
+                "p.s.s.r",
+                "personal safety and social responsibilities",
+                "personal safety and social responsibility",
+                "personal safety & social responsibilities",
+                "personal safety & social responsibility",
+            ],
         }
 
         certificate_states = {
@@ -2583,13 +2793,14 @@ class AIResumeAnalyzer:
         if not text:
             return {"dob": None, "status": "MISSING", "confidence": None, "extraction_method": "label_scan", "source_label": ""}
 
-        label_pattern = r'(?:date\s+of\s+birth|dob|d\.o\.b\.?)'
+        label_pattern = r'(?:date\s*/?\s*place\s*of\s*birth|place\s+date\s+of\s+birth|date\s+of\s+birth|dob|d\.o\.b\.?)'
         date_patterns = [
             r'(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})',
             r'(\d{1,2})[\s\/\-.]+([A-Za-z]{3,9})[\s\/\-.]+(\d{2,4})',
+            r'(\d{1,2})(?:st|nd|rd|th)?(?:\s+of)?[\s\/\-.]+([A-Za-z]{3,9})[\s\/\-.]+(\d{2,4})',
             r'([A-Za-z]{3,9})[\s\/\-.]+(\d{1,2}),?[\s\/\-.]+(\d{2,4})',
         ]
-        ambiguous_numeric_pattern = r'\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b'
+        numeric_date_pattern = r'\b(\d{1,2})[\s\/\-.]+(\d{1,2})[\s\/\-.]+(\d{2,4})\b'
 
         # Prefer DOB values that appear directly after an explicit DOB label.
         for label_match in re.finditer(label_pattern, text, flags=re.IGNORECASE):
@@ -2608,7 +2819,30 @@ class AIResumeAnalyzer:
                             "source_label": source_label,
                         }
 
-            if re.search(ambiguous_numeric_pattern, snippet):
+            numeric_match = re.search(numeric_date_pattern, snippet)
+            if numeric_match:
+                first = int(numeric_match.group(1))
+                second = int(numeric_match.group(2))
+                if first > 12 >= second:
+                    parsed = self._build_date_from_match((numeric_match.group(1), numeric_match.group(2), numeric_match.group(3)))
+                    if parsed and 1940 <= parsed.year <= date.today().year:
+                        return {
+                            "dob": parsed,
+                            "status": "PARSED",
+                            "confidence": 0.99,
+                            "extraction_method": "label_scan",
+                            "source_label": source_label,
+                        }
+                if second > 12 >= first:
+                    parsed = self._build_date_from_match((numeric_match.group(2), numeric_match.group(1), numeric_match.group(3)))
+                    if parsed and 1940 <= parsed.year <= date.today().year:
+                        return {
+                            "dob": parsed,
+                            "status": "PARSED",
+                            "confidence": 0.99,
+                            "extraction_method": "label_scan",
+                            "source_label": source_label,
+                        }
                 return {
                     "dob": None,
                     "status": "AMBIGUOUS_NUMERIC",
@@ -3799,7 +4033,7 @@ class AIResumeAnalyzer:
         Fallback retrieval when embeddings are unavailable.
         Builds pseudo-chunks from local PDFs based on keyword overlap.
         """
-        target_folder = Path(self.config.download_root) / rank.replace(' ', '_').replace('/', '-')
+        target_folder = rank_folder_path(self.config.download_root, rank)
         if not target_folder.exists():
             return {}
 
@@ -4006,7 +4240,7 @@ Examples of GOOD responses:
         yield {"type": "status", "message": "Initializing analysis..."}
         
         try:
-            target_folder = Path(self.config.download_root) / rank.replace(' ', '_').replace('/', '-')
+            target_folder = rank_folder_path(self.config.download_root, rank)
             
             if not target_folder.exists():
                 yield {"type": "error", "message": f"Rank folder for '{rank}' not found."}

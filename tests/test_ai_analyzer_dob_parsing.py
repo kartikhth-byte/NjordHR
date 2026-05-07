@@ -92,6 +92,9 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
             ("DOB 26 February 1995", date(1995, 2, 26)),
             ("D.O.B  February 26 1995", date(1995, 2, 26)),
             ("Date of Birth 26/Feb/1995", date(1995, 2, 26)),
+            ("Date of Birth : 15th January 1995", date(1995, 1, 15)),
+            ("DATE OF BIRTH: 04TH OF JUNE 1987", date(1987, 6, 4)),
+            ("Place date of Birth : HONNAVAR,19 /09/1996", date(1996, 9, 19)),
         ]
 
         for raw_text, expected in cases:
@@ -105,6 +108,7 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
             "Date of Birth: 04/11/1989",
             "DOB 03-02-1974",
             "D.O.B. 11.04.89",
+            "Date/Placeof Birth 08.08.1990 / GWALIOR",
         ]
 
         for raw_text in cases:

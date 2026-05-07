@@ -123,6 +123,27 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
         self.assertEqual(fact["visa_records"][0]["visa_type"], "US Visa (USA)")
         self.assertEqual(fact["visa_records"][0]["expiry_date"], date(2023, 2, 9))
 
+    def test_usa_visa_compact_resume_token_is_treated_as_supported_us_visa(self):
+        raw_text = (
+            "INDIA U.S.A.VISA R7659357 MUMBAI 07/12/2022 29/11/2027 U.S.A.\n"
+            "YELLOW FEVER LOT-178 KOLKATA 30/09/2017 LIFE TIME INDIA\n"
+        )
+        fact = self.analyzer._extract_us_visa_fact_from_text(raw_text)
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["visa_records"][0]["visa_type"], "US Visa (USA)")
+        self.assertEqual(fact["visa_records"][0]["expiry_date"], date(2027, 11, 29))
+
+    def test_online_maritime_crew_visa_uses_preceding_issue_expiry_dates(self):
+        raw_text = (
+            "PASSPORT C3019236 08/10/2024 07/10/2034 SURAT AUSTRALIAN 0059569096478 04/06/2024 04/06/2027\n"
+            "ONLINE MARITIME CREW VISA "
+            "C.D.C. MUM258353 22/03/2016 05/05/2035 MUMBAI\n"
+        )
+        fact = self.analyzer._extract_us_visa_fact_from_text(raw_text)
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["visa_records"][0]["visa_type"], "MCV (Australia)")
+        self.assertEqual(fact["visa_records"][0]["expiry_date"], date(2027, 6, 4))
+
     def test_structured_only_prompt_recognizes_supported_visa_queries(self):
         self.assertTrue(self.analyzer._is_structured_only_prompt("has a valid Schengen visa"))
         self.assertTrue(self.analyzer._is_structured_only_prompt("has a valid Australia Entry visa"))
@@ -220,7 +241,9 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
                     "score": 1.0,
                     "metadata": {
                         "resume_id": Path(spec["filename"]).stem,
+                        "filename": spec["filename"],
                         "rank": self.rank,
+                        "source_path": str(self.rank_folder / spec["filename"]),
                         "raw_text": spec["raw_text"],
                     },
                 }
@@ -274,7 +297,9 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
                     "score": 1.0,
                     "metadata": {
                         "resume_id": Path(spec["filename"]).stem,
+                        "filename": spec["filename"],
                         "rank": self.rank,
+                        "source_path": str(self.rank_folder / spec["filename"]),
                         "raw_text": spec["raw_text"],
                     },
                 }
