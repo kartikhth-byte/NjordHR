@@ -1634,6 +1634,11 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["us_visa"] = visa_constraint
             constraints["applied_constraints"].append("us_visa")
 
+        passport_constraint = self._extract_passport_validity_constraint(user_prompt)
+        if passport_constraint:
+            constraints["hard_constraints"]["passport_validity"] = passport_constraint
+            constraints["applied_constraints"].append("passport_validity")
+
         coc_constraint = self._extract_coc_requirement_constraint(user_prompt)
         if coc_constraint:
             constraints["hard_constraints"]["certifications"] = coc_constraint
@@ -2090,6 +2095,31 @@ class AIResumeAnalyzer:
                     "visa_group": "uk",
                     "requested_label": label,
                     "supported": False,
+                }
+        return None
+
+    def _extract_passport_validity_constraint(self, user_prompt):
+        prompt = str(user_prompt or "").strip().lower()
+        if not prompt:
+            return None
+
+        patterns = [
+            r"\bvalid\s+passport\b",
+            r"\bpassport\s+required\b",
+            r"\bpassport\s+mandatory\b",
+            r"\bmust\s+have\s+valid\s+passport\b",
+            r"\bmust\s+hold\s+valid\s+passport\b",
+            r"\bpassport\s+holder\b",
+            r"\bvalid\s+passport\s+holder\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, prompt)
+            if match:
+                return {
+                    "required": True,
+                    "must_be_valid": True,
+                    "requested_label": "valid passport",
+                    "display_value": match.group(0).strip(),
                 }
         return None
 
@@ -3924,6 +3954,83 @@ class AIResumeAnalyzer:
             unknown_reason="FACTUAL_UNKNOWN",
         )
 
+    def _evaluate_passport_validity_rule(self, candidate_facts, constraint, reference_date=None):
+        logistics = candidate_facts.get("logistics") or {}
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("logistics.passport_expiry_date") or {}).get("confidence")
+        requested_label = (constraint or {}).get("requested_label") or "valid passport"
+        today = reference_date or date.today()
+
+        passport_expiry_raw = logistics.get("passport_expiry_date")
+        passport_expiry_status = logistics.get("passport_expiry_status")
+        passport_expiry = None
+        if passport_expiry_raw:
+            try:
+                passport_expiry = date.fromisoformat(str(passport_expiry_raw))
+            except Exception:
+                passport_expiry = None
+
+        if confidence is not None and confidence < 0.85:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "PASSPORT_CONFIDENCE_LOW",
+                "Passport validity evidence confidence is below the hard-filter threshold.",
+                actual_value={"expiry_date": str(passport_expiry_raw) if passport_expiry_raw else None},
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if passport_expiry_status == "PARSED" and passport_expiry:
+            if passport_expiry >= today:
+                return self._base_rule_result(
+                    "PASS",
+                    "PASSPORT_VALID",
+                    f"Passport is valid until {passport_expiry.isoformat()} for requested filter '{requested_label}'.",
+                    actual_value={"expiry_date": passport_expiry.isoformat()},
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+            return self._base_rule_result(
+                "FAIL",
+                "PASSPORT_EXPIRED",
+                f"Passport expired on {passport_expiry.isoformat()}.",
+                actual_value={"expiry_date": passport_expiry.isoformat()},
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        if passport_expiry_status == "INVALID":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "PASSPORT_EXPIRY_INVALID",
+                "Passport evidence is present but the expiry date value is invalid.",
+                actual_value={"expiry_date": str(passport_expiry_raw) if passport_expiry_raw else None},
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if passport_expiry_status == "AMBIGUOUS_NUMERIC":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "PASSPORT_EXPIRY_AMBIGUOUS",
+                "Passport evidence is present but the expiry date format is ambiguous.",
+                actual_value={"expiry_date": str(passport_expiry_raw) if passport_expiry_raw else None},
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        return self._base_rule_result(
+            "UNKNOWN",
+            "PASSPORT_MISSING",
+            f"Could not determine passport validity evidence for requested filter '{requested_label}'.",
+            actual_value={"expiry_date": None},
+            expected_value=constraint,
+            confidence=confidence,
+            unknown_reason="FACTUAL_UNKNOWN",
+        )
+
     def _evaluate_rank_rule(self, candidate_facts, constraint):
         role = candidate_facts.get("role") or {}
         actual_rank = role.get("applied_rank_normalized")
@@ -4147,6 +4254,22 @@ class AIResumeAnalyzer:
         if "us_visa" in applied_constraints and visa_constraint:
             activated_rules.append("us_visa")
             results.append(self._evaluate_us_visa_rule(candidate_facts, visa_constraint))
+
+        passport_constraint = hard_constraints.get("passport_validity")
+        if "passport_validity" in applied_constraints and passport_constraint:
+            activated_rules.append("passport_validity")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "PASSPORT_RULE_REQUIRES_V2_FACTS",
+                    "Passport validity requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=passport_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_passport_validity_rule(candidate_facts, passport_constraint))
 
         rank_constraint = hard_constraints.get("rank")
         if "rank_match" in applied_constraints and rank_constraint:

@@ -225,6 +225,72 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"], [])
 
+    def test_passport_validity_rule_pass(self):
+        result = self.analyzer._evaluate_passport_validity_rule(
+            {
+                "logistics": {
+                    "passport_expiry_date": "2028-05-04",
+                    "passport_expiry_status": "PARSED",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": 0.9}},
+            },
+            {"required": True, "must_be_valid": True, "requested_label": "valid passport"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_passport_validity_rule_fail_when_expired(self):
+        result = self.analyzer._evaluate_passport_validity_rule(
+            {
+                "logistics": {
+                    "passport_expiry_date": "2020-05-04",
+                    "passport_expiry_status": "PARSED",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": 0.9}},
+            },
+            {"required": True, "must_be_valid": True, "requested_label": "valid passport"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_passport_validity_rule_missing_is_unknown(self):
+        result = self.analyzer._evaluate_passport_validity_rule(
+            {
+                "logistics": {
+                    "passport_expiry_date": None,
+                    "passport_expiry_status": "MISSING",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": None}},
+            },
+            {"required": True, "must_be_valid": True, "requested_label": "valid passport"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_hard_filter_skips_passport_rule_when_not_in_applied_constraints(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "logistics": {
+                    "passport_expiry_date": "2028-05-04",
+                    "passport_expiry_status": "PARSED",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": [],
+                "hard_constraints": {
+                    "passport_validity": {
+                        "required": True,
+                        "must_be_valid": True,
+                        "requested_label": "valid passport",
+                    },
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"], [])
+
     def test_hard_filter_skips_applied_ship_type_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -362,6 +428,31 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
                 "applied_constraints": ["company_continuity"],
                 "hard_constraints": {
                     "company_continuity": {"min_same_company_contract_count": 2},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["facts_version"], "1.1")
+        self.assertEqual(result["results"][0]["unknown_reason"], "VERSION_MISMATCH_UNKNOWN")
+
+    def test_v1_record_on_active_passport_rule_is_version_mismatch_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "facts_version": "1.1",
+                "logistics": {
+                    "passport_expiry_date": "2028-05-04",
+                    "passport_expiry_status": "PARSED",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["passport_validity"],
+                "hard_constraints": {
+                    "passport_validity": {
+                        "required": True,
+                        "must_be_valid": True,
+                        "requested_label": "valid passport",
+                    },
                 },
             },
         )

@@ -262,6 +262,23 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertIn("stcw_basic", constraints["applied_constraints"])
                 self.assertEqual(constraints["hard_constraints"]["stcw_basic"], {"required": True})
 
+    def test_passport_validity_family_variants_map_to_same_requirement(self):
+        prompts = [
+            "valid passport",
+            "passport required",
+            "must have valid passport",
+            "passport holder",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("passport_validity", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["passport_validity"]["requested_label"],
+                    "valid passport",
+                )
+                self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+
     def test_company_continuity_two_contracts_prompt_is_supported(self):
         constraints = self.analyzer._extract_job_constraints("same company for 2 contracts", rank=self.rank)
         self.assertIn("company_continuity", constraints["applied_constraints"])
