@@ -1478,6 +1478,30 @@ class AIResumeAnalyzer:
             }
         return None
 
+    def _extract_coc_grade_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt.strip():
+            return None
+
+        rank_aliases = sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True)
+        for alias, entry in rank_aliases:
+            alias_pattern = re.escape(alias)
+            patterns = [
+                rf"\b{alias_pattern}(?:'s)?\s+coc\b",
+                rf"\b{alias_pattern}(?:'s)?\s+certificate\s+of\s+competency\b",
+                rf"\bcoc\b(?:\s+grade)?\s+(?:for\s+)?{alias_pattern}\b",
+                rf"\bcertificate\s+of\s+competency\b(?:\s+grade)?\s+(?:for\s+)?{alias_pattern}\b",
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, prompt, flags=re.IGNORECASE)
+                if match:
+                    return {
+                        "required_grades": [entry["canonical_id"]],
+                        "operator": "contains_any",
+                        "display_value": match.group(0).strip(),
+                    }
+        return None
+
     def _extract_stcw_basic_constraint(self, user_prompt):
         prompt = str(user_prompt or "").lower()
         patterns = [
@@ -1652,6 +1676,11 @@ class AIResumeAnalyzer:
         if coc_constraint:
             constraints["hard_constraints"]["certifications"] = coc_constraint
             constraints["applied_constraints"].append("coc_document_gate")
+
+        coc_grade_constraint = self._extract_coc_grade_constraint(user_prompt)
+        if coc_grade_constraint:
+            constraints["hard_constraints"]["coc_grade"] = coc_grade_constraint
+            constraints["applied_constraints"].append("coc_grade_match")
 
         stcw_constraint = self._extract_stcw_basic_constraint(user_prompt)
         if stcw_constraint:
@@ -4385,6 +4414,53 @@ class AIResumeAnalyzer:
             unknown_reason="FACTUAL_UNKNOWN",
         )
 
+    def _evaluate_coc_grade_rule(self, candidate_facts, constraint):
+        coc = (candidate_facts.get("certifications") or {}).get("coc") or {}
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("certifications.coc") or {}).get("confidence")
+        actual_grade = coc.get("grade")
+        expected_grades = (constraint or {}).get("required_grades") or []
+
+        if confidence is not None and confidence < 0.85:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_GRADE_CONFIDENCE_LOW",
+                "COC grade evidence confidence is below the hard-filter threshold.",
+                actual_value=actual_grade,
+                expected_value=expected_grades,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if actual_grade is None:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_GRADE_MISSING",
+                "Could not determine certificate of competency grade for this candidate.",
+                actual_value=None,
+                expected_value=expected_grades,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if self._evaluate_rule("contains_any", [actual_grade], expected_grades):
+            return self._base_rule_result(
+                "PASS",
+                "COC_GRADE_MATCH",
+                f"Candidate COC grade '{actual_grade}' matches the requested grade filter.",
+                actual_value=actual_grade,
+                expected_value=expected_grades,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "COC_GRADE_MISMATCH",
+            f"Candidate COC grade '{actual_grade}' does not match the requested grade filter.",
+            actual_value=actual_grade,
+            expected_value=expected_grades,
+            confidence=confidence,
+        )
+
     def _evaluate_stcw_basic_rule(self, candidate_facts, constraint):
         certifications = candidate_facts.get("certifications") or {}
         actual_value = certifications.get("stcw_basic_all_valid")
@@ -4560,6 +4636,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_coc_document_gate(candidate_facts, coc_constraint))
+
+        coc_grade_constraint = hard_constraints.get("coc_grade")
+        if "coc_grade_match" in applied_constraints and coc_grade_constraint:
+            activated_rules.append("coc_grade_match")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "COC_GRADE_RULE_REQUIRES_V2_FACTS",
+                    "COC grade matching requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=coc_grade_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_coc_grade_rule(candidate_facts, coc_grade_constraint))
 
         stcw_constraint = hard_constraints.get("stcw_basic")
         if "stcw_basic" in applied_constraints and stcw_constraint:

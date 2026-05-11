@@ -142,6 +142,37 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_coc_grade_rule_pass(self):
+        result = self.analyzer._evaluate_coc_grade_rule(
+            {
+                "certifications": {"coc": {"grade": "chief_officer"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"required_grades": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_coc_grade_rule_fail(self):
+        result = self.analyzer._evaluate_coc_grade_rule(
+            {
+                "certifications": {"coc": {"grade": "2nd_officer"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"required_grades": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_coc_grade_rule_missing_is_unknown(self):
+        result = self.analyzer._evaluate_coc_grade_rule(
+            {
+                "certifications": {"coc": {"grade": None}},
+                "fact_meta": {"certifications.coc": {"confidence": None}},
+            },
+            {"required_grades": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
     def test_rule_skipped_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -426,6 +457,24 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
                 "applied_constraints": ["coc_document_gate"],
                 "hard_constraints": {
                     "certifications": {"coc_required": False, "coc_valid_required": True},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["facts_version"], "1.1")
+        self.assertEqual(result["results"][0]["unknown_reason"], "VERSION_MISMATCH_UNKNOWN")
+
+    def test_v1_record_on_active_coc_grade_rule_is_version_mismatch_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "facts_version": "1.1",
+                "certifications": {"coc": {"grade": "chief_officer"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["coc_grade_match"],
+                "hard_constraints": {
+                    "coc_grade": {"required_grades": ["chief_officer"]},
                 },
             },
         )

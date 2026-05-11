@@ -261,6 +261,22 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     {"coc_required": True, "coc_valid_required": True},
                 )
 
+    def test_coc_grade_family_variants_map_to_same_requirement(self):
+        prompts = {
+            "chief officer coc": "chief_officer",
+            "coc chief officer": "chief_officer",
+            "chief mate's coc": "chief_officer",
+            "certificate of competency for second engineer": "2nd_engineer",
+        }
+        for prompt, expected_grade in prompts.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("coc_grade_match", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["coc_grade"]["required_grades"],
+                    [expected_grade],
+                )
+
     def test_stcw_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid stcw basic",
