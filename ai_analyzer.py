@@ -876,7 +876,17 @@ class AIResumeAnalyzer:
     LLM_RATE_LIMIT_SLEEP_SECONDS = 0.5
     LLM_REQUEST_TIMEOUT_SECONDS = 45
     LLM_CONTEXT_TEXT_CHAR_LIMIT = 30000
-    V2_ONLY_CONSTRAINT_IDS = {"rank_match", "coc_document_gate", "stcw_basic", "company_continuity"}
+    V2_ONLY_CONSTRAINT_IDS = {
+        "rank_match",
+        "coc_document_gate",
+        "stcw_basic",
+        "company_continuity",
+        "passport_validity",
+        "availability",
+        "coc_grade_match",
+        "stcw_endorsement",
+        "recency",
+    }
     RANK_ALIAS_TABLE = {
         "master": {
             "canonical_id": "master",
@@ -1499,6 +1509,7 @@ class AIResumeAnalyzer:
                         "required_grades": [entry["canonical_id"]],
                         "operator": "contains_any",
                         "display_value": match.group(0).strip(),
+                        "matched_span": match.span(),
                     }
         return None
 
@@ -1656,9 +1667,16 @@ class AIResumeAnalyzer:
             (r"\bchemical tanker endorsement\b", "tanker_chemical", "chemical tanker endorsement"),
             (r"\bgas tanker endorsement\b", "tanker_gas", "gas tanker endorsement"),
         ]
+        matches = []
         for pattern, canonical_id, display_value in mappings:
             if re.search(pattern, prompt, flags=re.IGNORECASE):
-                return {"endorsements_required": [canonical_id], "display_value": display_value}
+                matches.append((canonical_id, display_value))
+        if matches:
+            ordered = list(dict.fromkeys(matches))
+            return {
+                "endorsements_required": [canonical_id for canonical_id, _display in ordered],
+                "display_value": " and ".join(display for _canonical_id, display in ordered),
+            }
 
         if re.search(r"\btanker endorsement\b", prompt, flags=re.IGNORECASE):
             return {"ambiguous": True, "fragment": "tanker endorsement"}
@@ -1679,7 +1697,15 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["age_years"] = age_constraint
             constraints["applied_constraints"].append("age_range")
 
-        rank_constraint = self._extract_rank_constraint(user_prompt)
+        rank_prompt = str(user_prompt or "")
+        coc_grade_constraint = self._extract_coc_grade_constraint(user_prompt)
+        if coc_grade_constraint:
+            matched_span = coc_grade_constraint.get("matched_span")
+            if matched_span and len(matched_span) == 2:
+                start, end = matched_span
+                rank_prompt = f"{rank_prompt[:start]} {rank_prompt[end:]}"
+
+        rank_constraint = self._extract_rank_constraint(rank_prompt)
         if rank_constraint:
             constraints["hard_constraints"]["rank"] = rank_constraint
             constraints["applied_constraints"].append("rank_match")
@@ -1699,8 +1725,9 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["certifications"] = coc_constraint
             constraints["applied_constraints"].append("coc_document_gate")
 
-        coc_grade_constraint = self._extract_coc_grade_constraint(user_prompt)
         if coc_grade_constraint:
+            coc_grade_constraint = dict(coc_grade_constraint)
+            coc_grade_constraint.pop("matched_span", None)
             constraints["hard_constraints"]["coc_grade"] = coc_grade_constraint
             constraints["applied_constraints"].append("coc_grade_match")
 
@@ -2800,7 +2827,7 @@ class AIResumeAnalyzer:
                 "availability_date": start_date,
                 "availability_end_date": end_date,
                 "availability_status": status or "PARSED",
-                "confidence": 0.9 if end_date else 0.8,
+                "confidence": 0.9 if end_date else 0.85,
                 "extraction_method": "availability_details_window",
                 "source_label": "availability_details",
             }

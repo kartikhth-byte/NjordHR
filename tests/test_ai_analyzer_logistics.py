@@ -130,6 +130,17 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["availability_end_date"], date(2026, 6, 15))
         self.assertEqual(fact["availability_status"], "PARSED")
 
+    def test_extract_logistics_availability_window_single_date_keeps_immediate_and_threshold_confidence(self):
+        raw_text = (
+            "Availability Details Applied For Rank Chief Officer Present Rank Chief Officer "
+            "From date - Till date 30-Mar-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_availability_fact_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["availability_date"], date(2026, 3, 30))
+        self.assertIsNone(fact["availability_end_date"])
+        self.assertEqual(fact["availability_status"], "immediately")
+        self.assertEqual(fact["confidence"], 0.85)
+
 
 if __name__ == "__main__":
     unittest.main()

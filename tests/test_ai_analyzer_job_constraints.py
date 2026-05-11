@@ -244,6 +244,14 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ["dp_operational"],
         )
 
+    def test_multi_endorsement_query_preserves_all_canonical_values(self):
+        constraints = self.analyzer._extract_job_constraints("DPO and GMDSS required", rank=self.rank)
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["dp_operational", "gmdss"],
+        )
+
     def test_coc_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid coc",
@@ -276,6 +284,15 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     constraints["hard_constraints"]["coc_grade"]["required_grades"],
                     [expected_grade],
                 )
+
+    def test_coc_grade_prompt_does_not_force_matching_rank(self):
+        constraints = self.analyzer._extract_job_constraints("chief mate coc", rank=self.rank)
+        self.assertIn("coc_grade_match", constraints["applied_constraints"])
+        self.assertNotIn("rank_match", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["coc_grade"]["required_grades"],
+            ["chief_officer"],
+        )
 
     def test_stcw_family_variants_map_to_same_requirement(self):
         prompts = [
@@ -410,6 +427,13 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("DP2", constraints["parsing_notes"])
         self.assertNotIn("stcw_endorsement", constraints["unapplied_constraints"])
         self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
+
+    def test_v1_candidate_with_new_family_triggers_sync_reextract(self):
+        should_retry = self.analyzer._should_try_sync_reextract(
+            {"facts_version": "1.1"},
+            {"applied_constraints": ["availability"], "hard_constraints": {}},
+        )
+        self.assertTrue(should_retry)
 
     def test_unclassifiable_fragment_populates_parsing_notes(self):
         constraints = self.analyzer._extract_job_constraints("VLCC-ish but not exactly", rank=self.rank)

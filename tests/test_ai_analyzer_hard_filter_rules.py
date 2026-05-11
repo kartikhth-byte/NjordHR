@@ -367,6 +367,21 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "PASS")
 
+    def test_availability_rule_pass_for_immediate_single_date_window(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_date": "2026-03-30",
+                    "availability_end_date": None,
+                    "availability_status": "immediately",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.85}},
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+
     def test_availability_rule_unknown_when_missing(self):
         result = self.analyzer._evaluate_availability_rule(
             {
