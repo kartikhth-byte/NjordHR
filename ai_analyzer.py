@@ -12,6 +12,7 @@ import io
 import threading
 from pathlib import Path
 from datetime import UTC, datetime, date
+from collections import Counter
 
 # --- Core Dependencies ---
 import requests
@@ -454,12 +455,17 @@ class RAGPrepper:
             self.last_error = f"Could not list Gemini models: {e}"
             return []
 
-    def _chunk_metadata(self, resume_id, rank, chunk_text):
-        return {
+    def _chunk_metadata(self, resume_id, rank, chunk_text, filename=None, source_path=None):
+        metadata = {
             "resume_id": resume_id,
             "rank": rank,
             "raw_text": chunk_text,
         }
+        if filename:
+            metadata["filename"] = str(filename)
+        if source_path:
+            metadata["source_path"] = str(source_path)
+        return metadata
 
     def _split_structure_blocks(self, text):
         normalized = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
@@ -514,7 +520,7 @@ class RAGPrepper:
 
         return chunks
 
-    def chunk_text(self, text, resume_id, rank):
+    def chunk_text(self, text, resume_id, rank, filename=None, source_path=None):
         chunk_size, overlap = 400, 50
         blocks = self._split_structure_blocks(text)
         if not blocks:
@@ -540,7 +546,9 @@ class RAGPrepper:
                 if chunk_text:
                     chunks.append({
                         "text": chunk_text,
-                        "metadata": self._chunk_metadata(resume_id, rank, chunk_text),
+                        "metadata": self._chunk_metadata(
+                            resume_id, rank, chunk_text, filename=filename, source_path=source_path
+                        ),
                     })
                     overlap_seed = " ".join(chunk_text.split()[-overlap:])
                 current_units = [overlap_seed, unit] if overlap_seed else [unit]
@@ -555,7 +563,9 @@ class RAGPrepper:
             if chunk_text:
                 chunks.append({
                     "text": chunk_text,
-                    "metadata": self._chunk_metadata(resume_id, rank, chunk_text),
+                    "metadata": self._chunk_metadata(
+                        resume_id, rank, chunk_text, filename=filename, source_path=source_path
+                    ),
                 })
 
         return chunks
@@ -864,7 +874,8 @@ class AIResumeAnalyzer:
     SYNC_REEXTRACT_TIMEOUT_SECONDS = 10
     SYNC_REEXTRACT_WAIT_SECONDS = 12
     LLM_RATE_LIMIT_SLEEP_SECONDS = 0.5
-    V2_ONLY_CONSTRAINT_IDS = {"rank_match", "coc_document_gate", "stcw_basic"}
+    LLM_REQUEST_TIMEOUT_SECONDS = 45
+    V2_ONLY_CONSTRAINT_IDS = {"rank_match", "coc_document_gate", "stcw_basic", "company_continuity"}
     RANK_ALIAS_TABLE = {
         "master": {
             "canonical_id": "master",
@@ -1354,9 +1365,11 @@ class AIResumeAnalyzer:
         range_patterns = [
             r'between\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old',
             r'between\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'between\s+ages?\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
             r'within\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
             r'within\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
             r'with\s*in\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
+            r'age\s+between\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
             r'age\s+range\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
             r'age\s+range\s+of\s+(\d{1,2})\s*-\s*(\d{1,2})',
             r'age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old',
@@ -1387,30 +1400,40 @@ class AIResumeAnalyzer:
         min_patterns = [
             r'at\s+least\s+(\d{1,2})\s+years?\s+old',
             r'older\s+than\s+(\d{1,2})',
+            r'over\s+the\s+age\s+of\s+(\d{1,2})(?:\s+years?)?',
             r'over\s+(\d{1,2})',
+            r'above\s+the\s+age\s+of\s+(\d{1,2})',
             r'above\s+(\d{1,2})',
             r'minimum\s+age\s+(?:of\s+)?(\d{1,2})',
+            r'minimum\s+age\s+should\s+be\s+(\d{1,2})',
         ]
         for pattern in min_patterns:
             match = re.search(pattern, prompt)
             if match:
                 value = int(match.group(1))
-                if 'older than' in pattern or 'over' in pattern or 'above' in pattern:
+                matched_phrase = match.group(0).lower()
+                if any(term in matched_phrase for term in ("older than", "over", "above")):
                     value += 1
                 return {"min_age": value, "max_age": None}
 
         max_patterns = [
             r'up\s+to\s+(\d{1,2})\s+years?\s+old',
             r'younger\s+than\s+(\d{1,2})',
+            r'below\s+the\s+age\s+of\s+(\d{1,2})',
+            r'below\s+age\s+(\d{1,2})',
+            r'less\s+than\s+(\d{1,2})\s+years?\s+old',
+            r'not\s+more\s+than\s+(\d{1,2})\s+years?\s+old',
             r'under\s+(\d{1,2})',
             r'below\s+(\d{1,2})',
             r'maximum\s+age\s+(?:of\s+)?(\d{1,2})',
+            r'maximum\s+age\s+should\s+be\s+(\d{1,2})',
         ]
         for pattern in max_patterns:
             match = re.search(pattern, prompt)
             if match:
                 value = int(match.group(1))
-                if 'younger than' in pattern or 'under' in pattern or 'below' in pattern:
+                matched_phrase = match.group(0).lower()
+                if any(term in matched_phrase for term in ("younger than", "under", "below", "less than")):
                     value -= 1
                 return {"min_age": None, "max_age": value}
 
@@ -1439,9 +1462,13 @@ class AIResumeAnalyzer:
         patterns = [
             r"\bvalid\s+coc\b",
             r"\bcoc\s+required\b",
+            r"\bcoc\s+mandatory\b",
+            r"\bcoc\s+holder\b",
             r"\bvalid\s+certificate\s+of\s+competency\b",
             r"\bcertificate\s+of\s+competency\s+required\b",
+            r"\bvalid\s+certificate\s+of\s+competency\s+required\b",
             r"\bmust\s+hold\s+valid\s+coc\b",
+            r"\bmust\s+hold\s+coc\b",
         ]
         if any(re.search(pattern, prompt) for pattern in patterns):
             return {
@@ -1455,8 +1482,11 @@ class AIResumeAnalyzer:
         patterns = [
             r"\bvalid\s+stcw\s+basic\b",
             r"\bstcw\s+basic\s+required\b",
+            r"\bbasic\s+stcw\s+required\b",
+            r"\ball\s+basic\s+stcw\s+required\b",
             r"\bmust\s+hold\s+all\s+basic\s+stcw\s+certificates\b",
             r"\bvalid\s+stcw\s+basic\s+required\b",
+            r"\bmust\s+hold\s+valid\s+basic\s+stcw\b",
         ]
         if any(re.search(pattern, prompt) for pattern in patterns):
             return {"required": True}
@@ -1464,15 +1494,49 @@ class AIResumeAnalyzer:
 
     def _extract_min_sea_service_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
-        match = re.search(r"\b(\d+)\s*\+?\s*(years?|months?)\b", prompt, flags=re.IGNORECASE)
-        if not match:
-            return None
-        value = int(match.group(1))
-        unit = match.group(2).lower()
-        months = value * 12 if unit.startswith("year") else value
-        original_phrase = match.group(0).strip()
-        if re.search(r"\bsea\s+service\b|\bexperience\b", prompt, flags=re.IGNORECASE):
+        cleaned_prompt = self._strip_age_constraint_phrases(prompt)
+        patterns = [
+            r"\b(?:minimum|at\s+least)?\s*(\d+)\s*\+?\s*(years?|months?)\s*(?:of\s+)?(sea\s+service|sea\s+time|sailing\s+experience)\b",
+            r"\b(?:minimum|at\s+least)?\s*(\d+)\s*\+?\s*(years?|months?)\s*(?:of\s+)?experience\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, cleaned_prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            value = int(match.group(1))
+            unit = match.group(2).lower()
+            months = value * 12 if unit.startswith("year") else value
+            original_phrase = match.group(0).strip()
             return {"min_total_months": months, "display_value": original_phrase, "operator": "gte"}
+        return None
+
+    def _extract_company_continuity_constraint(self, user_prompt):
+        prompt = " ".join(str(user_prompt or "").split())
+        if not prompt:
+            return None
+
+        patterns = [
+            (r"\b(?:same|one)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
+            (r"\bmore\s+than\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gt"),
+            (r"\b(?:at\s+least|minimum)\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gte"),
+            (r"\bserved\s+(?:at\s+least|minimum)\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gte"),
+            (r"\b(?:same|one)\s+(?:company|employer)\s+(?:for|with|at\s+least|minimum)\s+(\d+)\s+contracts?\b", "gte"),
+            (r"\bhas\s+worked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
+            (r"\bhas\s+worked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+(\d+)\s+contracts?\b", "gte"),
+            (r"\bworked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
+            (r"\bworked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+(\d+)\s+contracts?\b", "gte"),
+        ]
+        for pattern, mode in patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            value = int(match.group(1))
+            minimum = value + 1 if mode == "gt" else value
+            return {
+                "min_same_company_contract_count": minimum,
+                "display_value": match.group(0).strip(),
+                "operator": "gte",
+            }
         return None
 
     def _extract_vessel_type_constraint(self, user_prompt):
@@ -1583,6 +1647,11 @@ class AIResumeAnalyzer:
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
             constraints["applied_constraints"].append("experience_ship_type")
+
+        company_continuity_constraint = self._extract_company_continuity_constraint(user_prompt)
+        if company_continuity_constraint:
+            constraints["hard_constraints"]["company_continuity"] = company_continuity_constraint
+            constraints["applied_constraints"].append("company_continuity")
 
         sea_service_constraint = self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
@@ -1846,7 +1915,7 @@ class AIResumeAnalyzer:
         prompt = self._normalize_ship_type(user_prompt)
         if not prompt:
             return None
-        if not any(token in prompt for token in ("experience", "experienced", "sailed", "worked on", "vessel", "ship")):
+        if not any(token in prompt for token in ("experience", "experienced", "sailed", "worked on", "vessel", "ship", "background")):
             return None
         configured_matches = self._extract_configured_ship_types(prompt)
         if configured_matches:
@@ -1864,6 +1933,8 @@ class AIResumeAnalyzer:
                     rf'\bexperienced\s+on\s+{escaped}\b',
                     rf'\bsailed on\s+{escaped}\b',
                     rf'\bworked on\s+{escaped}\b',
+                    rf'\b{escaped}\s+background\b',
+                    rf'\bbackground\s+(?:on|in|with)?\s*{escaped}\b',
                 ]
                 if any(re.search(pattern, prompt) for pattern in patterns):
                     return canonical
@@ -1937,18 +2008,42 @@ class AIResumeAnalyzer:
         group_patterns = [
             (
                 "usa",
-                [r"\bvalid\s+us\s+visa\b", r"\bcurrent\s+us\s+visa\b", r"\bhas\s+a\s+valid\s+us\s+visa\b",
-                 r"\bus\s+visa\b", r"\bamerican\s+visa\b", r"\bus\s+work\s+authorization\b"],
+                [
+                    r"\bvalid\s+us\s+visa\b",
+                    r"\bcurrent\s+us\s+visa\b",
+                    r"\bhas\s+a\s+valid\s+us\s+visa\b",
+                    r"\bholding\s+valid\s+us\s+visa\b",
+                    r"\bwith\s+valid\s+us\s+visa\b",
+                    r"\bmust\s+have\s+valid\s+us\s+visa\b",
+                    r"\bus\s+visa\s+holder\b",
+                    r"\bus\s+visa\b",
+                    r"\bamerican\s+visa\b",
+                    r"\bus\s+work\s+authorization\b",
+                ],
                 "valid US visa",
             ),
             (
                 "australia",
-                [r"\bvalid\s+australia(?:n)?\s+visa\b", r"\bcurrent\s+australia(?:n)?\s+visa\b", r"\baustralia(?:n)?\s+visa\b"],
+                [
+                    r"\bvalid\s+australia(?:n)?\s+visa\b",
+                    r"\bcurrent\s+australia(?:n)?\s+visa\b",
+                    r"\bholding\s+valid\s+australia(?:n)?\s+visa\b",
+                    r"\bwith\s+valid\s+australia(?:n)?\s+visa\b",
+                    r"\baustralia(?:n)?\s+visa\s+holder\b",
+                    r"\baustralia(?:n)?\s+visa\b",
+                ],
                 "valid Australia visa",
             ),
             (
                 "schengen",
-                [r"\bvalid\s+schengen\s+visa\b", r"\bcurrent\s+schengen\s+visa\b", r"\bschengen\s+visa\b"],
+                [
+                    r"\bvalid\s+schengen\s+visa\b",
+                    r"\bcurrent\s+schengen\s+visa\b",
+                    r"\bholding\s+valid\s+schengen\s+visa\b",
+                    r"\bwith\s+valid\s+schengen\s+visa\b",
+                    r"\bschengen\s+visa\s+holder\b",
+                    r"\bschengen\s+visa\b",
+                ],
                 "valid Schengen visa",
             ),
         ]
@@ -2005,9 +2100,11 @@ class AIResumeAnalyzer:
         patterns = [
             r'between\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
             r'between\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'between\s+ages?\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'within\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'within\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'with\s*in\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
+            r'age\s+between\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'age\s+range\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'age\s+range\s+of\s+\d{1,2}\s*-\s*\d{1,2}',
             r'age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
@@ -2016,14 +2113,22 @@ class AIResumeAnalyzer:
             r'\d{1,2}\s*(?:-|to)\s*\d{1,2}\s+years?\s+old',
             r'at\s+least\s+\d{1,2}\s+years?\s+old',
             r'older\s+than\s+\d{1,2}',
+            r'over\s+the\s+age\s+of\s+\d{1,2}(?:\s+years?)?',
             r'over\s+\d{1,2}',
+            r'above\s+the\s+age\s+of\s+\d{1,2}',
             r'above\s+\d{1,2}',
             r'minimum\s+age\s+(?:of\s+)?\d{1,2}',
+            r'minimum\s+age\s+should\s+be\s+\d{1,2}',
             r'up\s+to\s+\d{1,2}\s+years?\s+old',
             r'younger\s+than\s+\d{1,2}',
+            r'below\s+the\s+age\s+of\s+\d{1,2}',
+            r'below\s+age\s+\d{1,2}',
+            r'less\s+than\s+\d{1,2}\s+years?\s+old',
+            r'not\s+more\s+than\s+\d{1,2}\s+years?\s+old',
             r'under\s+\d{1,2}',
             r'below\s+\d{1,2}',
             r'maximum\s+age\s+(?:of\s+)?\d{1,2}',
+            r'maximum\s+age\s+should\s+be\s+\d{1,2}',
         ]
 
         cleaned = prompt
@@ -2095,6 +2200,26 @@ class AIResumeAnalyzer:
         prompt = str(user_prompt or "").strip().lower()
         if not prompt:
             return False
+
+        applied_constraints = (job_constraints or {}).get("applied_constraints") or []
+        unapplied_constraints = (job_constraints or {}).get("unapplied_constraints") or []
+
+        # Preserve graceful-failure behavior for prompts that are already
+        # recognized as unsupported structured constraints.
+        if not applied_constraints and not unapplied_constraints:
+            experience_semantic_groups = [
+                (
+                    r"\b(?:experience|experienced|background|exposure)\b",
+                    r"\b(?:ship|ships|vessel|vessels|fleet)\b",
+                ),
+                (
+                    r"\b(?:worked|working|sailed|sailing|served|serving)\b",
+                    r"\b(?:ship|ships|vessel|vessels|fleet|company|employer|contract|contracts)\b",
+                ),
+            ]
+            for left_pattern, right_pattern in experience_semantic_groups:
+                if re.search(left_pattern, prompt, flags=re.IGNORECASE) and re.search(right_pattern, prompt, flags=re.IGNORECASE):
+                    return True
 
         semantic_patterns = [
             r"\bleadership\b",
@@ -2176,6 +2301,177 @@ class AIResumeAnalyzer:
         files = data.get("files") if isinstance(data, dict) else {}
         return files if isinstance(files, dict) else {}
 
+    def _extract_same_company_contract_count_fact_from_text(self, raw_text, original_path=None):
+        text = str(raw_text or "")
+        if not text.strip():
+            return {
+                "count": None,
+                "repeat_employer_present": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": None,
+            }
+
+        path_name = Path(original_path).name if original_path else ""
+        if path_name.upper().startswith("EMAIL_"):
+            return {
+                "count": None,
+                "repeat_employer_present": None,
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "email_resume_excluded",
+            }
+
+        upper = text.upper()
+        has_seajobs_banner = (
+            "NJORDSHIPS MANAGEMENT INDIA PVT LTD" in upper
+            or "NJORSHIPS MANAGEMENT INDIA PVT LTD" in upper
+        )
+        if "SEAMEN EXPERIENCE DETAILS" not in upper or not has_seajobs_banner:
+            return {
+                "count": None,
+                "repeat_employer_present": None,
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "non_seajobs_resume_excluded",
+            }
+
+        section = self._extract_seajobs_experience_section(text)
+        if not section:
+            return {
+                "count": None,
+                "repeat_employer_present": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "seajobs_resume",
+            }
+
+        company_counts = self._extract_seajobs_company_occurrence_counts(section)
+        if not company_counts:
+            return {
+                "count": None,
+                "repeat_employer_present": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "seajobs_resume",
+            }
+
+        max_count = max(company_counts.values())
+        return {
+            "count": max_count,
+            "repeat_employer_present": max_count >= 2,
+            "status": "PARSED",
+            "confidence": 0.9,
+            "extraction_method": "seajobs_service_history",
+            "source_label": "seajobs_resume",
+        }
+
+    def _extract_seajobs_experience_section(self, text):
+        content = str(text or "")
+        if not content:
+            return ""
+        upper = content.upper()
+        start = upper.find("SEAMEN EXPERIENCE DETAILS")
+        if start < 0:
+            return ""
+        tail = content[start:]
+        upper_tail = tail.upper()
+        end = len(tail)
+        for marker in (
+            "CERTIFICATE DETAILS",
+            "COURSE DETAILS",
+            "ACADEMIC DETAILS",
+            "DANGEROUS CARGO ENDORSEMENT",
+            "TOTAL EXPERIENCE",
+        ):
+            marker_index = upper_tail.find(marker, 40)
+            if marker_index >= 0:
+                end = min(end, marker_index)
+        return tail[: min(end, 5000)].strip()
+
+    def _extract_seajobs_company_occurrence_counts(self, section_text):
+        lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
+        counts = Counter()
+        for line in lines:
+            if "/" not in line:
+                continue
+            upper = line.upper()
+            if "COMPANY NAME / SHIP TYPE" in upper or upper.startswith("# "):
+                continue
+            prefix = line.split("/", 1)[0]
+            normalized = self._normalize_seajobs_company_name(prefix)
+            if normalized:
+                counts[normalized] += 1
+        return counts
+
+    def _normalize_seajobs_company_name(self, raw_company):
+        text = " ".join(str(raw_company or "").split())
+        if not text:
+            return ""
+
+        text = re.sub(r"^\d+\s+", "", text)
+        rank_aliases = sorted(self.RANK_ALIAS_TABLE.keys(), key=len, reverse=True)
+        stripped = True
+        while stripped and text:
+            stripped = False
+            for alias in rank_aliases:
+                alias_pattern = rf"^{re.escape(alias)}\b[\s:.-]*"
+                updated = re.sub(alias_pattern, "", text, flags=re.IGNORECASE).strip()
+                if updated != text:
+                    text = updated
+                    stripped = True
+                    break
+
+        lowered = re.sub(r"[^a-z0-9\s]", " ", text.lower())
+        tokens = [token for token in lowered.split() if token]
+        if not tokens:
+            return ""
+
+        legal_suffixes = {"ltd", "limited", "pvt", "private", "llp", "co", "company"}
+        while tokens and tokens[-1] in legal_suffixes:
+            tokens.pop()
+        if not tokens:
+            return ""
+
+        normalized = "".join(tokens)
+        for suffix in (
+            "limited",
+            "private",
+            "company",
+            "ltd",
+            "pvt",
+            "llp",
+            "co",
+        ):
+            if normalized.endswith(suffix) and len(normalized) > len(suffix) + 2:
+                normalized = normalized[: -len(suffix)]
+                break
+        for suffix in (
+            "shipmanagement",
+            "management",
+            "shipmgmt",
+            "shipping",
+            "services",
+            "service",
+            "maritime",
+            "marine",
+            "lines",
+            "line",
+        ):
+            if normalized.endswith(suffix) and len(normalized) > len(suffix) + 2:
+                normalized = normalized[: -len(suffix)]
+                break
+
+        normalized = normalized.strip()
+        if len(normalized) < 3:
+            return ""
+        return normalized
+
     def _extract_experienced_ship_types_from_text(self, raw_text):
         text = self._normalize_ship_type(raw_text)
         if not text:
@@ -2242,7 +2538,7 @@ class AIResumeAnalyzer:
 
     def _parse_day_first_numeric_date_token(self, token):
         token = str(token or "").strip()
-        match = re.fullmatch(r'(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})', token)
+        match = re.fullmatch(r'(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})', token)
         if not match:
             return None
         return self._build_date_from_match(match.groups(), allow_future=True)
@@ -2821,28 +3117,15 @@ class AIResumeAnalyzer:
 
             numeric_match = re.search(numeric_date_pattern, snippet)
             if numeric_match:
-                first = int(numeric_match.group(1))
-                second = int(numeric_match.group(2))
-                if first > 12 >= second:
-                    parsed = self._build_date_from_match((numeric_match.group(1), numeric_match.group(2), numeric_match.group(3)))
-                    if parsed and 1940 <= parsed.year <= date.today().year:
-                        return {
-                            "dob": parsed,
-                            "status": "PARSED",
-                            "confidence": 0.99,
-                            "extraction_method": "label_scan",
-                            "source_label": source_label,
-                        }
-                if second > 12 >= first:
-                    parsed = self._build_date_from_match((numeric_match.group(2), numeric_match.group(1), numeric_match.group(3)))
-                    if parsed and 1940 <= parsed.year <= date.today().year:
-                        return {
-                            "dob": parsed,
-                            "status": "PARSED",
-                            "confidence": 0.99,
-                            "extraction_method": "label_scan",
-                            "source_label": source_label,
-                        }
+                parsed = self._parse_day_first_numeric_date_token(numeric_match.group(0))
+                if parsed and 1940 <= parsed.year <= date.today().year:
+                    return {
+                        "dob": parsed,
+                        "status": "PARSED",
+                        "confidence": 0.99,
+                        "extraction_method": "label_scan",
+                        "source_label": source_label,
+                    }
                 return {
                     "dob": None,
                     "status": "AMBIGUOUS_NUMERIC",
@@ -3056,6 +3339,7 @@ class AIResumeAnalyzer:
         if not isinstance(applied_ship_types, list):
             applied_ship_types = []
         current_rank_fact = self._extract_rank_fact_from_text(source_text)
+        same_company_fact = self._extract_same_company_contract_count_fact_from_text(source_text, original_path=original_path)
         coc_fact = self._extract_coc_fact_from_text(source_text)
         stcw_fact = self._extract_stcw_fact_from_text(source_text)
         endorsement_facts = self._extract_endorsements_from_text(source_text)
@@ -3119,6 +3403,7 @@ class AIResumeAnalyzer:
             "derived": {
                 "age_years": age_info.get("age"),
                 "age_is_cached": True,
+                "same_company_contract_count_max": same_company_fact.get("count"),
             },
             "fact_meta": {
                 "personal.dob": self._build_fact_meta(
@@ -3144,6 +3429,18 @@ class AIResumeAnalyzer:
                     status="PARSED" if age_info.get("age") is not None else "MISSING",
                     source_label=age_info.get("dob_source_label"),
                     context={"field": "derived.age_years", "derived_from": "personal.dob"},
+                ),
+                "derived.same_company_contract_count_max": self._build_fact_meta(
+                    same_company_fact.get("count"),
+                    confidence=same_company_fact.get("confidence"),
+                    extraction_method=same_company_fact.get("extraction_method", ""),
+                    status=same_company_fact.get("status", "MISSING"),
+                    source_label=same_company_fact.get("source_label"),
+                    context={
+                        "field": "derived.same_company_contract_count_max",
+                        "derived_from": "experience.seajobs_service_history",
+                        "source_scope": "seajobs_only",
+                    },
                 ),
                 "application.applied_ship_types": self._build_fact_meta(
                     applied_ship_types,
@@ -3254,6 +3551,79 @@ class AIResumeAnalyzer:
             "expected_value": expected_value,
             "confidence": confidence,
             "unknown_reason": unknown_reason if decision == "UNKNOWN" else None,
+        }
+
+    def _derive_document_quality_hint(self, candidate_facts, evidence_review_reasons):
+        fact_meta = (candidate_facts or {}).get("fact_meta") or {}
+        key_paths = [
+            "personal.dob",
+            "travel.visa_records",
+            "role.current_rank_normalized",
+            "certifications.coc",
+            "certifications.stcw_basic_all_valid",
+            "logistics.passport_expiry_date",
+        ]
+        statuses = [
+            str((fact_meta.get(path) or {}).get("status") or "").strip().upper()
+            for path in key_paths
+        ]
+        statuses = [status for status in statuses if status]
+        if not statuses:
+            return None
+        if any(status in {"AMBIGUOUS_NUMERIC", "INVALID"} for status in statuses):
+            return "usable_but_noisy"
+        if evidence_review_reasons and all(status == "MISSING" for status in statuses):
+            return "sparse"
+        return None
+
+    def _derive_evidence_review_metadata(self, hard_filter_result, candidate_facts=None):
+        results = list((hard_filter_result or {}).get("results") or [])
+        unknown_reason_types = list(dict.fromkeys(
+            reason.get("unknown_reason")
+            for reason in results
+            if reason.get("unknown_reason")
+        ))
+
+        if "FACTUAL_UNKNOWN" in unknown_reason_types:
+            review_path_type = "factual_unknown"
+            evidence_review_state = "insufficient_evidence"
+        elif "VERSION_MISMATCH_UNKNOWN" in unknown_reason_types:
+            review_path_type = "version_mismatch_unknown"
+            evidence_review_state = "partial_evidence"
+        else:
+            review_path_type = "none"
+            evidence_review_state = "sufficient_evidence"
+
+        reason_map = {
+            "AGE_MISSING": "age_evidence_missing",
+            "AGE_DOB_AMBIGUOUS_FORMAT": "age_evidence_ambiguous",
+            "US_VISA_MISSING": "visa_evidence_missing",
+            "US_VISA_EXPIRY_MISSING": "visa_evidence_missing",
+            "RANK_UNKNOWN": "rank_evidence_incomplete",
+            "RANK_CONFIDENCE_LOW": "rank_evidence_incomplete",
+            "COC_UNKNOWN": "coc_evidence_incomplete",
+            "COC_CONFIDENCE_LOW": "coc_evidence_incomplete",
+            "STCW_BASIC_UNKNOWN": "stcw_evidence_incomplete",
+            "APPLIED_SHIP_TYPE_MISSING": "document_sparse",
+            "EXPERIENCE_SHIP_TYPE_MISSING": "document_sparse",
+        }
+        evidence_review_reasons = []
+        for result in results:
+            reason_code = str(result.get("reason_code") or "").strip()
+            mapped_reason = reason_map.get(reason_code)
+            if mapped_reason and mapped_reason not in evidence_review_reasons:
+                evidence_review_reasons.append(mapped_reason)
+
+        if "VERSION_MISMATCH_UNKNOWN" in unknown_reason_types and "version_mismatch_partial_evaluation" not in evidence_review_reasons:
+            evidence_review_reasons.append("version_mismatch_partial_evaluation")
+
+        document_quality_hint = self._derive_document_quality_hint(candidate_facts, evidence_review_reasons)
+
+        return {
+            "review_path_type": review_path_type,
+            "evidence_review_state": evidence_review_state,
+            "evidence_review_reasons": evidence_review_reasons,
+            "document_quality_hint": document_quality_hint,
         }
 
     def _evaluate_rule(self, operator, actual_value, expected_value):
@@ -3501,6 +3871,17 @@ class AIResumeAnalyzer:
                 confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
             )
 
+        if expired_records:
+            visa_type, expiry_date = expired_records[0]
+            return self._base_rule_result(
+                "FAIL",
+                "US_VISA_EXPIRED",
+                f"Visa {visa_type} expired on {expiry_date.isoformat()}.",
+                actual_value={"visa_type": visa_type, "expiry_date": expiry_date.isoformat()},
+                expected_value=constraint,
+                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+            )
+
         if invalid_records:
             return self._base_rule_result(
                 "FAIL",
@@ -3520,17 +3901,6 @@ class AIResumeAnalyzer:
                 expected_value=constraint,
                 confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
                 unknown_reason="FACTUAL_UNKNOWN",
-            )
-
-        if expired_records:
-            visa_type, expiry_date = expired_records[0]
-            return self._base_rule_result(
-                "FAIL",
-                "US_VISA_EXPIRED",
-                f"Visa {visa_type} expired on {expiry_date.isoformat()}.",
-                actual_value={"visa_type": visa_type, "expiry_date": expiry_date.isoformat()},
-                expected_value=constraint,
-                confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
             )
 
         return self._base_rule_result(
@@ -3690,6 +4060,55 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_company_continuity_rule(self, candidate_facts, constraint):
+        derived = candidate_facts.get("derived") or {}
+        fact_meta = (candidate_facts.get("fact_meta") or {}).get("derived.same_company_contract_count_max") or {}
+        actual_count = derived.get("same_company_contract_count_max")
+        minimum = int((constraint or {}).get("min_same_company_contract_count") or 0)
+        status = str(fact_meta.get("status") or "MISSING")
+        confidence = fact_meta.get("confidence")
+
+        if status == "SOURCE_EXCLUDED":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COMPANY_CONTINUITY_SOURCE_EXCLUDED",
+                "Same-company contract count is currently supported only for SeaJobs-style resumes.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if actual_count is None:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COMPANY_CONTINUITY_MISSING",
+                "Could not determine same-company contract history from the selected resume.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if actual_count >= minimum:
+            return self._base_rule_result(
+                "PASS",
+                "COMPANY_CONTINUITY_MATCH",
+                f"Candidate has {actual_count} contract(s) with the same company, meeting the minimum {minimum}.",
+                actual_value=actual_count,
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "COMPANY_CONTINUITY_INSUFFICIENT",
+            f"Candidate has {actual_count} contract(s) with the same company, below the required minimum {minimum}.",
+            actual_value=actual_count,
+            expected_value=constraint,
+            confidence=confidence,
+        )
+
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
@@ -3765,6 +4184,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_stcw_basic_rule(candidate_facts, stcw_constraint))
+
+        company_continuity_constraint = hard_constraints.get("company_continuity")
+        if "company_continuity" in applied_constraints and company_continuity_constraint:
+            activated_rules.append("company_continuity")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "COMPANY_CONTINUITY_RULE_REQUIRES_V2_FACTS",
+                    "Same-company contract continuity requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=company_continuity_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_company_continuity_rule(candidate_facts, company_continuity_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if "applied_ship_type" in applied_constraints and ship_type_constraint:
@@ -3916,7 +4351,13 @@ class AIResumeAnalyzer:
                 continue
             
             resume_id = self.registry.generate_resume_id(str(path))
-            chunks = self.prepper.chunk_text(text, resume_id, rank)
+            chunks = self.prepper.chunk_text(
+                text,
+                resume_id,
+                rank,
+                filename=path.name,
+                source_path=str(path),
+            )
             embeddings = self.prepper.get_embeddings([c['text'] for c in chunks])
 
             if embeddings:
@@ -4120,11 +4561,18 @@ class AIResumeAnalyzer:
         
         return merged_candidates
 
-    def _reason_with_llm(self, prompt, retrieved_chunks, past_feedback):
-        """Enhanced LLM reasoning with confidence scoring and past feedback"""
+    def _llm_compound_note_from_prompt(self, prompt):
+        original_prompt = str(prompt or "").splitlines()[0].strip()
+        if not original_prompt:
+            return ""
+        is_compound, operator, _sub_queries = self._parse_compound_query(original_prompt)
+        if is_compound and operator == 'AND':
+            return '[Note: This is a compound query - ALL conditions must be satisfied]'
+        return ""
+
+    def _build_llm_reasoning_prompt(self, prompt, retrieved_chunks, past_feedback, applied_constraints=None):
         context = "\n---\n".join([chunk['metadata']['raw_text'] for chunk in retrieved_chunks])
-        
-        # Build feedback context
+
         feedback_context = ""
         if past_feedback:
             feedback_context = "\n\nPast User Corrections (learn from these):\n"
@@ -4136,12 +4584,86 @@ class AIResumeAnalyzer:
                 if user_notes:
                     feedback_context += f" - Note: {user_notes}"
                 feedback_context += "\n"
-        
-        # Detect compound query for enhanced prompt
-        is_compound = ' and ' in prompt.lower() or ' or ' in prompt.lower()
-        compound_note = '[Note: This is a compound query - ALL conditions must be satisfied]' if ' and ' in prompt.lower() else ''
-        
-        reasoning_prompt = f"""
+
+        compound_note = self._llm_compound_note_from_prompt(prompt)
+        applied_constraint_set = set(applied_constraints or [])
+
+        sections = []
+        if "us_visa" in applied_constraint_set:
+            sections.append(
+                """1. **VISA VALIDATION - VERY STRICT:**
+   - Supported visa evidence includes: "US Visa", "C1/D (USA)", "C1 (USA)", "D (USA)", "B1/B2 (USA)", "Australia Entry visa", "MCV (Australia)", and "Schengen"
+   - If a visa field shows "Other", blank, "N/A", or "None" -> This means NO VALID VISA (mark FALSE)
+   - If a supported visa type is present -> Check expiry date
+   - If expiry date is before the current date -> EXPIRED (mark FALSE)
+   - If expiry date shows year "0001" or "-0001" -> INVALID (mark FALSE)
+   - ONLY mark TRUE if there's a specific supported visa type with valid future expiry
+   - NEVER substitute one country's visa for another country's visa
+   - A certificate, CoC, license, flag endorsement, or document issued by a country is NOT a visa or right-to-work unless the resume explicitly says so"""
+            )
+
+        sections.append(
+            """2. COMPOUND REQUIREMENTS:
+   - "A and B" requires BOTH A AND B
+   - "A or B" requires EITHER A OR B (or both)
+   - If ANY required condition (in AND queries) is missing -> mark FALSE"""
+        )
+
+        sections.append(
+            '''3. TERMINOLOGY FLEXIBILITY:
+   - "Oil tanker" matches: "crude oil tanker", "product tanker", "VLCC", "oil/chem tanker"
+   - "Bulk carrier" matches: "dry cargo vessel", "handy size", "capesize", "panamax"'''
+        )
+        if "us_visa" in applied_constraint_set:
+            sections[-1] = (
+                '''3. TERMINOLOGY FLEXIBILITY:
+   - "US visa" matches: "C1/D visa", "C1 visa", "D visa", "B1/B2 visa", "American visa", "US work authorization"
+   - "Australia visa" matches: "Australia Entry visa", "MCV (Australia)"
+   - "Schengen visa" matches: "Schengen"
+   - "UK visa" does NOT match US visa, Schengen visa, or UK-issued certificates
+   - "Oil tanker" matches: "crude oil tanker", "product tanker", "VLCC", "oil/chem tanker"
+   - "Bulk carrier" matches: "dry cargo vessel", "handy size", "capesize", "panamax"'''
+            )
+
+        sections.append(
+            """4. CONFIDENCE SCORING:
+   - 0.9-1.0: Perfect match, all requirements clearly met with strong evidence
+   - 0.7-0.89: Good match, requirements met but some minor ambiguity
+   - 0.5-0.69: Uncertain, some requirements unclear or borderline (FLAG FOR REVIEW)
+   - 0.0-0.49: Poor match, requirements not met or very unclear
+
+   **Flag as "uncertain" if confidence < 0.7 - user will review these**"""
+        )
+
+        reason_clarity = """5. REASON CLARITY:
+   - Quantify experience (years, vessel types)
+   - State what's missing if no-match
+   - Use natural language recruiters understand"""
+        if "us_visa" in applied_constraint_set:
+            reason_clarity = """5. REASON CLARITY:
+   - Be specific about visa status (type, expiry date)
+   - Quantify experience (years, vessel types)
+   - State what's missing if no-match
+   - Use natural language recruiters understand"""
+        sections.append(reason_clarity)
+
+        examples = [
+            """{"is_match": true, "reason": "Candidate has 12 years as Chief Engineer on oil tankers including VLCCs", "confidence": 0.95}""",
+            """{"is_match": false, "reason": "Candidate has bulk carrier background but no clear oil tanker experience", "confidence": 0.3}""",
+            """{"is_match": true, "reason": "Candidate has relevant vessel experience, but the exact tenure requirement is only partially evidenced", "confidence": 0.65}""",
+        ]
+        if "us_visa" in applied_constraint_set:
+            examples = [
+                """{"is_match": true, "reason": "Candidate has valid US C1/D visa expiring 2028 and 12 years as Chief Engineer on oil tankers including VLCCs", "confidence": 0.95}""",
+                """{"is_match": false, "reason": "US visa field shows 'Other' (not a valid US visa type), though candidate has extensive oil tanker experience", "confidence": 0.3}""",
+                """{"is_match": true, "reason": "Valid US B1/B2 visa until 2027, but only 3 years oil tanker experience (requirement was 5+)", "confidence": 0.65}""",
+                """{"is_match": false, "reason": "US visa expired in 2023, candidate needs valid current visa", "confidence": 0.2}""",
+            ]
+
+        instruction_block = "\n\n".join(sections)
+        example_block = "\n\n".join(examples)
+
+        return f"""
 Analyze the resume context below to determine if it matches the user's requirements.
 
 User Requirements: "{prompt}"
@@ -4153,63 +4675,37 @@ Resume Context:
 
 Instructions:
 
-1. **VISA VALIDATION - VERY STRICT:**
-   - Supported visa evidence includes: "US Visa", "C1/D (USA)", "C1 (USA)", "D (USA)", "B1/B2 (USA)", "Australia Entry visa", "MCV (Australia)", and "Schengen"
-   - If a visa field shows "Other", blank, "N/A", or "None" → This means NO VALID VISA (mark FALSE)
-   - If a supported visa type is present → Check expiry date
-   - If expiry date is before the current date → EXPIRED (mark FALSE)
-   - If expiry date shows year "0001" or "-0001" → INVALID (mark FALSE)
-   - ONLY mark TRUE if there's a specific supported visa type with valid future expiry
-   - NEVER substitute one country's visa for another country's visa
-   - A certificate, CoC, license, flag endorsement, or document issued by a country is NOT a visa or right-to-work unless the resume explicitly says so
-
-2. COMPOUND REQUIREMENTS:
-   - "A and B" requires BOTH A AND B
-   - "A or B" requires EITHER A OR B (or both)
-   - If ANY required condition (in AND queries) is missing → mark FALSE
-
-3. TERMINOLOGY FLEXIBILITY:
-   - "US visa" matches: "C1/D visa", "C1 visa", "D visa", "B1/B2 visa", "American visa", "US work authorization"
-   - "Australia visa" matches: "Australia Entry visa", "MCV (Australia)"
-   - "Schengen visa" matches: "Schengen"
-   - "UK visa" does NOT match US visa, Schengen visa, or UK-issued certificates
-   - "Oil tanker" matches: "crude oil tanker", "product tanker", "VLCC", "oil/chem tanker"
-   - "Bulk carrier" matches: "dry cargo vessel", "handy size", "capesize", "panamax"
-
-4. CONFIDENCE SCORING:
-   - 0.9-1.0: Perfect match, all requirements clearly met with strong evidence
-   - 0.7-0.89: Good match, requirements met but some minor ambiguity
-   - 0.5-0.69: Uncertain, some requirements unclear or borderline (FLAG FOR REVIEW)
-   - 0.0-0.49: Poor match, requirements not met or very unclear
-   
-   **Flag as "uncertain" if confidence < 0.7 - user will review these**
-
-5. REASON CLARITY:
-   - Be specific about visa status (type, expiry date)
-   - Quantify experience (years, vessel types)
-   - State what's missing if no-match
-   - Use natural language recruiters understand
+{instruction_block}
 
 Respond ONLY with valid JSON (no markdown):
 {{"is_match": boolean, "reason": "Clear specific explanation", "confidence": 0.0-1.0}}
 
 Examples of GOOD responses:
 
-{{"is_match": true, "reason": "Candidate has valid US C1/D visa expiring 2028 and 12 years as Chief Engineer on oil tankers including VLCCs", "confidence": 0.95}}
-
-{{"is_match": false, "reason": "US visa field shows 'Other' (not a valid US visa type), though candidate has extensive oil tanker experience", "confidence": 0.3}}
-
-{{"is_match": true, "reason": "Valid US B1/B2 visa until 2027, but only 3 years oil tanker experience (requirement was 5+)", "confidence": 0.65}}
-
-{{"is_match": false, "reason": "US visa expired in 2023, candidate needs valid current visa", "confidence": 0.2}}
+{example_block}
 """
+
+    def _reason_with_llm(self, prompt, retrieved_chunks, past_feedback):
+        """Enhanced LLM reasoning with confidence scoring and past feedback"""
+        applied_constraints = getattr(self, "_llm_applied_constraints", [])
+        reasoning_prompt = self._build_llm_reasoning_prompt(
+            prompt,
+            retrieved_chunks,
+            past_feedback,
+            applied_constraints=applied_constraints,
+        )
         
         api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.config.reasoning_model}:generateContent"
         headers = {'Content-Type': 'application/json', 'x-goog-api-key': self.config.gemini_api_key}
         payload = {"contents": [{"parts": [{"text": reasoning_prompt}]}]}
         
         try:
-            response = requests.post(api_url, headers=headers, json=payload)
+            response = requests.post(
+                api_url,
+                headers=headers,
+                json=payload,
+                timeout=self.LLM_REQUEST_TIMEOUT_SECONDS,
+            )
             response.raise_for_status()
             result_text = response.json()['candidates'][0]['content']['parts'][0]['text']
             
@@ -4278,6 +4774,7 @@ Examples of GOOD responses:
                         "vessel_type": "vessel type",
                         "availability": "availability",
                         "stcw_endorsement": "STCW endorsement",
+                        "company_continuity": "same-company contract continuity",
                     }
                     unapplied_labels = [
                         friendly_labels.get(constraint_id, constraint_id)
@@ -4435,6 +4932,7 @@ Examples of GOOD responses:
                     "result_bucket": "excluded",
                     "sync_reextract": reextract_meta,
                 }
+                audit_entry.update(self._derive_evidence_review_metadata(hard_filter_result, candidate_facts))
 
                 if reextract_meta and not reextract_meta.get("succeeded"):
                     partial_evaluation["occurred"] = True
@@ -4470,6 +4968,7 @@ Examples of GOOD responses:
                         for reason in hard_filter_result["results"]
                         if reason.get("unknown_reason")
                     ))
+                    evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
                     unknown_match = {
                         "filename": filename,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
@@ -4485,6 +4984,7 @@ Examples of GOOD responses:
                         "partial_evaluation": bool(reextract_meta and not reextract_meta.get("succeeded")),
                         "partial_evaluation_reason": str((reextract_meta or {}).get("fallback_reason") or ""),
                     }
+                    unknown_match.update(evidence_review)
                     unknown_matches.append(unknown_match)
                     yield {
                         "type": "hard_filter_unknown",
@@ -4503,8 +5003,6 @@ Examples of GOOD responses:
                     continue
 
                 hard_filter_summary["passed"] += 1
-                audit_entry["llm_reached"] = True
-                audit_entry["result_bucket"] = "llm_no_match"
                 if age_constraint and age_value is not None and dob_value is not None:
                     prompt_for_reasoning = (
                         f"{user_prompt}\n"
@@ -4512,17 +5010,13 @@ Examples of GOOD responses:
                         f"(DOB: {dob_value.isoformat()}). Treat this age as authoritative. "
                         f"This candidate already passed the deterministic age gate."
                     )
-                
-                # LLM reasoning with confidence
-                llm_started_at = time.perf_counter()
-                llm_result = self._reason_with_llm(prompt_for_reasoning, chunks, past_feedback)
-                self._record_perf_timing(perf_state, "llm_reasoning", time.perf_counter() - llm_started_at)
-                
-                if llm_result.get('is_match'):
+
+                if structured_only_prompt and not has_semantic_intent:
+                    evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
                     match_data = {
                         "filename": filename,
-                        "reason": llm_result.get('reason', 'Match found.'),
-                        "confidence": llm_result.get('confidence', 0.5),
+                        "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Passed deterministic hard filters.",
+                        "confidence": 1.0,
                         "hard_filter_decision": hard_filter_result["decision"],
                         "hard_filter_reasons": hard_filter_result["results"],
                         "computed_age": age_value,
@@ -4532,19 +5026,54 @@ Examples of GOOD responses:
                         "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                         "facts_version": hard_filter_result.get("facts_version"),
                     }
-                    
-                    # Flag uncertain matches (confidence < 0.7)
-                    if match_data['confidence'] < 0.7:
-                        uncertain_matches.append(match_data)
-                        audit_entry["result_bucket"] = "uncertain_match"
-                        yield {"type": "uncertain_found", "match": match_data, 
-                               "current": i, "total": total_candidates}
-                    else:
-                        verified_matches.append(match_data)
-                        audit_entry["result_bucket"] = "verified_match"
-                        yield {"type": "match_found", "match": match_data, 
-                               "current": i, "total": total_candidates}
+                    match_data.update(evidence_review)
+                    verified_matches.append(match_data)
+                    audit_entry["result_bucket"] = "verified_match"
+                    yield {"type": "match_found", "match": match_data,
+                           "current": i, "total": total_candidates}
                     hard_filter_summary["matched"] += 1
+                else:
+                    audit_entry["llm_reached"] = True
+                    audit_entry["result_bucket"] = "llm_no_match"
+
+                    # LLM reasoning with confidence
+                    llm_started_at = time.perf_counter()
+                    self._llm_applied_constraints = list(job_constraints.get("applied_constraints", []))
+                    try:
+                        llm_result = self._reason_with_llm(prompt_for_reasoning, chunks, past_feedback)
+                    finally:
+                        self._llm_applied_constraints = []
+                    self._record_perf_timing(perf_state, "llm_reasoning", time.perf_counter() - llm_started_at)
+
+                    if llm_result.get('is_match'):
+                        evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
+                        match_data = {
+                            "filename": filename,
+                            "reason": llm_result.get('reason', 'Match found.'),
+                            "confidence": llm_result.get('confidence', 0.5),
+                            "hard_filter_decision": hard_filter_result["decision"],
+                            "hard_filter_reasons": hard_filter_result["results"],
+                            "computed_age": age_value,
+                            "dob": dob_value.isoformat() if dob_value else None,
+                            "applied_ship_types": applied_ship_types,
+                            "experienced_ship_types": experienced_ship_types,
+                            "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
+                            "facts_version": hard_filter_result.get("facts_version"),
+                        }
+                        match_data.update(evidence_review)
+
+                        # Flag uncertain matches (confidence < 0.7)
+                        if match_data['confidence'] < 0.7:
+                            uncertain_matches.append(match_data)
+                            audit_entry["result_bucket"] = "uncertain_match"
+                            yield {"type": "uncertain_found", "match": match_data,
+                                   "current": i, "total": total_candidates}
+                        else:
+                            verified_matches.append(match_data)
+                            audit_entry["result_bucket"] = "verified_match"
+                            yield {"type": "match_found", "match": match_data,
+                                   "current": i, "total": total_candidates}
+                        hard_filter_summary["matched"] += 1
                 hard_filter_audit.append(audit_entry)
                 
                 # Only pace provider-backed LLM paths; deterministic hard-filter-only

@@ -94,6 +94,23 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
             ["C1/D (USA)", "B1/B2 (USA)", "C1 (USA)", "D (USA)", "US Visa (USA)"],
         )
 
+    def test_visa_family_group_variants_map_to_supported_groups(self):
+        cases = [
+            ("US visa holder", "usa", "valid US visa"),
+            ("must have valid US visa", "usa", "valid US visa"),
+            ("holding valid Schengen visa", "schengen", "valid Schengen visa"),
+            ("Schengen visa holder", "schengen", "valid Schengen visa"),
+            ("with valid Australian visa", "australia", "valid Australia visa"),
+            ("Australian visa holder", "australia", "valid Australia visa"),
+        ]
+        for prompt, expected_group, expected_label in cases:
+            with self.subTest(prompt=prompt):
+                constraint = self.analyzer._extract_us_visa_constraint(prompt)
+                self.assertEqual(constraint["visa_group"], expected_group)
+                self.assertEqual(constraint["requested_label"], expected_label)
+                self.assertTrue(constraint["required"])
+                self.assertTrue(constraint["must_be_valid"])
+
     def test_supported_visa_types_are_extracted_from_resume_text(self):
         cases = [
             ("Visa: C1/D (USA) Expiry: 04-May-2028", "C1/D (USA)"),
@@ -207,6 +224,66 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
         self.assertEqual(ambiguous_result["decision"], "UNKNOWN")
         self.assertEqual(missing_result["decision"], "UNKNOWN")
 
+    def test_visa_rule_prefers_expired_over_ambiguous_when_both_present(self):
+        constraint = self.analyzer._extract_us_visa_constraint("has a valid Schengen visa")
+        candidate_facts = {
+            "travel": {
+                "us_visa_status": "PARSED",
+                "visa_records": [
+                    {
+                        "status": "PARSED",
+                        "visa_type": "Schengen",
+                        "visa_group": "schengen",
+                        "expiry_date": None,
+                        "expiry_status": "AMBIGUOUS_NUMERIC",
+                    },
+                    {
+                        "status": "PARSED",
+                        "visa_type": "Schengen",
+                        "visa_group": "schengen",
+                        "expiry_date": date(2023, 4, 2),
+                        "expiry_status": "PARSED",
+                    },
+                ],
+                "visa_types": ["Schengen"],
+            }
+        }
+
+        result = self.analyzer._evaluate_us_visa_rule(candidate_facts, constraint, reference_date=date(2026, 4, 2))
+
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "US_VISA_EXPIRED")
+
+    def test_visa_rule_prefers_expired_over_invalid_when_both_present(self):
+        constraint = self.analyzer._extract_us_visa_constraint("has a valid Schengen visa")
+        candidate_facts = {
+            "travel": {
+                "us_visa_status": "PARSED",
+                "visa_records": [
+                    {
+                        "status": "PARSED",
+                        "visa_type": "Schengen",
+                        "visa_group": "schengen",
+                        "expiry_date": None,
+                        "expiry_status": "INVALID",
+                    },
+                    {
+                        "status": "PARSED",
+                        "visa_type": "Schengen",
+                        "visa_group": "schengen",
+                        "expiry_date": date(2024, 4, 2),
+                        "expiry_status": "PARSED",
+                    },
+                ],
+                "visa_types": ["Schengen"],
+            }
+        }
+
+        result = self.analyzer._evaluate_us_visa_rule(candidate_facts, constraint, reference_date=date(2026, 4, 2))
+
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "US_VISA_EXPIRED")
+
     def test_visa_only_structured_full_scan_excludes_fail_and_unknown_before_llm(self):
         resume_specs = [
             {
@@ -266,7 +343,7 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
         self.assertEqual(complete_event["hard_filter_summary"]["passed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 2)
         self.assertEqual(complete_event["hard_filter_summary"]["unknown"], 1)
-        self.assertEqual(len(llm_prompts), 1)
+        self.assertEqual(len(llm_prompts), 0)
         self.assertIn("Schengen", complete_event["verified_matches"][0]["hard_filter_reasons"][0]["message"])
 
     def test_unsupported_uk_visa_prompt_does_not_reach_llm_reasoning(self):

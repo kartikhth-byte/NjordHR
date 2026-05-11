@@ -320,6 +320,102 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
 
+    def test_company_continuity_rule_pass(self):
+        result = self.analyzer._evaluate_company_continuity_rule(
+            {
+                "derived": {"same_company_contract_count_max": 3},
+                "fact_meta": {"derived.same_company_contract_count_max": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {"min_same_company_contract_count": 2},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_company_continuity_rule_fail(self):
+        result = self.analyzer._evaluate_company_continuity_rule(
+            {
+                "derived": {"same_company_contract_count_max": 1},
+                "fact_meta": {"derived.same_company_contract_count_max": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {"min_same_company_contract_count": 2},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_company_continuity_rule_source_excluded_is_unknown(self):
+        result = self.analyzer._evaluate_company_continuity_rule(
+            {
+                "derived": {"same_company_contract_count_max": None},
+                "fact_meta": {"derived.same_company_contract_count_max": {"status": "SOURCE_EXCLUDED", "confidence": None}},
+            },
+            {"min_same_company_contract_count": 2},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_v1_record_on_active_company_continuity_rule_is_version_mismatch_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "facts_version": "1.1",
+                "derived": {"same_company_contract_count_max": 3},
+                "fact_meta": {"derived.same_company_contract_count_max": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["company_continuity"],
+                "hard_constraints": {
+                    "company_continuity": {"min_same_company_contract_count": 2},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["facts_version"], "1.1")
+        self.assertEqual(result["results"][0]["unknown_reason"], "VERSION_MISMATCH_UNKNOWN")
+
+    def test_evidence_review_metadata_for_factual_unknown(self):
+        metadata = self.analyzer._derive_evidence_review_metadata(
+            {
+                "decision": "UNKNOWN",
+                "results": [
+                    {
+                        "decision": "UNKNOWN",
+                        "reason_code": "AGE_DOB_AMBIGUOUS_FORMAT",
+                        "unknown_reason": "FACTUAL_UNKNOWN",
+                    }
+                ],
+            },
+            {
+                "fact_meta": {
+                    "personal.dob": {"status": "AMBIGUOUS_NUMERIC"},
+                    "travel.visa_records": {"status": "MISSING"},
+                    "role.current_rank_normalized": {"status": "MISSING"},
+                    "certifications.coc": {"status": "MISSING"},
+                    "certifications.stcw_basic_all_valid": {"status": "MISSING"},
+                    "logistics.passport_expiry_date": {"status": "MISSING"},
+                }
+            },
+        )
+        self.assertEqual(metadata["review_path_type"], "factual_unknown")
+        self.assertEqual(metadata["evidence_review_state"], "insufficient_evidence")
+        self.assertEqual(metadata["evidence_review_reasons"], ["age_evidence_ambiguous"])
+        self.assertEqual(metadata["document_quality_hint"], "usable_but_noisy")
+
+    def test_evidence_review_metadata_for_version_mismatch_unknown(self):
+        metadata = self.analyzer._derive_evidence_review_metadata(
+            {
+                "decision": "UNKNOWN",
+                "results": [
+                    {
+                        "decision": "UNKNOWN",
+                        "reason_code": "RANK_RULE_REQUIRES_V2_FACTS",
+                        "unknown_reason": "VERSION_MISMATCH_UNKNOWN",
+                    }
+                ],
+            },
+            {},
+        )
+        self.assertEqual(metadata["review_path_type"], "version_mismatch_unknown")
+        self.assertEqual(metadata["evidence_review_state"], "partial_evidence")
+        self.assertEqual(metadata["evidence_review_reasons"], ["version_mismatch_partial_evaluation"])
+        self.assertIsNone(metadata["document_quality_hint"])
+
 
 if __name__ == "__main__":
     unittest.main()

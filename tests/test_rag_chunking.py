@@ -86,6 +86,20 @@ class RAGChunkingTests(unittest.TestCase):
         self.assertTrue(all(chunk["metadata"]["raw_text"] for chunk in chunks))
         self.assertTrue(all(len(chunk["text"].split()) <= 450 for chunk in chunks))
 
+    def test_chunk_text_carries_filename_and_source_path_metadata(self):
+        text = "Present Rank: Master\n\nSea service details"
+
+        chunks = self.prepper.chunk_text(
+            text,
+            "resume-4",
+            "Master",
+            filename="Master_1001.pdf",
+            source_path="/tmp/Master_1001.pdf",
+        )
+
+        self.assertEqual(chunks[0]["metadata"]["filename"], "Master_1001.pdf")
+        self.assertEqual(chunks[0]["metadata"]["source_path"], "/tmp/Master_1001.pdf")
+
 
 if __name__ == "__main__":
     unittest.main()
