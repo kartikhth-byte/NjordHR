@@ -582,6 +582,46 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_recency_rule_pass(self):
+        result = self.analyzer._evaluate_recency_rule(
+            {
+                "experience": {
+                    "last_sign_off_date": "2026-01-15",
+                    "last_sign_off_months_ago": 2,
+                },
+                "fact_meta": {"experience.last_sign_off_date": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {"max_months_since_sign_off": 6},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_recency_rule_fail(self):
+        result = self.analyzer._evaluate_recency_rule(
+            {
+                "experience": {
+                    "last_sign_off_date": "2025-01-15",
+                    "last_sign_off_months_ago": 14,
+                },
+                "fact_meta": {"experience.last_sign_off_date": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {"max_months_since_sign_off": 6},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_recency_rule_source_excluded_is_unknown(self):
+        result = self.analyzer._evaluate_recency_rule(
+            {
+                "experience": {
+                    "last_sign_off_date": None,
+                    "last_sign_off_months_ago": None,
+                },
+                "fact_meta": {"experience.last_sign_off_date": {"status": "SOURCE_EXCLUDED", "confidence": None}},
+            },
+            {"max_months_since_sign_off": 6},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
     def test_v1_record_on_active_company_continuity_rule_is_version_mismatch_unknown(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -593,6 +633,27 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
                 "applied_constraints": ["company_continuity"],
                 "hard_constraints": {
                     "company_continuity": {"min_same_company_contract_count": 2},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["facts_version"], "1.1")
+        self.assertEqual(result["results"][0]["unknown_reason"], "VERSION_MISMATCH_UNKNOWN")
+
+    def test_v1_record_on_active_recency_rule_is_version_mismatch_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "facts_version": "1.1",
+                "experience": {
+                    "last_sign_off_date": "2026-01-15",
+                    "last_sign_off_months_ago": 2,
+                },
+                "fact_meta": {"experience.last_sign_off_date": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["recency"],
+                "hard_constraints": {
+                    "recency": {"max_months_since_sign_off": 6},
                 },
             },
         )

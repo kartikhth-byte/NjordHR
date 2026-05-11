@@ -1564,6 +1564,28 @@ class AIResumeAnalyzer:
             }
         return None
 
+    def _extract_recency_constraint(self, user_prompt):
+        prompt = " ".join(str(user_prompt or "").split())
+        if not prompt:
+            return None
+
+        patterns = [
+            r"\bsigned\s+off\s+in\s+last\s+(\d+)\s+months?\b",
+            r"\bsigned\s+off\s+within\s+(\d+)\s+months?\b",
+            r"\blast\s+sign(?:ed)?\s+off\s+within\s+(\d+)\s+months?\b",
+            r"\blast\s+sign(?:ed)?\s+off\s+in\s+last\s+(\d+)\s+months?\b",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if match:
+                months = int(match.group(1))
+                return {
+                    "max_months_since_sign_off": months,
+                    "display_value": match.group(0).strip(),
+                    "operator": "lte",
+                }
+        return None
+
     def _extract_vessel_type_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         configured_matches = self._extract_configured_ship_types(prompt)
@@ -1696,6 +1718,11 @@ class AIResumeAnalyzer:
         if company_continuity_constraint:
             constraints["hard_constraints"]["company_continuity"] = company_continuity_constraint
             constraints["applied_constraints"].append("company_continuity")
+
+        recency_constraint = self._extract_recency_constraint(user_prompt)
+        if recency_constraint:
+            constraints["hard_constraints"]["recency"] = recency_constraint
+            constraints["applied_constraints"].append("recency")
 
         sea_service_constraint = self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
@@ -2477,6 +2504,95 @@ class AIResumeAnalyzer:
             if normalized:
                 counts[normalized] += 1
         return counts
+
+    def _extract_last_sign_off_fact_from_text(self, raw_text, original_path=None, reference_date=None):
+        text = str(raw_text or "")
+        if not text.strip():
+            return {
+                "last_sign_off_date": None,
+                "last_sign_off_months_ago": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": None,
+            }
+
+        path_name = Path(original_path).name if original_path else ""
+        if path_name.upper().startswith("EMAIL_"):
+            return {
+                "last_sign_off_date": None,
+                "last_sign_off_months_ago": None,
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "email_resume_excluded",
+            }
+
+        upper = text.upper()
+        has_seajobs_banner = (
+            "NJORDSHIPS MANAGEMENT INDIA PVT LTD" in upper
+            or "NJORSHIPS MANAGEMENT INDIA PVT LTD" in upper
+        )
+        if "SEAMEN EXPERIENCE DETAILS" not in upper or not has_seajobs_banner:
+            return {
+                "last_sign_off_date": None,
+                "last_sign_off_months_ago": None,
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "non_seajobs_resume_excluded",
+            }
+
+        section = self._extract_seajobs_experience_section(text)
+        if not section:
+            return {
+                "last_sign_off_date": None,
+                "last_sign_off_months_ago": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "seajobs_resume",
+            }
+
+        lines = [" ".join(line.split()) for line in str(section or "").splitlines() if line.strip()]
+        last_dates = []
+        for line in lines:
+            if "/" not in line:
+                continue
+            upper_line = line.upper()
+            if "COMPANY NAME / SHIP TYPE" in upper_line or upper_line.startswith("# "):
+                continue
+            ordered_tokens = self._extract_ordered_date_tokens(line)
+            if len(ordered_tokens) < 2:
+                continue
+            sign_off_fact = self._parse_ordered_date_token(ordered_tokens[1])
+            if sign_off_fact.get("status") == "PARSED" and sign_off_fact.get("date"):
+                last_dates.append(sign_off_fact.get("date"))
+
+        if not last_dates:
+            return {
+                "last_sign_off_date": None,
+                "last_sign_off_months_ago": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "seajobs_resume",
+            }
+
+        reference = reference_date or date.today()
+        last_sign_off_date = max(last_dates)
+        months_ago = max(0, (reference.year - last_sign_off_date.year) * 12 + (reference.month - last_sign_off_date.month))
+        if reference.day < last_sign_off_date.day:
+            months_ago = max(0, months_ago - 1)
+
+        return {
+            "last_sign_off_date": last_sign_off_date,
+            "last_sign_off_months_ago": months_ago,
+            "status": "PARSED",
+            "confidence": 0.9,
+            "extraction_method": "seajobs_service_history",
+            "source_label": "seajobs_resume",
+        }
 
     def _normalize_seajobs_company_name(self, raw_company):
         text = " ".join(str(raw_company or "").split())
@@ -3503,6 +3619,7 @@ class AIResumeAnalyzer:
             applied_ship_types = []
         current_rank_fact = self._extract_rank_fact_from_text(source_text)
         same_company_fact = self._extract_same_company_contract_count_fact_from_text(source_text, original_path=original_path)
+        last_sign_off_fact = self._extract_last_sign_off_fact_from_text(source_text, original_path=original_path)
         coc_fact = self._extract_coc_fact_from_text(source_text)
         stcw_fact = self._extract_stcw_fact_from_text(source_text)
         endorsement_facts = self._extract_endorsements_from_text(source_text)
@@ -3556,6 +3673,8 @@ class AIResumeAnalyzer:
             },
             "experience": {
                 "vessel_types": experienced_ship_types,
+                "last_sign_off_date": last_sign_off_fact.get("last_sign_off_date").isoformat() if last_sign_off_fact.get("last_sign_off_date") else None,
+                "last_sign_off_months_ago": last_sign_off_fact.get("last_sign_off_months_ago"),
             },
             "travel": {
                 "us_visa_type": logistics_fact.get("visa_fact", {}).get("visa_type"),
@@ -3611,6 +3730,18 @@ class AIResumeAnalyzer:
                     context={
                         "field": "derived.same_company_contract_count_max",
                         "derived_from": "experience.seajobs_service_history",
+                        "source_scope": "seajobs_only",
+                    },
+                ),
+                "experience.last_sign_off_date": self._build_fact_meta(
+                    last_sign_off_fact.get("last_sign_off_date").isoformat() if last_sign_off_fact.get("last_sign_off_date") else None,
+                    confidence=last_sign_off_fact.get("confidence"),
+                    extraction_method=last_sign_off_fact.get("extraction_method", ""),
+                    status=last_sign_off_fact.get("status", "MISSING"),
+                    source_label=last_sign_off_fact.get("source_label"),
+                    context={
+                        "field": "experience.last_sign_off_date",
+                        "last_sign_off_months_ago": last_sign_off_fact.get("last_sign_off_months_ago"),
                         "source_scope": "seajobs_only",
                     },
                 ),
@@ -4552,6 +4683,62 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_recency_rule(self, candidate_facts, constraint):
+        experience = candidate_facts.get("experience") or {}
+        fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.last_sign_off_date") or {}
+        last_sign_off_months_ago = experience.get("last_sign_off_months_ago")
+        last_sign_off_date = experience.get("last_sign_off_date")
+        max_months = int((constraint or {}).get("max_months_since_sign_off") or 0)
+        status = str(fact_meta.get("status") or "MISSING")
+        confidence = fact_meta.get("confidence")
+
+        if status == "SOURCE_EXCLUDED":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENCY_SOURCE_EXCLUDED",
+                "Last sign-off recency is currently supported only for SeaJobs-style resumes.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if last_sign_off_months_ago is None or last_sign_off_date is None:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENCY_MISSING",
+                "Could not determine last sign-off recency from the selected resume.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if last_sign_off_months_ago <= max_months:
+            return self._base_rule_result(
+                "PASS",
+                "RECENCY_MATCH",
+                f"Candidate last signed off on {last_sign_off_date}, which is within the last {max_months} month(s).",
+                actual_value={
+                    "last_sign_off_date": last_sign_off_date,
+                    "last_sign_off_months_ago": last_sign_off_months_ago,
+                },
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "RECENCY_MISMATCH",
+            f"Candidate last signed off on {last_sign_off_date}, which is more than {max_months} month(s) ago.",
+            actual_value={
+                "last_sign_off_date": last_sign_off_date,
+                "last_sign_off_months_ago": last_sign_off_months_ago,
+            },
+            expected_value=constraint,
+            confidence=confidence,
+        )
+
     def _evaluate_company_continuity_rule(self, candidate_facts, constraint):
         derived = candidate_facts.get("derived") or {}
         fact_meta = (candidate_facts.get("fact_meta") or {}).get("derived.same_company_contract_count_max") or {}
@@ -4756,6 +4943,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_company_continuity_rule(candidate_facts, company_continuity_constraint))
+
+        recency_constraint = hard_constraints.get("recency")
+        if "recency" in applied_constraints and recency_constraint:
+            activated_rules.append("recency")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "RECENCY_RULE_REQUIRES_V2_FACTS",
+                    "Last sign-off recency requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=recency_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_recency_rule(candidate_facts, recency_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if "applied_ship_type" in applied_constraints and ship_type_constraint:

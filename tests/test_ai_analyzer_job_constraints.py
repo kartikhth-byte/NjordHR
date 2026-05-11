@@ -351,6 +351,22 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 )
                 self.assertEqual(constraints["parsing_notes"], [])
 
+    def test_recency_family_variants_map_to_expected_maximums(self):
+        prompts = {
+            "signed off in last 6 months": 6,
+            "signed off within 3 months": 3,
+            "last sign off within 12 months": 12,
+            "last signed off in last 9 months": 9,
+        }
+        for prompt, expected_maximum in prompts.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("recency", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["recency"]["max_months_since_sign_off"],
+                    expected_maximum,
+                )
+
     def test_llm_compound_note_ignores_age_ranges(self):
         note = self.analyzer._llm_compound_note_from_prompt(
             "should be within the ages of 30 and 50 years old\nComputed candidate age from DOB: 36 years old."
