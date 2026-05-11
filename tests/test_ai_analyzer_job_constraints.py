@@ -221,8 +221,20 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)
-        self.assertIn("availability", constraints["unapplied_constraints"])
+        self.assertIn("availability", constraints["applied_constraints"])
         self.assertEqual(constraints["hard_constraints"]["availability"]["status"], "immediately")
+
+    def test_availability_date_query_is_applied_with_preserved_value(self):
+        constraints = self.analyzer._extract_job_constraints("2nd engineer available from January 15", rank=self.rank)
+        self.assertIn("availability", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["availability"]["value_type"], "date")
+        self.assertIsNotNone(constraints["hard_constraints"]["availability"]["available_from_date"])
+
+    def test_availability_relative_query_is_applied_with_preserved_value(self):
+        constraints = self.analyzer._extract_job_constraints("pumpman joinable in 30 days", rank=self.rank)
+        self.assertIn("availability", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["availability"]["value_type"], "relative_phrase")
+        self.assertEqual(constraints["hard_constraints"]["availability"]["relative_days"], 30)
 
     def test_rank_and_endorsement_query_preserves_canonical_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer DPO required", rank=self.rank)
@@ -408,8 +420,8 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer available immediately"))
         complete_event = next(event for event in events if event["type"] == "complete")
 
-        self.assertEqual(complete_event["applied_constraints"], ["rank_match"])
-        self.assertEqual(complete_event["unapplied_constraints"], ["availability"])
+        self.assertEqual(complete_event["applied_constraints"], ["rank_match", "availability"])
+        self.assertEqual(complete_event["unapplied_constraints"], [])
         self.assertEqual(complete_event["parsing_notes"], [])
 
     def test_all_parsing_notes_query_gracefully_fails(self):

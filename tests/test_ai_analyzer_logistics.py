@@ -110,6 +110,26 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["us_visa_status"], "US Visa (USA)")
         self.assertEqual(fact["us_visa_expiry_date"], date(2027, 12, 11))
 
+    def test_extract_logistics_availability_window_marks_immediate_when_today_inside(self):
+        raw_text = (
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer "
+            "From date - Till date 30-Mar-2026 - 30-Apr-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["availability_date"], date(2026, 3, 30))
+        self.assertEqual(fact["availability_end_date"], date(2026, 4, 30))
+        self.assertEqual(fact["availability_status"], "immediately")
+
+    def test_extract_logistics_availability_window_parses_future_range(self):
+        raw_text = (
+            "Availability Details Applied For Rank Chief Officer Present Rank Chief Officer "
+            "From date - Till date 15-May-2026 - 15-Jun-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["availability_date"], date(2026, 5, 15))
+        self.assertEqual(fact["availability_end_date"], date(2026, 6, 15))
+        self.assertEqual(fact["availability_status"], "PARSED")
+
 
 if __name__ == "__main__":
     unittest.main()

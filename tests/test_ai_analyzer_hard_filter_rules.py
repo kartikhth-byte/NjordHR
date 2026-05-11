@@ -291,6 +291,91 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"], [])
 
+    def test_availability_rule_pass_for_immediate_window(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_date": "2026-03-30",
+                    "availability_end_date": "2026-04-30",
+                    "availability_status": "immediately",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.9}},
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_availability_rule_fail_when_not_immediate(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_date": "2026-05-15",
+                    "availability_end_date": "2026-06-15",
+                    "availability_status": "PARSED",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.9}},
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_availability_rule_pass_for_requested_date_inside_window(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_date": "2026-05-15",
+                    "availability_end_date": "2026-06-15",
+                    "availability_status": "PARSED",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.9}},
+            },
+            {"value_type": "date", "available_from_date": "2026-06-01", "display_value": "available from June 1"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_availability_rule_unknown_when_missing(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_date": None,
+                    "availability_end_date": None,
+                    "availability_status": "MISSING",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": None}},
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_hard_filter_skips_availability_rule_when_not_in_applied_constraints(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "logistics": {
+                    "availability_date": "2026-03-30",
+                    "availability_end_date": "2026-04-30",
+                    "availability_status": "immediately",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": [],
+                "hard_constraints": {
+                    "availability": {
+                        "value_type": "status",
+                        "status": "immediately",
+                        "display_value": "available immediately",
+                    },
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"], [])
+
     def test_hard_filter_skips_applied_ship_type_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -452,6 +537,32 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
                         "required": True,
                         "must_be_valid": True,
                         "requested_label": "valid passport",
+                    },
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["facts_version"], "1.1")
+        self.assertEqual(result["results"][0]["unknown_reason"], "VERSION_MISMATCH_UNKNOWN")
+
+    def test_v1_record_on_active_availability_rule_is_version_mismatch_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "facts_version": "1.1",
+                "logistics": {
+                    "availability_date": "2026-03-30",
+                    "availability_end_date": "2026-04-30",
+                    "availability_status": "immediately",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["availability"],
+                "hard_constraints": {
+                    "availability": {
+                        "value_type": "status",
+                        "status": "immediately",
+                        "display_value": "available immediately",
                     },
                 },
             },
