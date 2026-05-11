@@ -41,6 +41,9 @@ class _FakeRegistry:
     def get_resume_id(self, file_path):
         return Path(file_path).stem
 
+    def generate_resume_id(self, file_path):
+        return Path(file_path).stem
+
     def needs_processing(self, *_args, **_kwargs):
         return False
 
@@ -424,6 +427,42 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
         self.assertFalse(any(event["type"] == "graceful_failure" for event in events))
         self.assertTrue(any(event["type"] == "complete" for event in events))
+
+    def test_full_scan_candidates_use_expanded_llm_context_cap(self):
+        filename = "2nd_Engineer_2001.pdf"
+        pdf_path = self.rank_folder / filename
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        class _FakePDFProcessor:
+            def extract_text(self, *_args, **_kwargs):
+                return "A" * 35000
+
+        self.analyzer.pdf_processor = _FakePDFProcessor()
+
+        candidates = self.analyzer._enumerate_rank_candidates(self.rank_folder, self.rank)
+        chunk = next(iter(candidates.values()))[0]
+
+        self.assertEqual(len(chunk["metadata"]["raw_text"]), self.analyzer.LLM_CONTEXT_TEXT_CHAR_LIMIT)
+        self.assertEqual(chunk["metadata"]["filename"], filename)
+        self.assertEqual(chunk["metadata"]["source_path"], str(pdf_path))
+
+    def test_keyword_fallback_candidates_use_expanded_llm_context_cap(self):
+        filename = "2nd_Engineer_2002.pdf"
+        pdf_path = self.rank_folder / filename
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        class _FakePDFProcessor:
+            def extract_text(self, *_args, **_kwargs):
+                return ("dual fuel ships " * 3000).strip()
+
+        self.analyzer.pdf_processor = _FakePDFProcessor()
+
+        candidates = self.analyzer._retrieve_candidates_keyword_fallback(self.rank, "dual fuel ships", top_k=5)
+        chunk = next(iter(candidates.values()))[0]
+
+        self.assertEqual(len(chunk["metadata"]["raw_text"]), self.analyzer.LLM_CONTEXT_TEXT_CHAR_LIMIT)
+        self.assertEqual(chunk["metadata"]["filename"], filename)
+        self.assertEqual(chunk["metadata"]["source_path"], str(pdf_path))
 
     def test_mixed_query_still_proceeds(self):
         filename = "2nd_Engineer_1001.pdf"

@@ -875,6 +875,7 @@ class AIResumeAnalyzer:
     SYNC_REEXTRACT_WAIT_SECONDS = 12
     LLM_RATE_LIMIT_SLEEP_SECONDS = 0.5
     LLM_REQUEST_TIMEOUT_SECONDS = 45
+    LLM_CONTEXT_TEXT_CHAR_LIMIT = 30000
     V2_ONLY_CONSTRAINT_IDS = {"rank_match", "coc_document_gate", "stcw_basic", "company_continuity"}
     RANK_ALIAS_TABLE = {
         "master": {
@@ -2284,7 +2285,7 @@ class AIResumeAnalyzer:
                     "rank": rank,
                     "filename": pdf_path.name,
                     "source_path": str(pdf_path),
-                    "raw_text": text[:12000],
+                    "raw_text": text[:self.LLM_CONTEXT_TEXT_CHAR_LIMIT],
                 }
             }]
         print(f"[FULL SCAN] Enumerated {len(candidates)} candidate resumes from rank folder")
@@ -4505,13 +4506,15 @@ class AIResumeAnalyzer:
         candidates = {}
         for idx, (score, pdf_path, text) in enumerate(top_ranked):
             resume_id = self.registry.get_resume_id(str(pdf_path))
-            chunk_text = text[:12000]
+            chunk_text = text[:self.LLM_CONTEXT_TEXT_CHAR_LIMIT]
             pseudo_chunk = {
                 "id": f"fallback-{resume_id}-{idx}",
                 "score": score,
                 "metadata": {
                     "resume_id": resume_id,
                     "rank": rank,
+                    "filename": pdf_path.name,
+                    "source_path": str(pdf_path),
                     "raw_text": chunk_text
                 }
             }
