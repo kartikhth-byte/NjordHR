@@ -3287,13 +3287,15 @@ class AIResumeAnalyzer:
         text_cache = text_cache if text_cache is not None else {}
         source_text = ""
         cache_key = str(original_path) if original_path else None
+        extraction_error = ""
 
         if cache_key:
             source_text = text_cache.get(cache_key, "")
             if not source_text:
                 try:
                     source_text = self.pdf_processor.extract_text(str(original_path)) or ""
-                except Exception:
+                except Exception as exc:
+                    extraction_error = f"{type(exc).__name__}: {exc}"
                     source_text = ""
                 text_cache[cache_key] = source_text
 
@@ -3319,6 +3321,7 @@ class AIResumeAnalyzer:
             "stated_age_confidence": stated_age_fact.get("confidence"),
             "stated_age_extraction_method": stated_age_fact.get("extraction_method", ""),
             "stated_age_source_label": stated_age_fact.get("source_label", ""),
+            "source_text_extraction_error": extraction_error,
         }
 
     def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
@@ -3413,7 +3416,10 @@ class AIResumeAnalyzer:
                     extraction_method=age_info.get("dob_extraction_method"),
                     status=age_info.get("dob_parse_status"),
                     source_label=age_info.get("dob_source_label"),
-                    context={"field": "personal.dob"},
+                    context={
+                        "field": "personal.dob",
+                        "source_text_extraction_error": age_info.get("source_text_extraction_error", ""),
+                    },
                 ),
                 "personal.stated_age": self._build_fact_meta(
                     age_info.get("stated_age"),
@@ -3429,7 +3435,11 @@ class AIResumeAnalyzer:
                     extraction_method="derived_from_dob",
                     status="PARSED" if age_info.get("age") is not None else "MISSING",
                     source_label=age_info.get("dob_source_label"),
-                    context={"field": "derived.age_years", "derived_from": "personal.dob"},
+                    context={
+                        "field": "derived.age_years",
+                        "derived_from": "personal.dob",
+                        "source_text_extraction_error": age_info.get("source_text_extraction_error", ""),
+                    },
                 ),
                 "derived.same_company_contract_count_max": self._build_fact_meta(
                     same_company_fact.get("count"),
@@ -4291,6 +4301,10 @@ class AIResumeAnalyzer:
                 f"activated_rules={activated_rules}"
             )
 
+        # Final hard-filter precedence is load-bearing:
+        # FAIL overrides UNKNOWN, and UNKNOWN overrides PASS. This ensures
+        # conclusive disqualifiers win, while unresolved evidence still blocks
+        # deterministic promotion into a PASS result.
         if any(result["decision"] == "FAIL" for result in results):
             final_decision = "FAIL"
         elif any(result["decision"] == "UNKNOWN" for result in results):

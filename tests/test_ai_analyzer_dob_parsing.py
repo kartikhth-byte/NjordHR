@@ -2,6 +2,7 @@ import sys
 import types
 import unittest
 from datetime import date
+from pathlib import Path
 
 
 def _stub_ai_dependencies():
@@ -95,6 +96,11 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
             ("Date of Birth : 15th January 1995", date(1995, 1, 15)),
             ("DATE OF BIRTH: 04TH OF JUNE 1987", date(1987, 6, 4)),
             ("Place date of Birth : HONNAVAR,19 /09/1996", date(1996, 9, 19)),
+            ("DATE OF BIRTH : 05/02/1993", date(1993, 2, 5)),
+            ("Date of Birth : 10-11-1996", date(1996, 11, 10)),
+            ("D.O.B : 03/01/2002", date(2002, 1, 3)),
+            ("Date/Placeof Birth 08.08.1990 / GWALIOR", date(1990, 8, 8)),
+            ("DATE OF BIRTH : 05/02/93", date(1993, 2, 5)),
         ]
 
         for raw_text, expected in cases:
@@ -103,12 +109,11 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
                 self.assertEqual(dob_fact["status"], "PARSED")
                 self.assertEqual(dob_fact["dob"], expected)
 
-    def test_ambiguous_numeric_labeled_formats_are_marked_unknown(self):
+    def test_invalid_numeric_labeled_formats_are_marked_unknown(self):
         cases = [
-            "Date of Birth: 04/11/1989",
-            "DOB 03-02-1974",
-            "D.O.B. 11.04.89",
-            "Date/Placeof Birth 08.08.1990 / GWALIOR",
+            "Date of Birth: 31/00/1989",
+            "DOB 00-02-1974",
+            "D.O.B. 32.04.89",
         ]
 
         for raw_text in cases:
@@ -158,6 +163,21 @@ class AIAnalyzerDobParsingTests(unittest.TestCase):
         self.assertEqual(age_info["age"], self.analyzer._calculate_age(date(1989, 11, 4)))
         self.assertEqual(age_info["stated_age"], 36)
         self.assertEqual(age_info["stated_age_status"], "PARSED")
+
+    def test_resolved_candidate_age_surfaces_pdf_extraction_error_in_metadata(self):
+        class _FailingPDFProcessor:
+            def extract_text(self, *_args, **_kwargs):
+                raise RuntimeError("pdf parse failed")
+
+        self.analyzer.pdf_processor = _FailingPDFProcessor()
+        age_info = self.analyzer._resolve_candidate_age(
+            [{"metadata": {"raw_text": "Date of Birth: 04-Nov-1989"}}],
+            original_path=Path("/tmp/fake.pdf"),
+            text_cache={},
+        )
+
+        self.assertEqual(age_info["dob"], date(1989, 11, 4))
+        self.assertIn("RuntimeError: pdf parse failed", age_info["source_text_extraction_error"])
 
 
 if __name__ == "__main__":
