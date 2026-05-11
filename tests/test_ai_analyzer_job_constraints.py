@@ -238,7 +238,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
     def test_rank_and_endorsement_query_preserves_canonical_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer DPO required", rank=self.rank)
-        self.assertIn("stcw_endorsement", constraints["unapplied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
         self.assertEqual(
             constraints["hard_constraints"]["certifications"]["endorsements_required"],
             ["dp_operational"],
@@ -387,11 +387,13 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         constraints = self.analyzer._extract_job_constraints("2nd engineer tanker endorsement", rank=self.rank)
         self.assertIn("tanker endorsement", constraints["parsing_notes"])
         self.assertNotIn("stcw_endorsement", constraints["unapplied_constraints"])
+        self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
 
     def test_ambiguous_dp_phrase_goes_to_parsing_notes(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer DP2", rank=self.rank)
         self.assertIn("DP2", constraints["parsing_notes"])
         self.assertNotIn("stcw_endorsement", constraints["unapplied_constraints"])
+        self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
 
     def test_unclassifiable_fragment_populates_parsing_notes(self):
         constraints = self.analyzer._extract_job_constraints("VLCC-ish but not exactly", rank=self.rank)

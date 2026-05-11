@@ -1720,7 +1720,7 @@ class AIResumeAnalyzer:
                 certs = constraints["hard_constraints"].setdefault("certifications", {})
                 certs["endorsements_required"] = endorsement_constraint["endorsements_required"]
                 certs["endorsement_display_value"] = endorsement_constraint["display_value"]
-                constraints["unapplied_constraints"].append("stcw_endorsement")
+                constraints["applied_constraints"].append("stcw_endorsement")
 
         if not constraints["applied_constraints"] and not constraints["unapplied_constraints"] and str(user_prompt or "").strip():
             constraints["parsing_notes"].append(str(user_prompt).strip())
@@ -3670,6 +3670,14 @@ class AIResumeAnalyzer:
                     source_label=stcw_fact.get("source_label"),
                     context={"field": "certifications.stcw_basic_all_valid"},
                 ),
+                "certifications.endorsements": self._build_fact_meta(
+                    endorsement_facts,
+                    confidence=0.9 if any(state != "unknown" for state in endorsement_facts.values()) else None,
+                    extraction_method="keyword_regex",
+                    status="PARSED" if any(state != "unknown" for state in endorsement_facts.values()) else "MISSING",
+                    source_label="resume_text",
+                    context={"field": "certifications.endorsements"},
+                ),
                 "logistics.passport_expiry_date": self._build_fact_meta(
                     logistics_fact.get("passport_expiry_date").isoformat() if logistics_fact.get("passport_expiry_date") else None,
                     confidence=logistics_fact.get("passport_fact", {}).get("confidence"),
@@ -4496,6 +4504,54 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_endorsement_rule(self, candidate_facts, constraint):
+        certifications = candidate_facts.get("certifications") or {}
+        endorsements = certifications.get("endorsements") or {}
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("certifications.endorsements") or {}).get("confidence")
+        required_endorsements = (constraint or {}).get("endorsements_required") or []
+
+        if not required_endorsements:
+            return self._base_rule_result(
+                "PASS",
+                "ENDORSEMENT_RULE_NOT_REQUESTED",
+                "No endorsement filter requested.",
+                actual_value={},
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        actual_states = {endorsement_id: endorsements.get(endorsement_id, "unknown") for endorsement_id in required_endorsements}
+
+        if any(state == "unknown" for state in actual_states.values()):
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENDORSEMENT_UNKNOWN",
+                "One or more required endorsements could not be determined reliably.",
+                actual_value=actual_states,
+                expected_value=required_endorsements,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if any(state in {"expired", "absent"} for state in actual_states.values()):
+            return self._base_rule_result(
+                "FAIL",
+                "ENDORSEMENT_MISSING_OR_EXPIRED",
+                "One or more required endorsements are absent or expired.",
+                actual_value=actual_states,
+                expected_value=required_endorsements,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "PASS",
+            "ENDORSEMENT_VALID",
+            "All required endorsements are present and valid.",
+            actual_value=actual_states,
+            expected_value=required_endorsements,
+            confidence=confidence,
+        )
+
     def _evaluate_company_continuity_rule(self, candidate_facts, constraint):
         derived = candidate_facts.get("derived") or {}
         fact_meta = (candidate_facts.get("fact_meta") or {}).get("derived.same_company_contract_count_max") or {}
@@ -4668,6 +4724,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_stcw_basic_rule(candidate_facts, stcw_constraint))
+
+        cert_constraint = (hard_constraints.get("certifications") or {}) if isinstance(hard_constraints.get("certifications"), dict) else {}
+        if "stcw_endorsement" in applied_constraints:
+            activated_rules.append("stcw_endorsement")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "ENDORSEMENT_RULE_REQUIRES_V2_FACTS",
+                    "Endorsement validation requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=cert_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_endorsement_rule(candidate_facts, cert_constraint))
 
         company_continuity_constraint = hard_constraints.get("company_continuity")
         if "company_continuity" in applied_constraints and company_continuity_constraint:

@@ -520,6 +520,37 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
 
+    def test_endorsement_rule_pass(self):
+        result = self.analyzer._evaluate_endorsement_rule(
+            {
+                "certifications": {"endorsements": {"dp_operational": "present"}},
+                "fact_meta": {"certifications.endorsements": {"confidence": 0.9}},
+            },
+            {"endorsements_required": ["dp_operational"]},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_endorsement_rule_fail_when_absent(self):
+        result = self.analyzer._evaluate_endorsement_rule(
+            {
+                "certifications": {"endorsements": {"dp_operational": "absent"}},
+                "fact_meta": {"certifications.endorsements": {"confidence": 0.9}},
+            },
+            {"endorsements_required": ["dp_operational"]},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_endorsement_rule_unknown_when_missing(self):
+        result = self.analyzer._evaluate_endorsement_rule(
+            {
+                "certifications": {"endorsements": {"dp_operational": "unknown"}},
+                "fact_meta": {"certifications.endorsements": {"confidence": None}},
+            },
+            {"endorsements_required": ["dp_operational"]},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
     def test_company_continuity_rule_pass(self):
         result = self.analyzer._evaluate_company_continuity_rule(
             {
@@ -562,6 +593,46 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
                 "applied_constraints": ["company_continuity"],
                 "hard_constraints": {
                     "company_continuity": {"min_same_company_contract_count": 2},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["facts_version"], "1.1")
+        self.assertEqual(result["results"][0]["unknown_reason"], "VERSION_MISMATCH_UNKNOWN")
+
+    def test_hard_filter_skips_endorsement_rule_when_not_in_applied_constraints(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "certifications": {"endorsements": {"dp_operational": "present"}},
+                "fact_meta": {"certifications.endorsements": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": [],
+                "hard_constraints": {
+                    "certifications": {
+                        "endorsements_required": ["dp_operational"],
+                        "endorsement_display_value": "DPO",
+                    },
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"], [])
+
+    def test_v1_record_on_active_endorsement_rule_is_version_mismatch_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "facts_version": "1.1",
+                "certifications": {"endorsements": {"dp_operational": "present"}},
+                "fact_meta": {"certifications.endorsements": {"confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["stcw_endorsement"],
+                "hard_constraints": {
+                    "certifications": {
+                        "endorsements_required": ["dp_operational"],
+                        "endorsement_display_value": "DPO",
+                    },
                 },
             },
         )
