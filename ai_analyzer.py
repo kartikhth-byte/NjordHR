@@ -11,7 +11,7 @@ import re
 import io
 import threading
 from pathlib import Path
-from datetime import UTC, datetime, date
+from datetime import UTC, datetime, date, timedelta
 from collections import Counter
 
 # --- Core Dependencies ---
@@ -2539,36 +2539,237 @@ class AIResumeAnalyzer:
                 end = min(end, marker_index)
         return tail[: min(end, 5000)].strip()
 
-    def _extract_seajobs_experience_row_snippets(self, section_text):
+    def _extract_seajobs_experience_row_windows(self, section_text):
         lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
-        row_snippets = []
+        row_windows = []
         header_tokens = {
             "SEAMEN EXPERIENCE DETAILS",
             "SIGN IN SIGN OUT",
             "DATE DATE",
         }
+        anchor_indices = [
+            idx for idx, line in enumerate(lines)
+            if re.match(r"^\d{1,2}\s", line)
+            and line.upper() not in header_tokens
+            and "COMPANY NAME / SHIP TYPE" not in line.upper()
+            and not line.upper().startswith("# ")
+        ]
+        anchor_index_set = set(anchor_indices)
 
-        for idx, line in enumerate(lines):
+        def is_header(line):
             upper_line = line.upper()
-            if upper_line in header_tokens:
-                continue
-            if "COMPANY NAME / SHIP TYPE" in upper_line or upper_line.startswith("# "):
-                continue
-            if not re.match(r"^\d+\s", line):
-                continue
+            return (
+                upper_line in header_tokens
+                or "COMPANY NAME / SHIP TYPE" in upper_line
+                or upper_line.startswith("# ")
+            )
 
-            window = [line]
-            if idx > 0:
-                window.insert(0, lines[idx - 1])
-            if idx + 1 < len(lines):
-                window.append(lines[idx + 1])
-            if idx + 2 < len(lines):
-                window.append(lines[idx + 2])
+        def is_row_prefix_candidate(line):
+            text = str(line or "").strip()
+            if not text:
+                return False
+            lower = text.lower()
+            if "/" in text:
+                return True
+            if re.search(r"\b\d{1,2}[\s/\-.]*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b", lower):
+                return True
+            if re.match(r"^(?:master|chief|2nd|second|3rd|third|4th|fourth|5th|fifth|6th|sixth|jr|junior|sr|senior|ab|os|oiler|wiper|bosun|pumpman|fitter)\b", lower):
+                return True
+            return False
 
+        for anchor_position, idx in enumerate(anchor_indices):
+            previous_boundary = (anchor_indices[anchor_position - 1] + 1) if anchor_position > 0 else 0
+            next_boundary = anchor_indices[anchor_position + 1] if anchor_position + 1 < len(anchor_indices) else len(lines)
+
+            prefix_candidates = []
+            for back_idx in range(idx - 1, previous_boundary - 1, -1):
+                candidate_line = lines[back_idx]
+                if is_header(candidate_line) or back_idx in anchor_index_set:
+                    break
+                if is_row_prefix_candidate(candidate_line):
+                    prefix_candidates.insert(0, candidate_line)
+
+            suffix_candidates = []
+            for forward_idx in range(idx + 1, next_boundary):
+                candidate_line = lines[forward_idx]
+                if is_header(candidate_line) or forward_idx in anchor_index_set:
+                    break
+                suffix_candidates.append(candidate_line)
+
+            while len(suffix_candidates) > 1 and is_row_prefix_candidate(suffix_candidates[-1]):
+                suffix_candidates.pop()
+
+            anchor_line = lines[idx]
+            window = prefix_candidates + [anchor_line] + suffix_candidates
+
+            row_windows.append(window)
+
+        return row_windows
+
+    def _extract_seajobs_experience_row_snippets(self, section_text):
+        row_snippets = []
+        for window in self._extract_seajobs_experience_row_windows(section_text):
             reconstructed_tokens = self._extract_ordered_date_tokens_from_seajobs_row(window)
             row_snippets.append(" ".join(reconstructed_tokens) if reconstructed_tokens else " ".join(window))
 
         return row_snippets
+
+    def _extract_rank_from_seajobs_row_window(self, row_lines):
+        lines = [" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip()]
+        if not lines:
+            return {
+                "raw_rank": None,
+                "canonical_id": None,
+                "department": None,
+                "seniority_bucket": None,
+                "confidence": None,
+                "status": "MISSING",
+                "extraction_method": "seajobs_service_history",
+                "source_label": "seajobs_resume",
+            }
+
+        candidate_labels = []
+        seen = set()
+
+        def add_candidate(label):
+            normalized = " ".join(str(label or "").split()).strip(" ,:-")
+            if not normalized:
+                return
+            key = normalized.lower()
+            if key in seen:
+                return
+            seen.add(key)
+            candidate_labels.append(normalized)
+
+        if len(lines) >= 3:
+            prev_tokens = lines[0].split()
+            next_tokens = lines[2].split()
+            for prev_count in range(1, min(2, len(prev_tokens)) + 1):
+                for next_count in range(1, min(2, len(next_tokens)) + 1):
+                    add_candidate(" ".join(prev_tokens[:prev_count] + next_tokens[:next_count]))
+
+        for line in lines:
+            tokens = line.split()
+            for count in range(1, min(3, len(tokens)) + 1):
+                add_candidate(" ".join(tokens[:count]))
+
+        for raw_rank in candidate_labels:
+            canonical_id, department, seniority_bucket, confidence = self._normalize_rank(raw_rank)
+            if canonical_id:
+                return {
+                    "raw_rank": raw_rank,
+                    "canonical_id": canonical_id,
+                    "department": department,
+                    "seniority_bucket": seniority_bucket,
+                    "confidence": confidence,
+                    "status": "PARSED",
+                    "extraction_method": "seajobs_service_history",
+                    "source_label": "seajobs_resume",
+                }
+
+        return {
+            "raw_rank": None,
+            "canonical_id": None,
+            "department": None,
+            "seniority_bucket": None,
+            "confidence": None,
+            "status": "MISSING",
+            "extraction_method": "seajobs_service_history",
+            "source_label": "seajobs_resume",
+        }
+
+    def _extract_seajobs_experience_rows(self, raw_text, original_path=None):
+        text = str(raw_text or "")
+        if not text.strip():
+            return {
+                "rows": [],
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": None,
+            }
+
+        path_name = Path(original_path).name if original_path else ""
+        if path_name.upper().startswith("EMAIL_"):
+            return {
+                "rows": [],
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "email_resume_excluded",
+            }
+
+        upper = text.upper()
+        has_seajobs_banner = (
+            "NJORDSHIPS MANAGEMENT INDIA PVT LTD" in upper
+            or "NJORSHIPS MANAGEMENT INDIA PVT LTD" in upper
+        )
+        if "SEAMEN EXPERIENCE DETAILS" not in upper or not has_seajobs_banner:
+            return {
+                "rows": [],
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "non_seajobs_resume_excluded",
+            }
+
+        section = self._extract_seajobs_experience_section(text)
+        if not section:
+            return {
+                "rows": [],
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history",
+                "source_label": "seajobs_resume",
+            }
+
+        parsed_rows = []
+        for window in self._extract_seajobs_experience_row_windows(section):
+            row_index = None
+            for line in window:
+                match = re.match(r"^(\d{1,2})\s", line)
+                if match:
+                    row_index = int(match.group(1))
+                    break
+
+            rank_fact = self._extract_rank_from_seajobs_row_window(window)
+            ordered_tokens = self._extract_ordered_date_tokens_from_seajobs_row(window)
+            sign_in_date = None
+            sign_out_date = None
+            if len(ordered_tokens) >= 2:
+                sign_in_fact = self._parse_ordered_date_token(ordered_tokens[0])
+                sign_out_fact = self._parse_ordered_date_token(ordered_tokens[1])
+                if sign_in_fact.get("status") == "PARSED":
+                    sign_in_date = sign_in_fact.get("date")
+                if sign_out_fact.get("status") == "PARSED":
+                    sign_out_date = sign_out_fact.get("date")
+
+            parsed_rows.append({
+                "row_index": row_index,
+                "rank_raw": rank_fact.get("raw_rank"),
+                "rank_normalized": rank_fact.get("canonical_id"),
+                "sign_in_date": sign_in_date,
+                "sign_out_date": sign_out_date,
+                "snippet": " ".join(window),
+            })
+
+        return {
+            "rows": parsed_rows,
+            "status": "PARSED" if parsed_rows else "MISSING",
+            "confidence": 0.9 if parsed_rows else None,
+            "extraction_method": "seajobs_service_history",
+            "source_label": "seajobs_resume",
+        }
+
+    def _compute_service_duration_months(self, sign_in_date, sign_out_date):
+        if not sign_in_date or not sign_out_date:
+            return None
+        if sign_out_date < sign_in_date:
+            return None
+        total_days = (sign_out_date - sign_in_date).days + 1
+        if total_days <= 0:
+            return None
+        return max(1, total_days // 30)
 
     def _extract_ordered_date_tokens_from_seajobs_row(self, row_lines):
         month_pattern = r'(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)'
@@ -2576,7 +2777,7 @@ class AIResumeAnalyzer:
             rf'\b\d{{1,2}}[\s\/\-.]*{month_pattern}[\s\/\-.]*',
             flags=re.IGNORECASE,
         )
-        year_pattern = re.compile(r'\b\d{4}\b')
+        year_pattern = re.compile(r'\b(?:19|20)\d{2}\b')
         full_token_pattern = re.compile(
             rf'\d{{4}}[\/\-.]\d{{1,2}}[\/\-.]\d{{1,2}}|'
             rf'\d{{1,2}}[\/\-.]\d{{1,2}}[\/\-.]\d{{4}}|'
@@ -2584,45 +2785,122 @@ class AIResumeAnalyzer:
             rf'{month_pattern}[\s\/\-.]+\d{{1,2}},?[\s\/\-.]+\d{{4}}',
             flags=re.IGNORECASE,
         )
+        normalized_lines = [str(line or "") for line in (row_lines or [])]
+        if not normalized_lines:
+            return []
 
-        token_candidates = []
-        partial_candidates = []
-        year_candidates = []
-        full_token_spans = []
+        anchor_idx = 0
+        for idx, line in enumerate(normalized_lines):
+            if re.match(r"^\d{1,2}\s", line):
+                anchor_idx = idx
+                break
 
-        for line_idx, raw_line in enumerate(row_lines):
-            line = str(raw_line or "")
+        def _collect_line_parts(line):
+            full_matches = []
+            full_spans = []
+            partial_matches = []
+            year_matches = []
             for match in full_token_pattern.finditer(line):
-                token = match.group(0).strip()
-                token_candidates.append((line_idx, match.start(), token))
-                full_token_spans.append((line_idx, match.start(), match.end()))
-
+                token = " ".join(match.group(0).strip().split())
+                full_matches.append((match.start(), token))
+                full_spans.append((match.start(), match.end()))
             for match in partial_pattern.finditer(line):
                 start = match.start()
-                if any(span_line == line_idx and span_start <= start < span_end for span_line, span_start, span_end in full_token_spans):
+                if any(span_start <= start < span_end for span_start, span_end in full_spans):
                     continue
-                partial_candidates.append((line_idx, start, match.group(0).strip()))
-
+                partial_matches.append((match.start(), " ".join(match.group(0).strip().split())))
             for match in year_pattern.finditer(line):
-                year_candidates.append((line_idx, match.start(), match.group(0)))
+                start = match.start()
+                if any(span_start <= start < span_end for span_start, span_end in full_spans):
+                    continue
+                year_matches.append((match.start(), match.group(0)))
+            return full_matches, partial_matches, year_matches
 
-        if len(token_candidates) < 2 and partial_candidates and year_candidates:
-            rebuilt_tokens = []
-            for (line_idx, start, partial), (_year_line, _year_start, year) in zip(partial_candidates, year_candidates):
-                cleaned_partial = re.sub(r'[\s\/\-.]+$', '-', partial)
-                rebuilt_tokens.append((line_idx, start, f"{cleaned_partial}{year}"))
-            token_candidates.extend(rebuilt_tokens)
+        prefix_lines = normalized_lines[:anchor_idx]
+        anchor_line = normalized_lines[anchor_idx]
+        suffix_lines = normalized_lines[anchor_idx + 1:]
 
-        token_candidates.sort(key=lambda item: (item[0], item[1]))
-        ordered_tokens = []
+        full_token_candidates = []
+        partial_token_candidates = []
+        year_token_candidates = []
+        for line_idx, line in enumerate(normalized_lines):
+            full_matches, partial_matches, year_matches = _collect_line_parts(line)
+            for start, token in full_matches:
+                full_token_candidates.append((line_idx, start, token))
+            for start, token in partial_matches:
+                partial_token_candidates.append((line_idx, start, token))
+            for start, token in year_matches:
+                year_token_candidates.append((line_idx, start, token))
+
+        full_token_candidates.sort(key=lambda item: (item[0], item[1]))
+        partial_token_candidates.sort(key=lambda item: (item[0], item[1]))
+        year_token_candidates.sort(key=lambda item: (item[0], item[1]))
+        ordered_full_tokens = []
         seen = set()
-        for _line_idx, _start, token in token_candidates:
-            normalized = " ".join(token.split())
-            if normalized in seen:
+        for _line_idx, _start, token in full_token_candidates:
+            if token in seen:
                 continue
-            seen.add(normalized)
-            ordered_tokens.append(normalized)
-        return ordered_tokens
+            seen.add(token)
+            ordered_full_tokens.append(token)
+
+        if len(ordered_full_tokens) >= 2:
+            return ordered_full_tokens[:2]
+
+        if not ordered_full_tokens and partial_token_candidates and year_token_candidates:
+            rebuilt_tokens = []
+            partial_values = [token for _line_idx, _start, token in partial_token_candidates]
+            year_values = [token for _line_idx, _start, token in year_token_candidates]
+            for idx, partial_token in enumerate(partial_values[:2]):
+                if len(year_values) == 1:
+                    year_token = year_values[0]
+                elif idx < len(year_values):
+                    year_token = year_values[idx]
+                else:
+                    year_token = year_values[-1]
+                cleaned_partial = re.sub(r'[\s\/\-.]+$', '-', partial_token)
+                rebuilt_tokens.append(f"{cleaned_partial}{year_token}")
+            if rebuilt_tokens:
+                return rebuilt_tokens
+
+        prefix_partials = []
+        for line in prefix_lines:
+            _, partials, _ = _collect_line_parts(line)
+            prefix_partials.extend(partials)
+        anchor_partials = _collect_line_parts(anchor_line)[1]
+        suffix_years = []
+        for line in suffix_lines:
+            _, _, years = _collect_line_parts(line)
+            suffix_years.extend(years)
+        prefix_years = []
+        for line in prefix_lines:
+            _, _, years = _collect_line_parts(line)
+            prefix_years.extend(years)
+        anchor_years = _collect_line_parts(anchor_line)[2]
+
+        partial_token = None
+        if prefix_partials:
+            partial_token = prefix_partials[-1][1]
+        elif anchor_partials:
+            partial_token = anchor_partials[0][1]
+
+        year_token = None
+        if suffix_years:
+            year_token = suffix_years[0][1]
+        elif prefix_years:
+            year_token = prefix_years[-1][1]
+        elif anchor_years:
+            year_token = anchor_years[0][1]
+
+        rebuilt_sign_in = None
+        if partial_token and year_token:
+            cleaned_partial = re.sub(r'[\s\/\-.]+$', '-', partial_token)
+            rebuilt_sign_in = f"{cleaned_partial}{year_token}"
+
+        if ordered_full_tokens and rebuilt_sign_in:
+            return [rebuilt_sign_in, ordered_full_tokens[0]]
+        if rebuilt_sign_in:
+            return [rebuilt_sign_in]
+        return ordered_full_tokens
 
     def _extract_seajobs_company_occurrence_counts(self, section_text):
         lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
@@ -2726,6 +3004,147 @@ class AIResumeAnalyzer:
             "confidence": 0.9,
             "extraction_method": "seajobs_service_history",
             "source_label": "seajobs_resume",
+        }
+
+    def _extract_current_rank_months_fact_from_text(self, raw_text, original_path=None):
+        experience_rows_fact = self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
+        status = experience_rows_fact.get("status", "MISSING")
+        if status != "PARSED":
+            return {
+                "months_total": None,
+                "matched_rows": 0,
+                "status": status,
+                "confidence": None,
+                "extraction_method": "seajobs_service_history_rank_duration_sum",
+                "source_label": experience_rows_fact.get("source_label"),
+            }
+
+        current_rank_fact = self._extract_rank_fact_from_text(raw_text)
+        current_rank_normalized = current_rank_fact.get("canonical_id")
+        if not current_rank_normalized:
+            return {
+                "months_total": None,
+                "matched_rows": 0,
+                "status": "UNKNOWN",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history_rank_duration_sum",
+                "source_label": "seajobs_resume",
+            }
+
+        total_months = 0
+        matched_rows = 0
+        for row in experience_rows_fact.get("rows") or []:
+            if row.get("rank_normalized") != current_rank_normalized:
+                continue
+            months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+            if months is None:
+                continue
+            total_months += months
+            matched_rows += 1
+
+        if matched_rows == 0:
+            return {
+                "months_total": None,
+                "matched_rows": 0,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history_rank_duration_sum",
+                "source_label": "seajobs_resume",
+            }
+
+        return {
+            "months_total": total_months,
+            "matched_rows": matched_rows,
+            "status": "PARSED",
+            "confidence": 0.9,
+            "extraction_method": "seajobs_service_history_rank_duration_sum",
+            "source_label": "seajobs_resume",
+            "current_rank_normalized": current_rank_normalized,
+        }
+
+    def _extract_contract_gap_fact_from_text(self, raw_text, original_path=None, reference_date=None):
+        experience_rows_fact = self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
+        status = experience_rows_fact.get("status", "MISSING")
+        if status != "PARSED":
+            return {
+                "has_gap_over_6_months": None,
+                "max_gap_days": None,
+                "max_gap_start": None,
+                "max_gap_end": None,
+                "status": status,
+                "confidence": None,
+                "extraction_method": "seajobs_service_history_gap_scan",
+                "source_label": experience_rows_fact.get("source_label"),
+            }
+
+        valid_rows = []
+        for row in experience_rows_fact.get("rows") or []:
+            sign_in_date = row.get("sign_in_date")
+            sign_out_date = row.get("sign_out_date")
+            if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+                continue
+            valid_rows.append(row)
+
+        if len(valid_rows) < 2:
+            return {
+                "has_gap_over_6_months": None,
+                "max_gap_days": None,
+                "max_gap_start": None,
+                "max_gap_end": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history_gap_scan",
+                "source_label": "seajobs_resume",
+            }
+
+        reference = reference_date or date.today()
+        lookback_cutoff = reference - timedelta(days=5 * 365)
+        valid_rows = [
+            row for row in valid_rows
+            if (
+                (row.get("sign_in_date") and row.get("sign_in_date") >= lookback_cutoff)
+                or (row.get("sign_out_date") and row.get("sign_out_date") >= lookback_cutoff)
+            )
+        ]
+
+        if len(valid_rows) < 2:
+            return {
+                "has_gap_over_6_months": None,
+                "max_gap_days": None,
+                "max_gap_start": None,
+                "max_gap_end": None,
+                "status": "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_service_history_gap_scan",
+                "source_label": "seajobs_resume",
+            }
+
+        valid_rows.sort(key=lambda row: (row.get("sign_in_date"), row.get("sign_out_date")))
+        max_gap_days = 0
+        max_gap_after_sign_out = None
+        max_gap_before_sign_in = None
+        for previous_row, next_row in zip(valid_rows, valid_rows[1:]):
+            previous_sign_out = previous_row.get("sign_out_date")
+            next_sign_in = next_row.get("sign_in_date")
+            if not previous_sign_out or not next_sign_in:
+                continue
+            gap_days = max(0, (next_sign_in - previous_sign_out).days - 1)
+            if gap_days > max_gap_days:
+                max_gap_days = gap_days
+                max_gap_after_sign_out = previous_sign_out
+                max_gap_before_sign_in = next_sign_in
+
+        return {
+            "has_gap_over_6_months": max_gap_days > 183,
+            "max_gap_days": max_gap_days,
+            "max_gap_start": max_gap_after_sign_out,
+            "max_gap_end": max_gap_before_sign_in,
+            "status": "PARSED",
+            "confidence": 0.9,
+            "extraction_method": "seajobs_service_history_gap_scan",
+            "source_label": "seajobs_resume",
+            "gap_after_sign_out": max_gap_after_sign_out,
+            "gap_before_sign_in": max_gap_before_sign_in,
         }
 
     def _normalize_seajobs_company_name(self, raw_company):
@@ -3754,6 +4173,8 @@ class AIResumeAnalyzer:
         current_rank_fact = self._extract_rank_fact_from_text(source_text)
         same_company_fact = self._extract_same_company_contract_count_fact_from_text(source_text, original_path=original_path)
         last_sign_off_fact = self._extract_last_sign_off_fact_from_text(source_text, original_path=original_path)
+        current_rank_months_fact = self._extract_current_rank_months_fact_from_text(source_text, original_path=original_path)
+        contract_gap_fact = self._extract_contract_gap_fact_from_text(source_text, original_path=original_path)
         coc_fact = self._extract_coc_fact_from_text(source_text)
         stcw_fact = self._extract_stcw_fact_from_text(source_text)
         endorsement_facts = self._extract_endorsements_from_text(source_text)
@@ -3819,11 +4240,16 @@ class AIResumeAnalyzer:
                 "visa_records": logistics_fact.get("visa_fact", {}).get("visa_records") or [],
                 "visa_types": [record.get("visa_type") for record in (logistics_fact.get("visa_fact", {}).get("visa_records") or []) if record.get("visa_type")],
             },
-            "derived": {
-                "age_years": age_info.get("age"),
-                "age_is_cached": True,
-                "same_company_contract_count_max": same_company_fact.get("count"),
-            },
+                "derived": {
+                    "age_years": age_info.get("age"),
+                    "age_is_cached": True,
+                    "same_company_contract_count_max": same_company_fact.get("count"),
+                    "current_rank_months_total": current_rank_months_fact.get("months_total"),
+                    "has_contract_gap_over_6_months": contract_gap_fact.get("has_gap_over_6_months"),
+                    "max_contract_gap_days": contract_gap_fact.get("max_gap_days"),
+                    "max_contract_gap_start": contract_gap_fact.get("max_gap_start").isoformat() if contract_gap_fact.get("max_gap_start") else None,
+                    "max_contract_gap_end": contract_gap_fact.get("max_gap_end").isoformat() if contract_gap_fact.get("max_gap_end") else None,
+                },
             "fact_meta": {
                 "personal.dob": self._build_fact_meta(
                     age_info.get("dob").isoformat() if age_info.get("dob") else None,
@@ -3865,6 +4291,35 @@ class AIResumeAnalyzer:
                     context={
                         "field": "derived.same_company_contract_count_max",
                         "derived_from": "experience.seajobs_service_history",
+                        "source_scope": "seajobs_only",
+                    },
+                ),
+                "derived.current_rank_months_total": self._build_fact_meta(
+                    current_rank_months_fact.get("months_total"),
+                    confidence=current_rank_months_fact.get("confidence"),
+                    extraction_method=current_rank_months_fact.get("extraction_method", ""),
+                    status=current_rank_months_fact.get("status", "MISSING"),
+                    source_label=current_rank_months_fact.get("source_label"),
+                    context={
+                        "field": "derived.current_rank_months_total",
+                        "current_rank_normalized": current_rank_months_fact.get("current_rank_normalized"),
+                        "matched_rows": current_rank_months_fact.get("matched_rows"),
+                        "source_scope": "seajobs_only",
+                    },
+                ),
+                "derived.has_contract_gap_over_6_months": self._build_fact_meta(
+                    contract_gap_fact.get("has_gap_over_6_months"),
+                    confidence=contract_gap_fact.get("confidence"),
+                    extraction_method=contract_gap_fact.get("extraction_method", ""),
+                    status=contract_gap_fact.get("status", "MISSING"),
+                    source_label=contract_gap_fact.get("source_label"),
+                    context={
+                        "field": "derived.has_contract_gap_over_6_months",
+                        "threshold_days": 183,
+                        "max_contract_gap_days": contract_gap_fact.get("max_gap_days"),
+                        "lookback_years": 5,
+                        "max_contract_gap_start": contract_gap_fact.get("max_gap_start").isoformat() if contract_gap_fact.get("max_gap_start") else None,
+                        "max_contract_gap_end": contract_gap_fact.get("max_gap_end").isoformat() if contract_gap_fact.get("max_gap_end") else None,
                         "source_scope": "seajobs_only",
                     },
                 ),
@@ -4036,6 +4491,29 @@ class AIResumeAnalyzer:
         if evidence_review_reasons and all(status == "MISSING" for status in statuses):
             return "sparse"
         return None
+
+    def _build_default_search_insights(self, candidate_facts):
+        derived = (candidate_facts or {}).get("derived") or {}
+        fact_meta = (candidate_facts or {}).get("fact_meta") or {}
+        insights = {}
+
+        current_rank_months_meta = fact_meta.get("derived.current_rank_months_total") or {}
+        current_rank_months = derived.get("current_rank_months_total")
+        if current_rank_months_meta.get("status") == "PARSED" and current_rank_months is not None:
+            insights["current_rank_months_total"] = current_rank_months
+
+        contract_gap_meta = fact_meta.get("derived.has_contract_gap_over_6_months") or {}
+        has_gap = derived.get("has_contract_gap_over_6_months")
+        max_gap_days = derived.get("max_contract_gap_days")
+        max_gap_start = derived.get("max_contract_gap_start")
+        max_gap_end = derived.get("max_contract_gap_end")
+        if contract_gap_meta.get("status") == "PARSED" and has_gap is not None:
+            insights["has_contract_gap_over_6_months"] = bool(has_gap)
+            insights["max_contract_gap_days"] = max_gap_days
+            insights["max_contract_gap_start"] = max_gap_start
+            insights["max_contract_gap_end"] = max_gap_end
+
+        return insights
 
     def _derive_evidence_review_metadata(self, hard_filter_result, candidate_facts=None):
         results = list((hard_filter_result or {}).get("results") or [])
@@ -5888,6 +6366,7 @@ Examples of GOOD responses:
                         "facts_version": hard_filter_result.get("facts_version"),
                         "partial_evaluation": bool(reextract_meta and not reextract_meta.get("succeeded")),
                         "partial_evaluation_reason": str((reextract_meta or {}).get("fallback_reason") or ""),
+                        "default_insights": self._build_default_search_insights(candidate_facts),
                     }
                     unknown_match.update(evidence_review)
                     unknown_matches.append(unknown_match)
@@ -5930,6 +6409,7 @@ Examples of GOOD responses:
                         "experienced_ship_types": experienced_ship_types,
                         "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                         "facts_version": hard_filter_result.get("facts_version"),
+                        "default_insights": self._build_default_search_insights(candidate_facts),
                     }
                     match_data.update(evidence_review)
                     verified_matches.append(match_data)
@@ -5964,6 +6444,7 @@ Examples of GOOD responses:
                             "experienced_ship_types": experienced_ship_types,
                             "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                             "facts_version": hard_filter_result.get("facts_version"),
+                            "default_insights": self._build_default_search_insights(candidate_facts),
                         }
                         match_data.update(evidence_review)
 

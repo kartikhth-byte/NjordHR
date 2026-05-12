@@ -173,6 +173,101 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         tokens = self.analyzer._extract_ordered_date_tokens_from_seajobs_row(row_lines)
         self.assertEqual(tokens, ["14-Sep-2024", "06-Dec-2024"])
 
+    def test_extract_seajobs_experience_rows_parses_rank_and_dates_from_multiline_window(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+            "2nd HMS maritime services pvt Ltd / Crude Oil MAN B&W 04-Oct- 20-Dec-\n"
+            "2 30000\n"
+            "Engineer Tanker SMC 2023 2023\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 9, 14))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2024, 12, 6))
+
+    def test_extract_current_rank_months_fact_sums_matching_seajobs_rows(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+            "2nd HMS maritime services pvt Ltd / Crude Oil MAN B&W 04-Oct- 20-Dec-\n"
+            "2 30000\n"
+            "Engineer Tanker SMC 2023 2023\n"
+            "3rd Quadrant Maritime pvt Ltd / Container 04-Mar-\n"
+            "3 1204\n"
+            "Engineer 2011 08-Apr-2011\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 2)
+        self.assertEqual(fact["months_total"], 4)
+
+    def test_extract_contract_gap_fact_flags_gap_over_six_months(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd HMS maritime services pvt Ltd / Crude Oil MAN B&W 04-Oct- 20-Dec-\n"
+            "2 30000\n"
+            "Engineer Tanker SMC 2023 2023\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+        )
+        fact = self.analyzer._extract_contract_gap_fact_from_text(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertTrue(fact["has_gap_over_6_months"])
+        self.assertGreater(fact["max_gap_days"], 183)
+
+    def test_default_insight_facts_exclude_email_resumes(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+        )
+        months_fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        gap_fact = self.analyzer._extract_contract_gap_fact_from_text(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(months_fact["status"], "SOURCE_EXCLUDED")
+        self.assertEqual(gap_fact["status"], "SOURCE_EXCLUDED")
+
 
 if __name__ == "__main__":
     unittest.main()
