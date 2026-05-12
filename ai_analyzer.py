@@ -2038,6 +2038,24 @@ class AIResumeAnalyzer:
                     return canonical
         return None
 
+    def _ship_type_expected_values(self, requested_ship_type):
+        normalized_requested = self._normalize_ship_type(requested_ship_type)
+        if not normalized_requested:
+            return []
+
+        aliases = self._ship_type_aliases().get(normalized_requested)
+        if not aliases:
+            return [normalized_requested]
+
+        expected_values = []
+        seen = set()
+        for alias in aliases:
+            normalized_alias = self._normalize_ship_type(alias)
+            if normalized_alias and normalized_alias not in seen:
+                expected_values.append(normalized_alias)
+                seen.add(normalized_alias)
+        return expected_values or [normalized_requested]
+
     def _visa_type_definitions(self):
         return [
             {
@@ -2302,7 +2320,11 @@ class AIResumeAnalyzer:
         cleaned = re.sub(r'\s+', ' ', cleaned).strip(" ,.-")
         return cleaned
 
-    def _is_structured_only_prompt(self, user_prompt):
+    def _is_structured_only_prompt(self, user_prompt, job_constraints=None, has_semantic_intent=None):
+        applied_constraints = ((job_constraints or {}).get("applied_constraints") or [])
+        if applied_constraints and has_semantic_intent is False:
+            return True
+
         stripped = self._strip_age_constraint_phrases(user_prompt)
         stripped = self._strip_visa_constraint_phrases(stripped).lower()
         if not stripped:
@@ -2517,6 +2539,91 @@ class AIResumeAnalyzer:
                 end = min(end, marker_index)
         return tail[: min(end, 5000)].strip()
 
+    def _extract_seajobs_experience_row_snippets(self, section_text):
+        lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
+        row_snippets = []
+        header_tokens = {
+            "SEAMEN EXPERIENCE DETAILS",
+            "SIGN IN SIGN OUT",
+            "DATE DATE",
+        }
+
+        for idx, line in enumerate(lines):
+            upper_line = line.upper()
+            if upper_line in header_tokens:
+                continue
+            if "COMPANY NAME / SHIP TYPE" in upper_line or upper_line.startswith("# "):
+                continue
+            if not re.match(r"^\d+\s", line):
+                continue
+
+            window = [line]
+            if idx > 0:
+                window.insert(0, lines[idx - 1])
+            if idx + 1 < len(lines):
+                window.append(lines[idx + 1])
+            if idx + 2 < len(lines):
+                window.append(lines[idx + 2])
+
+            reconstructed_tokens = self._extract_ordered_date_tokens_from_seajobs_row(window)
+            row_snippets.append(" ".join(reconstructed_tokens) if reconstructed_tokens else " ".join(window))
+
+        return row_snippets
+
+    def _extract_ordered_date_tokens_from_seajobs_row(self, row_lines):
+        month_pattern = r'(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)'
+        partial_pattern = re.compile(
+            rf'\b\d{{1,2}}[\s\/\-.]*{month_pattern}[\s\/\-.]*',
+            flags=re.IGNORECASE,
+        )
+        year_pattern = re.compile(r'\b\d{4}\b')
+        full_token_pattern = re.compile(
+            rf'\d{{4}}[\/\-.]\d{{1,2}}[\/\-.]\d{{1,2}}|'
+            rf'\d{{1,2}}[\/\-.]\d{{1,2}}[\/\-.]\d{{4}}|'
+            rf'\d{{1,2}}[\s\/\-.]+{month_pattern}[\s\/\-.]+\d{{4}}|'
+            rf'{month_pattern}[\s\/\-.]+\d{{1,2}},?[\s\/\-.]+\d{{4}}',
+            flags=re.IGNORECASE,
+        )
+
+        token_candidates = []
+        partial_candidates = []
+        year_candidates = []
+        full_token_spans = []
+
+        for line_idx, raw_line in enumerate(row_lines):
+            line = str(raw_line or "")
+            for match in full_token_pattern.finditer(line):
+                token = match.group(0).strip()
+                token_candidates.append((line_idx, match.start(), token))
+                full_token_spans.append((line_idx, match.start(), match.end()))
+
+            for match in partial_pattern.finditer(line):
+                start = match.start()
+                if any(span_line == line_idx and span_start <= start < span_end for span_line, span_start, span_end in full_token_spans):
+                    continue
+                partial_candidates.append((line_idx, start, match.group(0).strip()))
+
+            for match in year_pattern.finditer(line):
+                year_candidates.append((line_idx, match.start(), match.group(0)))
+
+        if len(token_candidates) < 2 and partial_candidates and year_candidates:
+            rebuilt_tokens = []
+            for (line_idx, start, partial), (_year_line, _year_start, year) in zip(partial_candidates, year_candidates):
+                cleaned_partial = re.sub(r'[\s\/\-.]+$', '-', partial)
+                rebuilt_tokens.append((line_idx, start, f"{cleaned_partial}{year}"))
+            token_candidates.extend(rebuilt_tokens)
+
+        token_candidates.sort(key=lambda item: (item[0], item[1]))
+        ordered_tokens = []
+        seen = set()
+        for _line_idx, _start, token in token_candidates:
+            normalized = " ".join(token.split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered_tokens.append(normalized)
+        return ordered_tokens
+
     def _extract_seajobs_company_occurrence_counts(self, section_text):
         lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
         counts = Counter()
@@ -2581,11 +2688,11 @@ class AIResumeAnalyzer:
                 "source_label": "seajobs_resume",
             }
 
-        lines = [" ".join(line.split()) for line in str(section or "").splitlines() if line.strip()]
+        row_snippets = self._extract_seajobs_experience_row_snippets(section)
+        if not row_snippets:
+            row_snippets = [" ".join(line.split()) for line in str(section or "").splitlines() if line.strip()]
         last_dates = []
-        for line in lines:
-            if "/" not in line:
-                continue
+        for line in row_snippets:
             upper_line = line.upper()
             if "COMPANY NAME / SHIP TYPE" in upper_line or upper_line.startswith("# "):
                 continue
@@ -3680,6 +3787,7 @@ class AIResumeAnalyzer:
             },
             "logistics": {
                 "passport_expiry_date": logistics_fact.get("passport_expiry_date").isoformat() if logistics_fact.get("passport_expiry_date") else None,
+                "passport_expiry_status": logistics_fact.get("passport_expiry_status"),
                 "passport_valid": logistics_fact.get("passport_valid"),
                 "us_visa_valid": logistics_fact.get("us_visa_valid"),
                 "us_visa_status": logistics_fact.get("us_visa_status"),
@@ -5032,6 +5140,7 @@ class AIResumeAnalyzer:
         if "experience_ship_type" in applied_constraints and experience_ship_type_constraint:
             activated_rules.append("experience_ship_type")
             requested_ship_type = self._normalize_ship_type(experience_ship_type_constraint)
+            expected_ship_types = self._ship_type_expected_values(requested_ship_type)
             experienced_ship_types = [
                 self._normalize_ship_type(value)
                 for value in ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
@@ -5043,17 +5152,17 @@ class AIResumeAnalyzer:
                     "EXPERIENCE_SHIP_TYPE_MISSING",
                     f"Could not determine experienced ship type for requested filter '{experience_ship_type_constraint}'.",
                     actual_value=[],
-                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    expected_value=expected_ship_types,
                     confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
                     unknown_reason="FACTUAL_UNKNOWN",
                 ))
-            elif self._evaluate_rule("contains_any", experienced_ship_types, [requested_ship_type]):
+            elif self._evaluate_rule("contains_any", experienced_ship_types, expected_ship_types):
                 results.append(self._base_rule_result(
                     "PASS",
                     "EXPERIENCE_SHIP_TYPE_MATCH",
                     f"Candidate resume shows experience on '{experience_ship_type_constraint}'.",
                     actual_value=experienced_ship_types,
-                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    expected_value=expected_ship_types,
                     confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
                 ))
             else:
@@ -5065,7 +5174,7 @@ class AIResumeAnalyzer:
                         f"filter '{experience_ship_type_constraint}'."
                     ),
                     actual_value=experienced_ship_types,
-                    expected_value=[requested_ship_type] if requested_ship_type else [],
+                    expected_value=expected_ship_types,
                     confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
                 ))
 
@@ -5553,7 +5662,11 @@ Examples of GOOD responses:
                 or str(applied_ship_type or "").strip()
                 or str(experienced_ship_type or "").strip()
             )
-            structured_only_prompt = self._is_structured_only_prompt(user_prompt)
+            structured_only_prompt = self._is_structured_only_prompt(
+                user_prompt,
+                job_constraints=job_constraints,
+                has_semantic_intent=has_semantic_intent,
+            )
             folder_metadata = self._rank_manifest_metadata(target_folder)
 
             if not has_actionable_constraints and not has_semantic_intent:

@@ -244,6 +244,15 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ["dp_operational"],
         )
 
+    def test_new_applied_family_without_semantic_intent_is_structured_only(self):
+        constraints = self.analyzer._extract_job_constraints("has tanker background", rank=self.rank)
+        structured_only = self.analyzer._is_structured_only_prompt(
+            "has tanker background",
+            job_constraints=constraints,
+            has_semantic_intent=False,
+        )
+        self.assertTrue(structured_only)
+
     def test_multi_endorsement_query_preserves_all_canonical_values(self):
         constraints = self.analyzer._extract_job_constraints("DPO and GMDSS required", rank=self.rank)
         self.assertIn("stcw_endorsement", constraints["applied_constraints"])
@@ -634,6 +643,54 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
         self.assertEqual(match_event["match"]["confidence"], 1.0)
         self.assertEqual(match_event["match"]["reason"], "Candidate age 36 meets requested age filter.")
+
+    def test_structured_only_recency_pass_skips_llm_and_surfaces_match(self):
+        filename = "Chief-Engineer_Container_12309_2026-01-29_16-35-43.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Sign Out Date 20-Oct-2025",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {"applied_rank_normalized": None},
+            "fact_meta": {"experience.last_sign_off_date": {"confidence": 0.9, "status": "PARSED"}},
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "last_sign_off_date": "2025-10-20", "last_sign_off_months_ago": 6},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "PASS",
+            "results": [{
+                "decision": "PASS",
+                "reason_code": "RECENCY_MATCH",
+                "message": "Candidate signed off within the requested 6 months.",
+                "actual_value": {"last_sign_off_date": "2025-10-20", "months_ago": 6},
+                "expected_value": {"max_months_since_sign_off": 6},
+                "confidence": 0.9,
+                "unknown_reason": None,
+            }],
+            "evaluation_date_used": "2026-05-11",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+        self.analyzer._reason_with_llm = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("LLM should be skipped"))
+
+        events = list(self.analyzer.run_analysis_stream(self.rank, "signed off in last 6 months"))
+        match_event = next(event for event in events if event["type"] == "match_found")
+
+        self.assertEqual(match_event["match"]["confidence"], 1.0)
+        self.assertEqual(match_event["match"]["reason"], "Candidate signed off within the requested 6 months.")
 
     def test_mixed_query_pass_still_uses_llm(self):
         filename = "2nd_Engineer_1004.pdf"

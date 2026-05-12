@@ -160,7 +160,7 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertEqual(unknown, ["2nd_Engineer_1003.pdf"])
         self.assertEqual(complete_event["verified_matches"][0]["applied_ship_types"], ["Bulk Carrier"])
         self.assertEqual(complete_event["unknown_matches"][0]["applied_ship_types"], [])
-        self.assertEqual(len(llm_calls), 1)
+        self.assertEqual(len(llm_calls), 0)
         self.assertEqual(complete_event["hard_filter_summary"]["passed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["unknown"], 1)
@@ -210,6 +210,17 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         })
         self.assertEqual(result["decision"], "PASS")
 
+    def test_experience_ship_type_family_matches_tanker_subtypes(self):
+        candidate_facts = {
+            "experience": {"vessel_types": ["oil tanker", "bulk carrier"]},
+        }
+        result = self.analyzer._evaluate_hard_filters(candidate_facts, {
+            "applied_constraints": ["experience_ship_type"],
+            "hard_constraints": {"experience_ship_type": "tanker"}
+        })
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
+
     def test_build_candidate_facts_exposes_experienced_ship_types(self):
         self.analyzer._resolve_candidate_age = lambda *args, **kwargs: {
             "dob": None,
@@ -258,16 +269,38 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             facts["logistics"],
             {
                 "passport_expiry_date": None,
+                "passport_expiry_status": "MISSING",
                 "passport_valid": None,
                 "us_visa_valid": None,
                 "us_visa_status": None,
                 "us_visa_expiry_date": None,
                 "availability_date": None,
+                "availability_end_date": None,
+                "availability_status": "MISSING",
                 "salary_expectation_usd": None,
             },
         )
         self.assertTrue(facts["derived"]["age_is_cached"])
         self.assertEqual(facts["experience"]["vessel_types"], ["product tanker", "bulk carrier"])
+
+    def test_build_candidate_facts_carries_passport_expiry_status(self):
+        self.analyzer._resolve_candidate_age = lambda *args, **kwargs: {
+            "dob": None,
+            "age": None,
+            "dob_parse_status": "MISSING",
+        }
+        raw_text = (
+            "Passport Details Passport No. Z6128495 Issue Authority RANCHI "
+            "Issue Date - Expiry Date 30-Dec-2020 - 29-Dec-2030"
+        )
+        facts = self.analyzer._build_candidate_facts(
+            "2nd_Engineer_120969.pdf",
+            self.rank,
+            [{"metadata": {"raw_text": raw_text}}],
+            folder_metadata={},
+        )
+        self.assertEqual(facts["logistics"]["passport_expiry_date"], "2030-12-29")
+        self.assertEqual(facts["logistics"]["passport_expiry_status"], "PARSED")
 
     def test_experience_ship_type_missing_is_unknown(self):
         candidate_facts = {

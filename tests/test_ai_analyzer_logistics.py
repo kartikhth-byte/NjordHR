@@ -141,6 +141,38 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["availability_status"], "immediately")
         self.assertEqual(fact["confidence"], 0.85)
 
+    def test_extract_last_sign_off_fact_handles_multiline_split_seajobs_dates(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd SNP Shipmanagement Pvt. Ltd. / Bulk 24-May-\n"
+            "1 43158 MAN & B&W 29-Oct-2025\n"
+            "Engineer Carrier 2025\n"
+            "01-Jul-\n"
+            "2 3rd Engineer Synergy Maritime Ltd. / Bulk Carrier 32837 MAN & B&W 06-Jan-2025\n"
+            "2024\n"
+        )
+        fact = self.analyzer._extract_last_sign_off_fact_from_text(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_349740.pdf",
+            reference_date=self.reference_date,
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["last_sign_off_date"], date(2025, 10, 29))
+        self.assertEqual(fact["last_sign_off_months_ago"], 5)
+
+    def test_extract_ordered_date_tokens_from_seajobs_row_rebuilds_split_dates(self):
+        row_lines = [
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-",
+            "1 45000",
+            "Engineer Tanker SMC 2024 2024",
+        ]
+        tokens = self.analyzer._extract_ordered_date_tokens_from_seajobs_row(row_lines)
+        self.assertEqual(tokens, ["14-Sep-2024", "06-Dec-2024"])
+
 
 if __name__ == "__main__":
     unittest.main()
