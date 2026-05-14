@@ -130,6 +130,15 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(master.exists(), "Master CSV should exist")
         return pd.read_csv(master, keep_default_na=False)
 
+    def _agent_settings_response(self, download_folder):
+        class DummyResponse:
+            status_code = 200
+
+            def json(self_inner):
+                return {"success": True, "settings": {"download_folder": str(download_folder)}}
+
+        return DummyResponse()
+
     def test_initial_verification_logs_events_without_file_copy(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         self._write_fake_resume("Chief_Officer_1002.pdf")
@@ -162,6 +171,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(set(df["Candidate_ID"].astype(str).tolist()), {"1001", "1002", "1003"})
 
         self.assertFalse((self.verified_root / self.rank).exists(), "No physical verified resume folder should be created")
+
+    def test_ui_vendor_assets_route_serves_local_runtime_js(self):
+        resp = self.client.get("/ui_vendor/react.development.js")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ReactVersion", resp.data)
 
     def test_status_and_notes_append_new_events(self):
         self._write_fake_resume("Chief_Officer_2001.pdf")
@@ -641,6 +655,87 @@ class BackendEventLogFlowTests(unittest.TestCase):
         body = resp.get_json()
         self.assertTrue(body["success"])
         self.assertEqual(body["files"], ["Chief_Officer_1001.pdf", "Chief_Officer_1002.pdf"])
+
+    def test_rank_folder_endpoints_prefer_local_agent_download_root(self):
+        legacy_rank = self.download_root / "Chief_Officer"
+        (legacy_rank / "Legacy.pdf").write_bytes(b"%PDF-1.4")
+
+        agent_root = self.base / "AgentResumes"
+        agent_rank = agent_root / "Chief_Officer"
+        agent_rank.mkdir(parents=True, exist_ok=True)
+        (agent_rank / "EmailResume.pdf").write_bytes(b"%PDF-1.4")
+
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+
+        with patch.object(
+            backend_server,
+            "_agent_request",
+            return_value=self._agent_settings_response(agent_root),
+        ):
+            folders_resp = self.client.get("/get_rank_folders")
+            files_resp = self.client.get("/get_rank_folder_files?rank_folder=Chief_Officer")
+            summaries_resp = self.client.get("/get_rank_folder_summaries")
+
+        self.assertEqual(folders_resp.status_code, 200)
+        self.assertEqual(files_resp.status_code, 200)
+        self.assertEqual(summaries_resp.status_code, 200)
+
+        self.assertEqual(folders_resp.get_json()["folders"], ["Chief_Officer"])
+        self.assertEqual(files_resp.get_json()["files"], ["EmailResume.pdf"])
+        summaries = {row["folder"]: row["pdf_count"] for row in summaries_resp.get_json()["folders"]}
+        self.assertEqual(summaries, {"Chief_Officer": 1})
+
+    def test_get_rank_options_uses_live_agent_folders_when_available(self):
+        agent_root = self.base / "AgentResumes"
+        (agent_root / "OS").mkdir(parents=True, exist_ok=True)
+        (agent_root / "AB").mkdir(parents=True, exist_ok=True)
+        (agent_root / "_EmailInbox_ManualReview").mkdir(parents=True, exist_ok=True)
+        (agent_root / "OS" / "resume.pdf").write_bytes(b"%PDF-1.4")
+        (agent_root / "AB" / "resume.pdf").write_bytes(b"%PDF-1.4")
+        (agent_root / "_EmailInbox_ManualReview" / "manual.pdf").write_bytes(b"%PDF-1.4")
+
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+
+        with patch.object(
+            backend_server,
+            "_agent_request",
+            return_value=self._agent_settings_response(agent_root),
+        ):
+            resp = self.client.get("/get_rank_options")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["source"], "active_download_root")
+        self.assertEqual(body["ranks"], ["AB", "OS"])
+
+    def test_download_results_summary_uses_live_agent_root_and_separates_manual_review(self):
+        agent_root = self.base / "AgentResumes"
+        os_rank = agent_root / "OS"
+        os_rank.mkdir(parents=True, exist_ok=True)
+        (os_rank / "EMAIL_resume.pdf").write_bytes(b"%PDF-1.4")
+        (os_rank / "legacy.pdf").write_bytes(b"%PDF-1.4")
+        manual_review = agent_root / "_EmailInbox_ManualReview"
+        manual_review.mkdir(parents=True, exist_ok=True)
+        (manual_review / "manual.pdf").write_bytes(b"%PDF-1.4")
+
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+
+        with patch.object(
+            backend_server,
+            "_agent_request",
+            return_value=self._agent_settings_response(agent_root),
+        ):
+            resp = self.client.get("/get_download_results_summary")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["mailbox"]["successfully_routed"], 1)
+        self.assertEqual(body["mailbox"]["manual_review_count"], 1)
+        self.assertEqual(body["mailbox"]["role_counts"], [{"folder": "OS", "count": 1}])
+        self.assertEqual(body["online"]["total_downloaded"], 1)
+        self.assertEqual(body["online"]["role_counts"], [{"folder": "OS", "count": 1}])
 
     def test_analyze_stream_forwards_applied_ship_type_to_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

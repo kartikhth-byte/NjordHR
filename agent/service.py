@@ -19,7 +19,10 @@ from .cloud_sync import CloudSyncClient
 from .config_store import AgentConfigStore
 from .filesystem import ensure_writable_folder
 from .job_queue import AgentJobQueue
+from .email_intake import OutlookEmailIntakeManager
+from .outlook_auth import OutlookAuthManager
 from .updater import AgentUpdater
+from rank_folders import rank_folder_slug
 
 
 def create_agent_app():
@@ -33,6 +36,8 @@ def create_agent_app():
     sync_client = CloudSyncClient(settings_store, os.path.join(settings_store.base_dir, "state"))
     sync_client.start()
     updater = AgentUpdater(settings_store, agent_version=os.getenv("NJORDHR_AGENT_VERSION", "0.1.0"))
+    outlook_auth = OutlookAuthManager(settings_store)
+    email_intake = OutlookEmailIntakeManager(settings_store, outlook_auth, parser)
 
     session_lock = threading.RLock()
     scraper_session = {"scraper": None}
@@ -43,9 +48,6 @@ def create_agent_app():
         if not scraper:
             return {"active": False, "valid": False, "reason": "No active session"}
         return scraper.get_session_health()
-
-    def _rank_slug(rank):
-        return str(rank or "").replace(" ", "_").replace("/", "-")
 
     def _build_scraper():
         cfg = settings_store.get()
@@ -122,7 +124,7 @@ def create_agent_app():
             qh.close()
 
         saved_files = _extract_saved_files(result.get("log", []))
-        rank_folder = _rank_slug(rank)
+        rank_folder = rank_folder_slug(rank)
         download_folder = settings.get("download_folder", "")
         upload_rows = []
         for filename in saved_files:
@@ -169,7 +171,23 @@ def create_agent_app():
             "uploads": upload_rows,
         }
 
-    job_queue = AgentJobQueue(_run_download_job)
+    def _run_agent_job(job_id, payload, emit):
+        job_type = str((payload or {}).get("job_type", "download")).strip() or "download"
+
+        def _job_emit(_job_id, event_type, message, data=None):
+            emit(_job_id, event_type, message, data or {})
+
+        if job_type == "download":
+            return _run_download_job(job_id, payload, _job_emit)
+        if job_type == "email_intake_fetch":
+            def _emit_email(event_type, message):
+                _job_emit(job_id, event_type, message, {})
+
+            result = email_intake.fetch_from_outlook(_emit_email)
+            return result
+        return {"success": False, "message": f"Unsupported job type: {job_type}"}
+
+    job_queue = AgentJobQueue(_run_agent_job)
 
     @app.route("/health", methods=["GET"])
     def health():
@@ -184,6 +202,7 @@ def create_agent_app():
             "download_folder_message": msg,
             "session_health": _session_health(),
             "sync": sync_client.stats(),
+            "email_intake": email_intake.health_summary(),
         })
 
     @app.route("/settings", methods=["GET"])
@@ -199,6 +218,11 @@ def create_agent_app():
             if not ok:
                 return jsonify({"success": False, "message": msg}), 400
             candidate["download_folder"] = normalized
+        if "email_intake_poll_interval_seconds" in candidate:
+            try:
+                candidate["email_intake_poll_interval_seconds"] = int(candidate["email_intake_poll_interval_seconds"])
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "email_intake_poll_interval_seconds must be an integer"}), 400
         updated = settings_store.update(candidate)
         return jsonify({"success": True, "settings": updated})
 
@@ -297,9 +321,102 @@ def create_agent_app():
             "success": True,
             "session_health": _session_health(),
             "sync": sync_client.stats(),
+            "email_intake": outlook_auth.status(),
             "settings_path": settings_store.path,
             "base_dir": settings_store.base_dir,
         })
+
+    @app.route("/email-intake/auth/status", methods=["GET"])
+    def email_intake_auth_status():
+        return jsonify({"success": True, "auth": outlook_auth.status()})
+
+    @app.route("/email-intake/auth/start", methods=["POST"])
+    def email_intake_auth_start():
+        payload = request.json or {}
+        result = outlook_auth.start_auth_flow(open_browser=bool(payload.get("open_browser", False)))
+        return jsonify(result), (200 if result.get("success") else 400)
+
+    @app.route("/email-intake/auth/disconnect", methods=["POST"])
+    def email_intake_auth_disconnect():
+        return jsonify(outlook_auth.disconnect())
+
+    @app.route("/email-intake/fetch", methods=["POST"])
+    def email_intake_fetch():
+        status = outlook_auth.status()
+        mailbox = str(status.get("mailbox", "")).strip()
+        connected_account = str(status.get("connected_account", "")).strip()
+        if not mailbox:
+            return jsonify({"success": False, "message": "email_intake_mailbox is not configured."}), 400
+        if not status.get("connected"):
+            return jsonify({"success": False, "message": "Outlook mailbox is not connected."}), 400
+        if mailbox.lower() != connected_account.lower():
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Connected Outlook account {connected_account or '(none)'} does not match "
+                    f"configured mailbox {mailbox}. Disconnect and connect the correct mailbox."
+                ),
+            }), 400
+        job_id = job_queue.submit({"job_type": "email_intake_fetch"})
+        return jsonify({"success": True, "job_id": job_id, "status": "queued"})
+
+    @app.route("/email-intake/manual-review/summary", methods=["GET"])
+    def email_intake_manual_review_summary():
+        try:
+            return jsonify({"success": True, "summary": email_intake.manual_review_summary()})
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/items", methods=["GET"])
+    def email_intake_manual_review_items():
+        try:
+            return jsonify({"success": True, "items": email_intake.list_manual_review_items()})
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/item", methods=["GET"])
+    def email_intake_manual_review_item():
+        item_id = str(request.args.get("id", "")).strip()
+        if not item_id:
+            return jsonify({"success": False, "message": "id is required"}), 400
+        try:
+            return jsonify({"success": True, "item": email_intake.get_manual_review_item(item_id)})
+        except RuntimeError as exc:
+            return jsonify({"success": False, "message": str(exc)}), 404
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/move", methods=["POST"])
+    def email_intake_manual_review_move():
+        payload = request.json or {}
+        item_id = str(payload.get("id", "")).strip()
+        selected_role = str(payload.get("selected_role", "")).strip()
+        if not item_id:
+            return jsonify({"success": False, "message": "id is required"}), 400
+        if not selected_role:
+            return jsonify({"success": False, "message": "selected_role is required"}), 400
+        try:
+            return jsonify(email_intake.move_manual_review_item(item_id, selected_role))
+        except RuntimeError as exc:
+            message = str(exc)
+            if "allowlist" in message or "selected_role is required" in message:
+                return jsonify({"success": False, "message": message}), 400
+            return jsonify({"success": False, "message": message}), 404
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/open", methods=["POST"])
+    def email_intake_manual_review_open():
+        payload = request.json or {}
+        item_id = str(payload.get("id", "")).strip()
+        if not item_id:
+            return jsonify({"success": False, "message": "id is required"}), 400
+        try:
+            return jsonify(email_intake.open_manual_review_item(item_id))
+        except RuntimeError as exc:
+            return jsonify({"success": False, "message": str(exc)}), 404
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
 
     @app.route("/diagnostics/log-bundle", methods=["GET"])
     def diagnostics_log_bundle():
@@ -355,6 +472,7 @@ def create_agent_app():
     def shutdown():
         sync_client.stop()
         job_queue.shutdown()
+        outlook_auth.shutdown()
         with session_lock:
             scraper = scraper_session["scraper"]
             scraper_session["scraper"] = None

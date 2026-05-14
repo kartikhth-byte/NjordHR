@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NjordHR - Dashboard Complete</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="/ui_vendor/react.development.js"></script>
+    <script src="/ui_vendor/react-dom.development.js"></script>
+    <script src="/ui_vendor/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -59,6 +59,46 @@
             top: 0;
             background: #f3f4f6;
             z-index: 10;
+        }
+
+        .app-shell {
+            font-size: 17px;
+            line-height: 1.6;
+        }
+
+        .app-shell .text-xs {
+            font-size: 0.9375rem;
+            line-height: 1.45rem;
+        }
+
+        .app-shell .text-sm {
+            font-size: 1.0625rem;
+            line-height: 1.6rem;
+        }
+
+        .app-shell .text-base {
+            font-size: 1.125rem;
+            line-height: 1.7rem;
+        }
+
+        .app-shell .text-lg {
+            font-size: 1.25rem;
+            line-height: 1.85rem;
+        }
+
+        .app-shell .text-xl {
+            font-size: 1.625rem;
+            line-height: 2.1rem;
+        }
+
+        .app-shell .text-2xl {
+            font-size: 2rem;
+            line-height: 2.45rem;
+        }
+
+        .app-shell .text-3xl {
+            font-size: 2.5rem;
+            line-height: 2.95rem;
         }
 
         .sr-only {
@@ -135,6 +175,7 @@
             const [isDownloadLoading, setIsDownloadLoading] = useState(false);
             const [isAnalyzeLoading, setIsAnalyzeLoading] = useState(false);
             const [isVerifyingResumes, setIsVerifyingResumes] = useState(false);
+            const [mailboxAuthAction, setMailboxAuthAction] = useState('');
             
             const [sessionConnected, setSessionConnected] = useState(false);
             const [sessionHealthInfo, setSessionHealthInfo] = useState({ idleSeconds: 0, idleTimeoutSeconds: 0 });
@@ -159,6 +200,39 @@
             const [rankFolders, setRankFolders] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
             const [downloadFolderSummaries, setDownloadFolderSummaries] = useState([]);
+            const [downloadResultsSummary, setDownloadResultsSummary] = useState({
+                mailbox: {
+                    last_fetch_at: '',
+                    total_processed: 0,
+                    successfully_routed: 0,
+                    manual_review_count: 0,
+                    failed_count: 0,
+                    role_counts: [],
+                },
+                online: {
+                    last_download_at: '',
+                    total_downloaded: 0,
+                    role_counts: [],
+                },
+            });
+            const [manualReviewSummary, setManualReviewSummary] = useState({
+                pending_count: 0,
+                latest_received_at: '',
+                latest_item_name: '',
+            });
+            const [manualReviewRoles, setManualReviewRoles] = useState([]);
+            const [manualReviewModal, setManualReviewModal] = useState({
+                open: false,
+                items: [],
+                selectedId: '',
+                loading: false,
+                detailLoading: false,
+                openLoading: false,
+                moveLoading: false,
+            });
+            const [manualReviewDetail, setManualReviewDetail] = useState(null);
+            const [manualReviewSelectedRole, setManualReviewSelectedRole] = useState('');
+            const [manualReviewMoveConfirmOpen, setManualReviewMoveConfirmOpen] = useState(false);
             const [downloadFolderBrowser, setDownloadFolderBrowser] = useState({
                 open: false,
                 rankFolder: '',
@@ -272,6 +346,7 @@
             
             const eventSourceRef = useRef(null);
             const downloadEventSourceRef = useRef(null);
+            const downloadLogRef = useRef(null);
             const dashboardTableScrollRef = useRef(null);
             const drawerNoteInputRef = useRef(null);
             const adminPasswordInputRef = useRef(null);
@@ -444,6 +519,9 @@
                 if (!authUser) return;
                 fetchRankFolders(authUser);
                 fetchDownloadFolderSummaries(authUser);
+                fetchDownloadResultsSummary(authUser);
+                fetchManualReviewSummary(authUser);
+                fetchManualReviewRoles(authUser);
                 fetchConfiguredShipTypes();
             }, [authUser, downloadLog]);
 
@@ -692,6 +770,11 @@
             }, [isDownloadInProgress]);
 
             useEffect(() => {
+                if (!downloadLogRef.current) return;
+                downloadLogRef.current.scrollTop = downloadLogRef.current.scrollHeight;
+            }, [downloadLog]);
+
+            useEffect(() => {
                 if (!sessionConnected && loginStep !== 'otp') return;
 
                 const checkHealth = async () => {
@@ -756,6 +839,8 @@
                     if (event.key !== 'Escape') return;
                     if (isDashboardDrawerOpen) {
                         closeDashboardDrawer();
+                    } else if (manualReviewModal.open) {
+                        closeManualReviewModal();
                     } else if (historyModal.open) {
                         setHistoryModal({ open: false, candidateId: '', rows: [] });
                     } else if (downloadFolderBrowser.open) {
@@ -764,10 +849,10 @@
                 };
                 window.addEventListener('keydown', onKeyDown);
                 return () => window.removeEventListener('keydown', onKeyDown);
-            }, [isDashboardDrawerOpen, historyModal.open, downloadFolderBrowser.open]);
+            }, [isDashboardDrawerOpen, manualReviewModal.open, historyModal.open, downloadFolderBrowser.open]);
 
             useEffect(() => {
-                if (!downloadFolderBrowser.open) return undefined;
+                if (!downloadFolderBrowser.open && !manualReviewModal.open) return undefined;
                 const previousBodyOverflow = document.body.style.overflow;
                 const previousHtmlOverflow = document.documentElement.style.overflow;
                 document.body.style.overflow = 'hidden';
@@ -776,7 +861,7 @@
                     document.body.style.overflow = previousBodyOverflow;
                     document.documentElement.style.overflow = previousHtmlOverflow;
                 };
-            }, [downloadFolderBrowser.open]);
+            }, [downloadFolderBrowser.open, manualReviewModal.open]);
 
             const fetchRankFolders = async (currentUser = authUser) => {
                 if (!currentUser) {
@@ -816,6 +901,270 @@
                     console.error("Could not fetch rank folder summaries", error);
                     setDownloadFolderSummaries([]);
                 }
+            };
+
+            const fetchDownloadResultsSummary = async (currentUser = authUser) => {
+                if (!currentUser) {
+                    setDownloadResultsSummary({
+                        mailbox: {
+                            last_fetch_at: '',
+                            total_processed: 0,
+                            successfully_routed: 0,
+                            manual_review_count: 0,
+                            failed_count: 0,
+                            role_counts: [],
+                        },
+                        online: {
+                            last_download_at: '',
+                            total_downloaded: 0,
+                            role_counts: [],
+                        },
+                    });
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_download_results_summary`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setDownloadResultsSummary({
+                            mailbox: {
+                                last_fetch_at: data.mailbox?.last_fetch_at || '',
+                                total_processed: Number(data.mailbox?.total_processed || 0),
+                                successfully_routed: Number(data.mailbox?.successfully_routed || 0),
+                                manual_review_count: Number(data.mailbox?.manual_review_count || 0),
+                                failed_count: Number(data.mailbox?.failed_count || 0),
+                                role_counts: Array.isArray(data.mailbox?.role_counts) ? data.mailbox.role_counts : [],
+                            },
+                            online: {
+                                last_download_at: data.online?.last_download_at || '',
+                                total_downloaded: Number(data.online?.total_downloaded || 0),
+                                role_counts: Array.isArray(data.online?.role_counts) ? data.online.role_counts : [],
+                            },
+                        });
+                    }
+                } catch (error) {
+                    console.error("Could not fetch download results summary", error);
+                }
+            };
+
+            const fetchManualReviewRoles = async (currentUser = authUser) => {
+                if (!currentUser) {
+                    setManualReviewRoles([]);
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_rank_options`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setManualReviewRoles(Array.isArray(data.ranks) ? data.ranks : []);
+                    } else {
+                        setManualReviewRoles([]);
+                    }
+                } catch (error) {
+                    console.error("Could not fetch manual review roles", error);
+                    setManualReviewRoles([]);
+                }
+            };
+
+            const fetchManualReviewSummary = async (currentUser = authUser) => {
+                if (!currentUser) {
+                    setManualReviewSummary({
+                        pending_count: 0,
+                        latest_received_at: '',
+                        latest_item_name: '',
+                    });
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/manual-review/summary`);
+                    const data = await response.json();
+                    if (data.success) {
+                        setManualReviewSummary({
+                            pending_count: Number(data.summary?.pending_count || 0),
+                            latest_received_at: data.summary?.latest_received_at || '',
+                            latest_item_name: data.summary?.latest_item_name || '',
+                        });
+                    } else {
+                        setManualReviewSummary({
+                            pending_count: 0,
+                            latest_received_at: '',
+                            latest_item_name: '',
+                        });
+                    }
+                } catch (error) {
+                    console.error("Could not fetch manual review summary", error);
+                    setManualReviewSummary({
+                        pending_count: 0,
+                        latest_received_at: '',
+                        latest_item_name: '',
+                    });
+                }
+            };
+
+            const fetchManualReviewItemDetail = async (itemId) => {
+                if (!itemId) {
+                    setManualReviewDetail(null);
+                    return;
+                }
+                setManualReviewModal(prev => ({ ...prev, detailLoading: true }));
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/manual-review/item?id=${encodeURIComponent(itemId)}`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load manual review item.');
+                        setManualReviewDetail(null);
+                        return;
+                    }
+                    setManualReviewDetail(data.item || null);
+                    setManualReviewSelectedRole('');
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load manual review item.');
+                    setManualReviewDetail(null);
+                } finally {
+                    setManualReviewModal(prev => ({ ...prev, detailLoading: false }));
+                }
+            };
+
+            const openManualReviewModal = async () => {
+                setManualReviewModal({
+                    open: true,
+                    items: [],
+                    selectedId: '',
+                    loading: true,
+                    detailLoading: false,
+                    openLoading: false,
+                    moveLoading: false,
+                });
+                setManualReviewDetail(null);
+                setManualReviewSelectedRole('');
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/manual-review/items`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load manual review items.');
+                        setManualReviewModal(prev => ({ ...prev, loading: false }));
+                        return;
+                    }
+                    const items = Array.isArray(data.items) ? data.items : [];
+                    const firstId = items[0]?.id || '';
+                    setManualReviewModal({
+                        open: true,
+                        items,
+                        selectedId: firstId,
+                        loading: false,
+                        detailLoading: Boolean(firstId),
+                        openLoading: false,
+                        moveLoading: false,
+                    });
+                    if (firstId) {
+                        fetchManualReviewItemDetail(firstId);
+                    }
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load manual review items.');
+                    setManualReviewModal(prev => ({ ...prev, loading: false }));
+                }
+            };
+
+            const closeManualReviewModal = () => {
+                setManualReviewModal({
+                    open: false,
+                    items: [],
+                    selectedId: '',
+                    loading: false,
+                    detailLoading: false,
+                    openLoading: false,
+                    moveLoading: false,
+                });
+                setManualReviewDetail(null);
+                setManualReviewSelectedRole('');
+                setManualReviewMoveConfirmOpen(false);
+            };
+
+            const handleSelectManualReviewItem = (itemId) => {
+                if (!itemId || itemId === manualReviewModal.selectedId) return;
+                setManualReviewMoveConfirmOpen(false);
+                setManualReviewModal(prev => ({ ...prev, selectedId: itemId }));
+                fetchManualReviewItemDetail(itemId);
+            };
+
+            const handleOpenManualReviewResume = async () => {
+                if (!manualReviewDetail?.id) return;
+                setManualReviewModal(prev => ({ ...prev, openLoading: true }));
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/manual-review/open`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: manualReviewDetail.id }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to open resume.');
+                        return;
+                    }
+                    handleSendMessage('success', 'Opened manual review resume.');
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to open resume.');
+                } finally {
+                    setManualReviewModal(prev => ({ ...prev, openLoading: false }));
+                }
+            };
+
+            const handleMoveManualReviewItem = () => {
+                if (!manualReviewDetail?.id || !manualReviewSelectedRole) return;
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    document.activeElement.blur();
+                }
+                setManualReviewMoveConfirmOpen(true);
+            };
+
+            const confirmMoveManualReviewItem = async () => {
+                if (!manualReviewDetail?.id || !manualReviewSelectedRole) return;
+                setManualReviewMoveConfirmOpen(false);
+                setManualReviewModal(prev => ({ ...prev, moveLoading: true }));
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/manual-review/move`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: manualReviewDetail.id,
+                            selected_role: manualReviewSelectedRole,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to move manual review item.');
+                        return;
+                    }
+
+                    handleSendMessage('success', `Moved to ${manualReviewSelectedRole}.`);
+                    const remainingItems = manualReviewModal.items.filter(item => item.id !== manualReviewDetail.id);
+                    const nextId = remainingItems[0]?.id || '';
+                    setManualReviewModal({
+                        open: remainingItems.length > 0,
+                        items: remainingItems,
+                        selectedId: nextId,
+                        loading: false,
+                        detailLoading: Boolean(nextId),
+                        openLoading: false,
+                        moveLoading: false,
+                    });
+                    setManualReviewSelectedRole('');
+                    setManualReviewDetail(null);
+                    fetchDownloadFolderSummaries();
+                    fetchDownloadResultsSummary();
+                    fetchManualReviewSummary();
+                    fetchRankFolders();
+                    if (nextId) {
+                        fetchManualReviewItemDetail(nextId);
+                    }
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to move manual review item.');
+                    setManualReviewModal(prev => ({ ...prev, moveLoading: false }));
+                }
+            };
+
+            const cancelMoveManualReviewItem = () => {
+                setManualReviewMoveConfirmOpen(false);
             };
 
             const openDownloadFolderBrowser = async (rankFolder) => {
@@ -916,6 +1265,7 @@
                     fetchAvailableRanks();
                     fetchDashboardData({ resetPage: true });
                     fetchDownloadFolderSummaries();
+                    fetchDownloadResultsSummary();
                 } catch (error) {
                     console.error('Download browser verification error:', error);
                     handleSendMessage('error', 'Failed to connect to backend.');
@@ -1552,6 +1902,28 @@
                 }
             };
 
+            const formatDateTime = (isoString) => {
+                if (!isoString) return '—';
+                try {
+                    const date = new Date(isoString);
+                    return date.toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                    });
+                } catch {
+                    return isoString;
+                }
+            };
+
+            const previewRoleFolder = (role) => {
+                const value = String(role || '').trim();
+                if (!value) return '—';
+                return value.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || value;
+            };
+
             const normalizePresentRank = (rank) => {
                 const value = String(rank || '').trim();
                 if (!value) return '';
@@ -1958,6 +2330,7 @@
                                 setDownloadCompleted(true);
                                 fetchRankFolders();
                                 fetchDownloadFolderSummaries();
+                                fetchDownloadResultsSummary();
                             } else {
                                 handleSendMessage('error', data.message || 'Download failed.');
                             }
@@ -2003,6 +2376,131 @@
                     setDownloadLog(prev => [...prev, 'Error: Could not connect to the backend.']);
                     setIsDownloadLoading(false);
                     setIsDownloadInProgress(false);
+                }
+            };
+
+            const handleFetchOutlookResumes = async () => {
+                setIsDownloadLoading(true);
+                setIsDownloadInProgress(true);
+                setDownloadCompleted(false);
+                setDownloadLog(['Starting Outlook fetch...']);
+                setLogFile(null);
+                try {
+                    if (downloadEventSourceRef.current) {
+                        downloadEventSourceRef.current.close();
+                    }
+
+                    const stream = new EventSource(`${API_BASE_URL}/outlook_fetch_stream`);
+                    downloadEventSourceRef.current = stream;
+
+                    stream.onmessage = (event) => {
+                        let data = {};
+                        try {
+                            data = JSON.parse(event.data);
+                        } catch {
+                            return;
+                        }
+
+                        if (data.type === 'started') {
+                            return;
+                        }
+
+                        if (data.type === 'log') {
+                            setDownloadLog(prev => [...prev, data.line]);
+                            return;
+                        }
+
+                        if (data.type === 'error') {
+                            handleSendMessage('error', data.message || 'Outlook fetch failed.');
+                            setDownloadLog(prev => [...prev, `ERROR: ${data.message || 'Outlook fetch failed.'}`]);
+                            resetDownloadActivityState();
+                            fetchRuntimeConfig(true);
+                            stream.close();
+                            downloadEventSourceRef.current = null;
+                            return;
+                        }
+
+                        if (data.type === 'complete') {
+                            if (data.success) {
+                                handleSendMessage('success', data.message || 'Outlook fetch finished.');
+                                setDownloadCompleted(true);
+                                fetchRankFolders();
+                                fetchDownloadFolderSummaries();
+                                fetchDownloadResultsSummary();
+                                fetchRuntimeConfig(true);
+                            } else {
+                                handleSendMessage('error', data.message || 'Outlook fetch failed.');
+                                fetchRuntimeConfig(true);
+                            }
+                            resetDownloadActivityState();
+                            stream.close();
+                            downloadEventSourceRef.current = null;
+                        }
+                    };
+
+                    stream.onerror = () => {
+                        stream.close();
+                        downloadEventSourceRef.current = null;
+                        resetDownloadActivityState();
+                        handleSendMessage('error', 'Outlook fetch stream disconnected.');
+                        setDownloadLog(prev => [...prev, 'ERROR: Outlook fetch stream disconnected.']);
+                        fetchRuntimeConfig(true);
+                    };
+                } catch (error) {
+                    handleSendMessage('error', 'Failed to connect to backend server.');
+                    setDownloadLog(prev => [...prev, 'ERROR: Could not connect to the backend.']);
+                    resetDownloadActivityState();
+                }
+            };
+
+            const handleConnectMailbox = async (mode = 'connect') => {
+                setMailboxAuthAction(mode);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/auth/start`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ open_browser: false }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to start mailbox connection.');
+                        return;
+                    }
+                    if (data.auth_url) {
+                        const popup = window.open(data.auth_url, '_blank', 'noopener,noreferrer');
+                        if (!popup) {
+                            handleSendMessage('info', 'Mailbox sign-in is ready. Allow pop-ups and use Connect Mailbox again if Microsoft sign-in did not open.');
+                        }
+                    }
+                    handleSendMessage('success', data.message || 'Mailbox sign-in started. Complete the Microsoft consent flow, then return here.');
+                    setDownloadLog(prev => [...prev, 'Started Outlook mailbox sign-in flow.']);
+                    setTimeout(() => fetchRuntimeConfig(true), 1500);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to start mailbox connection.');
+                } finally {
+                    setMailboxAuthAction('');
+                }
+            };
+
+            const handleDisconnectMailbox = async () => {
+                setMailboxAuthAction('disconnect');
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/auth/disconnect`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to disconnect mailbox.');
+                        return;
+                    }
+                    handleSendMessage('success', data.message || 'Mailbox disconnected.');
+                    setDownloadLog(prev => [...prev, 'Disconnected Outlook mailbox.']);
+                    await fetchRuntimeConfig(true);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to disconnect mailbox.');
+                } finally {
+                    setMailboxAuthAction('');
                 }
             };
             
@@ -2339,6 +2837,39 @@
                 );
             };
 
+            const renderDefaultInsights = (match) => {
+                const insights = match?.default_insights || {};
+                const lines = [];
+                if (typeof insights.current_rank_months_total === 'number') {
+                    lines.push(`Months in current rank: ${insights.current_rank_months_total}`);
+                }
+                if (typeof insights.has_contract_gap_over_6_months === 'boolean') {
+                    if (insights.has_contract_gap_over_6_months) {
+                        const approxMonths = typeof insights.max_contract_gap_days === 'number'
+                            ? Math.max(1, Math.ceil(insights.max_contract_gap_days / 30))
+                            : null;
+                        const gapTimeline = insights.max_contract_gap_start && insights.max_contract_gap_end
+                            ? `${insights.max_contract_gap_start} to ${insights.max_contract_gap_end}`
+                            : '';
+                        lines.push(
+                            approxMonths
+                                ? `Gap > 6 months: Yes (${approxMonths} months${gapTimeline ? `, ${gapTimeline}` : ''})`
+                                : 'Gap > 6 months: Yes'
+                        );
+                    } else {
+                        lines.push('Gap > 6 months: No');
+                    }
+                }
+                if (lines.length === 0) return null;
+                return (
+                    <div className="mt-2 space-y-1">
+                        {lines.map((line, index) => (
+                            <p key={index} className="text-xs text-slate-500">{line}</p>
+                        ))}
+                    </div>
+                );
+            };
+
             const renderHardFilterReasons = (match) => {
                 const reasons = Array.isArray(match.hard_filter_reasons) ? match.hard_filter_reasons : [];
                 if (reasons.length === 0) return null;
@@ -2350,73 +2881,220 @@
                     </div>
                 );
             };
+
+            const getReviewPathLabel = (reviewPathType) => {
+                if (reviewPathType === 'factual_unknown') return 'Insufficient evidence';
+                if (reviewPathType === 'version_mismatch_unknown') return 'Partial evaluation';
+                return 'Sufficient evidence';
+            };
+
+            const getReviewPathBadgeClass = (reviewPathType) => {
+                if (reviewPathType === 'factual_unknown') return 'bg-amber-100 text-amber-800 border border-amber-200';
+                if (reviewPathType === 'version_mismatch_unknown') return 'bg-blue-100 text-blue-800 border border-blue-200';
+                return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+            };
+
+            const getEvidenceReviewStateLabel = (evidenceReviewState) => {
+                if (evidenceReviewState === 'insufficient_evidence') return 'Evidence too weak for automation to decide';
+                if (evidenceReviewState === 'partial_evidence') return 'Partial evidence only';
+                return 'Sufficient evidence';
+            };
+
+            const formatEvidenceReasonLabel = (reason) => {
+                const labels = {
+                    age_evidence_missing: 'Age evidence missing',
+                    age_evidence_ambiguous: 'Age evidence ambiguous',
+                    visa_evidence_missing: 'Visa evidence missing',
+                    passport_evidence_missing: 'Passport evidence missing',
+                    stcw_evidence_incomplete: 'STCW evidence incomplete',
+                    coc_evidence_incomplete: 'COC evidence incomplete',
+                    rank_evidence_incomplete: 'Rank evidence incomplete',
+                    document_unreadable: 'Document unreadable',
+                    document_sparse: 'Resume content sparse',
+                    version_mismatch_partial_evaluation: 'Version mismatch partial evaluation',
+                };
+                return labels[reason] || String(reason || '').replace(/_/g, ' ').trim();
+            };
+
+            const formatDocumentQualityHint = (hint) => {
+                const labels = {
+                    usable_but_noisy: 'Usable but noisy',
+                    sparse: 'Sparse resume content',
+                    unreadable: 'Unreadable document',
+                };
+                return labels[hint] || '';
+            };
             
             const DownloadTabContent = () => {
+                const emailIntake = runtimeConfig?.local_agent?.health?.email_intake || {};
+                const agentReachable = Boolean(runtimeConfig?.local_agent?.reachable);
+                const outlookConnected = Boolean(emailIntake.connected);
+                const connectedMailbox = emailIntake.connected_account || emailIntake.mailbox || '-';
+                const mailboxLastError = String(emailIntake.last_error || '').trim();
+                const mailboxNeedsReconnect = /token refresh failed/i.test(mailboxLastError);
+                const mailboxStatusLabel = !outlookConnected
+                    ? 'Not connected'
+                    : mailboxNeedsReconnect
+                        ? 'Reconnect required'
+                        : 'Connected';
+                const mailboxResults = downloadResultsSummary.mailbox || {};
+                const onlineResults = downloadResultsSummary.online || {};
+                const manualReviewCount = Number(manualReviewSummary.pending_count || 0);
+                const mailboxRoutedCount = Number(mailboxResults.successfully_routed || 0);
+                const mailboxFailedCount = Number(mailboxResults.failed_count || 0);
+                const mailboxTotalProcessed = mailboxRoutedCount + manualReviewCount + mailboxFailedCount;
+                const mailboxLastActivity = mailboxResults.last_fetch_at || manualReviewSummary.latest_received_at || '';
+                const manualReviewDestinationPreview = previewRoleFolder(manualReviewSelectedRole);
+                const mailboxResultsIsEmpty = !mailboxRoutedCount && !manualReviewCount && !mailboxFailedCount;
+                const deriveManualReviewCandidateName = (item) => {
+                    const extractedName = String(item?.candidate_name || '').trim();
+                    if (extractedName) return extractedName;
+                    const sourceName = String(item?.original_attachment_name || item?.pdf_filename || '').trim();
+                    if (!sourceName) return 'Unknown candidate';
+                    const withoutPrefix = sourceName.replace(/^EMAIL_\d+_[A-Za-z0-9]+_/, '');
+                    const withoutExt = withoutPrefix.replace(/\.pdf$/i, '').replace(/\.docx?$/i, '');
+                    const normalized = withoutExt
+                        .replace(/[_\-]+/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    return normalized || 'Unknown candidate';
+                };
+                const renderRoleCounts = (roleCounts, emptyText) => (
+                    Array.isArray(roleCounts) && roleCounts.length > 0 ? (
+                        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                            {roleCounts.map(entry => (
+                                <div key={entry.folder} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 border border-slate-200">
+                                    <span className="text-sm text-slate-700">{entry.folder}</span>
+                                    <span className="text-xs font-medium text-slate-500">{entry.count}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500">{emptyText}</p>
+                    )
+                );
                 return (
                     <div>
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-2xl font-semibold">Download Resumes</h2>
-                                <p className="text-sm text-gray-600 mt-1">Browse already-downloaded resumes anytime. Live scraping still requires an active website session.</p>
-                            </div>
-                            {sessionConnected ? (
-                                <div className="flex items-center space-x-4">
-                                    <div className="flex items-center space-x-2">
-                                        <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></span>
-                                        <span className="text-sm font-medium text-green-700">Connected to Website</span>
-                                    </div>
-                                    {sessionHealthInfo.idleTimeoutSeconds > 0 && (
-                                        <span className="text-xs text-slate-500">
-                                            Idle timeout: {formatIdleDuration(Math.max(0, sessionHealthInfo.idleTimeoutSeconds - sessionHealthInfo.idleSeconds))} remaining
-                                        </span>
-                                    )}
-                                    <button onClick={handleDisconnect} disabled={isDisconnecting} className="text-sm text-red-600 hover:underline disabled:text-gray-400">{isDisconnecting ? 'Disconnecting...' : 'Disconnect'}</button>
-                                </div>
-                            ) : (
-                                <span className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">Website disconnected</span>
-                            )}
-                        </div>
                         <div className="space-y-6">
                             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                                 <div className="flex flex-col gap-1 mb-6">
                                     <h3 className="text-xl font-semibold text-slate-900">Download Resumes</h3>
-                                    <p className="text-sm text-slate-600">Connection info, session controls, and live download activity stay together here.</p>
+                                    <p className="text-sm text-slate-600">Download from Mailbox and/or Website</p>
                                 </div>
                                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6 items-start">
                                     <div className="space-y-4">
-                                        {!sessionConnected ? (
-                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-                                                <h4 className="text-base font-semibold text-slate-800 mb-2">Connect to the website to start downloading new resumes.</h4>
-                                                <p className="text-sm text-slate-600 mb-4">Browsing downloaded resumes does not require an active website session.</p>
-                                                {sessionDisconnectNotice && (
-                                                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                                                        <p className="text-sm text-amber-800">{sessionDisconnectNotice}</p>
-                                                        {sessionHealthInfo.idleTimeoutSeconds > 0 && (
-                                                            <p className="mt-1 text-xs text-amber-700">
-                                                                Previous session lasted {formatIdleDuration(sessionHealthInfo.idleSeconds)} and timed out after {formatIdleDuration(sessionHealthInfo.idleTimeoutSeconds)} of inactivity.
-                                                            </p>
-                                                        )}
+                                        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+                                            <div className="mb-3 flex items-start justify-between gap-3">
+                                                <h4 className="text-base font-semibold text-slate-800">Mailbox Intake</h4>
+                                                {outlookConnected && (
+                                                    <div className="flex flex-wrap justify-end gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleConnectMailbox('reconnect')}
+                                                            disabled={!agentReachable || mailboxAuthAction !== ''}
+                                                            className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                                        >
+                                                            {mailboxAuthAction === 'reconnect' ? 'Reconnecting...' : 'Reconnect Mailbox'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleDisconnectMailbox}
+                                                            disabled={!agentReachable || mailboxAuthAction !== ''}
+                                                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                                                        >
+                                                            {mailboxAuthAction === 'disconnect' ? 'Disconnecting...' : 'Disconnect Mailbox'}
+                                                        </button>
                                                     </div>
                                                 )}
-                                                {loginStep === 'phone' && (
-                                                    <div className="space-y-4">
-                                                        <div>
-                                                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Registered Mobile Number</label>
-                                                            <input type="text" id="phone" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" placeholder="e.g. 91xxxxxxxxxx"/>
-                                                        </div>
-                                                        <button onClick={handleSendOTP} disabled={isOtpSending} className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
-                                                            {isOtpSending ? 'Connecting...' : 'Connect & Get OTP'}
-                                                        </button>
-                                                        {!!phoneNumber && !isOtpSending && (
-                                                            <p className="text-xs text-slate-500">Your last mobile number is preserved so you can reconnect quickly.</p>
-                                                        )}
-                                                    </div>
+                                            </div>
+                                            <div className="space-y-2 text-sm text-slate-700">
+                                                <p><span className="font-medium">Mailbox:</span> {connectedMailbox}</p>
+                                                <p><span className="font-medium">Connection Status:</span> {mailboxStatusLabel}</p>
+                                                <p><span className="font-medium">Info:</span> Fetching only PDF and DOC/DOCX</p>
+                                                <p><span className="font-medium">Fetch Status:</span> {isDownloadInProgress ? 'Fetching' : (downloadCompleted ? 'Completed' : 'Not Started')}</p>
+                                            </div>
+                                            {mailboxLastError && (
+                                                <p className="mt-3 text-xs text-amber-700">{mailboxLastError}</p>
+                                            )}
+                                            <button
+                                                onClick={handleFetchOutlookResumes}
+                                                disabled={isDownloadLoading || !agentReachable || !outlookConnected || mailboxAuthAction !== ''}
+                                                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-300"
+                                            >
+                                                {isDownloadLoading ? (
+                                                    <>
+                                                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"></circle>
+                                                            <path d="M22 12a10 10 0 00-10-10" stroke="currentColor" strokeWidth="3" className="opacity-90"></path>
+                                                        </svg>
+                                                        <span>Fetching Mail...</span>
+                                                    </>
+                                                ) : (
+                                                    <span>Fetch Mail</span>
+                                                )}
+                                            </button>
+                                            <div className="mt-3 flex flex-wrap gap-3">
+                                                {!outlookConnected ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleConnectMailbox('connect')}
+                                                        disabled={!agentReachable || mailboxAuthAction !== ''}
+                                                        className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                                    >
+                                                        {mailboxAuthAction === 'connect' ? 'Connecting...' : 'Connect Mailbox'}
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                            {!agentReachable ? (
+                                                <p className="mt-3 text-xs text-amber-700">The local agent is not reachable. Start it before running Outlook fetch.</p>
+                                            ) : !outlookConnected ? (
+                                                <p className="mt-3 text-xs text-amber-700">Connect the configured Outlook mailbox before starting a fetch.</p>
+                                            ) : mailboxNeedsReconnect ? (
+                                                <p className="mt-3 text-xs text-amber-700">The saved mailbox session needs to be refreshed. Use Reconnect Mailbox before fetching.</p>
+                                            ) : null}
+                                            {agentReachable && !emailIntake.converter_available && (
+                                                <p className="mt-3 text-xs text-amber-700">{emailIntake.converter_message || 'LibreOffice (soffice) is not available. DOC/DOCX files will fail until conversion is installed.'}</p>
+                                            )}
+                                        </div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                            <div className="mb-3 flex items-start justify-between gap-3">
+                                                <h4 className="text-base font-semibold text-slate-800">Website Intake</h4>
+                                                <button
+                                                    onClick={handleDisconnect}
+                                                    disabled={!sessionConnected || isDisconnecting}
+                                                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {isDisconnecting ? 'Disconnecting...' : 'Disconnect Website'}
+                                                </button>
+                                            </div>
+                                            {sessionDisconnectNotice && !sessionConnected && (
+                                                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                                                    <p className="text-sm text-amber-800">{sessionDisconnectNotice}</p>
+                                                    {sessionHealthInfo.idleTimeoutSeconds > 0 && (
+                                                        <p className="mt-1 text-xs text-amber-700">
+                                                            Previous session lasted {formatIdleDuration(sessionHealthInfo.idleSeconds)} and timed out after {formatIdleDuration(sessionHealthInfo.idleTimeoutSeconds)} of inactivity.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Registered Mobile Number</label>
+                                                    <input type="text" id="phone" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md" placeholder="e.g. 91xxxxxxxxxx"/>
+                                                </div>
+                                                <p className="text-sm text-slate-700">
+                                                    <span className="font-medium">Website Status:</span> {sessionConnected ? 'Connected' : 'Disconnected'}
+                                                </p>
+                                                {sessionConnected && sessionHealthInfo.idleTimeoutSeconds > 0 && (
+                                                    <p className="text-xs text-slate-500">
+                                                        Idle timeout: {formatIdleDuration(Math.max(0, sessionHealthInfo.idleTimeoutSeconds - sessionHealthInfo.idleSeconds))} remaining
+                                                    </p>
                                                 )}
                                                 {loginStep === 'otp' && (
-                                                     <div className="space-y-4">
-                                                        <p className="text-sm text-center text-gray-600">An OTP was sent to {phoneNumber}.</p>
+                                                    <div className="space-y-3">
+                                                        <p className="text-sm text-gray-600">An OTP was sent to {phoneNumber}.</p>
                                                         {otpSecondsLeft !== null && (
-                                                            <p className={`text-xs text-center ${otpSecondsLeft <= 30 ? 'text-red-600' : 'text-gray-500'}`}>
+                                                            <p className={`text-xs ${otpSecondsLeft <= 30 ? 'text-red-600' : 'text-gray-500'}`}>
                                                                 OTP expires in {otpSecondsLeft}s
                                                             </p>
                                                         )}
@@ -2424,36 +3102,47 @@
                                                             <label htmlFor="otp" className="block text-sm font-medium text-gray-700">Enter OTP</label>
                                                             <input type="text" key="otp-input" id="otp" value={otp} onChange={e => setOtp(e.target.value)} className="mt-1 w-full p-2 border border-gray-300 rounded-md"/>
                                                         </div>
-                                                        <button onClick={handleVerifyOTP} disabled={isOtpVerifying} className="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-green-300">
+                                                        <button onClick={handleVerifyOTP} disabled={isOtpVerifying} className="w-full rounded-lg bg-green-600 py-2 px-4 text-sm font-semibold text-white hover:bg-green-700 disabled:bg-green-300">
                                                             {isOtpVerifying ? 'Verifying...' : 'Verify & Start Session'}
                                                         </button>
-                                                         <button onClick={() => { setLoginStep('phone'); setOtp(''); setOtpExpiresAt(null); }} className="w-full text-sm text-center text-blue-600 hover:underline">
+                                                        <button onClick={() => { setLoginStep('phone'); setOtp(''); setOtpExpiresAt(null); }} className="w-full text-sm text-center text-blue-600 hover:underline">
                                                             Use a different number
                                                         </button>
                                                     </div>
                                                 )}
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div>
-                                                    <label htmlFor="rank" className="block text-sm font-medium text-gray-700 mb-1">Select Rank</label>
-                                                    <select id="rank" value={selectedRank} onChange={e => setSelectedRank(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                                                        {ranks.map(r => <option key={r} value={r}>{r}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label htmlFor="shipType" className="block text-sm font-medium text-gray-700 mb-1">Select Ship Type</label>
-                                                    <select id="shipType" value={selectedShipType} onChange={e => setSelectedShipType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                                                        {shipTypes.map(st => <option key={st} value={st}>{st}</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="flex items-center">
-                                                    <input id="force" type="checkbox" checked={forceRedownload} onChange={e => setForceRedownload(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
-                                                    <label htmlFor="force" className="ml-2 block text-sm text-gray-900">Force re-download all resumes (slower)</label>
-                                                </div>
-                                                <button onClick={handleStartDownload} disabled={isDownloadLoading} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-300">
-                                                    {isDownloadLoading ? 'Downloading...' : 'Start Download'}
-                                                </button>
+                                                {sessionConnected && (
+                                                    <div className="space-y-4 rounded-lg border border-blue-100 bg-white p-4">
+                                                        <div>
+                                                            <label htmlFor="rank" className="block text-sm font-medium text-gray-700 mb-1">Select Role</label>
+                                                            <select id="rank" value={selectedRank} onChange={e => setSelectedRank(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                                                                {ranks.map(r => <option key={r} value={r}>{r}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label htmlFor="shipType" className="block text-sm font-medium text-gray-700 mb-1">Select Ship Type</label>
+                                                            <select id="shipType" value={selectedShipType} onChange={e => setSelectedShipType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                                                                {shipTypes.map(st => <option key={st} value={st}>{st}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="flex items-center">
+                                                            <input id="force" type="checkbox" checked={forceRedownload} onChange={e => setForceRedownload(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded"/>
+                                                            <label htmlFor="force" className="ml-2 block text-sm text-gray-900">Force re-download all resumes (slower)</label>
+                                                        </div>
+                                                        <button onClick={handleStartDownload} disabled={isDownloadLoading} className="w-full rounded-lg bg-blue-600 py-3 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-blue-300">
+                                                            {isDownloadLoading ? 'Downloading...' : 'Start Download'}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {!sessionConnected && loginStep === 'phone' && (
+                                                    <>
+                                                        <button onClick={handleSendOTP} disabled={isOtpSending} className="w-full rounded-lg bg-blue-600 py-3 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-blue-300">
+                                                            {isOtpSending ? 'Connecting...' : 'Connect & Get OTP'}
+                                                        </button>
+                                                        {!!phoneNumber && !isOtpSending && (
+                                                            <p className="text-xs text-slate-500">Your last mobile number is preserved so you can reconnect quickly.</p>
+                                                        )}
+                                                    </>
+                                                )}
                                                 {isDownloadInProgress && (
                                                     <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
                                                         <div className="flex items-center justify-between mb-3">
@@ -2470,13 +3159,13 @@
                                                         <p className="text-xs text-blue-700 mt-2">The scraper is collecting profiles and generating PDFs. This may take a few minutes.</p>
                                                     </div>
                                                 )}
-                                            </>
-                                        )}
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="rounded-xl bg-slate-950 p-5 text-white">
                                         <h4 className="text-lg font-medium text-white mb-2">Download Log</h4>
                                         <p className="text-sm text-slate-300 mb-3">Live scraper output and backend status updates.</p>
-                                        <div className="bg-slate-800 text-white font-mono text-sm p-4 rounded-lg log-area overflow-y-auto" role="log" aria-live="polite" aria-label="Download progress log">
+                                        <div ref={downloadLogRef} className="bg-slate-800 text-white font-mono text-sm p-4 rounded-lg log-area overflow-y-auto" role="log" aria-live="polite" aria-label="Download progress log">
                                             {downloadLog.length > 0 ? (
                                                 downloadLog.map((line, i) => <p key={i} className="whitespace-pre-wrap">{line}</p>)
                                             ) : (
@@ -2488,6 +3177,67 @@
                                                 Full log saved to: <span className="font-mono">{logFile}</span>
                                             </p>
                                         )}
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex flex-col gap-1 mb-6">
+                                    <h3 className="text-xl font-semibold text-slate-900">Download Results</h3>
+                                </div>
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                        <div className="flex items-start justify-between gap-4 mb-4">
+                                            <div>
+                                                <h4 className="text-base font-semibold text-slate-800">Mailbox Result</h4>
+                                                <p className="text-xs text-slate-500 mt-1">Last fetch: {formatDateTime(mailboxLastActivity)}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={openManualReviewModal}
+                                                disabled={manualReviewCount === 0}
+                                                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                                            >
+                                                {`Review Manual Items (${manualReviewCount})`}
+                                            </button>
+                                        </div>
+                                        {mailboxResultsIsEmpty ? (
+                                            <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5">
+                                                <p className="text-sm font-semibold text-slate-800">Mailbox ready for first fetch</p>
+                                                <p className="mt-1 text-sm text-slate-600">
+                                                    No mailbox resumes have been processed yet. Use <span className="font-medium">Fetch Mail</span> to start intake from {connectedMailbox}.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="space-y-2 text-sm text-slate-700 mb-5">
+                                                    <p><span className="font-medium">Mailbox:</span> {connectedMailbox}</p>
+                                                    <p><span className="font-medium">Total processed:</span> {mailboxTotalProcessed}</p>
+                                                    <p><span className="font-medium">Successfully routed:</span> {mailboxRoutedCount}</p>
+                                                    <p><span className="font-medium">Needs manual review:</span> {manualReviewCount}</p>
+                                                    <p><span className="font-medium">Failed:</span> {mailboxFailedCount}</p>
+                                                </div>
+                                                <div>
+                                                    <h5 className="text-sm font-semibold text-slate-800 mb-2">Resumes downloaded per role</h5>
+                                                    {renderRoleCounts(mailboxResults.role_counts, 'No mailbox resumes have been routed to role folders yet. Pending manual review items are listed above.')}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+                                        <div className="mb-4">
+                                            <h4 className="text-base font-semibold text-slate-800">Online Result</h4>
+                                            <p className="text-xs text-slate-500 mt-1">Last download: {formatDateTime(onlineResults.last_download_at)}</p>
+                                        </div>
+                                        <div className="space-y-2 text-sm text-slate-700 mb-5">
+                                            <p><span className="font-medium">Total downloaded:</span> {onlineResults.total_downloaded || 0}</p>
+                                            <p><span className="font-medium">Website Status:</span> {sessionConnected ? 'Connected' : 'Disconnected'}</p>
+                                        </div>
+                                        <div>
+                                            <h5 className="text-sm font-semibold text-slate-800 mb-2">Resumes downloaded per role</h5>
+                                            {renderRoleCounts(onlineResults.role_counts, 'No website-downloaded resumes yet.')}
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -2526,6 +3276,157 @@
                                 )}
                             </section>
                         </div>
+
+                        {manualReviewModal.open && (
+                            <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 p-4">
+                                <div className="relative animate-scale-in flex h-[80vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                                    <div className="flex items-start justify-between border-b border-slate-200 px-6 py-4">
+                                        <div>
+                                            <h3 className="text-xl font-semibold text-slate-900">Manual Review Items</h3>
+                                            <p className="text-sm text-slate-600 mt-1">{manualReviewModal.items.length} items pending</p>
+                                            <p className="text-sm text-slate-500 mt-1">Review resumes that could not be confidently assigned to a role.</p>
+                                        </div>
+                                        <button type="button" onClick={closeManualReviewModal} className="rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">Close</button>
+                                    </div>
+                                    <div
+                                        className={`grid min-h-0 flex-1 overflow-hidden grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] ${
+                                            manualReviewMoveConfirmOpen ? 'pointer-events-none select-none' : ''
+                                        }`}
+                                        aria-hidden={manualReviewMoveConfirmOpen ? 'true' : undefined}
+                                    >
+                                        <div className="min-h-0 overflow-hidden border-r border-slate-200 bg-slate-50 p-4">
+                                            {manualReviewModal.loading ? (
+                                                <p className="text-sm text-slate-500">Loading manual review items...</p>
+                                            ) : manualReviewModal.items.length > 0 ? (
+                                                <div className="min-h-0 h-full space-y-3 overflow-y-auto pr-1">
+                                                    {manualReviewModal.items.map(item => (
+                                                        <button
+                                                            key={item.id}
+                                                            type="button"
+                                                            onClick={() => handleSelectManualReviewItem(item.id)}
+                                                            className={`w-full rounded-xl border p-4 text-left transition ${
+                                                                manualReviewModal.selectedId === item.id
+                                                                    ? 'border-indigo-300 bg-indigo-50'
+                                                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                                            }`}
+                                                        >
+                                                            <p className="text-sm font-semibold text-slate-900 break-words">{deriveManualReviewCandidateName(item)}</p>
+                                                            <p className="mt-1 text-xs text-slate-600 break-all">{item.mail_sender || 'Unknown sender'}</p>
+                                                            <p className="mt-2 text-xs text-slate-400">{formatDateTime(item.received_at)}</p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-slate-500">No manual review items found.</p>
+                                            )}
+                                        </div>
+                                        <div className="min-h-0 overflow-y-auto p-6">
+                                            {manualReviewModal.detailLoading ? (
+                                                <p className="text-sm text-slate-500">Loading selected item...</p>
+                                            ) : manualReviewDetail ? (
+                                                <div className="space-y-6">
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Filename</span>
+                                                            <button type="button" onClick={handleOpenManualReviewResume} className="mt-1 block text-left text-sm font-semibold text-blue-700 hover:underline break-all">
+                                                                {manualReviewDetail.pdf_filename}
+                                                            </button>
+                                                        </div>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-700">
+                                                            <p><span className="font-medium">Email subject:</span> {manualReviewDetail.mail_subject || '—'}</p>
+                                                            <p><span className="font-medium">Sender email:</span> {manualReviewDetail.mail_sender || '—'}</p>
+                                                            <p><span className="font-medium">Received date:</span> {formatDateTime(manualReviewDetail.received_at)}</p>
+                                                            {manualReviewDetail.original_attachment_name && manualReviewDetail.original_attachment_name !== manualReviewDetail.pdf_filename ? (
+                                                                <p><span className="font-medium">Original attachment:</span> {manualReviewDetail.original_attachment_name}</p>
+                                                            ) : (
+                                                                <p><span className="font-medium">Candidate:</span> {deriveManualReviewCandidateName(manualReviewDetail)}</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                                        <h4 className="text-sm font-semibold text-slate-800 mb-2">Review reason</h4>
+                                                        <p className="text-sm text-slate-700">{manualReviewDetail.review_reason || manualReviewDetail.rank_reason || 'Needs manual role review.'}</p>
+                                                    </div>
+
+                                                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                                        <div className="space-y-4">
+                                                            <div>
+                                                                <label htmlFor="manual-review-role" className="block text-sm font-medium text-slate-700 mb-1">Assign role</label>
+                                                                <select
+                                                                    id="manual-review-role"
+                                                                    value={manualReviewSelectedRole}
+                                                                    onChange={e => {
+                                                                        setManualReviewMoveConfirmOpen(false);
+                                                                        setManualReviewSelectedRole(e.target.value);
+                                                                    }}
+                                                                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm"
+                                                                >
+                                                                    <option value="">Select a role</option>
+                                                                    {manualReviewRoles.map(roleOption => (
+                                                                        <option key={roleOption} value={roleOption}>{roleOption}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <p className="text-sm text-slate-600">
+                                                                <span className="font-medium">Will move to:</span> {manualReviewDestinationPreview}
+                                                            </p>
+                                                            <div className="flex flex-wrap gap-3">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleOpenManualReviewResume}
+                                                                    disabled={manualReviewModal.openLoading}
+                                                                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                                                >
+                                                                    {manualReviewModal.openLoading ? 'Opening...' : 'Open Resume'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={handleMoveManualReviewItem}
+                                                                    disabled={!manualReviewSelectedRole || manualReviewModal.moveLoading || manualReviewMoveConfirmOpen}
+                                                                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-300"
+                                                                >
+                                                                    {manualReviewModal.moveLoading ? 'Moving...' : 'Move to Role'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-sm text-slate-500">Select a manual review item to inspect its details.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {manualReviewMoveConfirmOpen && (
+                                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/25 p-6">
+                                            <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-2xl">
+                                                <p className="text-base font-semibold text-slate-900">
+                                                    Move this resume to {manualReviewDestinationPreview}?
+                                                </p>
+                                                <div className="mt-5 flex flex-wrap gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={confirmMoveManualReviewItem}
+                                                        disabled={manualReviewModal.moveLoading}
+                                                        className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-indigo-300"
+                                                    >
+                                                        Confirm
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={cancelMoveManualReviewItem}
+                                                        disabled={manualReviewModal.moveLoading}
+                                                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             };
@@ -3728,8 +4629,8 @@
             
             return (
                 <>
-                <div className="min-h-screen bg-gray-50 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 text-gray-800">
-                    <div className="max-w-[1600px] mx-auto">
+                <div className="app-shell min-h-screen bg-gray-50 px-4 py-5 sm:px-6 sm:py-6 xl:px-10 2xl:px-12 text-gray-800">
+                    <div className="w-full max-w-none">
                         <header className="flex justify-between items-center mb-8">
                              <div className="flex items-center gap-4">
                                 <img
@@ -4155,6 +5056,14 @@
                                                                         <td className="px-6 py-4 text-sm">{getConfidenceBadge(match.confidence)}</td>
                                                                         <td className="px-6 py-4 text-sm text-gray-500">
                                                                             <p>{match.reason}</p>
+                                                                            {match.review_path_type && match.review_path_type !== 'none' && (
+                                                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
+                                                                                        {getReviewPathLabel(match.review_path_type)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                            {renderDefaultInsights(match)}
                                                                             {renderShipTypeEvidence(match)}
                                                                             {renderHardFilterReasons(match)}
                                                                         </td>
@@ -4196,6 +5105,26 @@
                                                                                     {match.filename}
                                                                                 </a>
                                                                                 <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
+                                                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
+                                                                                        {getReviewPathLabel(match.review_path_type)}
+                                                                                    </span>
+                                                                                    {match.evidence_review_state && (
+                                                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                                                                            {getEvidenceReviewStateLabel(match.evidence_review_state)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {match.document_quality_hint && (
+                                                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                                                                            {formatDocumentQualityHint(match.document_quality_hint)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                {match.evidence_review_reasons && match.evidence_review_reasons.length > 0 && (
+                                                                                    <p className="text-xs text-slate-500 mt-2">
+                                                                                        Review reasons: {match.evidence_review_reasons.map(formatEvidenceReasonLabel).join(', ')}
+                                                                                    </p>
+                                                                                )}
                                                                                 {match.unknown_reason_types && match.unknown_reason_types.length > 0 && (
                                                                                     <p className="text-xs text-slate-500 mt-2">
                                                                                         Unknown reason: {match.unknown_reason_types.join(', ')}
@@ -4204,6 +5133,7 @@
                                                                                 {match.dob && (
                                                                                     <p className="text-xs text-slate-500 mt-2">DOB: {match.dob}</p>
                                                                                 )}
+                                                                                {renderDefaultInsights(match)}
                                                                                 {renderShipTypeEvidence(match)}
                                                                                 {renderHardFilterReasons(match)}
                                                                             </div>
@@ -4238,6 +5168,7 @@
                                                                             {match.filename}
                                                                         </a>
                                                                         <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
+                                                                        {renderDefaultInsights(match)}
                                                                         {renderShipTypeEvidence(match)}
                                                                         {renderHardFilterReasons(match)}
                                                                     </div>

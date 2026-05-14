@@ -840,6 +840,39 @@ class OutlookEmailIntakeManagerTests(unittest.TestCase):
         manual_dir = Path(self.temp_dir.name) / "downloads" / "_EmailInbox_ManualReview"
         self.assertFalse(any(manual_dir.glob("*.pdf")))
 
+    def test_should_skip_non_resume_attachment_for_candidate_certificate_attachment(self):
+        should_skip, reason = self.manager._should_skip_non_resume_attachment(
+            subject="Hello sir good day , my name is Ankithkrishna this is my CV for OS rank",
+            sender="ankithkrishnamanalur@gmail.com",
+            attachment_name="ANKITH KRISHNA WK CERTIFICATE .pdf",
+            pdf_text="The authenticity of this certificate can be verified online using the QR code.",
+        )
+
+        self.assertTrue(should_skip)
+        self.assertIn("supporting document", reason.lower())
+
+    def test_should_skip_non_resume_attachment_for_standalone_coc_supporting_doc(self):
+        should_skip, reason = self.manager._should_skip_non_resume_attachment(
+            subject="Application for the Rank of Junior Engineer - Tanker / Container Vessel",
+            sender="adityasweet001@gmail.com",
+            attachment_name="COC.pdf",
+            pdf_text="Certificate of Competency",
+        )
+
+        self.assertTrue(should_skip)
+        self.assertIn("supporting document", reason.lower())
+
+    def test_should_skip_non_resume_attachment_for_internal_proposal_biodata_mail(self):
+        should_skip, reason = self.manager._should_skip_non_resume_attachment(
+            subject="REG: INITIAL PROPOSAL - CMA CGM ARISTOTE - BOSUN SUJIT MORE",
+            sender="subhiksha@njordships.com",
+            attachment_name="sujit's Revised Biodata (1).pdf",
+            pdf_text="Revised biodata attached for review.",
+        )
+
+        self.assertTrue(should_skip)
+        self.assertIn("proposal/certificate", reason.lower())
+
     def test_fetch_from_outlook_routes_unreadable_binary_like_pdf_to_failed(self):
         pdf_bytes = base64.b64encode(b"%PDF-1.4 unreadable").decode("ascii")
         attachments = [{

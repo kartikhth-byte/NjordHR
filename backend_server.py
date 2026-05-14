@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, Response, send_file, redirect, has_request_context, session
 from flask_cors import CORS
+import configparser
 import csv
 import io
 import os
@@ -35,6 +36,7 @@ from app_settings import load_app_settings, FeatureFlags
 from repositories.repo_factory import build_candidate_event_repo
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import normalize_env_value, normalized_url
+from ai_analyzer import Analyzer
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -64,8 +66,12 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def _build_analyzer():
-    from ai_analyzer import Analyzer
-    return Analyzer(config)
+    analyzer_config = configparser.ConfigParser()
+    analyzer_config.read_dict({section: dict(config[section]) for section in config.sections()})
+    if not analyzer_config.has_section("Settings"):
+        analyzer_config.add_section("Settings")
+    analyzer_config.set("Settings", "Default_Download_Folder", _active_download_root())
+    return Analyzer(analyzer_config)
 
 
 def _resolve_verified_resumes_dir():
@@ -345,7 +351,7 @@ def _platform_from_filename(name: str):
 
 
 def _rank_manifest_data(rank_folder):
-    base_folder = settings['Default_Download_Folder']
+    base_folder = _active_download_root()
     rank_path = _resolve_within_base(base_folder, rank_folder)
     manifest_path = os.path.join(rank_path, "manifest.json")
     if not os.path.exists(manifest_path):
@@ -382,6 +388,39 @@ def _list_visible_rank_folders(base_folder):
         return sorted(names)
     except Exception:
         return []
+
+
+def _list_assignable_rank_folders(base_folder):
+    return [name for name in _list_visible_rank_folders(base_folder) if not str(name).startswith("_")]
+
+
+def _configured_rank_options():
+    ranks_str = config.get('Ranks', 'rank_options', fallback='').strip()
+    return [rank.strip() for rank in ranks_str.split('\n') if rank.strip()]
+
+
+def _configured_download_root():
+    configured = str(settings.get('Default_Download_Folder', '')).strip()
+    if not configured:
+        return ""
+    return os.path.abspath(os.path.expanduser(configured))
+
+
+def _active_download_root():
+    if _use_local_agent():
+        try:
+            resp = _agent_request("GET", "/settings", timeout=5)
+            if getattr(resp, "status_code", 500) < 400:
+                payload = resp.json()
+                agent_settings = payload.get("settings") if isinstance(payload, dict) else {}
+                candidate = str((agent_settings or {}).get("download_folder", "")).strip()
+                if candidate:
+                    resolved = os.path.abspath(os.path.expanduser(candidate))
+                    if os.path.isdir(resolved):
+                        return resolved
+        except Exception:
+            pass
+    return _configured_download_root()
 
 
 def _ui_idle_autoshutdown_enabled():
@@ -1336,7 +1375,7 @@ def _delete_older_candidate_resume_versions(rank_folder, candidate_id, keep_file
     if not rank or not cid:
         return deleted
 
-    source_base_dir = os.path.abspath(settings['Default_Download_Folder'])
+    source_base_dir = _active_download_root()
     source_folder = _resolve_within_base(source_base_dir, rank)
     if not os.path.isdir(source_folder):
         return deleted
@@ -1375,6 +1414,27 @@ def serve_app_asset(filename):
         return send_from_directory('.', filename)
     except FileNotFoundError:
         return "Asset not found.", 404
+
+
+@app.route('/ui_vendor/<path:filename>')
+def serve_ui_vendor_asset(filename):
+    """Serve vendored local UI runtime assets (React, ReactDOM, Babel)."""
+    allowed_ext = {'.js', '.map'}
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in allowed_ext:
+        return "Invalid vendor asset request.", 400
+
+    vendor_root = Path("web_vendor").resolve()
+    requested_path = (vendor_root / filename).resolve()
+    try:
+        requested_path.relative_to(vendor_root)
+    except ValueError:
+        return "Invalid vendor asset request.", 400
+
+    if not requested_path.is_file():
+        return "Vendor asset not found.", 404
+
+    return send_from_directory(str(vendor_root), filename)
 
 
 @app.route('/auth/me', methods=['GET'])
@@ -1842,6 +1902,176 @@ def download_stream():
         yield f"data: {json.dumps(payload)}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
+
+
+@app.route('/outlook_fetch_stream', methods=['GET'])
+def outlook_fetch_stream():
+    ok, reason = _require_role("admin", "manager")
+    if not ok:
+        def denied():
+            yield f"data: {json.dumps({'type': 'error', 'message': reason})}\n\n"
+        return Response(denied(), mimetype='text/event-stream')
+
+    if not _use_local_agent():
+        def no_agent():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Local agent is required for Outlook intake.'})}\n\n"
+        return Response(no_agent(), mimetype='text/event-stream')
+
+    def generate_agent():
+        try:
+            create_resp = _agent_request("POST", "/email-intake/fetch", json_body={}, timeout=60)
+            create_payload = create_resp.json()
+            if not create_payload.get("success"):
+                msg = create_payload.get("message", "Failed to start Outlook fetch job")
+                yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"
+                return
+            job_id = str(create_payload.get("job_id", "")).strip()
+            if not job_id:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Local agent did not return job_id'})}\n\n"
+                return
+            yield f"data: {json.dumps({'type': 'started', 'message': 'Outlook fetch started.', 'job_id': job_id})}\n\n"
+
+            with _agent_request("GET", f"/jobs/{job_id}/stream", stream=True, timeout=600) as stream_resp:
+                if stream_resp.status_code >= 400:
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'Agent stream failed ({stream_resp.status_code})'})}\n\n"
+                    return
+                for raw in stream_resp.iter_lines(decode_unicode=True):
+                    if raw is None:
+                        continue
+                    line = raw.strip()
+                    if not line:
+                        continue
+                    if line.startswith(":"):
+                        yield ": keepalive\n\n"
+                        continue
+                    if not line.startswith("data:"):
+                        continue
+                    payload_text = line[5:].strip()
+                    try:
+                        event = json.loads(payload_text)
+                    except Exception:
+                        continue
+                    ev_type = event.get("type")
+                    if ev_type == "log":
+                        yield f"data: {json.dumps({'type': 'log', 'line': event.get('message', '')})}\n\n"
+                    elif ev_type == "complete":
+                        result = (event.get("data") or {}).get("result", {}) or {}
+                        if result.get("success"):
+                            yield f"data: {json.dumps({'type': 'complete', **result})}\n\n"
+                        else:
+                            yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', 'Outlook fetch failed')})}\n\n"
+                        return
+                    elif ev_type == "error":
+                        yield f"data: {json.dumps({'type': 'error', 'message': event.get('message', 'Outlook fetch failed')})}\n\n"
+                        return
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Local agent unavailable: {exc}'})}\n\n"
+
+    return Response(generate_agent(), mimetype='text/event-stream')
+
+
+@app.route('/email-intake/manual-review/summary', methods=['GET'])
+def proxy_email_intake_manual_review_summary():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for manual review."}), 400
+    try:
+        resp = _agent_request("GET", "/email-intake/manual-review/summary", timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/email-intake/manual-review/items', methods=['GET'])
+def proxy_email_intake_manual_review_items():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for manual review."}), 400
+    try:
+        resp = _agent_request("GET", "/email-intake/manual-review/items", timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/email-intake/manual-review/item', methods=['GET'])
+def proxy_email_intake_manual_review_item():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for manual review."}), 400
+    item_id = str(request.args.get("id", "")).strip()
+    if not item_id:
+        return jsonify({"success": False, "message": "id is required"}), 400
+    try:
+        resp = _agent_request("GET", "/email-intake/manual-review/item", params={"id": item_id}, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/email-intake/manual-review/move', methods=['POST'])
+def proxy_email_intake_manual_review_move():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for manual review."}), 400
+    payload = request.json or {}
+    try:
+        resp = _agent_request("POST", "/email-intake/manual-review/move", json_body=payload, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/email-intake/manual-review/open', methods=['POST'])
+def proxy_email_intake_manual_review_open():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for manual review."}), 400
+    payload = request.json or {}
+    try:
+        resp = _agent_request("POST", "/email-intake/manual-review/open", json_body=payload, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/email-intake/auth/start', methods=['POST'])
+def proxy_email_intake_auth_start():
+    ok, reason = _require_role("admin", "manager")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for Outlook mailbox connection."}), 400
+    payload = request.json or {}
+    try:
+        resp = _agent_request("POST", "/email-intake/auth/start", json_body=payload, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/email-intake/auth/disconnect', methods=['POST'])
+def proxy_email_intake_auth_disconnect():
+    ok, reason = _require_role("admin", "manager")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    if not _use_local_agent():
+        return jsonify({"success": False, "message": "Local agent is required for Outlook mailbox disconnection."}), 400
+    try:
+        resp = _agent_request("POST", "/email-intake/auth/disconnect", json_body={}, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
 
 @app.route('/disconnect_session', methods=['POST'])
 def disconnect_session():
@@ -2725,12 +2955,12 @@ def get_rank_folders():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
-    base_folder = settings['Default_Download_Folder']
+    base_folder = _active_download_root()
     if not os.path.isdir(base_folder):
         return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
     
     try:
-        subfolders = _list_visible_rank_folders(base_folder)
+        subfolders = _list_assignable_rank_folders(base_folder)
         return jsonify({"success": True, "folders": subfolders})
     except Exception as e:
         return jsonify({"success": False, "folders": [], "message": str(e)})
@@ -2741,13 +2971,13 @@ def get_rank_folder_summaries():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
-    base_folder = settings['Default_Download_Folder']
+    base_folder = _active_download_root()
     if not os.path.isdir(base_folder):
         return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
 
     try:
         summaries = []
-        for folder in _list_visible_rank_folders(base_folder):
+        for folder in _list_assignable_rank_folders(base_folder):
             folder_path = os.path.join(base_folder, folder)
             pdf_count = len([name for name in os.listdir(folder_path) if name.lower().endswith('.pdf')])
             summaries.append({
@@ -2757,6 +2987,111 @@ def get_rank_folder_summaries():
         return jsonify({"success": True, "folders": summaries})
     except Exception as e:
         return jsonify({"success": False, "folders": [], "message": str(e)})
+
+
+@app.route('/get_rank_options', methods=['GET'])
+def get_rank_options():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    try:
+        base_folder = _active_download_root()
+        live_ranks = _list_assignable_rank_folders(base_folder) if os.path.isdir(base_folder) else []
+        if live_ranks:
+            return jsonify({"success": True, "ranks": live_ranks, "source": "active_download_root"})
+        return jsonify({"success": True, "ranks": _configured_rank_options(), "source": "configured_rank_options"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e), "ranks": []}), 500
+
+
+@app.route('/get_download_results_summary', methods=['GET'])
+def get_download_results_summary():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+
+    base_folder = _active_download_root()
+    if not os.path.isdir(base_folder):
+        return jsonify({"success": False, "message": "Download folder not found."})
+
+    try:
+        role_folders = _list_assignable_rank_folders(base_folder)
+        mailbox_role_counts = {}
+        online_role_counts = {}
+        mailbox_success_count = 0
+        online_success_count = 0
+        mailbox_latest_ts = 0.0
+        online_latest_ts = 0.0
+
+        for folder in role_folders:
+            folder_path = os.path.join(base_folder, folder)
+            mailbox_folder_count = 0
+            online_folder_count = 0
+            for name in os.listdir(folder_path):
+                if not name.lower().endswith('.pdf'):
+                    continue
+                full_path = os.path.join(folder_path, name)
+                modified_ts = os.path.getmtime(full_path)
+                if name.startswith("EMAIL_"):
+                    mailbox_folder_count += 1
+                    mailbox_success_count += 1
+                    mailbox_latest_ts = max(mailbox_latest_ts, modified_ts)
+                else:
+                    online_folder_count += 1
+                    online_success_count += 1
+                    online_latest_ts = max(online_latest_ts, modified_ts)
+            if mailbox_folder_count:
+                mailbox_role_counts[folder] = mailbox_folder_count
+            if online_folder_count:
+                online_role_counts[folder] = online_folder_count
+
+        manual_review_dir = os.path.join(base_folder, "_EmailInbox_ManualReview")
+        manual_review_count = 0
+        if os.path.isdir(manual_review_dir):
+            for name in os.listdir(manual_review_dir):
+                if name.lower().endswith(".pdf"):
+                    manual_review_count += 1
+                    mailbox_latest_ts = max(mailbox_latest_ts, os.path.getmtime(os.path.join(manual_review_dir, name)))
+
+        failed_dir = os.path.join(base_folder, "_EmailInbox_Failed")
+        failed_count = 0
+        if os.path.isdir(failed_dir):
+            for name in os.listdir(failed_dir):
+                full_path = os.path.join(failed_dir, name)
+                if not os.path.isfile(full_path) or name.lower().endswith(".json"):
+                    continue
+                failed_count += 1
+                mailbox_latest_ts = max(mailbox_latest_ts, os.path.getmtime(full_path))
+
+        def _serialize_role_counts(role_counts):
+            return [
+                {"folder": folder, "count": int(role_counts.get(folder, 0))}
+                for folder in sorted(role_counts.keys())
+            ]
+
+        def _iso_or_empty(timestamp):
+            if not timestamp:
+                return ""
+            return datetime.fromtimestamp(timestamp, UTC).isoformat().replace("+00:00", "Z")
+
+        return jsonify({
+            "success": True,
+            "mailbox": {
+                "last_fetch_at": _iso_or_empty(mailbox_latest_ts),
+                "total_processed": mailbox_success_count + manual_review_count + failed_count,
+                "successfully_routed": mailbox_success_count,
+                "manual_review_count": manual_review_count,
+                "failed_count": failed_count,
+                "role_counts": _serialize_role_counts(mailbox_role_counts),
+            },
+            "online": {
+                "last_download_at": _iso_or_empty(online_latest_ts),
+                "total_downloaded": online_success_count,
+                "role_counts": _serialize_role_counts(online_role_counts),
+            },
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 @app.route('/get_rank_folder_files', methods=['GET'])
@@ -2770,7 +3105,7 @@ def get_rank_folder_files():
     if not _is_safe_name(rank_folder):
         return jsonify({"success": False, "message": "Invalid rank folder.", "files": []}), 400
 
-    base_folder = settings['Default_Download_Folder']
+    base_folder = _active_download_root()
     try:
         folder_path = _resolve_within_base(base_folder, rank_folder)
         if not os.path.isdir(folder_path):
@@ -2871,7 +3206,7 @@ def analyze_stream():
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Missing required data'})}\n\n"
                 return
             
-            target_folder = os.path.join(settings['Default_Download_Folder'], rank_folder)
+            target_folder = os.path.join(_active_download_root(), rank_folder)
             if not os.path.isdir(target_folder):
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Rank folder not found: ' + rank_folder})}\n\n"
                 return
@@ -2932,7 +3267,7 @@ def analyze():
         if not prompt or not rank_folder:
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
         
-        target_folder = os.path.join(settings['Default_Download_Folder'], rank_folder)
+        target_folder = os.path.join(_active_download_root(), rank_folder)
         if not os.path.isdir(target_folder):
             return jsonify({"success": False, "message": f"Rank folder not found: {rank_folder}"}), 400
         
@@ -2989,7 +3324,7 @@ def submit_feedback():
 
 def _serve_local_resume(rank_folder, filename):
     try:
-        base_dir = os.path.abspath(settings['Default_Download_Folder'])
+        base_dir = _active_download_root()
         full_path = _resolve_within_base(base_dir, rank_folder, filename)
 
         if not os.path.isfile(full_path):
@@ -3100,7 +3435,7 @@ def verify_resumes():
         if not _is_safe_name(filename) or not filename.lower().endswith('.pdf'):
             return jsonify({"success": False, "message": f"Invalid filename: {filename}"}), 400
 
-    source_base_dir = os.path.abspath(settings['Default_Download_Folder'])
+    source_base_dir = _active_download_root()
     source_folder = _resolve_within_base(source_base_dir, rank_folder)
 
     try:
@@ -3466,7 +3801,7 @@ def export_resumes():
             return jsonify({"success": False, "message": "Selected candidates not found"}), 404
 
         zip_buffer = io.BytesIO()
-        download_root = os.path.abspath(settings['Default_Download_Folder'])
+        download_root = _active_download_root()
         missing_files = []
         added_files = 0
 

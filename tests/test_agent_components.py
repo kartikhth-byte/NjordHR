@@ -2,10 +2,13 @@ import os
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from agent.config_store import AgentConfigStore
 from agent.filesystem import ensure_writable_folder
 from agent.job_queue import AgentJobQueue
+from agent.secret_store import SecretStore
+from rank_folders import rank_folder_path, rank_folder_slug
 
 
 class AgentComponentsTests(unittest.TestCase):
@@ -16,16 +19,74 @@ class AgentComponentsTests(unittest.TestCase):
             cfg = store.get()
             self.assertTrue(cfg["device_id"])
             self.assertTrue(os.path.isabs(cfg["download_folder"]))
+            self.assertEqual(cfg["download_folder"], os.path.join(tmp, "Resumes"))
+            self.assertEqual(cfg["email_intake_monitored_folder"], "Inbox/NjordHR Resumes")
+            self.assertEqual(cfg["email_intake_processed_folder"], "Inbox/NjordHR Processed")
+            self.assertEqual(cfg["email_intake_failed_folder"], "Inbox/NjordHR Failed")
+            self.assertEqual(cfg["email_intake_poll_interval_seconds"], 60)
 
-            updated = store.update({"cloud_sync_enabled": False, "download_folder": tmp})
+            updated = store.update({
+                "cloud_sync_enabled": False,
+                "download_folder": tmp,
+                "email_intake_mailbox": "recruitment@njordships.com",
+                "email_intake_poll_interval_seconds": "90",
+                "outlook_client_id": "test-client-id",
+            })
             self.assertFalse(updated["cloud_sync_enabled"])
             self.assertEqual(updated["download_folder"], tmp)
+            self.assertEqual(updated["email_intake_mailbox"], "recruitment@njordships.com")
+            self.assertEqual(updated["email_intake_poll_interval_seconds"], 90)
+            self.assertEqual(updated["outlook_client_id"], "test-client-id")
+
+    def test_config_store_migrates_legacy_download_folder_into_app_managed_storage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = os.path.join(tmp, "app")
+            os.makedirs(app_dir, exist_ok=True)
+            path = os.path.join(app_dir, "agent.json")
+            legacy_downloads = os.path.join(tmp, "Downloads", "NjordHR")
+            os.makedirs(legacy_downloads, exist_ok=True)
+            legacy_file = os.path.join(legacy_downloads, "resume.pdf")
+            with open(legacy_file, "wb") as fh:
+                fh.write(b"%PDF-1.4 legacy")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write('{"download_folder": "%s"}' % legacy_downloads.replace("\\", "\\\\"))
+
+            with mock.patch("agent.config_store._legacy_download_folder", return_value=legacy_downloads):
+                store = AgentConfigStore(path=path)
+
+            cfg = store.get()
+            expected_download_folder = os.path.join(app_dir, "Resumes")
+            self.assertEqual(cfg["download_folder"], expected_download_folder)
+            self.assertTrue(os.path.exists(os.path.join(expected_download_folder, "resume.pdf")))
+            self.assertFalse(os.path.exists(legacy_file))
 
     def test_ensure_writable_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             ok, msg, path = ensure_writable_folder(tmp)
             self.assertTrue(ok, msg)
             self.assertEqual(path, tmp)
+
+    def test_secret_store_uses_backend(self):
+        class FakeBackend:
+            def __init__(self):
+                self.rows = {}
+
+            def get_password(self, service, key):
+                return self.rows.get((service, key))
+
+            def set_password(self, service, key, value):
+                self.rows[(service, key)] = value
+
+            def delete_password(self, service, key):
+                self.rows.pop((service, key), None)
+
+        backend = FakeBackend()
+        store = SecretStore(service_name="NjordHR.Test", backend=backend)
+        self.assertTrue(store.available())
+        store.set("cache", "hello")
+        self.assertEqual(store.get("cache"), "hello")
+        store.delete("cache")
+        self.assertIsNone(store.get("cache"))
 
     def test_job_queue_runs_worker(self):
         def worker(job_id, payload, emit):
@@ -49,7 +110,14 @@ class AgentComponentsTests(unittest.TestCase):
         finally:
             q.shutdown()
 
+    def test_rank_folder_helpers_match_seajobs_slugging(self):
+        self.assertEqual(rank_folder_slug("Chief Officer"), "Chief_Officer")
+        self.assertEqual(rank_folder_slug("NCV/NWKO"), "NCV-NWKO")
+        self.assertEqual(
+            str(rank_folder_path("/tmp/downloads", "Add 2nd Officer")),
+            "/tmp/downloads/Add_2nd_Officer",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
-

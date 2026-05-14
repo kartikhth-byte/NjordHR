@@ -52,6 +52,14 @@ NON_RESUME_ATTACHMENT_PATTERNS = (
     r"\bfor printing\b",
     r"\bces test\b",
 )
+SUPPORTING_DOCUMENT_ATTACHMENT_PATTERNS = (
+    r"\bcertificate\b",
+    r"\bcertificates\b",
+    r"\bcoc\b",
+    r"\bdce\b",
+    r"\badvance dce\b",
+    r"\bwk certificate\b",
+)
 PROPOSAL_CONTEXT_PATTERNS = (
     r"\bfinal proposal\b",
     r"\binitial proposal\b",
@@ -523,10 +531,16 @@ class OutlookEmailIntakeManager:
             re.search(pattern, " ".join([subject_lower, attachment_lower, pdf_text_lower[:2000]]), flags=re.IGNORECASE)
             for pattern in NON_RESUME_ATTACHMENT_PATTERNS
         )
+        supporting_doc_attachment = any(
+            re.search(pattern, attachment_lower, flags=re.IGNORECASE)
+            for pattern in SUPPORTING_DOCUMENT_ATTACHMENT_PATTERNS
+        )
         resume_signal_count = self._resume_like_signal_count(subject, attachment_name, pdf_text)
 
-        if sender_is_internal and proposal_context and non_resume_signal and resume_signal_count < 4:
+        if sender_is_internal and proposal_context:
             return True, "Attachment looks like internal proposal/certificate material, not a candidate resume."
+        if supporting_doc_attachment and resume_signal_count < 4:
+            return True, "Attachment looks like a certificate/supporting document, not a primary candidate resume."
         return False, ""
 
     def _cleanup_skipped_attachment_files(self, original_path, working_pdf_path):

@@ -89,6 +89,13 @@ Optional toggle (dev-only, no embedded runtime):
 NJORDHR_EMBED_RUNTIME=false ./scripts/packaging/macos/build_app_bundle.sh
 ```
 
+Optional bundled converter for DOC/DOCX customer builds:
+```bash
+NJORDHR_BUNDLED_CONVERTER_SOURCE=/absolute/path/to/libreoffice-payload \
+NJORDHR_REQUIRE_BUNDLED_CONVERTER=true \
+./scripts/packaging/macos/build_app_bundle.sh
+```
+
 Outputs:
 - `build/macos/NjordHR.app`
 - `build/macos/NjordHR-<version>-unsigned.pkg`
@@ -120,6 +127,14 @@ Inno installer (requires `iscc.exe`):
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\build_inno_installer.ps1
 ```
 
+Bundled converter staging for Electron/Windows release builds:
+```bash
+cd electron
+NJORDHR_BUNDLED_CONVERTER_SOURCE=/absolute/path/to/libreoffice-payload \
+NJORDHR_REQUIRE_BUNDLED_CONVERTER=true \
+npm run dist:win
+```
+
 Outputs under:
 - `build/windows/`
 
@@ -131,6 +146,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_sh
 ### Notes
 - Current installers are **unsigned** (development phase).
 - macOS app bundle is self-contained by default (`NJORDHR_EMBED_RUNTIME=true`) and ships Python runtime + dependencies.
+- The packaged runtime will export `NJORDHR_BUNDLED_CONVERTER_DIR` to the agent when a converter payload is staged under app resources.
+- If no bundled converter is staged, DOC/DOCX conversion falls back to system LibreOffice for developer validation only.
 - Next production step is code signing + notarization:
   - macOS: signed/notarized pkg
   - Windows: signed installer executable
