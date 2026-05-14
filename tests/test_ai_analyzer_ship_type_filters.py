@@ -208,6 +208,20 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         )
         self.assertEqual(constraint, "dredger")
 
+    def test_dual_fuel_experience_prompt_populates_applied_constraint(self):
+        constraints = self.analyzer._extract_job_constraints("has dual fuel experience")
+
+        self.assertIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["experience_ship_type"], "dual fuel")
+        self.assertNotIn("has dual fuel experience", constraints["parsing_notes"])
+
+    def test_dual_fuel_experience_is_extracted_from_resume_text(self):
+        vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
+            "Main engine: MAN B&W ME-GI dual fuel engine. Sea service on Bulk Carrier."
+        )
+
+        self.assertEqual(vessel_types, ["bulk carrier", "dual fuel"])
+
     def test_experience_ship_type_hard_filter_is_separate_from_applied_ship_type(self):
         candidate_facts = {
             "application": {"applied_ship_types": ["Bulk Carrier"]},
@@ -229,6 +243,17 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         result = self.analyzer._evaluate_hard_filters(candidate_facts, {
             "applied_constraints": ["experience_ship_type"],
             "hard_constraints": {"experience_ship_type": "tanker"}
+        })
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
+
+    def test_experience_ship_type_family_matches_dual_fuel_aliases(self):
+        candidate_facts = {
+            "experience": {"vessel_types": ["dual fuel engine"]},
+        }
+        result = self.analyzer._evaluate_hard_filters(candidate_facts, {
+            "applied_constraints": ["experience_ship_type"],
+            "hard_constraints": {"experience_ship_type": "dual fuel"}
         })
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")

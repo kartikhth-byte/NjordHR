@@ -793,7 +793,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                         "rank": rank,
                         "filename": filename,
                         "source_path": str(pdf_path),
-                        "raw_text": "Worked on dual fuel ships with strong leadership",
+                        "raw_text": "Worked with strong leadership under pressure",
                     },
                 }]
 
@@ -817,7 +817,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         }
         self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
 
-        events = list(self.analyzer.run_analysis_stream(self.rank, "has experience in dual fuel ships"))
+        events = list(self.analyzer.run_analysis_stream(self.rank, "strong leadership under pressure"))
         match_event = next(event for event in events if event["type"] == "match_found")
 
         self.assertEqual(match_event["match"]["filename"], filename)

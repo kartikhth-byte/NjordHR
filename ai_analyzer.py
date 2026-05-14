@@ -2071,6 +2071,23 @@ class AIResumeAnalyzer:
         configured_matches = self._extract_configured_ship_types(prompt)
         if configured_matches:
             return configured_matches[0]
+        for canonical, aliases in self._experience_keyword_aliases().items():
+            for alias in aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                escaped = re.escape(normalized_alias)
+                patterns = [
+                    rf'\b{escaped}\s+experience\b',
+                    rf'\bexperience\s+(?:on|in|with)?\s*{escaped}\b',
+                    rf'\bexperienced\s+(?:on|with)?\s*{escaped}\b',
+                    rf'\bhas\s+{escaped}\s+experience\b',
+                    rf'\bwith\s+{escaped}\s+experience\b',
+                    rf'\bworked\s+(?:on|with)?\s*{escaped}\b',
+                    rf'\bsailed\s+(?:on|with)?\s*{escaped}\b',
+                    rf'\b{escaped}\s+background\b',
+                    rf'\bbackground\s+(?:on|in|with)?\s*{escaped}\b',
+                ]
+                if any(re.search(pattern, prompt) for pattern in patterns):
+                    return canonical
         # Configured labels returned nothing; fall back to hardcoded alias table.
         if not self._configured_ship_type_labels():
             print("[WARN] _extract_experienced_vessel_type: no configured ship-type labels found; "
@@ -2097,6 +2114,17 @@ class AIResumeAnalyzer:
         if not normalized_requested:
             return []
 
+        experience_aliases = self._experience_keyword_aliases().get(normalized_requested)
+        if experience_aliases:
+            expected_values = []
+            seen = set()
+            for alias in experience_aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                if normalized_alias and normalized_alias not in seen:
+                    expected_values.append(normalized_alias)
+                    seen.add(normalized_alias)
+            return expected_values or [normalized_requested]
+
         aliases = self._ship_type_aliases().get(normalized_requested)
         if not aliases:
             return [normalized_requested]
@@ -2109,6 +2137,20 @@ class AIResumeAnalyzer:
                 expected_values.append(normalized_alias)
                 seen.add(normalized_alias)
         return expected_values or [normalized_requested]
+
+    def _experience_keyword_aliases(self):
+        return {
+            "dual fuel": [
+                "dual fuel",
+                "dual-fuel",
+                "dual fuel engine",
+                "dual-fuel engine",
+                "dual fuel engines",
+                "dual-fuel engines",
+                "df engine",
+                "df engines",
+            ],
+        }
 
     def _visa_type_definitions(self):
         return [
@@ -3339,8 +3381,15 @@ class AIResumeAnalyzer:
         if not text:
             return []
         configured_matches = self._extract_configured_ship_types(text)
-        if configured_matches:
-            return configured_matches
+        matched = list(configured_matches)
+        for canonical, aliases in self._experience_keyword_aliases().items():
+            for alias in aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                if normalized_alias and re.search(rf'\b{re.escape(normalized_alias)}\b', text):
+                    matched.append(canonical)
+                    break
+        if matched:
+            return list(dict.fromkeys(matched))
         # Configured labels returned nothing; fall back to hardcoded alias table.
         if not self._configured_ship_type_labels():
             print("[WARN] _extract_experienced_ship_types_from_text: no configured ship-type labels found; "
