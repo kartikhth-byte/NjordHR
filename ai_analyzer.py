@@ -1546,6 +1546,53 @@ class AIResumeAnalyzer:
             return {"min_total_months": months, "display_value": original_phrase, "operator": "gte"}
         return None
 
+    def _extract_recent_contract_vessel_experience_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt.strip():
+            return None
+
+        normalized_prompt = self._normalize_ship_type(prompt)
+        ship_matches = self._extract_configured_ship_types(normalized_prompt)
+        if not ship_matches:
+            for canonical, aliases in self._ship_type_aliases().items():
+                for alias in aliases:
+                    normalized_alias = self._normalize_ship_type(alias)
+                    if normalized_alias and re.search(rf"\b{re.escape(normalized_alias)}\b", normalized_prompt):
+                        ship_matches = [canonical]
+                        break
+                if ship_matches:
+                    break
+        if not ship_matches:
+            return None
+
+        if "experience" not in normalized_prompt and " on " not in normalized_prompt:
+            return None
+
+        contracts_match = re.search(r"\b(?:last|recent)\s+(\d+)\s+contracts?\b", normalized_prompt, flags=re.IGNORECASE)
+        if not contracts_match:
+            return None
+
+        months_match = re.search(
+            r"\b(?:minimum|at\s+least)?\s*(\d+)\s*(years?|months?)\b",
+            normalized_prompt,
+            flags=re.IGNORECASE,
+        )
+        if not months_match:
+            return None
+
+        value = int(months_match.group(1))
+        unit = months_match.group(2).lower()
+        min_months = value * 12 if unit.startswith("year") else value
+        lookback_contracts = int(contracts_match.group(1))
+        vessel_type = ship_matches[0]
+        return {
+            "vessel_type": vessel_type,
+            "min_months": min_months,
+            "lookback_contracts": lookback_contracts,
+            "requested_label": f"{min_months} months experience on {vessel_type} in last {lookback_contracts} contracts",
+            "display_value": " ".join(prompt.split()),
+        }
+
     def _extract_company_continuity_constraint(self, user_prompt):
         prompt = " ".join(str(user_prompt or "").split())
         if not prompt:
@@ -1604,9 +1651,9 @@ class AIResumeAnalyzer:
             return {"required": configured_matches, "display_value": ", ".join(configured_matches), "operator": "contains_any"}
 
         # Configured labels returned nothing; fall back to hardcoded alias table.
-        # This only happens when [ShipTypes] ship_type_options is absent from config.ini.
-        print("[WARN] _extract_vessel_type_constraint: no configured ship-type labels found; "
-              "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
+        if not self._configured_ship_type_labels():
+            print("[WARN] _extract_vessel_type_constraint: no configured ship-type labels found; "
+                  "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
         lowered = prompt.lower()
         seen = []
         for canonical, aliases in self._ship_type_aliases().items():
@@ -1746,12 +1793,17 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["company_continuity"] = company_continuity_constraint
             constraints["applied_constraints"].append("company_continuity")
 
+        recent_contract_vessel_experience_constraint = self._extract_recent_contract_vessel_experience_constraint(user_prompt)
+        if recent_contract_vessel_experience_constraint:
+            constraints["hard_constraints"]["recent_contract_vessel_experience"] = recent_contract_vessel_experience_constraint
+            constraints["applied_constraints"].append("recent_contract_vessel_experience")
+
         recency_constraint = self._extract_recency_constraint(user_prompt)
         if recency_constraint:
             constraints["hard_constraints"]["recency"] = recency_constraint
             constraints["applied_constraints"].append("recency")
 
-        sea_service_constraint = self._extract_min_sea_service_constraint(user_prompt)
+        sea_service_constraint = None if recent_contract_vessel_experience_constraint else self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
             constraints["hard_constraints"]["sea_service"] = sea_service_constraint
             constraints["unapplied_constraints"].append("min_sea_service")
@@ -1970,7 +2022,8 @@ class AIResumeAnalyzer:
         # Do NOT create a new ConfigParser or read from disk here — that would
         # diverge from the config the process was actually started with.
         labels = []
-        runtime_parser = getattr(self.config, "config", None)
+        runtime_config = getattr(self, "config", None)
+        runtime_parser = getattr(runtime_config, "config", None)
         if runtime_parser and runtime_parser.has_section("ShipTypes") and runtime_parser.has_option("ShipTypes", "ship_type_options"):
             raw_value = runtime_parser.get("ShipTypes", "ship_type_options")
             labels = [line.strip() for line in raw_value.splitlines() if line.strip()]
@@ -2019,8 +2072,9 @@ class AIResumeAnalyzer:
         if configured_matches:
             return configured_matches[0]
         # Configured labels returned nothing; fall back to hardcoded alias table.
-        print("[WARN] _extract_experienced_vessel_type: no configured ship-type labels found; "
-              "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
+        if not self._configured_ship_type_labels():
+            print("[WARN] _extract_experienced_vessel_type: no configured ship-type labels found; "
+                  "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
         for canonical, aliases in self._ship_type_aliases().items():
             for alias in aliases:
                 normalized_alias = self._normalize_ship_type(alias)
@@ -2121,6 +2175,39 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
+        window_patterns = [
+            (
+                "usa",
+                [
+                    r"\bus\s+visa\s+is\s+valid\s+(?:at\s+least\s+for\s+|for\s+at\s+least\s+|for\s+minimum\s+|for\s+)?(\d+)\s+months?\b",
+                    r"\bvalid\s+us\s+visa\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
+                    r"\bminimum\s+(\d+)\s+months?\s+(?:of\s+)?(?:validity\s+on\s+)?us\s+visa\b",
+                    r"\bus\s+visa\s+should\s+be\s+valid\s+for\s+(?:at\s+least\s+)?(\d+)\s+months?\b",
+                ],
+                "valid US visa",
+            ),
+        ]
+        for group, patterns, base_label in window_patterns:
+            for pattern in patterns:
+                match = re.search(pattern, prompt)
+                if not match:
+                    continue
+                months = int(match.group(1))
+                accepted = [
+                    visa_def["canonical"]
+                    for visa_def in self._visa_type_definitions()
+                    if visa_def["group"] == group
+                ]
+                return {
+                    "required": True,
+                    "must_be_valid": True,
+                    "accepted_types": accepted,
+                    "visa_group": group,
+                    "minimum_months_remaining": months,
+                    "requested_label": f"{base_label} for at least {months} months",
+                    "display_value": match.group(0).strip(),
+                }
+
         group_patterns = [
             (
                 "usa",
@@ -2213,6 +2300,24 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
+        window_patterns = [
+            r"\bpassport\s+valid(?:ity)?\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
+            r"\b(?:at\s+least|minimum)\s+(\d+)\s+months?\s+(?:of\s+)?passport\s+valid(?:ity)?\b",
+            r"\b(\d+)\s+months?\s+(?:of\s+)?passport\s+valid(?:ity)?\b",
+            r"\bpassport\s+should\s+be\s+valid\s+for\s+(?:at\s+least\s+)?(\d+)\s+months?\b",
+        ]
+        for pattern in window_patterns:
+            match = re.search(pattern, prompt)
+            if match:
+                months = int(match.group(1))
+                return {
+                    "required": True,
+                    "must_be_valid": True,
+                    "minimum_months_remaining": months,
+                    "requested_label": f"passport valid for at least {months} months",
+                    "display_value": match.group(0).strip(),
+                }
+
         patterns = [
             r"\bvalid\s+passport\b",
             r"\bpassport\s+required\b",
@@ -2232,6 +2337,14 @@ class AIResumeAnalyzer:
                     "display_value": match.group(0).strip(),
                 }
         return None
+
+    def _months_remaining_from_date(self, future_date, reference_date):
+        if not future_date or not reference_date:
+            return None
+        months = (future_date.year - reference_date.year) * 12 + (future_date.month - reference_date.month)
+        if future_date.day < reference_date.day:
+            months -= 1
+        return max(0, months)
 
     def _strip_age_constraint_phrases(self, user_prompt):
         prompt = str(user_prompt or "")
@@ -2633,6 +2746,7 @@ class AIResumeAnalyzer:
 
         def add_candidate(label):
             normalized = " ".join(str(label or "").split()).strip(" ,:-")
+            normalized = re.sub(r"^\d{1,2}\s+", "", normalized).strip(" ,:-")
             if not normalized:
                 return
             key = normalized.lower()
@@ -2750,6 +2864,7 @@ class AIResumeAnalyzer:
                 "rank_normalized": rank_fact.get("canonical_id"),
                 "sign_in_date": sign_in_date,
                 "sign_out_date": sign_out_date,
+                "vessel_types": self._extract_row_ship_types_from_seajobs_row(window),
                 "snippet": " ".join(window),
             })
 
@@ -2902,6 +3017,15 @@ class AIResumeAnalyzer:
             return [rebuilt_sign_in]
         return ordered_full_tokens
 
+    def _extract_row_ship_types_from_seajobs_row(self, row_lines):
+        snippet = " ".join(" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip())
+        if not snippet:
+            return []
+        configured_matches = self._extract_configured_ship_types(snippet)
+        if configured_matches:
+            return configured_matches
+        return self._extract_experienced_ship_types_from_text(snippet)
+
     def _extract_seajobs_company_occurrence_counts(self, section_text):
         lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
         counts = Counter()
@@ -3006,8 +3130,8 @@ class AIResumeAnalyzer:
             "source_label": "seajobs_resume",
         }
 
-    def _extract_current_rank_months_fact_from_text(self, raw_text, original_path=None):
-        experience_rows_fact = self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
+    def _extract_current_rank_months_fact_from_text(self, raw_text, original_path=None, experience_rows_fact=None):
+        experience_rows_fact = experience_rows_fact or self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
         status = experience_rows_fact.get("status", "MISSING")
         if status != "PARSED":
             return {
@@ -3062,8 +3186,8 @@ class AIResumeAnalyzer:
             "current_rank_normalized": current_rank_normalized,
         }
 
-    def _extract_contract_gap_fact_from_text(self, raw_text, original_path=None, reference_date=None):
-        experience_rows_fact = self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
+    def _extract_contract_gap_fact_from_text(self, raw_text, original_path=None, reference_date=None, experience_rows_fact=None):
+        experience_rows_fact = experience_rows_fact or self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
         status = experience_rows_fact.get("status", "MISSING")
         if status != "PARSED":
             return {
@@ -3218,8 +3342,9 @@ class AIResumeAnalyzer:
         if configured_matches:
             return configured_matches
         # Configured labels returned nothing; fall back to hardcoded alias table.
-        print("[WARN] _extract_experienced_ship_types_from_text: no configured ship-type labels found; "
-              "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
+        if not self._configured_ship_type_labels():
+            print("[WARN] _extract_experienced_ship_types_from_text: no configured ship-type labels found; "
+                  "using hardcoded fallback aliases. Add [ShipTypes] ship_type_options to config.ini.")
         matched = []
         for canonical, aliases in self._ship_type_aliases().items():
             for alias in aliases:
@@ -4171,10 +4296,11 @@ class AIResumeAnalyzer:
         if not isinstance(applied_ship_types, list):
             applied_ship_types = []
         current_rank_fact = self._extract_rank_fact_from_text(source_text)
+        experience_rows_fact = self._extract_seajobs_experience_rows(source_text, original_path=original_path)
         same_company_fact = self._extract_same_company_contract_count_fact_from_text(source_text, original_path=original_path)
         last_sign_off_fact = self._extract_last_sign_off_fact_from_text(source_text, original_path=original_path)
-        current_rank_months_fact = self._extract_current_rank_months_fact_from_text(source_text, original_path=original_path)
-        contract_gap_fact = self._extract_contract_gap_fact_from_text(source_text, original_path=original_path)
+        current_rank_months_fact = self._extract_current_rank_months_fact_from_text(source_text, original_path=original_path, experience_rows_fact=experience_rows_fact)
+        contract_gap_fact = self._extract_contract_gap_fact_from_text(source_text, original_path=original_path, experience_rows_fact=experience_rows_fact)
         coc_fact = self._extract_coc_fact_from_text(source_text)
         stcw_fact = self._extract_stcw_fact_from_text(source_text)
         endorsement_facts = self._extract_endorsements_from_text(source_text)
@@ -4231,6 +4357,7 @@ class AIResumeAnalyzer:
                 "vessel_types": experienced_ship_types,
                 "last_sign_off_date": last_sign_off_fact.get("last_sign_off_date").isoformat() if last_sign_off_fact.get("last_sign_off_date") else None,
                 "last_sign_off_months_ago": last_sign_off_fact.get("last_sign_off_months_ago"),
+                "service_rows": experience_rows_fact.get("rows") or [],
             },
             "travel": {
                 "us_visa_type": logistics_fact.get("visa_fact", {}).get("visa_type"),
@@ -4350,6 +4477,14 @@ class AIResumeAnalyzer:
                     status="PARSED" if experienced_ship_types else "MISSING",
                     source_label="resume_text",
                     context={"field": "experience.vessel_types"},
+                ),
+                "experience.service_rows": self._build_fact_meta(
+                    len(experience_rows_fact.get("rows") or []),
+                    confidence=experience_rows_fact.get("confidence"),
+                    extraction_method=experience_rows_fact.get("extraction_method", ""),
+                    status=experience_rows_fact.get("status", "MISSING"),
+                    source_label=experience_rows_fact.get("source_label"),
+                    context={"field": "experience.service_rows"},
                 ),
                 "travel.visa_records": self._build_fact_meta(
                     [record.get("visa_type") for record in (logistics_fact.get("visa_fact", {}).get("visa_records") or [])],
@@ -4716,6 +4851,7 @@ class AIResumeAnalyzer:
         visa_records = travel.get("visa_records") or []
         accepted_types = constraint.get("accepted_types") or []
         requested_label = constraint.get("requested_label") or "valid visa"
+        minimum_months_remaining = constraint.get("minimum_months_remaining")
         today = reference_date or date.today()
 
         if constraint.get("supported") is False:
@@ -4800,6 +4936,45 @@ class AIResumeAnalyzer:
             valid_records.append((visa_type, expiry_date))
 
         if valid_records:
+            threshold_satisfied = []
+            if minimum_months_remaining is not None:
+                for visa_type, expiry_date in valid_records:
+                    months_remaining = self._months_remaining_from_date(expiry_date, today)
+                    if months_remaining is not None and months_remaining >= minimum_months_remaining:
+                        threshold_satisfied.append((visa_type, expiry_date, months_remaining))
+                if threshold_satisfied:
+                    visa_type, expiry_date, months_remaining = threshold_satisfied[0]
+                    return self._base_rule_result(
+                        "PASS",
+                        "US_VISA_VALID",
+                        f"Visa {visa_type} is valid until {expiry_date.isoformat()} for requested filter '{requested_label}'.",
+                        actual_value={
+                            "visa_type": visa_type,
+                            "expiry_date": expiry_date.isoformat(),
+                            "months_remaining": months_remaining,
+                        },
+                        expected_value=constraint,
+                        confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+                    )
+
+                visa_type, expiry_date = max(valid_records, key=lambda item: item[1])
+                months_remaining = self._months_remaining_from_date(expiry_date, today)
+                return self._base_rule_result(
+                    "FAIL",
+                    "US_VISA_VALIDITY_WINDOW_TOO_SHORT",
+                    (
+                        f"Visa {visa_type} is valid until {expiry_date.isoformat()}, but only has "
+                        f"{months_remaining} month(s) remaining for requested filter '{requested_label}'."
+                    ),
+                    actual_value={
+                        "visa_type": visa_type,
+                        "expiry_date": expiry_date.isoformat(),
+                        "months_remaining": months_remaining,
+                    },
+                    expected_value=constraint,
+                    confidence=((candidate_facts.get("fact_meta") or {}).get("travel.visa_records") or {}).get("confidence"),
+                )
+
             visa_type, expiry_date = valid_records[0]
             return self._base_rule_result(
                 "PASS",
@@ -4856,6 +5031,7 @@ class AIResumeAnalyzer:
         logistics = candidate_facts.get("logistics") or {}
         confidence = ((candidate_facts.get("fact_meta") or {}).get("logistics.passport_expiry_date") or {}).get("confidence")
         requested_label = (constraint or {}).get("requested_label") or "valid passport"
+        minimum_months_remaining = (constraint or {}).get("minimum_months_remaining")
         today = reference_date or date.today()
 
         passport_expiry_raw = logistics.get("passport_expiry_date")
@@ -4880,11 +5056,30 @@ class AIResumeAnalyzer:
 
         if passport_expiry_status == "PARSED" and passport_expiry:
             if passport_expiry >= today:
+                months_remaining = self._months_remaining_from_date(passport_expiry, today)
+                if minimum_months_remaining is not None and months_remaining is not None and months_remaining < minimum_months_remaining:
+                    return self._base_rule_result(
+                        "FAIL",
+                        "PASSPORT_VALIDITY_WINDOW_TOO_SHORT",
+                        (
+                            f"Passport is valid until {passport_expiry.isoformat()}, but only has "
+                            f"{months_remaining} month(s) remaining for requested filter '{requested_label}'."
+                        ),
+                        actual_value={
+                            "expiry_date": passport_expiry.isoformat(),
+                            "months_remaining": months_remaining,
+                        },
+                        expected_value=constraint,
+                        confidence=confidence,
+                    )
                 return self._base_rule_result(
                     "PASS",
                     "PASSPORT_VALID",
                     f"Passport is valid until {passport_expiry.isoformat()} for requested filter '{requested_label}'.",
-                    actual_value={"expiry_date": passport_expiry.isoformat()},
+                    actual_value={
+                        "expiry_date": passport_expiry.isoformat(),
+                        "months_remaining": months_remaining,
+                    },
                     expected_value=constraint,
                     confidence=confidence,
                 )
@@ -5401,6 +5596,133 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_recent_contract_vessel_experience_rule(self, candidate_facts, constraint):
+        experience = candidate_facts.get("experience") or {}
+        fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.service_rows") or {}
+        service_rows = experience.get("service_rows") or []
+        status = str(fact_meta.get("status") or "MISSING")
+        confidence = fact_meta.get("confidence")
+
+        if status == "SOURCE_EXCLUDED":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENT_CONTRACT_VESSEL_SOURCE_EXCLUDED",
+                "Recent contract vessel experience is currently supported only for SeaJobs-style resumes.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        requested_ship_type = self._normalize_ship_type((constraint or {}).get("vessel_type"))
+        min_months = int((constraint or {}).get("min_months") or 0)
+        lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
+        if not requested_ship_type or min_months <= 0 or lookback_contracts <= 0:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENT_CONTRACT_VESSEL_CONSTRAINT_INVALID",
+                "Recent contract vessel experience constraint is incomplete.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        valid_rows = []
+        for row in service_rows:
+            sign_in_date = row.get("sign_in_date")
+            sign_out_date = row.get("sign_out_date")
+            if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+                continue
+            row_ship_types = [self._normalize_ship_type(value) for value in (row.get("vessel_types") or []) if value]
+            valid_rows.append({
+                "sign_in_date": sign_in_date,
+                "sign_out_date": sign_out_date,
+                "vessel_types": row_ship_types,
+            })
+
+        if not valid_rows:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENT_CONTRACT_VESSEL_MISSING",
+                "Could not determine recent contract vessel experience from the selected resume.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        valid_rows.sort(key=lambda row: (row.get("sign_out_date"), row.get("sign_in_date")), reverse=True)
+        recent_rows = valid_rows[:lookback_contracts]
+        if len(recent_rows) < lookback_contracts:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENT_CONTRACT_VESSEL_INCOMPLETE",
+                "Could not determine enough recent contracts to evaluate the requested vessel experience window.",
+                actual_value={"available_recent_contracts": len(recent_rows)},
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        expected_ship_types = set(self._ship_type_expected_values(requested_ship_type))
+        matched_months = 0
+        matched_contracts = 0
+        parsed_ship_type_rows = 0
+        for row in recent_rows:
+            row_ship_types = set(row.get("vessel_types") or [])
+            if row_ship_types:
+                parsed_ship_type_rows += 1
+            if not (row_ship_types & expected_ship_types):
+                continue
+            months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+            if months is None:
+                continue
+            matched_months += months
+            matched_contracts += 1
+
+        if parsed_ship_type_rows == 0:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RECENT_CONTRACT_VESSEL_UNPARSED",
+                "Could not determine vessel types for the candidate's recent contracts.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if matched_months >= min_months:
+            return self._base_rule_result(
+                "PASS",
+                "RECENT_CONTRACT_VESSEL_MATCH",
+                (
+                    f"Candidate has {matched_months} month(s) on '{requested_ship_type}' across "
+                    f"the last {lookback_contracts} contract(s)."
+                ),
+                actual_value={
+                    "matched_months": matched_months,
+                    "matched_contracts": matched_contracts,
+                },
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "RECENT_CONTRACT_VESSEL_INSUFFICIENT",
+            (
+                f"Candidate has only {matched_months} month(s) on '{requested_ship_type}' across "
+                f"the last {lookback_contracts} contract(s), below the required {min_months}."
+            ),
+            actual_value={
+                "matched_months": matched_months,
+                "matched_contracts": matched_contracts,
+            },
+            expected_value=constraint,
+            confidence=confidence,
+        )
+
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
@@ -5572,6 +5894,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_recency_rule(candidate_facts, recency_constraint))
+
+        recent_contract_vessel_experience_constraint = hard_constraints.get("recent_contract_vessel_experience")
+        if "recent_contract_vessel_experience" in applied_constraints and recent_contract_vessel_experience_constraint:
+            activated_rules.append("recent_contract_vessel_experience")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "RECENT_CONTRACT_VESSEL_RULE_REQUIRES_V2_FACTS",
+                    "Recent contract vessel experience requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=recent_contract_vessel_experience_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_recent_contract_vessel_experience_rule(candidate_facts, recent_contract_vessel_experience_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if "applied_ship_type" in applied_constraints and ship_type_constraint:

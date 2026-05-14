@@ -22,12 +22,31 @@ from ai_analyzer import AIResumeAnalyzer
 
 
 DEFAULT_CORPUS_PATH = PROJECT_ROOT / "docs" / "AI_SEARCH_V3_4_BOOTSTRAP_PROMPT_CORPUS_2026-04-08.json"
+DEFAULT_THRESHOLD_FAMILIES = [
+    "age_range",
+    "us_visa",
+    "rank_match",
+    "coc_document_gate",
+    "stcw_basic",
+]
 
 
-def _primary_family(constraints):
-    core_supported = [family for family in constraints["applied_constraints"] if family in {
-        "age_range", "us_visa", "rank_match", "coc_document_gate", "stcw_basic"
-    }]
+def _supported_families(corpus):
+    configured = corpus.get("supported_families")
+    if configured:
+        return set(configured)
+    return set(DEFAULT_THRESHOLD_FAMILIES)
+
+
+def _threshold_families(corpus):
+    configured = corpus.get("threshold_families")
+    if configured:
+        return list(configured)
+    return list(DEFAULT_THRESHOLD_FAMILIES)
+
+
+def _primary_family(constraints, supported_families):
+    core_supported = [family for family in constraints["applied_constraints"] if family in supported_families]
     if len(core_supported) == 1:
         return core_supported[0]
     if len(core_supported) > 1:
@@ -45,6 +64,7 @@ def _family_present(constraints, expected):
 
 def _evaluate_corpus(corpus):
     analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
+    supported_families = _supported_families(corpus)
     family_summaries = {}
     overall_counts = Counter()
     mismatches = []
@@ -59,7 +79,7 @@ def _evaluate_corpus(corpus):
             prompt = entry["prompt"]
             expected = entry["expected_primary_family"]
             constraints = analyzer._extract_job_constraints(prompt)
-            actual = _primary_family(constraints)
+            actual = _primary_family(constraints, supported_families)
             primary_matched = actual == expected
             present_matched = _family_present(constraints, expected)
             if primary_matched:
@@ -95,12 +115,26 @@ def _evaluate_corpus(corpus):
         }
 
     threshold_status = {}
-    for family_name in ("age_range", "us_visa", "rank_match", "coc_document_gate", "stcw_basic"):
+    for family_name in _threshold_families(corpus):
+        family_prompt_count = sum(
+            1
+            for prompts in corpus["families"].values()
+            for entry in prompts
+            if entry["expected_primary_family"] == family_name
+        )
+        family_rows = [
+            row
+            for summary in family_summaries.values()
+            for row in summary["rows"]
+            if row["expected_primary_family"] == family_name
+        ]
+        primary_matches = sum(1 for row in family_rows if row["primary_family_matched"])
+        presence_matches = sum(1 for row in family_rows if row["expected_family_present"])
         threshold_status[family_name] = {
-            "bootstrap_prompt_count": len(corpus["families"].get(family_name, [])),
-            "meets_20_prompt_gate": len(corpus["families"].get(family_name, [])) >= 20,
-            "primary_family_match_ratio": family_summaries.get(family_name, {}).get("primary_match_ratio", 0.0),
-            "expected_family_present_ratio": family_summaries.get(family_name, {}).get("expected_family_present_ratio", 0.0),
+            "bootstrap_prompt_count": family_prompt_count,
+            "meets_20_prompt_gate": family_prompt_count >= 20,
+            "primary_family_match_ratio": round(primary_matches / family_prompt_count, 4) if family_prompt_count else 0.0,
+            "expected_family_present_ratio": round(presence_matches / family_prompt_count, 4) if family_prompt_count else 0.0,
         }
 
     return {

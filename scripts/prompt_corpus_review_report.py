@@ -26,9 +26,11 @@ from ai_analyzer import AIResumeAnalyzer
 CORE_SUPPORTED_FAMILIES = [
     "age_range",
     "us_visa",
+    "passport_validity",
     "rank_match",
     "coc_document_gate",
     "stcw_basic",
+    "recent_contract_vessel_experience",
 ]
 
 

@@ -1,10 +1,12 @@
 import json
 import configparser
+import io
 import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
+from contextlib import redirect_stdout
 
 
 def _stub_ai_dependencies():
@@ -170,6 +172,16 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             "Sea Service: Chief Officer on Product Tanker, VLCC and Bulk Carrier vessels."
         )
         self.assertEqual(vessel_types, ["product tanker", "vlcc", "bulk carrier"])
+
+    def test_experienced_ship_type_no_match_does_not_warn_when_configured(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
+                "Sea Service: Chief Officer with dates, company names, and port details."
+            )
+
+        self.assertEqual(vessel_types, [])
+        self.assertNotIn("no configured ship-type labels found", stdout.getvalue())
 
     def test_configured_ship_type_constraint_preserves_exact_config_value(self):
         constraint = self.analyzer._extract_vessel_type_constraint(

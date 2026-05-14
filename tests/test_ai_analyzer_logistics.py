@@ -196,6 +196,28 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
         self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 9, 14))
         self.assertEqual(fact["rows"][0]["sign_out_date"], date(2024, 12, 6))
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+
+    def test_extract_row_ship_types_from_seajobs_row_uses_real_container_shape(self):
+        row_lines = [
+            "2nd MAN B&W 03-Mar-",
+            "4 ALTITUDE MARINE / Container Vessel 12000 06-Jun-2024",
+            "Engineer SMC 2024",
+        ]
+        self.assertEqual(
+            self.analyzer._extract_row_ship_types_from_seajobs_row(row_lines),
+            ["container"],
+        )
+
+    def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
+        row_lines = [
+            "02-Nov-",
+            "1 2nd Officer Sygnius / Bulk Carrier 18-Jan-2025",
+            "2024",
+        ]
+        fact = self.analyzer._extract_rank_from_seajobs_row_window(row_lines)
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["canonical_id"], "2nd_officer")
 
     def test_extract_current_rank_months_fact_sums_matching_seajobs_rows(self):
         raw_text = (

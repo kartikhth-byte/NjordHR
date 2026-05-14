@@ -284,6 +284,45 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
 
+    def test_passport_validity_rule_passes_when_remaining_window_is_met(self):
+        result = self.analyzer._evaluate_passport_validity_rule(
+            {
+                "logistics": {
+                    "passport_expiry_date": "2028-05-04",
+                    "passport_expiry_status": "PARSED",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": 0.9}},
+            },
+            {
+                "required": True,
+                "must_be_valid": True,
+                "minimum_months_remaining": 18,
+                "requested_label": "passport valid for at least 18 months",
+            },
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_passport_validity_rule_fails_when_remaining_window_is_too_short(self):
+        result = self.analyzer._evaluate_passport_validity_rule(
+            {
+                "logistics": {
+                    "passport_expiry_date": "2027-05-04",
+                    "passport_expiry_status": "PARSED",
+                },
+                "fact_meta": {"logistics.passport_expiry_date": {"confidence": 0.9}},
+            },
+            {
+                "required": True,
+                "must_be_valid": True,
+                "minimum_months_remaining": 18,
+                "requested_label": "passport valid for at least 18 months",
+            },
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "PASSPORT_VALIDITY_WINDOW_TOO_SHORT")
+
     def test_passport_validity_rule_missing_is_unknown(self):
         result = self.analyzer._evaluate_passport_validity_rule(
             {
@@ -297,6 +336,106 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
             reference_date=date(2026, 4, 6),
         )
         self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_recent_contract_vessel_rule_passes_when_recent_rows_meet_month_threshold(self):
+        result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2024, 11, 3),
+                            "sign_out_date": date(2025, 4, 13),
+                            "vessel_types": ["container"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 3, 3),
+                            "sign_out_date": date(2024, 11, 6),
+                            "vessel_types": ["container vessel"],
+                        },
+                        {
+                            "sign_in_date": date(2023, 12, 6),
+                            "sign_out_date": date(2024, 2, 27),
+                            "vessel_types": ["bulk carrier"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "vessel_type": "container",
+                "min_months": 12,
+                "lookback_contracts": 3,
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_MATCH")
+
+    def test_recent_contract_vessel_rule_fails_when_recent_rows_are_short(self):
+        result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 4, 17),
+                            "sign_out_date": date(2025, 6, 20),
+                            "vessel_types": ["container"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 7, 26),
+                            "sign_out_date": date(2025, 1, 25),
+                            "vessel_types": ["oil tanker"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 3, 3),
+                            "sign_out_date": date(2024, 6, 6),
+                            "vessel_types": ["container vessel"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "vessel_type": "container",
+                "min_months": 12,
+                "lookback_contracts": 3,
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_INSUFFICIENT")
+
+    def test_recent_contract_vessel_rule_is_unknown_when_recent_rows_lack_ship_types(self):
+        result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 4, 17),
+                            "sign_out_date": date(2025, 6, 20),
+                            "vessel_types": [],
+                        },
+                        {
+                            "sign_in_date": date(2024, 7, 26),
+                            "sign_out_date": date(2025, 1, 25),
+                            "vessel_types": [],
+                        },
+                        {
+                            "sign_in_date": date(2024, 3, 3),
+                            "sign_out_date": date(2024, 6, 6),
+                            "vessel_types": [],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "vessel_type": "container",
+                "min_months": 12,
+                "lookback_contracts": 3,
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_UNPARSED")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
     def test_hard_filter_skips_passport_rule_when_not_in_applied_constraints(self):

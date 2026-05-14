@@ -2,6 +2,8 @@
 
 Date: 2026-04-09
 
+Latest status refresh: 2026-05-14
+
 Purpose:
 - record the current migration-readiness evidence for the v1.1 -> v2.0 transition
 - separate controls that are already implemented and tested from migration criteria that still need explicit run artifacts
@@ -68,16 +70,60 @@ Judgment:
 Current evidence:
 - code paths and registry/indexing machinery exist
 - synchronous re-extraction path is validated
+- a guarded sample migration runner now exists:
+  - `/Users/kartikraghavan/Tools/NjordHR/scripts/background_migration_runner.py`
 - offline real-PDF extraction-path sample now exists via:
   - `/Users/kartikraghavan/Tools/NjordHR/scripts/background_reextract_sample.py`
   - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_reextract_sample_current.json`
   - current result: `11/11` processed rows produced `facts_version = 2.0`
+- refreshed offline real-PDF extraction-path sample exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_reextract_sample_2026-05-13.json`
+  - current result: `11/11` processed rows produced `facts_version = 2.0`
+- guarded migration-runner sample exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_pass2.json`
+  - local migration-state mode processed `11/11` rows to `facts_version = 2.0`
+- network-enabled guarded migration-runner sample exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_network_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_network_pass2.json`
+  - network upsert mode processed and indexed `1/1` row to `facts_version = 2.0`
+- broader evidence-only network-enabled guarded migration-runner sample exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_network10_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_network10_pass2.json`
+  - network upsert mode processed and indexed `10/10` rows to `facts_version = 2.0`
+  - normal ingest registry marking was intentionally disabled
+- controlled local registry-marking sample exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_registry_mark_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_registry_mark_pass2.json`
+  - registry mark mode processed `1/1` row to `facts_version = 2.0`
+  - registry mark mode marked `1/1` row in `logs/registry.db`
+  - vector-index upsert was intentionally disabled for this sample to isolate the registry write path
+- expanded controlled local registry-marking sample exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_registry_mark10_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_registry_mark10_pass2.json`
+  - registry mark mode processed `10/10` rows to `facts_version = 2.0`
+  - registry mark mode marked `10/10` rows in `logs/registry.db`
+  - vector-index upsert was intentionally disabled for this sample to isolate the registry write path
+  - historical diagnostic: the run emitted repeated ship-type fallback warnings even though runtime ship-type config existed; the warning path was later narrowed so no-match snippets no longer warn
+- full local-corpus registry-marking and vector-upsert run exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_full_registry_chief_officer_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_full_registry_chief_engineer_pass1.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_full_registry_2nd_officer_pass1.json`
+  - `Chief_Officer`: `11/11` processed, indexed, and registry-marked
+  - `Chief_Engineer`: `8/8` processed, indexed, and registry-marked
+  - `2nd_Officer`: `5/5` processed, indexed, and registry-marked
+  - total: `24/24` processed, indexed, and registry-marked
+  - all processed rows produced `facts_version = 2.0`
+  - historical diagnostic: the runs emitted repeated ship-type fallback warnings even though runtime ship-type config existed; the warning path was later narrowed so no-match snippets no longer warn
+- ship-type warning follow-up check exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_warning_check.json`
+  - current result: `1/1` processed successfully without emitting the ship-type fallback warning
 
 Missing evidence:
-- no documented networked/background scheduler run showing the full ingestion-orchestrated migration path over a sample corpus
+- no documented migration run beyond the currently available local `Verified_Resumes` corpus
 
 Current judgment:
-- partially met: the underlying v2.0 extraction path is evidenced on a representative real-PDF sample, but the full background migration runner/orchestration path is still not evidenced
+- complete for the currently available local corpus: the underlying v2.0 extraction path, guarded migration-runner path, vector-index upsert path, registry-marking path, and full local-corpus run are evidenced
 
 ### 2.2 Re-extraction idempotence
 
@@ -88,12 +134,35 @@ Current evidence:
   - `/Users/kartikraghavan/Tools/NjordHR/scripts/background_reextract_sample.py`
   - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_reextract_sample_current.json`
   - current result: `11/11` processed rows produced identical digests on immediate rerun
+- refreshed offline real-PDF rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_reextract_sample_2026-05-13.json`
+  - current result: `11/11` processed rows produced identical digests on immediate rerun
+- guarded migration-runner rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_pass2.json`
+  - current result: `11/11` comparable rows matched persisted digests
+- network-enabled guarded migration-runner rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_network_pass2.json`
+  - current result: `1/1` comparable rows matched persisted digests after external embedding/vector-index upsert
+- broader network-enabled guarded migration-runner rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_network10_pass2.json`
+  - current result: `10/10` comparable rows matched persisted digests after external embedding/vector-index upsert
+- controlled registry-marking rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-13_registry_mark_pass2.json`
+  - current result: `1/1` comparable rows matched persisted digests after local ingest-registry marking
+- expanded controlled registry-marking rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_registry_mark10_pass2.json`
+  - current result: `10/10` comparable rows matched persisted digests after local ingest-registry marking
+- full local-corpus rerun evidence exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_full_registry_chief_officer_pass2.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_full_registry_chief_engineer_pass2.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/background_migration_runner_2026-05-14_full_registry_2nd_officer_pass2.json`
+  - current result: `24/24` comparable rows matched persisted digests after vector upsert and local ingest-registry marking
 
 Missing evidence:
-- no documented idempotence run yet for the full background migration runner/orchestration path
+- no documented idempotence run beyond the currently available local `Verified_Resumes` corpus
 
 Current judgment:
-- partially met: the underlying v2.0 fact-building path is idempotent on the sampled real-PDF set, but the full background migration runner/orchestration path is still not evidenced
+- complete for the currently available local corpus: local guarded-runner idempotence, network-enabled idempotence, registry-marking idempotence, and full local-corpus idempotence are evidenced
 
 ### 2.3 Migration progress observability
 
@@ -112,6 +181,18 @@ Current evidence:
   - `/Users/kartikraghavan/Tools/NjordHR/scripts/run_real_facts_version_audit_search.py`
   - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_current.json`
   - current main-audit counts now include explicit `2.0: 11` rows alongside historical `<missing>: 1644`
+- refreshed audit progress proof exists via:
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_2026-05-13.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_2026-05-13_after_sample.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_2026-05-13_after_migration_runner.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_2026-05-13_after_network10.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_2026-05-14_after_registry_mark10.json`
+  - `/Users/kartikraghavan/Tools/NjordHR/AI_Search_Results/facts_version_audit_progress_2026-05-14_after_full_registry.json`
+  - before the refreshed sample: `2.0: 2797`, `<missing>: 1644`
+  - after the refreshed sample: `2.0: 2808`, `<missing>: 1644`
+  - after the expanded registry-marking sample: `2.0: 2808`, `<missing>: 1644`
+  - after the full local-corpus registry-marking run: `2.0: 2808`, `<missing>: 1644`
+  - latest sample searched `Chief_Officer` with prompt `having valid US visa`, scanned `11`, passed `10`, failed `1`, unknown `0`
 - CSV/dual-write/backend audit-storage coverage exists in:
   - `tests/test_backend_event_log_flow.py`
   - `tests/test_dual_write_repo.py`
@@ -119,31 +200,25 @@ Current evidence:
 
 Missing evidence:
 - the historical pre-change corpus still dominates the audit log as `<missing>`
-- the current real main-audit sample only demonstrates explicit `2.0` rows; it does not yet show mixed `1.1` and `2.0` counts from the live corpus
+- the historical pre-change corpus remains present as `<missing>` audit rows
+- the current real main-audit sample demonstrates explicit `2.0` rows and growing post-change volume
+- the guarded migration runner writes separate migration evidence artifacts rather than AI search audit rows
 - the real sample run skipped ingestion and external LLM calls so it could execute in the offline sandbox; it is valid for audit-shape evidence, but not for proving background re-extraction behavior
 
 Current judgment:
-- partially met: audit-shape support, export/report tooling, and a real main-audit sample now exist, but the corpus still needs broader post-change search traffic and background re-extraction evidence
+- materially improved: audit-shape support, export/report tooling, refreshed real main-audit samples, guarded migration-runner samples, controlled registry-marking samples, and a full local-corpus vector-upsert/registry-marking run now exist
 
 ## 3. Overall Migration Readiness Judgment
 
 Current overall judgment:
 - the dual-version safety controls are largely implemented and well tested
-- the remaining migration-readiness gap is operational evidence, not the synchronous control path itself
+- the currently available local corpus has been migrated through the guarded vector-upsert and registry-marking path
 
 The strongest remaining migration evidence tasks are:
-1. evidence the full background migration runner/orchestration path in a network-enabled environment
-2. rerun that same migration path for idempotence evidence at the orchestration level
-3. continue capturing/reporting v1.1 vs v2.0 progress counts as real post-change search traffic accumulates
+1. continue capturing/reporting facts-version progress counts as real post-change search traffic accumulates
 
 ## 4. Recommended Next Step
 
 Do not broaden parser behavior next.
 
-Instead, produce a small migration evidence pack with:
-- sample batch size
-- success/failure counts
-- rerun idempotence result
-- current v1.1 vs v2.0 counts
-
-Once that exists, the remaining open Phase 1 item will mostly be real prompt-corpus growth over time rather than missing implementation.
+The full local-corpus registry-marking and vector-upsert evidence pack now exists. The remaining open Phase 1 item is mostly real prompt-corpus growth over time rather than missing implementation.

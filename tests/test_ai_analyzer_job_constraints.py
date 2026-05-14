@@ -219,6 +219,27 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertIn("experience_ship_type", constraints["applied_constraints"])
                 self.assertEqual(constraints["hard_constraints"]["experience_ship_type"], expected_ship_type)
 
+    def test_recent_contract_vessel_experience_family_maps_to_structured_constraint(self):
+        prompts = [
+            "12 months experience on container in last 3 contracts",
+            "12 months on container in recent 3 contracts",
+            "minimum 12 months container experience in last 3 contracts",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["recent_contract_vessel_experience"],
+                    {
+                        "vessel_type": "container",
+                        "min_months": 12,
+                        "lookback_contracts": 3,
+                        "requested_label": "12 months experience on container in last 3 contracts",
+                        "display_value": prompt,
+                    },
+                )
+
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)
         self.assertIn("availability", constraints["applied_constraints"])
@@ -332,6 +353,22 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     "valid passport",
                 )
                 self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+
+    def test_passport_validity_window_variants_map_to_month_threshold(self):
+        prompts = [
+            "passport valid for 18 months",
+            "18 months of passport validity",
+            "passport should be valid for at least 18 months",
+            "minimum 18 months passport validity",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("passport_validity", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["passport_validity"]["minimum_months_remaining"],
+                    18,
+                )
 
     def test_company_continuity_two_contracts_prompt_is_supported(self):
         constraints = self.analyzer._extract_job_constraints("same company for 2 contracts", rank=self.rank)

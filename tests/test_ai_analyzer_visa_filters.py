@@ -111,6 +111,21 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
                 self.assertTrue(constraint["required"])
                 self.assertTrue(constraint["must_be_valid"])
 
+    def test_us_visa_validity_window_variants_map_to_month_threshold(self):
+        prompts = [
+            "US visa is valid at least for 10 months",
+            "valid US visa for 10 months",
+            "minimum 10 months validity on US visa",
+            "US visa should be valid for 10 months",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraint = self.analyzer._extract_us_visa_constraint(prompt)
+                self.assertEqual(constraint["visa_group"], "usa")
+                self.assertEqual(constraint["minimum_months_remaining"], 10)
+                self.assertTrue(constraint["required"])
+                self.assertTrue(constraint["must_be_valid"])
+
     def test_supported_visa_types_are_extracted_from_resume_text(self):
         cases = [
             ("Visa: C1/D (USA) Expiry: 04-May-2028", "C1/D (USA)"),
@@ -283,6 +298,43 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
 
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["reason_code"], "US_VISA_EXPIRED")
+
+    def test_visa_rule_passes_when_remaining_window_is_met(self):
+        constraint = self.analyzer._extract_us_visa_constraint("US visa is valid at least for 10 months")
+        candidate_facts = {
+            "travel": {
+                "us_visa_status": "PARSED",
+                "visa_records": [{
+                    "status": "PARSED",
+                    "visa_type": "US Visa (USA)",
+                    "visa_group": "usa",
+                    "expiry_date": date(2027, 6, 26),
+                    "expiry_status": "PARSED",
+                }],
+                "visa_types": ["US Visa (USA)"],
+            }
+        }
+        result = self.analyzer._evaluate_us_visa_rule(candidate_facts, constraint, reference_date=date(2026, 4, 2))
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_visa_rule_fails_when_remaining_window_is_too_short(self):
+        constraint = self.analyzer._extract_us_visa_constraint("US visa is valid at least for 10 months")
+        candidate_facts = {
+            "travel": {
+                "us_visa_status": "PARSED",
+                "visa_records": [{
+                    "status": "PARSED",
+                    "visa_type": "US Visa (USA)",
+                    "visa_group": "usa",
+                    "expiry_date": date(2026, 11, 26),
+                    "expiry_status": "PARSED",
+                }],
+                "visa_types": ["US Visa (USA)"],
+            }
+        }
+        result = self.analyzer._evaluate_us_visa_rule(candidate_facts, constraint, reference_date=date(2026, 4, 2))
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "US_VISA_VALIDITY_WINDOW_TOO_SHORT")
 
     def test_visa_only_structured_full_scan_excludes_fail_and_unknown_before_llm(self):
         resume_specs = [
