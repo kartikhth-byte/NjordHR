@@ -404,6 +404,73 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_INSUFFICIENT")
 
+    def test_recent_contract_vessel_rule_passes_no_duration_when_recent_contract_matches(self):
+        result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 4, 17),
+                            "sign_out_date": date(2025, 6, 20),
+                            "vessel_types": ["bulk carrier"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 7, 26),
+                            "sign_out_date": date(2025, 1, 25),
+                            "vessel_types": ["container vessel"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 3, 3),
+                            "sign_out_date": date(2024, 6, 6),
+                            "vessel_types": ["oil tanker"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "vessel_type": "container",
+                "min_months": 0,
+                "lookback_contracts": 3,
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_MATCH")
+        self.assertEqual(result["actual_value"]["matched_contracts"], 1)
+
+    def test_recent_contract_vessel_rule_fails_no_duration_when_recent_contracts_do_not_match(self):
+        result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 4, 17),
+                            "sign_out_date": date(2025, 6, 20),
+                            "vessel_types": ["bulk carrier"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 7, 26),
+                            "sign_out_date": date(2025, 1, 25),
+                            "vessel_types": ["oil tanker"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 3, 3),
+                            "sign_out_date": date(2024, 6, 6),
+                            "vessel_types": ["chemical tanker"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "vessel_type": "container",
+                "min_months": 0,
+                "lookback_contracts": 3,
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_INSUFFICIENT")
+
     def test_recent_contract_vessel_rule_is_unknown_when_recent_rows_lack_ship_types(self):
         result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
             {

@@ -1577,19 +1577,23 @@ class AIResumeAnalyzer:
             normalized_prompt,
             flags=re.IGNORECASE,
         )
-        if not months_match:
-            return None
-
-        value = int(months_match.group(1))
-        unit = months_match.group(2).lower()
-        min_months = value * 12 if unit.startswith("year") else value
+        min_months = 0
+        if months_match:
+            value = int(months_match.group(1))
+            unit = months_match.group(2).lower()
+            min_months = value * 12 if unit.startswith("year") else value
         lookback_contracts = int(contracts_match.group(1))
         vessel_type = ship_matches[0]
+        requested_label = (
+            f"{min_months} months experience on {vessel_type} in last {lookback_contracts} contracts"
+            if min_months
+            else f"{vessel_type} experience in last {lookback_contracts} contracts"
+        )
         return {
             "vessel_type": vessel_type,
             "min_months": min_months,
             "lookback_contracts": lookback_contracts,
-            "requested_label": f"{min_months} months experience on {vessel_type} in last {lookback_contracts} contracts",
+            "requested_label": requested_label,
             "display_value": " ".join(prompt.split()),
         }
 
@@ -1783,11 +1787,6 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["stcw_basic"] = stcw_constraint
             constraints["applied_constraints"].append("stcw_basic")
 
-        experienced_ship_type = self._extract_experience_ship_type_constraint(user_prompt)
-        if experienced_ship_type:
-            constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
-            constraints["applied_constraints"].append("experience_ship_type")
-
         company_continuity_constraint = self._extract_company_continuity_constraint(user_prompt)
         if company_continuity_constraint:
             constraints["hard_constraints"]["company_continuity"] = company_continuity_constraint
@@ -1797,6 +1796,11 @@ class AIResumeAnalyzer:
         if recent_contract_vessel_experience_constraint:
             constraints["hard_constraints"]["recent_contract_vessel_experience"] = recent_contract_vessel_experience_constraint
             constraints["applied_constraints"].append("recent_contract_vessel_experience")
+
+        experienced_ship_type = None if recent_contract_vessel_experience_constraint else self._extract_experience_ship_type_constraint(user_prompt)
+        if experienced_ship_type:
+            constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
+            constraints["applied_constraints"].append("experience_ship_type")
 
         recency_constraint = self._extract_recency_constraint(user_prompt)
         if recency_constraint:
@@ -5666,7 +5670,7 @@ class AIResumeAnalyzer:
         requested_ship_type = self._normalize_ship_type((constraint or {}).get("vessel_type"))
         min_months = int((constraint or {}).get("min_months") or 0)
         lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
-        if not requested_ship_type or min_months <= 0 or lookback_contracts <= 0:
+        if not requested_ship_type or min_months < 0 or lookback_contracts <= 0:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RECENT_CONTRACT_VESSEL_CONSTRAINT_INVALID",
@@ -5741,7 +5745,23 @@ class AIResumeAnalyzer:
                 unknown_reason="FACTUAL_UNKNOWN",
             )
 
-        if matched_months >= min_months:
+        if min_months == 0 and matched_contracts > 0:
+            return self._base_rule_result(
+                "PASS",
+                "RECENT_CONTRACT_VESSEL_MATCH",
+                (
+                    f"Candidate has '{requested_ship_type}' experience in {matched_contracts} of "
+                    f"the last {lookback_contracts} contract(s)."
+                ),
+                actual_value={
+                    "matched_months": matched_months,
+                    "matched_contracts": matched_contracts,
+                },
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        if min_months > 0 and matched_months >= min_months:
             return self._base_rule_result(
                 "PASS",
                 "RECENT_CONTRACT_VESSEL_MATCH",
@@ -5757,13 +5777,18 @@ class AIResumeAnalyzer:
                 confidence=confidence,
             )
 
+        failure_message = (
+            f"Candidate has no '{requested_ship_type}' contract(s) in the last {lookback_contracts} contract(s)."
+            if min_months == 0
+            else (
+                f"Candidate has only {matched_months} month(s) on '{requested_ship_type}' across "
+                f"the last {lookback_contracts} contract(s), below the required {min_months}."
+            )
+        )
         return self._base_rule_result(
             "FAIL",
             "RECENT_CONTRACT_VESSEL_INSUFFICIENT",
-            (
-                f"Candidate has only {matched_months} month(s) on '{requested_ship_type}' across "
-                f"the last {lookback_contracts} contract(s), below the required {min_months}."
-            ),
+            failure_message,
             actual_value={
                 "matched_months": matched_months,
                 "matched_contracts": matched_contracts,

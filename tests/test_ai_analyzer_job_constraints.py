@@ -240,6 +240,42 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     },
                 )
 
+    def test_recent_contract_vessel_experience_accepts_year_duration(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "2 years tanker experience in last 3 contracts",
+            rank=self.rank,
+        )
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+        self.assertNotIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"],
+            {
+                "vessel_type": "tanker",
+                "min_months": 24,
+                "lookback_contracts": 3,
+                "requested_label": "24 months experience on tanker in last 3 contracts",
+                "display_value": "2 years tanker experience in last 3 contracts",
+            },
+        )
+
+    def test_recent_contract_vessel_experience_accepts_no_duration_window(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "container vessel experience in recent 3 contracts",
+            rank=self.rank,
+        )
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+        self.assertNotIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"],
+            {
+                "vessel_type": "container",
+                "min_months": 0,
+                "lookback_contracts": 3,
+                "requested_label": "container experience in last 3 contracts",
+                "display_value": "container vessel experience in recent 3 contracts",
+            },
+        )
+
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)
         self.assertIn("availability", constraints["applied_constraints"])
