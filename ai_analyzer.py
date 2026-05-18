@@ -5779,16 +5779,6 @@ class AIResumeAnalyzer:
 
         valid_rows.sort(key=lambda row: (row.get("sign_out_date"), row.get("sign_in_date")), reverse=True)
         recent_rows = valid_rows[:lookback_contracts]
-        if len(recent_rows) < lookback_contracts:
-            return self._base_rule_result(
-                "UNKNOWN",
-                "RECENT_CONTRACT_VESSEL_INCOMPLETE",
-                "Could not determine enough recent contracts to evaluate the requested vessel experience window.",
-                actual_value={"available_recent_contracts": len(recent_rows)},
-                expected_value=constraint,
-                confidence=confidence,
-                unknown_reason="FACTUAL_UNKNOWN",
-            )
 
         expected_ship_types = set(self._ship_type_expected_values(requested_ship_type))
         matched_months = 0
@@ -5828,6 +5818,7 @@ class AIResumeAnalyzer:
                 actual_value={
                     "matched_months": matched_months,
                     "matched_contracts": matched_contracts,
+                    "evaluated_contracts": len(recent_rows),
                 },
                 expected_value=constraint,
                 confidence=confidence,
@@ -5844,6 +5835,7 @@ class AIResumeAnalyzer:
                 actual_value={
                     "matched_months": matched_months,
                     "matched_contracts": matched_contracts,
+                    "evaluated_contracts": len(recent_rows),
                 },
                 expected_value=constraint,
                 confidence=confidence,
@@ -5864,6 +5856,7 @@ class AIResumeAnalyzer:
             actual_value={
                 "matched_months": matched_months,
                 "matched_contracts": matched_contracts,
+                "evaluated_contracts": len(recent_rows),
             },
             expected_value=constraint,
             confidence=confidence,

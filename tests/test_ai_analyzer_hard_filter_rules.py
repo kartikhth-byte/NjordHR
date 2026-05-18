@@ -471,6 +471,41 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_INSUFFICIENT")
 
+    def test_recent_contract_vessel_rule_fails_available_rows_when_window_is_short(self):
+        result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2024, 11, 20),
+                            "sign_out_date": date(2025, 4, 16),
+                            "vessel_types": ["bulk carrier"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 2, 12),
+                            "sign_out_date": date(2024, 6, 19),
+                            "vessel_types": ["dry cargo"],
+                        },
+                        {
+                            "sign_in_date": date(2023, 5, 18),
+                            "sign_out_date": date(2023, 10, 16),
+                            "vessel_types": ["dry cargo"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "vessel_type": "tanker",
+                "min_months": 18,
+                "lookback_contracts": 4,
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_INSUFFICIENT")
+        self.assertEqual(result["actual_value"]["matched_contracts"], 0)
+        self.assertEqual(result["actual_value"]["evaluated_contracts"], 3)
+
     def test_recent_contract_vessel_rule_is_unknown_when_recent_rows_lack_ship_types(self):
         result = self.analyzer._evaluate_recent_contract_vessel_experience_rule(
             {
