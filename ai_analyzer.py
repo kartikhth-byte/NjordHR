@@ -1597,6 +1597,24 @@ class AIResumeAnalyzer:
             "display_value": " ".join(prompt.split()),
         }
 
+    def _extract_ship_type_from_prompt(self, user_prompt):
+        prompt = str(user_prompt or "")
+        normalized_prompt = self._normalize_ship_type(prompt)
+        ship_matches = self._extract_configured_ship_types(normalized_prompt)
+        if ship_matches:
+            return ship_matches[0]
+
+        fallback_aliases = []
+        for canonical, aliases in self._ship_type_aliases().items():
+            for alias in aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                if normalized_alias:
+                    fallback_aliases.append((normalized_alias, canonical))
+        for normalized_alias, canonical in sorted(fallback_aliases, key=lambda item: len(item[0]), reverse=True):
+            if re.search(rf"\b{re.escape(normalized_alias)}\b", normalized_prompt):
+                return normalized_alias if normalized_alias != canonical else canonical
+        return None
+
     def _engine_type_aliases(self):
         aliases = {
             "man_b_w_me": [
@@ -1877,6 +1895,40 @@ class AIResumeAnalyzer:
             "operator": "contains_any",
         }
 
+    def _extract_engine_vessel_experience_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        normalized_prompt = self._normalize_engine_type(prompt)
+        if not normalized_prompt:
+            return None
+
+        # Keep explicit "engine experience and vessel experience" prompts as two
+        # independent constraints. Combined rules are for same-row phrasing.
+        if re.search(r"\bexperience\b.*\band\b.*\bexperience\b", normalized_prompt):
+            return None
+
+        engine_constraint = self._extract_engine_experience_constraint(prompt)
+        vessel_type = self._extract_ship_type_from_prompt(prompt)
+        if not engine_constraint or not vessel_type:
+            return None
+
+        same_row_intent = (
+            " and " not in normalized_prompt
+            or any(token in normalized_prompt for token in (" on ", "fitted", "machinery"))
+        )
+        if not same_row_intent:
+            return None
+
+        return {
+            "engine_type": engine_constraint["engine_type"],
+            "expected_engine_values": engine_constraint["expected_values"],
+            "vessel_type": vessel_type,
+            "expected_vessel_values": self._ship_type_expected_values(vessel_type),
+            "min_months": engine_constraint.get("min_months", 0),
+            "lookback_contracts": engine_constraint.get("lookback_contracts", 0),
+            "display_value": " ".join(prompt.split()),
+            "operator": "contains_all_same_row",
+        }
+
     def _extract_company_continuity_constraint(self, user_prompt):
         prompt = " ".join(str(user_prompt or "").split())
         if not prompt:
@@ -2072,17 +2124,22 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["company_continuity"] = company_continuity_constraint
             constraints["applied_constraints"].append("company_continuity")
 
-        recent_contract_vessel_experience_constraint = self._extract_recent_contract_vessel_experience_constraint(user_prompt)
+        engine_vessel_experience_constraint = self._extract_engine_vessel_experience_constraint(user_prompt)
+        if engine_vessel_experience_constraint:
+            constraints["hard_constraints"]["engine_vessel_experience"] = engine_vessel_experience_constraint
+            constraints["applied_constraints"].append("engine_vessel_experience")
+
+        recent_contract_vessel_experience_constraint = None if engine_vessel_experience_constraint else self._extract_recent_contract_vessel_experience_constraint(user_prompt)
         if recent_contract_vessel_experience_constraint:
             constraints["hard_constraints"]["recent_contract_vessel_experience"] = recent_contract_vessel_experience_constraint
             constraints["applied_constraints"].append("recent_contract_vessel_experience")
 
-        engine_experience_constraint = self._extract_engine_experience_constraint(user_prompt)
+        engine_experience_constraint = None if engine_vessel_experience_constraint else self._extract_engine_experience_constraint(user_prompt)
         if engine_experience_constraint:
             constraints["hard_constraints"]["engine_experience"] = engine_experience_constraint
             constraints["applied_constraints"].append("engine_experience")
 
-        experienced_ship_type = None if (recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_experience_ship_type_constraint(user_prompt)
+        experienced_ship_type = None if (engine_vessel_experience_constraint or recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
             constraints["applied_constraints"].append("experience_ship_type")
@@ -2092,12 +2149,12 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["recency"] = recency_constraint
             constraints["applied_constraints"].append("recency")
 
-        sea_service_constraint = None if (recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_min_sea_service_constraint(user_prompt)
+        sea_service_constraint = None if (engine_vessel_experience_constraint or recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
             constraints["hard_constraints"]["sea_service"] = sea_service_constraint
             constraints["unapplied_constraints"].append("min_sea_service")
 
-        vessel_type_constraint = self._extract_vessel_type_constraint(user_prompt)
+        vessel_type_constraint = None if engine_vessel_experience_constraint else self._extract_vessel_type_constraint(user_prompt)
         if vessel_type_constraint:
             constraints["hard_constraints"]["vessel_type"] = vessel_type_constraint
             constraints["unapplied_constraints"].append("vessel_type")
@@ -6366,6 +6423,161 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_engine_vessel_experience_rule(self, candidate_facts, constraint):
+        experience = candidate_facts.get("experience") or {}
+        fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.service_rows") or {}
+        service_rows = experience.get("service_rows") or []
+        status = str(fact_meta.get("status") or "MISSING")
+        confidence = fact_meta.get("confidence")
+
+        if status == "SOURCE_EXCLUDED":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENGINE_VESSEL_EXPERIENCE_SOURCE_EXCLUDED",
+                "Engine/vessel row matching is currently supported only for SeaJobs-style resumes.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        requested_engine_type = self._normalize_engine_type((constraint or {}).get("engine_type")).replace(" ", "_")
+        requested_vessel_type = self._normalize_ship_type((constraint or {}).get("vessel_type"))
+        expected_engine_types = {
+            self._normalize_engine_type(value).replace(" ", "_")
+            for value in ((constraint or {}).get("expected_engine_values") or self._engine_type_expected_values(requested_engine_type))
+            if value
+        }
+        expected_vessel_types = {
+            self._normalize_ship_type(value)
+            for value in ((constraint or {}).get("expected_vessel_values") or self._ship_type_expected_values(requested_vessel_type))
+            if value
+        }
+        min_months = int((constraint or {}).get("min_months") or 0)
+        lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
+
+        if not requested_engine_type or not requested_vessel_type or not expected_engine_types or not expected_vessel_types:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENGINE_VESSEL_EXPERIENCE_CONSTRAINT_INVALID",
+                "Combined engine/vessel experience constraint is incomplete.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        valid_rows = []
+        for row in service_rows:
+            sign_in_date = row.get("sign_in_date")
+            sign_out_date = row.get("sign_out_date")
+            if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+                continue
+            valid_rows.append({
+                "sign_in_date": sign_in_date,
+                "sign_out_date": sign_out_date,
+                "engine_types": [
+                    self._normalize_engine_type(value).replace(" ", "_")
+                    for value in (row.get("engine_types") or [])
+                    if value
+                ],
+                "vessel_types": [
+                    self._normalize_ship_type(value)
+                    for value in (row.get("vessel_types") or [])
+                    if value
+                ],
+            })
+
+        if not valid_rows:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENGINE_VESSEL_EXPERIENCE_ROWS_MISSING",
+                "Could not determine contract-level engine/vessel experience from the selected resume.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        valid_rows.sort(key=lambda row: (row.get("sign_out_date"), row.get("sign_in_date")), reverse=True)
+        evaluated_rows = valid_rows[:lookback_contracts] if lookback_contracts > 0 else valid_rows
+        matched_months = 0
+        matched_contracts = 0
+        parsed_rows = 0
+        for row in evaluated_rows:
+            row_engine_types = set(row.get("engine_types") or [])
+            row_vessel_types = set(row.get("vessel_types") or [])
+            if row_engine_types or row_vessel_types:
+                parsed_rows += 1
+            if not (row_engine_types & expected_engine_types and row_vessel_types & expected_vessel_types):
+                continue
+            months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+            if months is None:
+                continue
+            matched_months += months
+            matched_contracts += 1
+
+        if parsed_rows == 0:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENGINE_VESSEL_EXPERIENCE_UNPARSED",
+                "Could not determine engine or vessel types for the candidate's contracts.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if min_months == 0 and matched_contracts > 0:
+            return self._base_rule_result(
+                "PASS",
+                "ENGINE_VESSEL_EXPERIENCE_MATCH",
+                (
+                    f"Candidate has '{requested_engine_type}' on '{requested_vessel_type}' "
+                    f"in {matched_contracts} contract(s)."
+                ),
+                actual_value={
+                    "matched_months": matched_months,
+                    "matched_contracts": matched_contracts,
+                    "evaluated_contracts": len(evaluated_rows),
+                },
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        if min_months > 0 and matched_months >= min_months:
+            return self._base_rule_result(
+                "PASS",
+                "ENGINE_VESSEL_EXPERIENCE_MATCH",
+                (
+                    f"Candidate has {matched_months} month(s) with '{requested_engine_type}' "
+                    f"on '{requested_vessel_type}'."
+                ),
+                actual_value={
+                    "matched_months": matched_months,
+                    "matched_contracts": matched_contracts,
+                    "evaluated_contracts": len(evaluated_rows),
+                },
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT",
+            (
+                f"Candidate has only {matched_months} month(s) with '{requested_engine_type}' "
+                f"on '{requested_vessel_type}', below the required {min_months}."
+            ),
+            actual_value={
+                "matched_months": matched_months,
+                "matched_contracts": matched_contracts,
+                "evaluated_contracts": len(evaluated_rows),
+            },
+            expected_value=constraint,
+            confidence=confidence,
+        )
+
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
@@ -6537,6 +6749,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_recency_rule(candidate_facts, recency_constraint))
+
+        engine_vessel_experience_constraint = hard_constraints.get("engine_vessel_experience")
+        if "engine_vessel_experience" in applied_constraints and engine_vessel_experience_constraint:
+            activated_rules.append("engine_vessel_experience")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "ENGINE_VESSEL_EXPERIENCE_RULE_REQUIRES_V2_FACTS",
+                    "Combined engine/vessel experience requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=engine_vessel_experience_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_engine_vessel_experience_rule(candidate_facts, engine_vessel_experience_constraint))
 
         recent_contract_vessel_experience_constraint = hard_constraints.get("recent_contract_vessel_experience")
         if "recent_contract_vessel_experience" in applied_constraints and recent_contract_vessel_experience_constraint:

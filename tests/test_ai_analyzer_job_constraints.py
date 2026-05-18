@@ -352,6 +352,34 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertEqual(engine_constraint["min_months"], expected_months)
                 self.assertEqual(engine_constraint["lookback_contracts"], expected_contracts)
 
+    def test_engine_vessel_experience_family_maps_to_same_row_constraint(self):
+        cases = [
+            ("Mitsubishi UEC on tanker in last 3 contracts", "mitsubishi_uec", "tanker", 0, 3),
+            ("12 months ME-GI on oil tanker", "man_b_w_me_gi", "oil tanker", 12, 0),
+            ("dual fuel product tanker experience in recent 4 contracts", "dual_fuel", "product tanker", 0, 4),
+            ("Mitsubishi UEC tanker experience in last 3 contracts", "mitsubishi_uec", "tanker", 0, 3),
+        ]
+        for prompt, expected_engine_type, expected_vessel_type, expected_months, expected_contracts in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("engine_vessel_experience", constraints["applied_constraints"])
+                self.assertNotIn("engine_experience", constraints["applied_constraints"])
+                self.assertNotIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+                combined = constraints["hard_constraints"]["engine_vessel_experience"]
+                self.assertEqual(combined["engine_type"], expected_engine_type)
+                self.assertEqual(combined["vessel_type"], expected_vessel_type)
+                self.assertEqual(combined["min_months"], expected_months)
+                self.assertEqual(combined["lookback_contracts"], expected_contracts)
+
+    def test_engine_and_vessel_experience_with_and_remains_separate_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Mitsubishi UEC experience and tanker experience in last 3 contracts",
+            rank=self.rank,
+        )
+        self.assertNotIn("engine_vessel_experience", constraints["applied_constraints"])
+        self.assertIn("engine_experience", constraints["applied_constraints"])
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)
         self.assertIn("availability", constraints["applied_constraints"])

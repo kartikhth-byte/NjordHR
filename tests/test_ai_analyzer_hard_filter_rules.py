@@ -695,6 +695,122 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_INSUFFICIENT")
         self.assertEqual(result["results"][0]["actual_value"]["matched_months"], 9)
 
+    def test_engine_vessel_experience_rule_requires_same_service_row(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                            "vessel_types": ["bulk carrier"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 1, 1),
+                            "sign_out_date": date(2024, 6, 1),
+                            "engine_types": ["man_b_w_me"],
+                            "vessel_types": ["oil tanker"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["engine_vessel_experience"],
+                "hard_constraints": {
+                    "engine_vessel_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_engine_values": ["mitsubishi_uec"],
+                        "vessel_type": "tanker",
+                        "expected_vessel_values": self.analyzer._ship_type_expected_values("tanker"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 0)
+
+    def test_engine_vessel_experience_rule_passes_when_same_row_matches(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                            "vessel_types": ["product tanker"],
+                        }
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["engine_vessel_experience"],
+                "hard_constraints": {
+                    "engine_vessel_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_engine_values": ["mitsubishi_uec"],
+                        "vessel_type": "tanker",
+                        "expected_vessel_values": self.analyzer._ship_type_expected_values("tanker"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_VESSEL_EXPERIENCE_MATCH")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 1)
+
+    def test_engine_vessel_experience_rule_honors_recent_window(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "engine_types": ["man_b_w_me"],
+                            "vessel_types": ["product tanker"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 1, 1),
+                            "sign_out_date": date(2024, 6, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                            "vessel_types": ["bulk carrier"],
+                        },
+                        {
+                            "sign_in_date": date(2023, 1, 1),
+                            "sign_out_date": date(2023, 6, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                            "vessel_types": ["product tanker"],
+                        },
+                    ]
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["engine_vessel_experience"],
+                "hard_constraints": {
+                    "engine_vessel_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_engine_values": ["mitsubishi_uec"],
+                        "vessel_type": "tanker",
+                        "expected_vessel_values": self.analyzer._ship_type_expected_values("tanker"),
+                        "min_months": 0,
+                        "lookback_contracts": 2,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["actual_value"]["evaluated_contracts"], 2)
+
     def test_hard_filter_skips_passport_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
