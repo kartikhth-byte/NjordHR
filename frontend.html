@@ -176,6 +176,14 @@
             const [isAnalyzeLoading, setIsAnalyzeLoading] = useState(false);
             const [isVerifyingResumes, setIsVerifyingResumes] = useState(false);
             const [mailboxAuthAction, setMailboxAuthAction] = useState('');
+            const [mailboxSettings, setMailboxSettings] = useState({
+                email_intake_mailbox: '',
+                outlook_client_id: '',
+                outlook_tenant_id: 'organizations',
+                email_intake_monitored_folder: 'Inbox/NjordHR Resumes',
+                email_intake_poll_interval_seconds: 60,
+            });
+            const [isMailboxSettingsSaving, setIsMailboxSettingsSaving] = useState(false);
             
             const [sessionConnected, setSessionConnected] = useState(false);
             const [sessionHealthInfo, setSessionHealthInfo] = useState({ idleSeconds: 0, idleTimeoutSeconds: 0 });
@@ -674,6 +682,13 @@
                 }, 5000);
                 return () => clearInterval(poller);
             }, [authUser, runtimeConfig]);
+
+            useEffect(() => {
+                if (!authUser || activeTab !== 'download') return;
+                if (!runtimeConfig?.feature_flags?.use_local_agent) return;
+                if (!runtimeConfig?.local_agent?.reachable) return;
+                fetchMailboxSettings();
+            }, [authUser, activeTab, runtimeConfig?.feature_flags?.use_local_agent, runtimeConfig?.local_agent?.reachable]);
 
             useEffect(() => {
                 if (activeTab !== 'dashboard') return;
@@ -1338,6 +1353,81 @@
                     }
                 } finally {
                     setIsRuntimeRefreshing(false);
+                }
+            };
+
+            const fetchMailboxSettings = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/settings`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        return;
+                    }
+                    const settings = data.settings || {};
+                    setMailboxSettings(prev => ({
+                        ...prev,
+                        email_intake_mailbox: settings.email_intake_mailbox || '',
+                        outlook_client_id: settings.outlook_client_id || '',
+                        outlook_tenant_id: settings.outlook_tenant_id || 'organizations',
+                        email_intake_monitored_folder: settings.email_intake_monitored_folder || 'Inbox/NjordHR Resumes',
+                        email_intake_poll_interval_seconds: Number(settings.email_intake_poll_interval_seconds || 60),
+                    }));
+                } catch (_error) {
+                    // Best-effort helper; runtime health still drives the visible status.
+                }
+            };
+
+            const saveMailboxSettings = async ({ silent = false } = {}) => {
+                const mailbox = String(mailboxSettings.email_intake_mailbox || '').trim();
+                const clientId = String(mailboxSettings.outlook_client_id || '').trim();
+                const tenantId = String(mailboxSettings.outlook_tenant_id || 'organizations').trim() || 'organizations';
+                const monitoredFolder = String(mailboxSettings.email_intake_monitored_folder || 'Inbox/NjordHR Resumes').trim() || 'Inbox/NjordHR Resumes';
+                const pollInterval = Number(mailboxSettings.email_intake_poll_interval_seconds || 60);
+                if (!mailbox) {
+                    handleSendMessage('error', 'Enter the Outlook mailbox before connecting.');
+                    return false;
+                }
+                if (!clientId) {
+                    handleSendMessage('error', 'Enter the Outlook client ID before connecting.');
+                    return false;
+                }
+                setIsMailboxSettingsSaving(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/email-intake/settings`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email_intake_mailbox: mailbox,
+                            outlook_client_id: clientId,
+                            outlook_tenant_id: tenantId,
+                            email_intake_monitored_folder: monitoredFolder,
+                            email_intake_poll_interval_seconds: pollInterval,
+                            email_intake_enabled: true,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to save mailbox settings.');
+                        return false;
+                    }
+                    setMailboxSettings(prev => ({
+                        ...prev,
+                        email_intake_mailbox: mailbox,
+                        outlook_client_id: clientId,
+                        outlook_tenant_id: tenantId,
+                        email_intake_monitored_folder: monitoredFolder,
+                        email_intake_poll_interval_seconds: pollInterval,
+                    }));
+                    if (!silent) {
+                        handleSendMessage('success', 'Mailbox settings saved.');
+                    }
+                    await fetchRuntimeConfig(false);
+                    return true;
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to save mailbox settings.');
+                    return false;
+                } finally {
+                    setIsMailboxSettingsSaving(false);
                 }
             };
 
@@ -2456,6 +2546,10 @@
             const handleConnectMailbox = async (mode = 'connect') => {
                 setMailboxAuthAction(mode);
                 try {
+                    const saved = await saveMailboxSettings({ silent: true });
+                    if (!saved) {
+                        return;
+                    }
                     const response = await fetch(`${API_BASE_URL}/email-intake/auth/start`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2946,6 +3040,7 @@
                 const mailboxLastActivity = mailboxResults.last_fetch_at || manualReviewSummary.latest_received_at || '';
                 const manualReviewDestinationPreview = previewRoleFolder(manualReviewSelectedRole);
                 const mailboxResultsIsEmpty = !mailboxRoutedCount && !manualReviewCount && !mailboxFailedCount;
+                const setMailboxField = (key, value) => setMailboxSettings(prev => ({ ...prev, [key]: value }));
                 const deriveManualReviewCandidateName = (item) => {
                     const extractedName = String(item?.candidate_name || '').trim();
                     if (extractedName) return extractedName;
@@ -2986,26 +3081,84 @@
                                         <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-5">
                                             <div className="mb-3 flex items-start justify-between gap-3">
                                                 <h4 className="text-base font-semibold text-slate-800">Mailbox Intake</h4>
-                                                {outlookConnected && (
-                                                    <div className="flex flex-wrap justify-end gap-2">
+                                                <div className="flex flex-wrap justify-end gap-2">
+                                                    {!outlookConnected ? (
                                                         <button
                                                             type="button"
-                                                            onClick={() => handleConnectMailbox('reconnect')}
-                                                            disabled={!agentReachable || mailboxAuthAction !== ''}
+                                                            onClick={() => handleConnectMailbox('connect')}
+                                                            disabled={!agentReachable || mailboxAuthAction !== '' || isMailboxSettingsSaving}
                                                             className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
                                                         >
-                                                            {mailboxAuthAction === 'reconnect' ? 'Reconnecting...' : 'Reconnect Mailbox'}
+                                                            {mailboxAuthAction === 'connect' ? 'Connecting...' : 'Connect Mailbox'}
                                                         </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={handleDisconnectMailbox}
-                                                            disabled={!agentReachable || mailboxAuthAction !== ''}
-                                                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                                                        >
-                                                            {mailboxAuthAction === 'disconnect' ? 'Disconnecting...' : 'Disconnect Mailbox'}
-                                                        </button>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleConnectMailbox('reconnect')}
+                                                                disabled={!agentReachable || mailboxAuthAction !== '' || isMailboxSettingsSaving}
+                                                                className="rounded-lg border border-indigo-300 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                                                            >
+                                                                {mailboxAuthAction === 'reconnect' ? 'Reconnecting...' : 'Reconnect Mailbox'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleDisconnectMailbox}
+                                                                disabled={!agentReachable || mailboxAuthAction !== ''}
+                                                                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                                                            >
+                                                                {mailboxAuthAction === 'disconnect' ? 'Disconnecting...' : 'Disconnect Mailbox'}
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="mb-4 grid grid-cols-1 lg:grid-cols-2 gap-3 rounded-lg border border-indigo-100 bg-white/70 p-3">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-slate-600 mb-1">Mailbox</label>
+                                                    <input
+                                                        type="email"
+                                                        value={mailboxSettings.email_intake_mailbox}
+                                                        onChange={e => setMailboxField('email_intake_mailbox', e.target.value)}
+                                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                                        placeholder="recruitment@company.com"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-slate-600 mb-1">Outlook Client ID</label>
+                                                    <input
+                                                        value={mailboxSettings.outlook_client_id}
+                                                        onChange={e => setMailboxField('outlook_client_id', e.target.value)}
+                                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                                        placeholder="Microsoft Entra application client ID"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-slate-600 mb-1">Monitored Folder</label>
+                                                    <input
+                                                        value={mailboxSettings.email_intake_monitored_folder}
+                                                        onChange={e => setMailboxField('email_intake_monitored_folder', e.target.value)}
+                                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-slate-600 mb-1">Tenant</label>
+                                                        <input
+                                                            value={mailboxSettings.outlook_tenant_id}
+                                                            onChange={e => setMailboxField('outlook_tenant_id', e.target.value)}
+                                                            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                                                        />
                                                     </div>
-                                                )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => saveMailboxSettings()}
+                                                        disabled={!agentReachable || isMailboxSettingsSaving || mailboxAuthAction !== ''}
+                                                        className="self-end rounded-lg bg-white px-3 py-2 text-sm font-medium text-indigo-700 border border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+                                                    >
+                                                        {isMailboxSettingsSaving ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="space-y-2 text-sm text-slate-700">
                                                 <p><span className="font-medium">Mailbox:</span> {connectedMailbox}</p>
@@ -3033,18 +3186,6 @@
                                                     <span>Fetch Mail</span>
                                                 )}
                                             </button>
-                                            <div className="mt-3 flex flex-wrap gap-3">
-                                                {!outlookConnected ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleConnectMailbox('connect')}
-                                                        disabled={!agentReachable || mailboxAuthAction !== ''}
-                                                        className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
-                                                    >
-                                                        {mailboxAuthAction === 'connect' ? 'Connecting...' : 'Connect Mailbox'}
-                                                    </button>
-                                                ) : null}
-                                            </div>
                                             {!agentReachable ? (
                                                 <p className="mt-3 text-xs text-amber-700">The local agent is not reachable. Start it before running Outlook fetch.</p>
                                             ) : !outlookConnected ? (

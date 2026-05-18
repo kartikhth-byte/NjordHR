@@ -139,6 +139,17 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         return DummyResponse()
 
+    def _agent_json_response(self, payload, status_code=200):
+        class DummyResponse:
+            def __init__(self, body, code):
+                self._body = body
+                self.status_code = code
+
+            def json(self_inner):
+                return self_inner._body
+
+        return DummyResponse(payload, status_code)
+
     def test_initial_verification_logs_events_without_file_copy(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         self._write_fake_resume("Chief_Officer_1002.pdf")
@@ -684,6 +695,32 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(files_resp.get_json()["files"], ["EmailResume.pdf"])
         summaries = {row["folder"]: row["pdf_count"] for row in summaries_resp.get_json()["folders"]}
         self.assertEqual(summaries, {"Chief_Officer": 1})
+
+    def test_email_intake_settings_proxy_updates_allowed_agent_fields(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = {}
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured["method"] = method
+            captured["path"] = path
+            captured["json_body"] = json_body
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.put("/email-intake/settings", json={
+                "email_intake_mailbox": "recruitment@njordships.com",
+                "outlook_client_id": "client-123",
+                "outlook_tenant_id": "organizations",
+                "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                "unsafe_field": "ignored",
+            })
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(captured["method"], "PUT")
+        self.assertEqual(captured["path"], "/settings")
+        self.assertEqual(captured["json_body"]["email_intake_mailbox"], "recruitment@njordships.com")
+        self.assertEqual(captured["json_body"]["outlook_client_id"], "client-123")
+        self.assertNotIn("unsafe_field", captured["json_body"])
 
     def test_get_rank_options_uses_live_agent_folders_when_available(self):
         agent_root = self.base / "AgentResumes"
