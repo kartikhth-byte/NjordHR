@@ -6111,9 +6111,10 @@ class AIResumeAnalyzer:
             for value in ((constraint or {}).get("expected_values") or self._engine_type_expected_values(requested_engine_type))
             if value
         ]
+        experience = candidate_facts.get("experience") or {}
         experienced_engine_types = [
             self._normalize_engine_type(value).replace(" ", "_")
-            for value in ((candidate_facts.get("experience") or {}).get("engine_types") or [])
+            for value in (experience.get("engine_types") or [])
             if value
         ]
         experienced_engine_types = list(dict.fromkeys(experienced_engine_types))
@@ -6132,6 +6133,51 @@ class AIResumeAnalyzer:
             )
 
         if not experienced_engine_types:
+            service_rows = experience.get("service_rows") or []
+            row_engine_types = []
+            parsed_service_rows = 0
+            for row in service_rows:
+                if row.get("engine_types"):
+                    parsed_service_rows += 1
+                for engine_type in row.get("engine_types") or []:
+                    normalized_engine_type = self._normalize_engine_type(engine_type).replace(" ", "_")
+                    if normalized_engine_type:
+                        row_engine_types.append(normalized_engine_type)
+            row_engine_types = list(dict.fromkeys(row_engine_types))
+            if row_engine_types:
+                if set(row_engine_types) & set(expected_engine_types):
+                    return self._base_rule_result(
+                        "PASS",
+                        "ENGINE_EXPERIENCE_MATCH",
+                        f"Candidate SeaJobs rows show experience with '{requested_engine_type}'.",
+                        actual_value=row_engine_types,
+                        expected_value=expected_engine_types,
+                        confidence=confidence,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    "ENGINE_EXPERIENCE_MISMATCH",
+                    (
+                        f"Candidate engine experience {row_engine_types} does not match requested "
+                        f"filter '{requested_engine_type}'."
+                    ),
+                    actual_value=row_engine_types,
+                    expected_value=expected_engine_types,
+                    confidence=confidence,
+                )
+            service_rows_status = str(((candidate_facts.get("fact_meta") or {}).get("experience.service_rows") or {}).get("status") or "")
+            if service_rows and service_rows_status == "PARSED":
+                return self._base_rule_result(
+                    "FAIL",
+                    "ENGINE_EXPERIENCE_MISMATCH",
+                    (
+                        f"Candidate has parsed service rows but no engine evidence matching "
+                        f"'{requested_engine_type}'."
+                    ),
+                    actual_value=[],
+                    expected_value=expected_engine_types,
+                    confidence=confidence,
+                )
             return self._base_rule_result(
                 "UNKNOWN",
                 "ENGINE_EXPERIENCE_MISSING",

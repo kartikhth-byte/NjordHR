@@ -578,6 +578,34 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
 
+    def test_engine_experience_rule_fails_when_parsed_service_rows_have_no_match(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": [],
+                    "service_rows": [
+                        {"engine_types": [], "snippet": "Chief Engineer / Product Tanker 7463 Wartsila"},
+                        {"engine_types": [], "snippet": "Chief Engineer / AHTS 489 Mak"},
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": None},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
     def test_hard_filter_skips_passport_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
