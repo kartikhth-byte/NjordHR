@@ -2060,35 +2060,6 @@ def proxy_email_intake_auth_start():
         return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
 
 
-@app.route('/email-intake/settings', methods=['GET', 'PUT'])
-def proxy_email_intake_settings():
-    ok, reason = _require_role("admin", "manager")
-    if not ok:
-        return jsonify({"success": False, "message": reason}), 403
-    if not _use_local_agent():
-        return jsonify({"success": False, "message": "Local agent is required for Outlook mailbox settings."}), 400
-    try:
-        if request.method == 'GET':
-            resp = _agent_request("GET", "/settings", timeout=15)
-        else:
-            payload = request.json or {}
-            allowed = {
-                "email_intake_enabled",
-                "email_intake_mailbox",
-                "email_intake_monitored_folder",
-                "email_intake_processed_folder",
-                "email_intake_failed_folder",
-                "email_intake_poll_interval_seconds",
-                "outlook_client_id",
-                "outlook_tenant_id",
-            }
-            agent_payload = {key: payload[key] for key in allowed if key in payload}
-            resp = _agent_request("PUT", "/settings", json_body=agent_payload, timeout=15)
-        return jsonify(resp.json()), resp.status_code
-    except Exception as exc:
-        return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
-
-
 @app.route('/email-intake/auth/disconnect', methods=['POST'])
 def proxy_email_intake_auth_disconnect():
     ok, reason = _require_role("admin", "manager")
