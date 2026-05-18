@@ -293,7 +293,37 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     constraints["hard_constraints"]["engine_experience"]["engine_type"],
                     expected_engine_type,
                 )
+                self.assertEqual(constraints["hard_constraints"]["engine_experience"]["min_months"], 0)
+                self.assertEqual(constraints["hard_constraints"]["engine_experience"]["lookback_contracts"], 0)
                 self.assertNotIn("experience_ship_type", constraints["applied_constraints"])
+
+    def test_engine_experience_family_preserves_contract_window(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Mitsubishi UEC experience in the last 3 contracts",
+            rank=self.rank,
+        )
+        self.assertIn("engine_experience", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["engine_experience"]["engine_type"],
+            "mitsubishi_uec",
+        )
+        self.assertEqual(constraints["hard_constraints"]["engine_experience"]["lookback_contracts"], 3)
+        self.assertEqual(constraints["hard_constraints"]["engine_experience"]["min_months"], 0)
+        self.assertNotIn("min_sea_service", constraints["unapplied_constraints"])
+
+    def test_engine_experience_family_preserves_minimum_months(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "has minimum 12 months experience in Mitsubishi UEC",
+            rank=self.rank,
+        )
+        self.assertIn("engine_experience", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["engine_experience"]["engine_type"],
+            "mitsubishi_uec",
+        )
+        self.assertEqual(constraints["hard_constraints"]["engine_experience"]["min_months"], 12)
+        self.assertEqual(constraints["hard_constraints"]["engine_experience"]["lookback_contracts"], 0)
+        self.assertNotIn("min_sea_service", constraints["unapplied_constraints"])
 
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)

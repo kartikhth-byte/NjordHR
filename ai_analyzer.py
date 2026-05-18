@@ -1827,9 +1827,22 @@ class AIResumeAnalyzer:
                 matches = [generic_engine_type] + [match for match in matches if match != generic_engine_type]
                 break
         engine_type = matches[0]
+        contracts_match = re.search(r"\b(?:last|recent)\s+(\d+)\s+contracts?\b", normalized_prompt, flags=re.IGNORECASE)
+        months_match = re.search(
+            r"\b(?:minimum|at\s+least)?\s*(\d+)\s*(years?|months?)\b",
+            normalized_prompt,
+            flags=re.IGNORECASE,
+        )
+        min_months = 0
+        if months_match:
+            value = int(months_match.group(1))
+            unit = months_match.group(2).lower()
+            min_months = value * 12 if unit.startswith("year") else value
         return {
             "engine_type": engine_type,
             "expected_values": self._engine_type_expected_values(engine_type),
+            "min_months": min_months,
+            "lookback_contracts": int(contracts_match.group(1)) if contracts_match else 0,
             "display_value": " ".join(prompt.split()),
             "operator": "contains_any",
         }
@@ -2049,7 +2062,7 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["recency"] = recency_constraint
             constraints["applied_constraints"].append("recency")
 
-        sea_service_constraint = None if recent_contract_vessel_experience_constraint else self._extract_min_sea_service_constraint(user_prompt)
+        sea_service_constraint = None if (recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
             constraints["hard_constraints"]["sea_service"] = sea_service_constraint
             constraints["unapplied_constraints"].append("min_sea_service")
@@ -6130,6 +6143,119 @@ class AIResumeAnalyzer:
                 expected_value=constraint,
                 confidence=confidence,
                 unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        min_months = int((constraint or {}).get("min_months") or 0)
+        lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
+        if min_months > 0 or lookback_contracts > 0:
+            service_rows = experience.get("service_rows") or []
+            valid_rows = []
+            for row in service_rows:
+                sign_in_date = row.get("sign_in_date")
+                sign_out_date = row.get("sign_out_date")
+                if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+                    continue
+                row_engine_types = [
+                    self._normalize_engine_type(value).replace(" ", "_")
+                    for value in (row.get("engine_types") or [])
+                    if value
+                ]
+                valid_rows.append({
+                    "sign_in_date": sign_in_date,
+                    "sign_out_date": sign_out_date,
+                    "engine_types": row_engine_types,
+                })
+
+            if not valid_rows:
+                return self._base_rule_result(
+                    "UNKNOWN",
+                    "ENGINE_EXPERIENCE_ROWS_MISSING",
+                    "Could not determine contract-level engine experience from the selected resume.",
+                    actual_value=None,
+                    expected_value=constraint,
+                    confidence=confidence,
+                    unknown_reason="FACTUAL_UNKNOWN",
+                )
+
+            valid_rows.sort(key=lambda row: (row.get("sign_out_date"), row.get("sign_in_date")), reverse=True)
+            evaluated_rows = valid_rows[:lookback_contracts] if lookback_contracts > 0 else valid_rows
+            matched_months = 0
+            matched_contracts = 0
+            parsed_engine_rows = 0
+            for row in evaluated_rows:
+                row_engine_types = set(row.get("engine_types") or [])
+                if row_engine_types:
+                    parsed_engine_rows += 1
+                if not (row_engine_types & set(expected_engine_types)):
+                    continue
+                months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+                if months is None:
+                    continue
+                matched_months += months
+                matched_contracts += 1
+
+            if parsed_engine_rows == 0:
+                return self._base_rule_result(
+                    "FAIL",
+                    "ENGINE_EXPERIENCE_MISMATCH",
+                    f"Candidate has parsed service rows but no engine evidence matching '{requested_engine_type}'.",
+                    actual_value={
+                        "matched_months": 0,
+                        "matched_contracts": 0,
+                        "evaluated_contracts": len(evaluated_rows),
+                    },
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+
+            if min_months == 0 and matched_contracts > 0:
+                return self._base_rule_result(
+                    "PASS",
+                    "ENGINE_EXPERIENCE_MATCH",
+                    (
+                        f"Candidate has '{requested_engine_type}' experience in "
+                        f"{matched_contracts} contract(s)."
+                    ),
+                    actual_value={
+                        "matched_months": matched_months,
+                        "matched_contracts": matched_contracts,
+                        "evaluated_contracts": len(evaluated_rows),
+                    },
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+
+            if min_months > 0 and matched_months >= min_months:
+                return self._base_rule_result(
+                    "PASS",
+                    "ENGINE_EXPERIENCE_MATCH",
+                    (
+                        f"Candidate has {matched_months} month(s) with "
+                        f"'{requested_engine_type}'."
+                    ),
+                    actual_value={
+                        "matched_months": matched_months,
+                        "matched_contracts": matched_contracts,
+                        "evaluated_contracts": len(evaluated_rows),
+                    },
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+
+            return self._base_rule_result(
+                "FAIL",
+                "ENGINE_EXPERIENCE_INSUFFICIENT",
+                (
+                    f"Candidate has only {matched_months} month(s) with "
+                    f"'{requested_engine_type}', below the required {min_months}."
+                ),
+                actual_value={
+                    "matched_months": matched_months,
+                    "matched_contracts": matched_contracts,
+                    "evaluated_contracts": len(evaluated_rows),
+                },
+                expected_value=constraint,
+                confidence=confidence,
             )
 
         if not experienced_engine_types:

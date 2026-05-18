@@ -606,6 +606,95 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
 
+    def test_engine_experience_rule_honors_recent_contract_window(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": ["mitsubishi_uec"],
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 5, 1),
+                            "engine_types": ["man_b_w_me"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 6, 1),
+                            "sign_out_date": date(2024, 12, 1),
+                            "engine_types": ["wartsila_rt_flex"],
+                        },
+                        {
+                            "sign_in_date": date(2023, 10, 1),
+                            "sign_out_date": date(2024, 3, 1),
+                            "engine_types": ["man_b_w_me"],
+                        },
+                        {
+                            "sign_in_date": date(2022, 1, 1),
+                            "sign_out_date": date(2022, 7, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.8},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_values": self.analyzer._engine_type_expected_values("mitsubishi_uec"),
+                        "min_months": 0,
+                        "lookback_contracts": 3,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_INSUFFICIENT")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 0)
+        self.assertEqual(result["results"][0]["actual_value"]["evaluated_contracts"], 3)
+
+    def test_engine_experience_rule_honors_minimum_months(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": ["mitsubishi_uec"],
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2024, 1, 1),
+                            "sign_out_date": date(2024, 7, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                        {
+                            "sign_in_date": date(2023, 1, 1),
+                            "sign_out_date": date(2023, 4, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.8},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_values": self.analyzer._engine_type_expected_values("mitsubishi_uec"),
+                        "min_months": 12,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_INSUFFICIENT")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_months"], 9)
+
     def test_hard_filter_skips_passport_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
