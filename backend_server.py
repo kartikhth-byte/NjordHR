@@ -1070,6 +1070,17 @@ def _normalize_user_role(value):
 
 
 def _settings_payload(include_plain_secrets=False):
+    agent_settings = {}
+    if _use_local_agent():
+        try:
+            resp = _agent_request("GET", "/settings", timeout=5)
+            if getattr(resp, "status_code", 500) < 400:
+                payload = resp.json()
+                if isinstance(payload, dict) and isinstance(payload.get("settings"), dict):
+                    agent_settings = payload.get("settings") or {}
+        except Exception:
+            agent_settings = {}
+
     payload = {
         "non_secret": {
             "default_download_folder": settings.get("Default_Download_Folder", ""),
@@ -1091,6 +1102,14 @@ def _settings_payload(include_plain_secrets=False):
             "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
             "use_local_agent": bool(feature_flags.use_local_agent),
             "use_cloud_export": bool(feature_flags.use_cloud_export),
+            "email_intake_enabled": bool(agent_settings.get("email_intake_enabled", False)),
+            "email_intake_mailbox": str(agent_settings.get("email_intake_mailbox", "")).strip(),
+            "email_intake_monitored_folder": str(agent_settings.get("email_intake_monitored_folder", "")).strip(),
+            "email_intake_processed_folder": str(agent_settings.get("email_intake_processed_folder", "")).strip(),
+            "email_intake_failed_folder": str(agent_settings.get("email_intake_failed_folder", "")).strip(),
+            "email_intake_poll_interval_seconds": agent_settings.get("email_intake_poll_interval_seconds", 60),
+            "outlook_client_id": str(agent_settings.get("outlook_client_id", "")).strip(),
+            "outlook_tenant_id": str(agent_settings.get("outlook_tenant_id", "organizations")).strip() or "organizations",
         },
         "secrets": {
             "seajob_username": _mask_secret(_seajob_username()),
@@ -2693,6 +2712,31 @@ def save_admin_settings():
         except Exception:
             return jsonify({"success": False, "message": "otp_window_seconds must be an integer between 30 and 900"}), 400
         _config_set_literal(config, "Advanced", "otp_window_seconds", str(otp_seconds))
+
+    email_intake_keys = {
+        "email_intake_enabled",
+        "email_intake_mailbox",
+        "email_intake_monitored_folder",
+        "email_intake_processed_folder",
+        "email_intake_failed_folder",
+        "email_intake_poll_interval_seconds",
+        "outlook_client_id",
+        "outlook_tenant_id",
+    }
+    email_intake_payload = {key: payload[key] for key in email_intake_keys if key in payload}
+    if email_intake_payload:
+        if not _use_local_agent():
+            return jsonify({"success": False, "message": "Local agent is required to save Outlook mailbox intake settings."}), 400
+        try:
+            resp = _agent_request("PUT", "/settings", json_body=email_intake_payload, timeout=15)
+            if getattr(resp, "status_code", 500) >= 400:
+                try:
+                    message = resp.json().get("message", "Local agent rejected Outlook mailbox intake settings.")
+                except Exception:
+                    message = "Local agent rejected Outlook mailbox intake settings."
+                return jsonify({"success": False, "message": message}), resp.status_code
+        except Exception as exc:
+            return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
 
     if "supabase_url" in payload:
         supabase_url = normalized_url(payload.get("supabase_url", ""))

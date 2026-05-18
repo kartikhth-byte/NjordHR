@@ -318,6 +318,14 @@
                 use_supabase_reads: false,
                 use_local_agent: false,
                 use_cloud_export: false,
+                email_intake_enabled: false,
+                email_intake_mailbox: '',
+                email_intake_monitored_folder: 'Inbox/NjordHR Resumes',
+                email_intake_processed_folder: 'Inbox/NjordHR Processed',
+                email_intake_failed_folder: 'Inbox/NjordHR Failed',
+                email_intake_poll_interval_seconds: '60',
+                outlook_client_id: '',
+                outlook_tenant_id: 'organizations',
                 seajob_username: '',
                 seajob_password: '',
                 gemini_api_key: '',
@@ -1505,6 +1513,14 @@
                         use_supabase_reads: Boolean(nonSecret.use_supabase_reads),
                         use_local_agent: Boolean(nonSecret.use_local_agent),
                         use_cloud_export: Boolean(nonSecret.use_cloud_export),
+                        email_intake_enabled: Boolean(nonSecret.email_intake_enabled),
+                        email_intake_mailbox: nonSecret.email_intake_mailbox || '',
+                        email_intake_monitored_folder: nonSecret.email_intake_monitored_folder || 'Inbox/NjordHR Resumes',
+                        email_intake_processed_folder: nonSecret.email_intake_processed_folder || 'Inbox/NjordHR Processed',
+                        email_intake_failed_folder: nonSecret.email_intake_failed_folder || 'Inbox/NjordHR Failed',
+                        email_intake_poll_interval_seconds: String(nonSecret.email_intake_poll_interval_seconds || '60'),
+                        outlook_client_id: nonSecret.outlook_client_id || '',
+                        outlook_tenant_id: nonSecret.outlook_tenant_id || 'organizations',
                         seajob_username: secretsPlain.seajob_username || '',
                         seajob_password: secretsPlain.seajob_password || '',
                         gemini_api_key: secretsPlain.gemini_api_key || '',
@@ -2463,7 +2479,10 @@
                     });
                     const data = await response.json();
                     if (!data.success) {
-                        handleSendMessage('error', data.message || 'Failed to start mailbox connection.');
+                        const message = /outlook_client_id is required/i.test(data.message || '')
+                            ? 'Outlook Client ID is missing. Add it in Settings > Operational Settings > Mailbox Intake, save settings, then connect the mailbox.'
+                            : (data.message || 'Failed to start mailbox connection.');
+                        handleSendMessage('error', message);
                         return;
                     }
                     if (data.auth_url) {
@@ -4065,6 +4084,50 @@
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL</label>
                                                 <input value={settingsForm.supabase_url} onChange={e => setField('supabase_url', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div className="md:col-span-2 border-t border-gray-100 pt-4">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div>
+                                                        <h4 className="font-semibold text-gray-900">Mailbox Intake</h4>
+                                                        <p className="text-xs text-gray-600">Outlook mailbox settings are stored in the local agent.</p>
+                                                    </div>
+                                                    <label className="flex items-center space-x-2 text-sm text-gray-700">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Boolean(settingsForm.email_intake_enabled)}
+                                                            onChange={e => setField('email_intake_enabled', e.target.checked)}
+                                                        />
+                                                        <span>Enable intake</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Mailbox</label>
+                                                <input value={settingsForm.email_intake_mailbox} onChange={e => setField('email_intake_mailbox', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder="recruitment@company.com" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Outlook Client ID</label>
+                                                <input value={settingsForm.outlook_client_id} onChange={e => setField('outlook_client_id', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder="Microsoft Entra application client ID" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Outlook Tenant</label>
+                                                <input value={settingsForm.outlook_tenant_id} onChange={e => setField('outlook_tenant_id', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" placeholder="organizations" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Poll Interval Seconds</label>
+                                                <input value={settingsForm.email_intake_poll_interval_seconds} onChange={e => setField('email_intake_poll_interval_seconds', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Monitored Folder</label>
+                                                <input value={settingsForm.email_intake_monitored_folder} onChange={e => setField('email_intake_monitored_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Processed Folder</label>
+                                                <input value={settingsForm.email_intake_processed_folder} onChange={e => setField('email_intake_processed_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Failed Folder</label>
+                                                <input value={settingsForm.email_intake_failed_folder} onChange={e => setField('email_intake_failed_folder', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">SeaJob Login URL</label>

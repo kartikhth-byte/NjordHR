@@ -139,6 +139,17 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         return DummyResponse()
 
+    def _agent_json_response(self, payload, status_code=200):
+        class DummyResponse:
+            def __init__(self, body, code):
+                self._body = body
+                self.status_code = code
+
+            def json(self_inner):
+                return self_inner._body
+
+        return DummyResponse(payload, status_code)
+
     def test_initial_verification_logs_events_without_file_copy(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         self._write_fake_resume("Chief_Officer_1002.pdf")
@@ -684,6 +695,54 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(files_resp.get_json()["files"], ["EmailResume.pdf"])
         summaries = {row["folder"]: row["pdf_count"] for row in summaries_resp.get_json()["folders"]}
         self.assertEqual(summaries, {"Chief_Officer": 1})
+
+    def test_admin_settings_loads_and_saves_mailbox_intake_settings_via_local_agent(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            if method == "GET" and path == "/settings":
+                return self._agent_json_response({
+                    "success": True,
+                    "settings": {
+                        "email_intake_enabled": True,
+                        "email_intake_mailbox": "recruitment@njordships.com",
+                        "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                        "email_intake_processed_folder": "Inbox/NjordHR Processed",
+                        "email_intake_failed_folder": "Inbox/NjordHR Failed",
+                        "email_intake_poll_interval_seconds": 90,
+                        "outlook_client_id": "client-123",
+                        "outlook_tenant_id": "organizations",
+                    },
+                })
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            get_resp = self.client.get("/admin/settings", headers={"X-Admin-Token": "test-admin-token"})
+            post_resp = self.client.post(
+                "/admin/settings",
+                headers={"X-Admin-Token": "test-admin-token"},
+                json={"settings": {
+                    "email_intake_enabled": True,
+                    "email_intake_mailbox": "crewing@example.com",
+                    "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                    "email_intake_poll_interval_seconds": "120",
+                    "outlook_client_id": "client-456",
+                    "outlook_tenant_id": "organizations",
+                }},
+            )
+
+        self.assertEqual(get_resp.status_code, 200)
+        non_secret = get_resp.get_json()["settings"]["non_secret"]
+        self.assertEqual(non_secret["email_intake_mailbox"], "recruitment@njordships.com")
+        self.assertEqual(non_secret["outlook_client_id"], "client-123")
+        self.assertEqual(post_resp.status_code, 200)
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        agent_payload = put_calls[0][2]
+        self.assertEqual(agent_payload["email_intake_mailbox"], "crewing@example.com")
+        self.assertEqual(agent_payload["outlook_client_id"], "client-456")
 
     def test_get_rank_options_uses_live_agent_folders_when_available(self):
         agent_root = self.base / "AgentResumes"
