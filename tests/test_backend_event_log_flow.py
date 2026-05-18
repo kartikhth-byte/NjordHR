@@ -744,6 +744,57 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(agent_payload["email_intake_mailbox"], "crewing@example.com")
         self.assertEqual(agent_payload["outlook_client_id"], "client-456")
 
+    def test_admin_settings_does_not_clear_mailbox_settings_with_blank_form_values(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.post(
+                "/admin/settings",
+                headers={"X-Admin-Token": "test-admin-token"},
+                json={"settings": {
+                    "email_intake_enabled": False,
+                    "email_intake_mailbox": "",
+                    "outlook_client_id": "",
+                    "outlook_tenant_id": "",
+                }},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        agent_payload = put_calls[0][2]
+        self.assertEqual(agent_payload, {"email_intake_enabled": False})
+
+    def test_mailbox_connect_reports_missing_agent_configuration_before_auth_start(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            if method == "GET" and path == "/email-intake/auth/status":
+                return self._agent_json_response({
+                    "success": True,
+                    "auth": {
+                        "mailbox": "",
+                        "client_id_present": False,
+                    },
+                })
+            return self._agent_json_response({"success": True})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.post("/email-intake/auth/start", json={})
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("Mailbox and Outlook Client ID missing", body["message"])
+        self.assertFalse(any(call[0] == "POST" and call[1] == "/email-intake/auth/start" for call in captured))
+
     def test_get_rank_options_uses_live_agent_folders_when_available(self):
         agent_root = self.base / "AgentResumes"
         (agent_root / "OS").mkdir(parents=True, exist_ok=True)

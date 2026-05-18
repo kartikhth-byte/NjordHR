@@ -2073,6 +2073,22 @@ def proxy_email_intake_auth_start():
         return jsonify({"success": False, "message": "Local agent is required for Outlook mailbox connection."}), 400
     payload = request.json or {}
     try:
+        status_resp = _agent_request("GET", "/email-intake/auth/status", timeout=15)
+        status_payload = status_resp.json() if getattr(status_resp, "status_code", 500) < 400 else {}
+        auth_status = status_payload.get("auth") if isinstance(status_payload, dict) else {}
+        missing = []
+        if not str((auth_status or {}).get("mailbox", "")).strip():
+            missing.append("Mailbox")
+        if not (auth_status or {}).get("client_id_present"):
+            missing.append("Outlook Client ID")
+        if missing:
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"{' and '.join(missing)} missing. Add it in Settings > Operational Settings > "
+                    "Mailbox Intake, save settings, then connect the mailbox."
+                ),
+            }), 400
         resp = _agent_request("POST", "/email-intake/auth/start", json_body=payload, timeout=30)
         return jsonify(resp.json()), resp.status_code
     except Exception as exc:
@@ -2713,17 +2729,28 @@ def save_admin_settings():
             return jsonify({"success": False, "message": "otp_window_seconds must be an integer between 30 and 900"}), 400
         _config_set_literal(config, "Advanced", "otp_window_seconds", str(otp_seconds))
 
-    email_intake_keys = {
-        "email_intake_enabled",
+    email_intake_payload = {}
+    if "email_intake_enabled" in payload:
+        email_intake_payload["email_intake_enabled"] = bool(payload.get("email_intake_enabled"))
+    for key in [
         "email_intake_mailbox",
         "email_intake_monitored_folder",
         "email_intake_processed_folder",
         "email_intake_failed_folder",
-        "email_intake_poll_interval_seconds",
         "outlook_client_id",
         "outlook_tenant_id",
-    }
-    email_intake_payload = {key: payload[key] for key in email_intake_keys if key in payload}
+    ]:
+        if key in payload:
+            value = normalize_env_value(payload.get(key, ""))
+            if value:
+                email_intake_payload[key] = value
+    if "email_intake_poll_interval_seconds" in payload:
+        raw_interval = str(payload.get("email_intake_poll_interval_seconds", "")).strip()
+        if raw_interval:
+            try:
+                email_intake_payload["email_intake_poll_interval_seconds"] = int(raw_interval)
+            except Exception:
+                return jsonify({"success": False, "message": "email_intake_poll_interval_seconds must be an integer"}), 400
     if email_intake_payload:
         if not _use_local_agent():
             return jsonify({"success": False, "message": "Local agent is required to save Outlook mailbox intake settings."}), 400
