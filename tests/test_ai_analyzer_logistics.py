@@ -209,6 +209,16 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
             ["container"],
         )
 
+    def test_extract_row_ship_types_from_seajobs_row_handles_fragmented_bulk_carrier(self):
+        row_lines = [
+            "Chief dockendale ship management / Bulk Electronic Eng 05-Oct- 31-Mar-",
+            "1 34657 Engineer Carrier B&W 2024 2025",
+        ]
+        self.assertEqual(
+            self.analyzer._extract_row_ship_types_from_seajobs_row(row_lines),
+            ["bulk carrier"],
+        )
+
     def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
         row_lines = [
             "02-Nov-",

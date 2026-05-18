@@ -3076,7 +3076,73 @@ class AIResumeAnalyzer:
         configured_matches = self._extract_configured_ship_types(snippet)
         if configured_matches:
             return configured_matches
-        return self._extract_experienced_ship_types_from_text(snippet)
+        experienced_matches = self._extract_experienced_ship_types_from_text(snippet)
+        if experienced_matches:
+            return experienced_matches
+        return self._extract_fragmented_ship_types_from_seajobs_row(snippet)
+
+    def _extract_fragmented_ship_types_from_seajobs_row(self, snippet):
+        normalized_snippet = self._normalize_ship_type(snippet)
+        if not normalized_snippet:
+            return []
+
+        row_tokens = re.findall(r"[a-z0-9]+", normalized_snippet)
+        if len(row_tokens) < 2:
+            return []
+
+        candidates = []
+        seen = set()
+        for label in self._configured_ship_type_labels():
+            normalized_label = self._normalize_ship_type(label)
+            if normalized_label and normalized_label not in seen:
+                candidates.append(normalized_label)
+                seen.add(normalized_label)
+        if not candidates:
+            for canonical, aliases in self._ship_type_aliases().items():
+                normalized_canonical = self._normalize_ship_type(canonical)
+                if normalized_canonical and normalized_canonical not in seen:
+                    candidates.append(normalized_canonical)
+                    seen.add(normalized_canonical)
+                for alias in aliases:
+                    normalized_alias = self._normalize_ship_type(alias)
+                    if normalized_alias and normalized_alias not in seen:
+                        candidates.append(normalized_alias)
+                        seen.add(normalized_alias)
+
+        matches = []
+        for label in sorted(candidates, key=len, reverse=True):
+            label_tokens = re.findall(r"[a-z0-9]+", label)
+            if len(label_tokens) < 2:
+                continue
+            match_start = self._ordered_token_match_start(row_tokens, label_tokens, max_gap=12)
+            if match_start is None:
+                continue
+            matches.append((match_start, label))
+
+        return [label for _start, label in sorted(matches, key=lambda item: (item[0], -len(item[1])))]
+
+    def _ordered_token_match_start(self, row_tokens, label_tokens, max_gap=6):
+        if not row_tokens or not label_tokens:
+            return None
+        for start_idx, token in enumerate(row_tokens):
+            if token != label_tokens[0]:
+                continue
+            current_idx = start_idx
+            matched = True
+            for label_token in label_tokens[1:]:
+                next_idx = None
+                search_end = min(len(row_tokens), current_idx + max_gap + 2)
+                for idx in range(current_idx + 1, search_end):
+                    if row_tokens[idx] == label_token:
+                        next_idx = idx
+                        break
+                if next_idx is None:
+                    matched = False
+                    break
+                current_idx = next_idx
+            if matched:
+                return start_idx
+        return None
 
     def _extract_seajobs_company_occurrence_counts(self, section_text):
         lines = [" ".join(line.split()) for line in str(section_text or "").splitlines() if line.strip()]
