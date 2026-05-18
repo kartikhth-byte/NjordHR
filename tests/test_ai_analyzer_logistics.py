@@ -219,6 +219,23 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
             ["bulk carrier"],
         )
 
+    def test_extract_seajobs_experience_rows_includes_engine_types(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 2nd Engineer Synergy Maritime / Oil Tanker 35973 Dual Fuel (X-DF) ENGINE 09-Jan-2024 03-Apr-2024\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["rows"][0]["engine_types"], ["wingd_x_df", "dual_fuel"])
+
     def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
         row_lines = [
             "02-Nov-",

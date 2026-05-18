@@ -1597,6 +1597,243 @@ class AIResumeAnalyzer:
             "display_value": " ".join(prompt.split()),
         }
 
+    def _engine_type_aliases(self):
+        aliases = {
+            "man_b_w_me": [
+                "MAN B&W",
+                "MAN & B&W",
+                "MAN B and W",
+                "MAN BW",
+                "MAN-B&W",
+                "B&W",
+                "ME engine",
+                "ME engines",
+                "ME-C",
+                "ME-B",
+                "MAN ME",
+            ],
+            "man_b_w_me_gi": [
+                "ME-GI",
+                "MEGI",
+                "GI engine",
+                "gas injection",
+                "LNG ME-GI",
+            ],
+            "man_b_w_me_ga": [
+                "ME-GA",
+                "MEGA",
+                "gas admission",
+                "low pressure gas engine",
+            ],
+            "man_b_w_me_lgi": [
+                "ME-LGI",
+                "MELGI",
+                "LGI",
+                "liquid gas injection",
+            ],
+            "man_b_w_me_lgim": [
+                "ME-LGIM",
+                "MELGIM",
+                "methanol engine",
+                "methanol dual fuel",
+            ],
+            "man_b_w_me_lgip": [
+                "ME-LGIP",
+                "MELGIP",
+                "LPG engine",
+                "propane engine",
+            ],
+            "man_b_w_me_gie": [
+                "ME-GIE",
+                "ethane engine",
+                "LEG engine",
+            ],
+            "wingd_x_df": [
+                "WinGD X-DF",
+                "X-DF",
+                "XDF",
+                "dual fuel WinGD",
+                "LNG X-DF",
+            ],
+            "wingd_x_df_m": [
+                "X-DF-M",
+                "XDFM",
+                "X-DF-M/E",
+                "XDFME",
+                "methanol WinGD",
+                "methanol X-DF",
+            ],
+            "wingd_x_df_a": [
+                "X-DF-A",
+                "XDFA",
+                "ammonia WinGD",
+                "ammonia X-DF",
+            ],
+            "wingd_x_engines": [
+                "X-Engine",
+                "X-Engines",
+                "WinGD X engine",
+            ],
+            "wartsila_dual_fuel": [
+                "Wartsila DF",
+                "Wärtsilä DF",
+                "Wartsila dual fuel",
+                "Wärtsilä dual fuel",
+                "32DF",
+                "34DF",
+                "46DF",
+                "50DF",
+                "dual fuel Wartsila",
+                "dual fuel Wärtsilä",
+            ],
+            "wartsila_rt_flex": [
+                "RT-flex",
+                "RT Flex",
+                "Wartsila RT-flex",
+                "Wärtsilä RT-flex",
+                "Sulzer RT-flex",
+                "Sulzer RT Flex",
+            ],
+            "mitsubishi_uec": [
+                "Mitsubishi UEC",
+                "UEC",
+            ],
+            "dual_fuel": [
+                "dual fuel",
+                "dual-fuel",
+                "DF engine",
+                "DF engines",
+                "dual fuel engine",
+                "dual fuel engines",
+            ],
+            "methanol_engine": [
+                "methanol engine",
+                "methanol fuel engine",
+                "MeOH engine",
+            ],
+            "ammonia_engine": [
+                "ammonia engine",
+                "ammonia fuel engine",
+                "NH3 engine",
+            ],
+        }
+        runtime_config = getattr(getattr(self, "config", None), "config", None)
+        if runtime_config and runtime_config.has_section("EngineTypes"):
+            for canonical, raw_value in runtime_config.items("EngineTypes"):
+                configured_aliases = [line.strip() for line in str(raw_value or "").splitlines() if line.strip()]
+                if configured_aliases:
+                    aliases[self._normalize_engine_type(canonical)] = configured_aliases
+        return aliases
+
+    def _normalize_engine_type(self, value):
+        normalized = str(value or "").strip().lower()
+        normalized = normalized.replace("wärtsilä", "wartsila")
+        normalized = re.sub(r"[_/]+", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized.strip()
+
+    def _engine_alias_matches_text(self, normalized_text, alias):
+        normalized_alias = self._normalize_engine_type(alias)
+        if not normalized_text or not normalized_alias:
+            return False
+        if normalized_alias in {"me", "df", "gi", "lgi", "uec"}:
+            return False
+        if normalized_alias in {"me engine", "me engines"}:
+            return bool(re.search(r"\bme\s+engines?\b", normalized_text))
+        alias_pattern = re.escape(normalized_alias)
+        alias_pattern = alias_pattern.replace(r"\ ", r"[\s./()&-]+")
+        return bool(re.search(rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9])", normalized_text))
+
+    def _extract_engine_types_from_text(self, raw_text):
+        text = self._normalize_engine_type(raw_text)
+        if not text:
+            return []
+        matches = []
+        for canonical, aliases in self._engine_type_aliases().items():
+            canonical_id = self._normalize_engine_type(canonical).replace(" ", "_")
+            for alias in aliases:
+                if self._engine_alias_matches_text(text, alias):
+                    matches.append(canonical_id)
+                    break
+        return list(dict.fromkeys(matches))
+
+    def _engine_type_expected_values(self, requested_engine_type):
+        requested = self._normalize_engine_type(requested_engine_type).replace(" ", "_")
+        if not requested:
+            return []
+        expanded = {
+            "man_b_w_me": [
+                "man_b_w_me",
+                "man_b_w_me_gi",
+                "man_b_w_me_ga",
+                "man_b_w_me_lgi",
+                "man_b_w_me_lgim",
+                "man_b_w_me_lgip",
+                "man_b_w_me_gie",
+            ],
+            "dual_fuel": [
+                "dual_fuel",
+                "man_b_w_me_gi",
+                "man_b_w_me_ga",
+                "man_b_w_me_lgi",
+                "man_b_w_me_lgim",
+                "man_b_w_me_lgip",
+                "man_b_w_me_gie",
+                "wingd_x_df",
+                "wingd_x_df_m",
+                "wingd_x_df_a",
+                "wartsila_dual_fuel",
+                "methanol_engine",
+                "ammonia_engine",
+            ],
+            "methanol_engine": [
+                "methanol_engine",
+                "man_b_w_me_lgim",
+                "wingd_x_df_m",
+            ],
+            "ammonia_engine": [
+                "ammonia_engine",
+                "wingd_x_df_a",
+            ],
+        }
+        return expanded.get(requested, [requested])
+
+    def _extract_engine_experience_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        normalized_prompt = self._normalize_engine_type(prompt)
+        if not normalized_prompt:
+            return None
+        if not any(token in normalized_prompt for token in ("experience", "experienced", "engine", "engines", "worked", "sailed", "with", "has")):
+            return None
+
+        matches = []
+        for canonical, aliases in self._engine_type_aliases().items():
+            canonical_id = self._normalize_engine_type(canonical).replace(" ", "_")
+            for alias in aliases:
+                normalized_alias = self._normalize_engine_type(alias)
+                if normalized_alias == "b&w":
+                    continue
+                if normalized_alias == "me engine" and re.search(r"\bme\s+engine(?:s)?\b", normalized_prompt):
+                    matches.append(canonical_id)
+                    break
+                if self._engine_alias_matches_text(normalized_prompt, alias):
+                    matches.append(canonical_id)
+                    break
+
+        if not matches:
+            return None
+        for generic_engine_type in ("methanol_engine", "ammonia_engine"):
+            if generic_engine_type in matches:
+                matches = [generic_engine_type] + [match for match in matches if match != generic_engine_type]
+                break
+        engine_type = matches[0]
+        return {
+            "engine_type": engine_type,
+            "expected_values": self._engine_type_expected_values(engine_type),
+            "display_value": " ".join(prompt.split()),
+            "operator": "contains_any",
+        }
+
     def _extract_company_continuity_constraint(self, user_prompt):
         prompt = " ".join(str(user_prompt or "").split())
         if not prompt:
@@ -1797,7 +2034,12 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["recent_contract_vessel_experience"] = recent_contract_vessel_experience_constraint
             constraints["applied_constraints"].append("recent_contract_vessel_experience")
 
-        experienced_ship_type = None if recent_contract_vessel_experience_constraint else self._extract_experience_ship_type_constraint(user_prompt)
+        engine_experience_constraint = self._extract_engine_experience_constraint(user_prompt)
+        if engine_experience_constraint:
+            constraints["hard_constraints"]["engine_experience"] = engine_experience_constraint
+            constraints["applied_constraints"].append("engine_experience")
+
+        experienced_ship_type = None if (recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
             constraints["applied_constraints"].append("experience_ship_type")
@@ -2149,18 +2391,7 @@ class AIResumeAnalyzer:
         return expected_values or [normalized_requested]
 
     def _experience_keyword_aliases(self):
-        return {
-            "dual fuel": [
-                "dual fuel",
-                "dual-fuel",
-                "dual fuel engine",
-                "dual-fuel engine",
-                "dual fuel engines",
-                "dual-fuel engines",
-                "df engine",
-                "df engines",
-            ],
-        }
+        return {}
 
     def _visa_type_definitions(self):
         return [
@@ -2917,6 +3148,7 @@ class AIResumeAnalyzer:
                 "sign_in_date": sign_in_date,
                 "sign_out_date": sign_out_date,
                 "vessel_types": self._extract_row_ship_types_from_seajobs_row(window),
+                "engine_types": self._extract_engine_types_from_text(" ".join(window)),
                 "snippet": " ".join(window),
             })
 
@@ -4413,6 +4645,7 @@ class AIResumeAnalyzer:
                 for chunk in (chunks or [])
             )
         experienced_ship_types = self._extract_experienced_ship_types_from_text(source_text)
+        experienced_engine_types = self._extract_engine_types_from_text(source_text)
         logistics_fact = self._extract_logistics_from_text(source_text)
         metadata_entry = {}
         if folder_metadata:
@@ -4480,6 +4713,7 @@ class AIResumeAnalyzer:
             },
             "experience": {
                 "vessel_types": experienced_ship_types,
+                "engine_types": experienced_engine_types,
                 "last_sign_off_date": last_sign_off_fact.get("last_sign_off_date").isoformat() if last_sign_off_fact.get("last_sign_off_date") else None,
                 "last_sign_off_months_ago": last_sign_off_fact.get("last_sign_off_months_ago"),
                 "service_rows": experience_rows_fact.get("rows") or [],
@@ -4602,6 +4836,14 @@ class AIResumeAnalyzer:
                     status="PARSED" if experienced_ship_types else "MISSING",
                     source_label="resume_text",
                     context={"field": "experience.vessel_types"},
+                ),
+                "experience.engine_types": self._build_fact_meta(
+                    experienced_engine_types,
+                    confidence=0.8 if experienced_engine_types else None,
+                    extraction_method="resume_keyword_scan",
+                    status="PARSED" if experienced_engine_types else "MISSING",
+                    source_label="resume_text",
+                    context={"field": "experience.engine_types"},
                 ),
                 "experience.service_rows": self._build_fact_meta(
                     len(experience_rows_fact.get("rows") or []),
@@ -5862,6 +6104,66 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_engine_experience_rule(self, candidate_facts, constraint):
+        requested_engine_type = self._normalize_engine_type((constraint or {}).get("engine_type")).replace(" ", "_")
+        expected_engine_types = [
+            self._normalize_engine_type(value).replace(" ", "_")
+            for value in ((constraint or {}).get("expected_values") or self._engine_type_expected_values(requested_engine_type))
+            if value
+        ]
+        experienced_engine_types = [
+            self._normalize_engine_type(value).replace(" ", "_")
+            for value in ((candidate_facts.get("experience") or {}).get("engine_types") or [])
+            if value
+        ]
+        experienced_engine_types = list(dict.fromkeys(experienced_engine_types))
+        fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.engine_types") or {}
+        confidence = fact_meta.get("confidence")
+
+        if not requested_engine_type or not expected_engine_types:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENGINE_EXPERIENCE_CONSTRAINT_INVALID",
+                "Engine experience constraint is incomplete.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if not experienced_engine_types:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "ENGINE_EXPERIENCE_MISSING",
+                f"Could not determine engine experience for requested filter '{requested_engine_type}'.",
+                actual_value=[],
+                expected_value=expected_engine_types,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if set(experienced_engine_types) & set(expected_engine_types):
+            return self._base_rule_result(
+                "PASS",
+                "ENGINE_EXPERIENCE_MATCH",
+                f"Candidate resume shows experience with '{requested_engine_type}'.",
+                actual_value=experienced_engine_types,
+                expected_value=expected_engine_types,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "ENGINE_EXPERIENCE_MISMATCH",
+            (
+                f"Candidate engine experience {experienced_engine_types} does not match requested "
+                f"filter '{requested_engine_type}'."
+            ),
+            actual_value=experienced_engine_types,
+            expected_value=expected_engine_types,
+            confidence=confidence,
+        )
+
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
@@ -6049,6 +6351,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_recent_contract_vessel_experience_rule(candidate_facts, recent_contract_vessel_experience_constraint))
+
+        engine_experience_constraint = hard_constraints.get("engine_experience")
+        if "engine_experience" in applied_constraints and engine_experience_constraint:
+            activated_rules.append("engine_experience")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "ENGINE_EXPERIENCE_RULE_REQUIRES_V2_FACTS",
+                    "Engine experience requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=engine_experience_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_engine_experience_rule(candidate_facts, engine_experience_constraint))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if "applied_ship_type" in applied_constraints and ship_type_constraint:

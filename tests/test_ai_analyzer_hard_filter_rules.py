@@ -540,6 +540,44 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_UNPARSED")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_engine_experience_rule_matches_expected_family(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w_me_gi"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "dual_fuel",
+                        "expected_values": self.analyzer._engine_type_expected_values("dual_fuel"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
+    def test_engine_experience_rule_fails_when_family_missing(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["mitsubishi_uec"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
     def test_hard_filter_skips_passport_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {

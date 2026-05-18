@@ -276,6 +276,25 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             },
         )
 
+    def test_engine_experience_family_maps_to_structured_constraint(self):
+        cases = {
+            "with me engine experience": "man_b_w_me",
+            "has MAN B&W experience": "man_b_w_me",
+            "WinGD X-DF experience": "wingd_x_df",
+            "Wartsila 32DF experience": "wartsila_dual_fuel",
+            "methanol engine experience": "methanol_engine",
+            "ammonia engine experience": "ammonia_engine",
+        }
+        for prompt, expected_engine_type in cases.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("engine_experience", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["engine_experience"]["engine_type"],
+                    expected_engine_type,
+                )
+                self.assertNotIn("experience_ship_type", constraints["applied_constraints"])
+
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)
         self.assertIn("availability", constraints["applied_constraints"])

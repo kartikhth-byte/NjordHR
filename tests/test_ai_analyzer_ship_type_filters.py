@@ -211,16 +211,16 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
     def test_dual_fuel_experience_prompt_populates_applied_constraint(self):
         constraints = self.analyzer._extract_job_constraints("has dual fuel experience")
 
-        self.assertIn("experience_ship_type", constraints["applied_constraints"])
-        self.assertEqual(constraints["hard_constraints"]["experience_ship_type"], "dual fuel")
+        self.assertIn("engine_experience", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["engine_experience"]["engine_type"], "dual_fuel")
         self.assertNotIn("has dual fuel experience", constraints["parsing_notes"])
 
-    def test_dual_fuel_experience_is_extracted_from_resume_text(self):
-        vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
+    def test_dual_fuel_engine_experience_is_extracted_from_resume_text(self):
+        engine_types = self.analyzer._extract_engine_types_from_text(
             "Main engine: MAN B&W ME-GI dual fuel engine. Sea service on Bulk Carrier."
         )
 
-        self.assertEqual(vessel_types, ["bulk carrier", "dual fuel"])
+        self.assertEqual(engine_types, ["man_b_w_me", "man_b_w_me_gi", "dual_fuel"])
 
     def test_experience_ship_type_hard_filter_is_separate_from_applied_ship_type(self):
         candidate_facts = {
@@ -252,16 +252,22 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertIn("container", expected_values)
         self.assertIn("container vessel", expected_values)
 
-    def test_experience_ship_type_family_matches_dual_fuel_aliases(self):
+    def test_engine_experience_family_matches_dual_fuel_aliases(self):
         candidate_facts = {
-            "experience": {"vessel_types": ["dual fuel engine"]},
+            "experience": {"engine_types": ["wingd_x_df"]},
+            "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
         }
         result = self.analyzer._evaluate_hard_filters(candidate_facts, {
-            "applied_constraints": ["experience_ship_type"],
-            "hard_constraints": {"experience_ship_type": "dual fuel"}
+            "applied_constraints": ["engine_experience"],
+            "hard_constraints": {
+                "engine_experience": {
+                    "engine_type": "dual_fuel",
+                    "expected_values": self.analyzer._engine_type_expected_values("dual_fuel"),
+                }
+            },
         })
         self.assertEqual(result["decision"], "PASS")
-        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
 
     def test_build_candidate_facts_exposes_experienced_ship_types(self):
         self.analyzer._resolve_candidate_age = lambda *args, **kwargs: {
