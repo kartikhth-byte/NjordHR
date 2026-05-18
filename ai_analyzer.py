@@ -2131,6 +2131,12 @@ class AIResumeAnalyzer:
 
         aliases = self._ship_type_aliases().get(normalized_requested)
         if not aliases:
+            for canonical, candidate_aliases in self._ship_type_aliases().items():
+                normalized_aliases = [self._normalize_ship_type(alias) for alias in candidate_aliases]
+                if normalized_requested in normalized_aliases:
+                    aliases = candidate_aliases
+                    break
+        if not aliases:
             return [normalized_requested]
 
         expected_values = []

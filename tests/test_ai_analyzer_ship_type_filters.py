@@ -247,6 +247,11 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
 
+    def test_ship_type_expected_values_expand_alias_requested_value(self):
+        expected_values = self.analyzer._ship_type_expected_values("container vessel")
+        self.assertIn("container", expected_values)
+        self.assertIn("container vessel", expected_values)
+
     def test_experience_ship_type_family_matches_dual_fuel_aliases(self):
         candidate_facts = {
             "experience": {"vessel_types": ["dual fuel engine"]},
