@@ -1736,7 +1736,7 @@ class AIResumeAnalyzer:
         normalized_alias = self._normalize_engine_type(alias)
         if not normalized_text or not normalized_alias:
             return False
-        if normalized_alias in {"me", "df", "gi", "lgi", "uec"}:
+        if normalized_alias in {"me", "df", "gi", "lgi"}:
             return False
         if normalized_alias in {"me engine", "me engines"}:
             return bool(re.search(r"\bme\s+engines?\b", normalized_text))
@@ -1803,8 +1803,6 @@ class AIResumeAnalyzer:
         normalized_prompt = self._normalize_engine_type(prompt)
         if not normalized_prompt:
             return None
-        if not any(token in normalized_prompt for token in ("experience", "experienced", "engine", "engines", "worked", "sailed", "with", "has")):
-            return None
 
         matches = []
         for canonical, aliases in self._engine_type_aliases().items():
@@ -1827,7 +1825,16 @@ class AIResumeAnalyzer:
                 matches = [generic_engine_type] + [match for match in matches if match != generic_engine_type]
                 break
         engine_type = matches[0]
-        contracts_match = re.search(r"\b(?:last|recent)\s+(\d+)\s+contracts?\b", normalized_prompt, flags=re.IGNORECASE)
+        contract_patterns = [
+            r"\b(?:last|recent|latest)\s+(\d+)\s+(?:contracts?|vessels?|ships?)\b",
+            r"\b(?:contracts?|vessels?|ships?)\s+(?:last|recent|latest)\s+(\d+)\b",
+            r"\b(?:in|within|across|during)\s+(?:the\s+)?(?:last|recent|latest)\s+(\d+)\s+(?:contracts?|vessels?|ships?)\b",
+        ]
+        contracts_match = None
+        for pattern in contract_patterns:
+            contracts_match = re.search(pattern, normalized_prompt, flags=re.IGNORECASE)
+            if contracts_match:
+                break
         months_match = re.search(
             r"\b(?:minimum|at\s+least)?\s*(\d+)\s*(years?|months?)\b",
             normalized_prompt,
@@ -1838,6 +1845,29 @@ class AIResumeAnalyzer:
             value = int(months_match.group(1))
             unit = months_match.group(2).lower()
             min_months = value * 12 if unit.startswith("year") else value
+        has_engine_intent = any(token in normalized_prompt for token in (
+            "experience",
+            "experienced",
+            "engine",
+            "engines",
+            "worked",
+            "sailed",
+            "served",
+            "handled",
+            "background",
+            "machinery",
+            "fitted",
+            "must have",
+            "need",
+            "needs",
+            "should be",
+            "should have",
+            "only",
+            "with",
+            "has",
+        ))
+        if not has_engine_intent and not contracts_match and min_months == 0:
+            return None
         return {
             "engine_type": engine_type,
             "expected_values": self._engine_type_expected_values(engine_type),

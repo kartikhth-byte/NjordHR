@@ -325,6 +325,33 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(constraints["hard_constraints"]["engine_experience"]["lookback_contracts"], 0)
         self.assertNotIn("min_sea_service", constraints["unapplied_constraints"])
 
+    def test_engine_experience_slot_parser_handles_recruiter_variants(self):
+        cases = [
+            ("Mitsubishi UEC in last 3 contracts", "mitsubishi_uec", 0, 3),
+            ("last 3 contracts should be Mitsubishi UEC", "mitsubishi_uec", 0, 3),
+            ("recent 3 vessels with UEC engine", "mitsubishi_uec", 0, 3),
+            ("candidate should have sailed on UEC engines", "mitsubishi_uec", 0, 0),
+            ("worked on ships fitted with Mitsubishi UEC", "mitsubishi_uec", 0, 0),
+            ("must have UEC engine background", "mitsubishi_uec", 0, 0),
+            ("Mitsubishi UEC only", "mitsubishi_uec", 0, 0),
+            ("UEC in latest 4 ships", "mitsubishi_uec", 0, 4),
+            ("has handled Mitsubishi UEC machinery", "mitsubishi_uec", 0, 0),
+            ("12 months sailing on Mitsubishi UEC", "mitsubishi_uec", 12, 0),
+            ("served 1 year with Mitsubishi UEC", "mitsubishi_uec", 12, 0),
+            ("Mitsubishi UEC within recent 3 contracts", "mitsubishi_uec", 0, 3),
+            ("last 2 vessels should be ME-GI", "man_b_w_me_gi", 0, 2),
+            ("minimum 6 months on WinGD X-DF", "wingd_x_df", 6, 0),
+            ("RT Flex in recent 5 vessels", "wartsila_rt_flex", 0, 5),
+        ]
+        for prompt, expected_engine_type, expected_months, expected_contracts in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("engine_experience", constraints["applied_constraints"])
+                engine_constraint = constraints["hard_constraints"]["engine_experience"]
+                self.assertEqual(engine_constraint["engine_type"], expected_engine_type)
+                self.assertEqual(engine_constraint["min_months"], expected_months)
+                self.assertEqual(engine_constraint["lookback_contracts"], expected_contracts)
+
     def test_rank_and_availability_query_preserves_value(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer available immediately", rank=self.rank)
         self.assertIn("availability", constraints["applied_constraints"])
