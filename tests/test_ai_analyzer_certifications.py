@@ -327,6 +327,33 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["tanker_gas"], "present")
         self.assertEqual(endorsements["tanker_gas_advanced_cop"], "present")
 
+    def test_extract_dce_management_uses_date_after_matching_row(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Dangerous Cargo Endorsement Type of Ship DCE Levels Expiry Date "
+            "Oil Tanker Management 20-Jan-2026 "
+            "LPG Carrier Management 06-Oct-2027 "
+            "Chemical Tanker Management 02-Oct-2027"
+        )
+        self.assertEqual(endorsements["tanker_chemical"], "present")
+        self.assertEqual(endorsements["tanker_chemical_advanced_cop"], "present")
+
+    def test_extract_dce_section_marks_missing_tanker_type_absent(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Dangerous Cargo Endorsement Type of Ship DCE Levels Expiry Date "
+            "Oil Tanker Management 20-Jan-2029"
+        )
+        self.assertEqual(endorsements["tanker_oil"], "present")
+        self.assertEqual(endorsements["tanker_chemical"], "absent")
+        self.assertEqual(endorsements["tanker_chemical_advanced_cop"], "absent")
+
+    def test_extract_lpg_carrier_dce_as_gas_tanker_endorsement(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Dangerous Cargo Endorsement Type of Ship DCE Levels Expiry Date "
+            "LPG Carrier Management 06-Oct-2027"
+        )
+        self.assertEqual(endorsements["tanker_gas"], "present")
+        self.assertEqual(endorsements["tanker_gas_advanced_cop"], "present")
+
     def test_extract_common_course_certificates_from_dense_list(self):
         endorsements = self.analyzer._extract_endorsements_from_text(
             "Courses completed: ECDIS, ARPA, BRM, ERM, PSCRB, AFF, "

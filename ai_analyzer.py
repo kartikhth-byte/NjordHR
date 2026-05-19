@@ -4439,6 +4439,7 @@ class AIResumeAnalyzer:
         for match in matches:
             snippet = text[max(0, match.start() - 80):match.start() + 220]
             local_window = text[max(0, match.start() - 20):min(len(text), match.end() + 80)]
+            post_alias_window = text[match.end():min(len(text), match.end() + 80)]
             lowered = snippet.lower()
             lowered_local = local_window.lower()
             if re.search(r"\b(?:not held|n/?a|none|absent)\b", lowered):
@@ -4459,13 +4460,15 @@ class AIResumeAnalyzer:
                 r"\b(valid until|valid till|validity|expires|expires on|expiry date|exp date|exp\b)\b",
                 lowered_local,
             ):
-                expiry_fact = self._extract_date_fact_from_snippet(local_window)
+                expiry_fact = self._extract_date_fact_from_snippet(post_alias_window)
+                if expiry_fact.get("status") == "MISSING":
+                    expiry_fact = self._extract_date_fact_from_snippet(local_window)
                 if expiry_fact.get("status") == "PARSED":
                     if expiry_fact.get("date") and expiry_fact["date"] < date.today():
                         return "expired"
                     return "present"
 
-            if re.search(r"\b(held|valid|completed|certificate|course|courses|training|endorsement|familiarization|familiarisation)\b", lowered):
+            if re.search(r"\b(held|valid|completed|certificate|course|courses|training|endorsement|familiarization|familiarisation|support|management)\b", lowered):
                 return "present"
 
         return "unknown"
@@ -4632,6 +4635,10 @@ class AIResumeAnalyzer:
                 "gas dc",
                 "gas tanker support",
                 "gas tanker management",
+                "lpg carrier support",
+                "lpg carrier management",
+                "lng carrier support",
+                "lng carrier management",
                 "liquefied gas tanker support",
                 "liquefied gas tanker management",
             ],
@@ -4645,6 +4652,8 @@ class AIResumeAnalyzer:
                 "gas tanker familiarisation",
                 "gas tanker dc support",
                 "gas tanker dce support",
+                "lpg carrier support",
+                "lng carrier support",
                 "liquefied gas tanker support",
             ],
             "tanker_gas_advanced_cop": [
@@ -4655,6 +4664,8 @@ class AIResumeAnalyzer:
                 "gas tanker management",
                 "gas tanker dc management",
                 "gas tanker dce management",
+                "lpg carrier management",
+                "lng carrier management",
                 "liquefied gas tanker management",
             ],
             "cert_ecdis": [
@@ -4707,10 +4718,29 @@ class AIResumeAnalyzer:
             "dp_operational": ["dpo", "dp operator"],
             "gmdss": ["gmdss"],
         }
-        return {
+        states = {
             endorsement_id: self._extract_certificate_state(text, aliases)
             for endorsement_id, aliases in endorsement_aliases.items()
         }
+        compact = " ".join(text.split())
+        dce_match = re.search(r"\bDangerous\s+Cargo\s+Endorsement\b.{0,700}", compact, flags=re.IGNORECASE)
+        if dce_match:
+            dce_section = dce_match.group(0)
+            dce_presence_patterns = {
+                "tanker_oil": r"\boil\s+tanker\s+(?:support|management|basic|advanced|dc|dce)\b",
+                "tanker_oil_basic_cop": r"\boil\s+tanker\s+(?:support|basic|dc\s+support|dce\s+support)\b",
+                "tanker_oil_advanced_cop": r"\boil\s+tanker\s+(?:management|advanced|dc\s+management|dce\s+management)\b",
+                "tanker_chemical": r"\bchemical\s+tanker\s+(?:support|management|basic|advanced|dc|dce)\b",
+                "tanker_chemical_basic_cop": r"\bchemical\s+tanker\s+(?:support|basic|dc\s+support|dce\s+support)\b",
+                "tanker_chemical_advanced_cop": r"\bchemical\s+tanker\s+(?:management|advanced|dc\s+management|dce\s+management)\b",
+                "tanker_gas": r"\b(?:gas|lpg|lng|liquefied\s+gas)\s+(?:carrier|tanker)\s+(?:support|management|basic|advanced|dc|dce)\b|\bgas\s+tanker\s+(?:support|management|basic|advanced|dc|dce)\b",
+                "tanker_gas_basic_cop": r"\b(?:gas|lpg|lng|liquefied\s+gas)\s+(?:carrier|tanker)\s+(?:support|basic|dc\s+support|dce\s+support)\b|\bgas\s+tanker\s+(?:support|basic|dc\s+support|dce\s+support)\b",
+                "tanker_gas_advanced_cop": r"\b(?:gas|lpg|lng|liquefied\s+gas)\s+(?:carrier|tanker)\s+(?:management|advanced|dc\s+management|dce\s+management)\b|\bgas\s+tanker\s+(?:management|advanced|dc\s+management|dce\s+management)\b",
+            }
+            for endorsement_id, pattern in dce_presence_patterns.items():
+                if states.get(endorsement_id) == "unknown" and not re.search(pattern, dce_section, flags=re.IGNORECASE):
+                    states[endorsement_id] = "absent"
+        return states
 
     def _parse_dob_from_text(self, raw_text):
         dob_fact = self._extract_dob_fact_from_text(raw_text)
