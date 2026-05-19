@@ -6141,6 +6141,33 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _endorsement_display_label(self, endorsement_id):
+        labels = {
+            "igf_advanced_cop": "advanced IGF CoP",
+            "igf_basic_cop": "basic IGF CoP",
+            "tanker_oil": "oil tanker endorsement",
+            "tanker_oil_basic_cop": "basic oil tanker CoP",
+            "tanker_oil_advanced_cop": "advanced oil tanker CoP",
+            "tanker_chemical": "chemical tanker endorsement",
+            "tanker_chemical_basic_cop": "basic chemical tanker CoP",
+            "tanker_chemical_advanced_cop": "advanced chemical tanker CoP",
+            "tanker_gas": "gas tanker endorsement",
+            "tanker_gas_basic_cop": "basic gas tanker CoP",
+            "tanker_gas_advanced_cop": "advanced gas tanker CoP",
+            "cert_ecdis": "ECDIS",
+            "cert_arpa": "ARPA",
+            "cert_brm_btm": "BRM/BTM",
+            "cert_erm": "ERM",
+            "cert_pscrb": "PSCRB",
+            "cert_aff": "AFF",
+            "cert_mfa": "MFA",
+            "cert_medical_care": "Medical Care",
+            "cert_sso": "SSO",
+            "dp_operational": "DPO",
+            "gmdss": "GMDSS",
+        }
+        return labels.get(str(endorsement_id or ""), str(endorsement_id or ""))
+
     def _evaluate_endorsement_rule(self, candidate_facts, constraint):
         certifications = candidate_facts.get("certifications") or {}
         endorsements = certifications.get("endorsements") or {}
@@ -6158,24 +6185,42 @@ class AIResumeAnalyzer:
             )
 
         actual_states = {endorsement_id: endorsements.get(endorsement_id, "unknown") for endorsement_id in required_endorsements}
+        required_labels = [self._endorsement_display_label(endorsement_id) for endorsement_id in required_endorsements]
+        actual_value = {
+            "states": actual_states,
+            "labels": {
+                endorsement_id: self._endorsement_display_label(endorsement_id)
+                for endorsement_id in required_endorsements
+            },
+        }
 
         if any(state == "unknown" for state in actual_states.values()):
+            unknown_labels = [
+                self._endorsement_display_label(endorsement_id)
+                for endorsement_id, state in actual_states.items()
+                if state == "unknown"
+            ]
             return self._base_rule_result(
                 "UNKNOWN",
                 "ENDORSEMENT_UNKNOWN",
-                "One or more required endorsements could not be determined reliably.",
-                actual_value=actual_states,
+                f"Required endorsement evidence could not be determined: {', '.join(unknown_labels)}.",
+                actual_value=actual_value,
                 expected_value=required_endorsements,
                 confidence=confidence,
                 unknown_reason="FACTUAL_UNKNOWN",
             )
 
         if any(state in {"expired", "absent"} for state in actual_states.values()):
+            missing_labels = [
+                f"{self._endorsement_display_label(endorsement_id)} ({state})"
+                for endorsement_id, state in actual_states.items()
+                if state in {"expired", "absent"}
+            ]
             return self._base_rule_result(
                 "FAIL",
                 "ENDORSEMENT_MISSING_OR_EXPIRED",
-                "One or more required endorsements are absent or expired.",
-                actual_value=actual_states,
+                f"Required endorsements are absent or expired: {', '.join(missing_labels)}.",
+                actual_value=actual_value,
                 expected_value=required_endorsements,
                 confidence=confidence,
             )
@@ -6183,8 +6228,8 @@ class AIResumeAnalyzer:
         return self._base_rule_result(
             "PASS",
             "ENDORSEMENT_VALID",
-            "All required endorsements are present and valid.",
-            actual_value=actual_states,
+            f"Required endorsements present and valid: {', '.join(required_labels)}.",
+            actual_value=actual_value,
             expected_value=required_endorsements,
             confidence=confidence,
         )

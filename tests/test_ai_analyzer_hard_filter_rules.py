@@ -1229,6 +1229,27 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
             {"endorsements_required": ["dp_operational"]},
         )
         self.assertEqual(result["decision"], "PASS")
+        self.assertIn("DPO", result["message"])
+        self.assertEqual(result["actual_value"]["labels"]["dp_operational"], "DPO")
+
+    def test_endorsement_rule_pass_message_names_requested_certificates(self):
+        result = self.analyzer._evaluate_endorsement_rule(
+            {
+                "certifications": {
+                    "endorsements": {
+                        "tanker_oil": "present",
+                        "cert_ecdis": "present",
+                        "cert_pscrb": "present",
+                    }
+                },
+                "fact_meta": {"certifications.endorsements": {"confidence": 0.9}},
+            },
+            {"endorsements_required": ["tanker_oil", "cert_ecdis", "cert_pscrb"]},
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertIn("oil tanker endorsement", result["message"])
+        self.assertIn("ECDIS", result["message"])
+        self.assertIn("PSCRB", result["message"])
 
     def test_endorsement_rule_fail_when_absent(self):
         result = self.analyzer._evaluate_endorsement_rule(
@@ -1239,6 +1260,7 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
             {"endorsements_required": ["dp_operational"]},
         )
         self.assertEqual(result["decision"], "FAIL")
+        self.assertIn("DPO (absent)", result["message"])
 
     def test_endorsement_rule_unknown_when_missing(self):
         result = self.analyzer._evaluate_endorsement_rule(
@@ -1250,6 +1272,7 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+        self.assertIn("DPO", result["message"])
 
     def test_company_continuity_rule_pass(self):
         result = self.analyzer._evaluate_company_continuity_rule(
