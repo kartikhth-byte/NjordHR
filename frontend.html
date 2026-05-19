@@ -2890,7 +2890,9 @@
             };
 
             const renderHardFilterReasons = (match) => {
-                const reasons = Array.isArray(match.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const mainReason = String(match?.reason || '').trim();
+                const reasons = (Array.isArray(match.hard_filter_reasons) ? match.hard_filter_reasons : [])
+                    .filter(item => String(item?.message || '').trim() && String(item?.message || '').trim() !== mainReason);
                 if (reasons.length === 0) return null;
                 return (
                     <div className="mt-2 space-y-1">
