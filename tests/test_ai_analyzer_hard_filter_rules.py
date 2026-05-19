@@ -656,6 +656,92 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 0)
         self.assertEqual(result["results"][0]["actual_value"]["evaluated_contracts"], 3)
 
+    def test_engine_experience_rule_requires_all_recent_contracts_when_requested(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": ["man_b_w_me", "mitsubishi_uec"],
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 7, 21),
+                            "sign_out_date": date(2025, 11, 17),
+                            "engine_types": ["man_b_w_me"],
+                        },
+                        {
+                            "sign_in_date": date(2025, 2, 17),
+                            "sign_out_date": date(2025, 6, 4),
+                            "engine_types": ["man_b_w_me"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 12, 31),
+                            "sign_out_date": date(2025, 1, 31),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.8},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_values": self.analyzer._engine_type_expected_values("mitsubishi_uec"),
+                        "min_months": 0,
+                        "lookback_contracts": 3,
+                        "recent_contract_match_mode": "all",
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_INSUFFICIENT")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 1)
+        self.assertEqual(result["results"][0]["actual_value"]["required_contracts"], 3)
+
+    def test_engine_experience_rule_passes_when_all_recent_contracts_match(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": ["mitsubishi_uec"],
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 7, 21),
+                            "sign_out_date": date(2025, 11, 17),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                        {
+                            "sign_in_date": date(2025, 2, 17),
+                            "sign_out_date": date(2025, 6, 4),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.8},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "mitsubishi_uec",
+                        "expected_values": self.analyzer._engine_type_expected_values("mitsubishi_uec"),
+                        "min_months": 0,
+                        "lookback_contracts": 2,
+                        "recent_contract_match_mode": "all",
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 2)
+        self.assertEqual(result["results"][0]["actual_value"]["required_contracts"], 2)
+
     def test_engine_experience_rule_honors_minimum_months(self):
         result = self.analyzer._evaluate_hard_filters(
             {

@@ -308,8 +308,23 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "mitsubishi_uec",
         )
         self.assertEqual(constraints["hard_constraints"]["engine_experience"]["lookback_contracts"], 3)
+        self.assertEqual(constraints["hard_constraints"]["engine_experience"]["recent_contract_match_mode"], "any")
         self.assertEqual(constraints["hard_constraints"]["engine_experience"]["min_months"], 0)
         self.assertNotIn("min_sea_service", constraints["unapplied_constraints"])
+
+    def test_engine_experience_recent_vessels_with_engine_requires_all_recent_rows(self):
+        cases = [
+            "recent 3 vessels with UEC engine",
+            "last 3 contracts should be Mitsubishi UEC",
+            "all recent 3 contracts on UEC engine",
+            "last 2 vessels should be ME-GI",
+        ]
+        for prompt in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("engine_experience", constraints["applied_constraints"])
+                engine_constraint = constraints["hard_constraints"]["engine_experience"]
+                self.assertEqual(engine_constraint["recent_contract_match_mode"], "all")
 
     def test_engine_experience_family_preserves_minimum_months(self):
         constraints = self.analyzer._extract_job_constraints(

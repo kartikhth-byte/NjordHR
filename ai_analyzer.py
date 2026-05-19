@@ -1853,6 +1853,15 @@ class AIResumeAnalyzer:
             contracts_match = re.search(pattern, normalized_prompt, flags=re.IGNORECASE)
             if contracts_match:
                 break
+        recent_contract_match_mode = "any"
+        if contracts_match:
+            strict_contract_patterns = [
+                r"\ball\s+(?:of\s+)?(?:the\s+)?(?:last|recent|latest)\s+\d+\s+(?:contracts?|vessels?|ships?)\b",
+                r"\b(?:last|recent|latest)\s+\d+\s+(?:contracts?|vessels?|ships?)\s+(?:with|on|fitted\s+with|should\s+(?:be|have)|must\s+(?:be|have)|need(?:s)?\s+to\s+(?:be|have))\b",
+                r"\b(?:contracts?|vessels?|ships?)\s+(?:last|recent|latest)\s+\d+\s+(?:with|on|fitted\s+with|should\s+(?:be|have)|must\s+(?:be|have))\b",
+            ]
+            if any(re.search(pattern, normalized_prompt, flags=re.IGNORECASE) for pattern in strict_contract_patterns):
+                recent_contract_match_mode = "all"
         months_match = re.search(
             r"\b(?:minimum|at\s+least)?\s*(\d+)\s*(years?|months?)\b",
             normalized_prompt,
@@ -1891,6 +1900,7 @@ class AIResumeAnalyzer:
             "expected_values": self._engine_type_expected_values(engine_type),
             "min_months": min_months,
             "lookback_contracts": int(contracts_match.group(1)) if contracts_match else 0,
+            "recent_contract_match_mode": recent_contract_match_mode,
             "display_value": " ".join(prompt.split()),
             "operator": "contains_any",
         }
@@ -6234,6 +6244,7 @@ class AIResumeAnalyzer:
 
         min_months = int((constraint or {}).get("min_months") or 0)
         lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
+        recent_contract_match_mode = str((constraint or {}).get("recent_contract_match_mode") or "any").strip().lower()
         if min_months > 0 or lookback_contracts > 0:
             service_rows = experience.get("service_rows") or []
             valid_rows = []
@@ -6290,6 +6301,44 @@ class AIResumeAnalyzer:
                         "matched_months": 0,
                         "matched_contracts": 0,
                         "evaluated_contracts": len(evaluated_rows),
+                    },
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+
+            if lookback_contracts > 0 and min_months == 0 and recent_contract_match_mode == "all":
+                if len(evaluated_rows) >= lookback_contracts and matched_contracts == lookback_contracts:
+                    return self._base_rule_result(
+                        "PASS",
+                        "ENGINE_EXPERIENCE_MATCH",
+                        (
+                            f"Candidate has '{requested_engine_type}' experience in all "
+                            f"{lookback_contracts} recent contract(s)."
+                        ),
+                        actual_value={
+                            "matched_months": matched_months,
+                            "matched_contracts": matched_contracts,
+                            "evaluated_contracts": len(evaluated_rows),
+                            "required_contracts": lookback_contracts,
+                            "recent_contract_match_mode": recent_contract_match_mode,
+                        },
+                        expected_value=constraint,
+                        confidence=confidence,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    "ENGINE_EXPERIENCE_INSUFFICIENT",
+                    (
+                        f"Candidate has '{requested_engine_type}' experience in "
+                        f"{matched_contracts} of the recent {lookback_contracts} contract(s); "
+                        f"all {lookback_contracts} were required."
+                    ),
+                    actual_value={
+                        "matched_months": matched_months,
+                        "matched_contracts": matched_contracts,
+                        "evaluated_contracts": len(evaluated_rows),
+                        "required_contracts": lookback_contracts,
+                        "recent_contract_match_mode": recent_contract_match_mode,
                     },
                     expected_value=constraint,
                     confidence=confidence,
