@@ -305,6 +305,7 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
                 },
                 "stcw_basic_all_valid": None,
                 "endorsements": {
+                    "igf_advanced_cop": "unknown",
                     "tanker_oil": "unknown",
                     "tanker_chemical": "unknown",
                     "tanker_gas": "unknown",

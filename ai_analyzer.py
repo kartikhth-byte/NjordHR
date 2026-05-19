@@ -2055,6 +2055,11 @@ class AIResumeAnalyzer:
     def _extract_endorsement_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         mappings = [
+            (
+                r"\badvanced\s+igf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bigf\s+advanced\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\badvanced\s+training\b.{0,80}\bigf\s+code\b",
+                "igf_advanced_cop",
+                "advanced IGF CoP",
+            ),
             (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
             (r"\bgmdss\b", "gmdss", "GMDSS"),
             (r"\boil tanker endorsement\b", "tanker_oil", "oil tanker endorsement"),
@@ -2074,6 +2079,8 @@ class AIResumeAnalyzer:
 
         if re.search(r"\btanker endorsement\b", prompt, flags=re.IGNORECASE):
             return {"ambiguous": True, "fragment": "tanker endorsement"}
+        if re.search(r"\bigf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b", prompt, flags=re.IGNORECASE):
+            return {"ambiguous": True, "fragment": "IGF CoP"}
         if re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt):
             return {"ambiguous": True, "fragment": re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt).group(0)}
         return None
@@ -4383,6 +4390,8 @@ class AIResumeAnalyzer:
                 return "expired"
             if re.search(r"\b(pending|in progress|applied for)\b", lowered):
                 return "unknown"
+            if re.search(r"\b(?:cop|certificate of proficiency|proficiency certificate)\b", lowered_local):
+                return "present"
 
             # Dates should only drive certificate validity when the alias carries
             # a nearby certificate-local cue. This prevents expiry dates from
@@ -4481,6 +4490,18 @@ class AIResumeAnalyzer:
     def _extract_endorsements_from_text(self, raw_text):
         text = str(raw_text or "")
         endorsement_aliases = {
+            "igf_advanced_cop": [
+                "advanced igf cop",
+                "advanced igf certificate",
+                "advanced igf certificate of proficiency",
+                "igf advanced cop",
+                "igf advanced certificate",
+                "certificate of proficiency in advanced training for ships subject to the igf code",
+                "certificate of proficiency advanced training for ships subject to the igf code",
+                "advanced training for ships subject to the igf code",
+                "advanced training for service on ships subject to the igf code",
+                "advanced training for ships using fuels covered by the igf code",
+            ],
             "tanker_oil": ["oil tanker endorsement"],
             "tanker_chemical": ["chemical tanker endorsement"],
             "tanker_gas": ["gas tanker endorsement"],

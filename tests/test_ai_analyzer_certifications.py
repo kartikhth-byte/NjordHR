@@ -292,6 +292,20 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         )
         self.assertNotEqual(fact["certificates"]["pssr"], "expired")
 
+    def test_extract_advanced_igf_cop_from_certificate_list(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Certificates: "
+            "Certificate of Proficiency in Advanced Training for Ships Subject to the IGF Code "
+            "Valid Until: 04-May-2028"
+        )
+        self.assertEqual(endorsements["igf_advanced_cop"], "present")
+
+    def test_extract_advanced_igf_cop_alias_from_dense_list(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Courses completed: Advanced IGF CoP, ECDIS, BRM"
+        )
+        self.assertEqual(endorsements["igf_advanced_cop"], "present")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -454,6 +454,26 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ["dp_operational", "gmdss"],
         )
 
+    def test_advanced_igf_cop_query_maps_to_endorsement(self):
+        prompts = [
+            "holding advanced igf cop",
+            "advanced IGF certificate required",
+            "must hold IGF advanced certificate of proficiency",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["certifications"]["endorsements_required"],
+                    ["igf_advanced_cop"],
+                )
+
+    def test_generic_igf_cop_query_is_ambiguous(self):
+        constraints = self.analyzer._extract_job_constraints("holding igf cop", rank=self.rank)
+        self.assertIn("IGF CoP", constraints["parsing_notes"])
+        self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
+
     def test_coc_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid coc",
