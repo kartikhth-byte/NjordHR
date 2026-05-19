@@ -1923,7 +1923,7 @@ class AIResumeAnalyzer:
 
         same_row_intent = (
             " and " not in normalized_prompt
-            or any(token in normalized_prompt for token in (" on ", "fitted", "machinery"))
+            or any(token in normalized_prompt for token in (" on ", " with ", "fitted", "machinery"))
         )
         if not same_row_intent:
             return None
@@ -1935,6 +1935,7 @@ class AIResumeAnalyzer:
             "expected_vessel_values": self._ship_type_expected_values(vessel_type),
             "min_months": engine_constraint.get("min_months", 0),
             "lookback_contracts": engine_constraint.get("lookback_contracts", 0),
+            "recent_contract_match_mode": engine_constraint.get("recent_contract_match_mode", "any"),
             "display_value": " ".join(prompt.split()),
             "operator": "contains_all_same_row",
         }
@@ -6504,6 +6505,7 @@ class AIResumeAnalyzer:
         }
         min_months = int((constraint or {}).get("min_months") or 0)
         lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
+        recent_contract_match_mode = str((constraint or {}).get("recent_contract_match_mode") or "any").strip().lower()
 
         if not requested_engine_type or not requested_vessel_type or not expected_engine_types or not expected_vessel_types:
             return self._base_rule_result(
@@ -6575,6 +6577,44 @@ class AIResumeAnalyzer:
                 expected_value=constraint,
                 confidence=confidence,
                 unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if lookback_contracts > 0 and min_months == 0 and recent_contract_match_mode == "all":
+            if len(evaluated_rows) >= lookback_contracts and matched_contracts == lookback_contracts:
+                return self._base_rule_result(
+                    "PASS",
+                    "ENGINE_VESSEL_EXPERIENCE_MATCH",
+                    (
+                        f"Candidate has '{requested_engine_type}' on '{requested_vessel_type}' "
+                        f"in all {lookback_contracts} recent contract(s)."
+                    ),
+                    actual_value={
+                        "matched_months": matched_months,
+                        "matched_contracts": matched_contracts,
+                        "evaluated_contracts": len(evaluated_rows),
+                        "required_contracts": lookback_contracts,
+                        "recent_contract_match_mode": recent_contract_match_mode,
+                    },
+                    expected_value=constraint,
+                    confidence=confidence,
+                )
+            return self._base_rule_result(
+                "FAIL",
+                "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT",
+                (
+                    f"Candidate has '{requested_engine_type}' on '{requested_vessel_type}' in "
+                    f"{matched_contracts} of the recent {lookback_contracts} contract(s); "
+                    f"all {lookback_contracts} were required."
+                ),
+                actual_value={
+                    "matched_months": matched_months,
+                    "matched_contracts": matched_contracts,
+                    "evaluated_contracts": len(evaluated_rows),
+                    "required_contracts": lookback_contracts,
+                    "recent_contract_match_mode": recent_contract_match_mode,
+                },
+                expected_value=constraint,
+                confidence=confidence,
             )
 
         if min_months == 0 and matched_contracts > 0:

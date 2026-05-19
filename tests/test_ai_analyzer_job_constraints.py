@@ -386,6 +386,23 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertEqual(combined["min_months"], expected_months)
                 self.assertEqual(combined["lookback_contracts"], expected_contracts)
 
+    def test_engine_vessel_experience_preserves_all_recent_contract_mode(self):
+        cases = [
+            ("last 3 contracts on oil tanker with MAN B&W engine", "man_b_w_me", "oil tanker", 3),
+            ("recent 3 vessels with UEC engine and container experience", "mitsubishi_uec", "container", 3),
+        ]
+        for prompt, expected_engine_type, expected_vessel_type, expected_contracts in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("engine_vessel_experience", constraints["applied_constraints"])
+                self.assertNotIn("engine_experience", constraints["applied_constraints"])
+                self.assertNotIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+                combined = constraints["hard_constraints"]["engine_vessel_experience"]
+                self.assertEqual(combined["engine_type"], expected_engine_type)
+                self.assertEqual(combined["vessel_type"], expected_vessel_type)
+                self.assertEqual(combined["lookback_contracts"], expected_contracts)
+                self.assertEqual(combined["recent_contract_match_mode"], "all")
+
     def test_engine_and_vessel_experience_with_and_remains_separate_constraints(self):
         constraints = self.analyzer._extract_job_constraints(
             "Mitsubishi UEC experience and tanker experience in last 3 contracts",
