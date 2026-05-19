@@ -495,6 +495,29 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     expected_ids,
                 )
 
+    def test_common_course_prompt_variants_map_to_certifications(self):
+        cases = [
+            ("must have ECDIS", ["cert_ecdis"]),
+            ("holding ARPA", ["cert_arpa"]),
+            ("BRM required", ["cert_brm_btm"]),
+            ("BTM certificate required", ["cert_brm_btm"]),
+            ("ERM course required", ["cert_erm"]),
+            ("holding PSCRB", ["cert_pscrb"]),
+            ("AFF required", ["cert_aff"]),
+            ("Medical First Aid required", ["cert_mfa"]),
+            ("Medical Care certificate required", ["cert_medical_care"]),
+            ("SSO required", ["cert_sso"]),
+            ("ECDIS and PSCRB required", ["cert_ecdis", "cert_pscrb"]),
+        ]
+        for prompt, expected_ids in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["certifications"]["endorsements_required"],
+                    expected_ids,
+                )
+
     def test_coc_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid coc",

@@ -2095,6 +2095,15 @@ class AIResumeAnalyzer:
                 "tanker_gas_basic_cop",
                 "basic gas tanker CoP",
             ),
+            (r"\becdis\b|\belectronic\s+chart\s+display(?:\s+and\s+information\s+system)?\b", "cert_ecdis", "ECDIS"),
+            (r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b", "cert_arpa", "ARPA"),
+            (r"\bbrm\b|\bbtm\b|\bbridge\s+resource\s+management\b|\bbridge\s+team\s+management\b", "cert_brm_btm", "BRM/BTM"),
+            (r"\berm\b|\bengine(?:\s+room)?\s+resource\s+management\b", "cert_erm", "ERM"),
+            (r"\bpscrb\b|\bproficiency\s+in\s+survival\s+craft(?:\s+and\s+rescue\s+boats?)?\b|\bsurvival\s+craft\s+and\s+rescue\s+boats?\b", "cert_pscrb", "PSCRB"),
+            (r"\baff\b|\badvanced?\s+fire\s+fighting\b", "cert_aff", "AFF"),
+            (r"\bmfa\b|\bmedical\s+first\s+aid\b", "cert_mfa", "MFA"),
+            (r"\bmedical\s+care\b", "cert_medical_care", "Medical Care"),
+            (r"\bsso\b|\bship\s+security\s+officer\b", "cert_sso", "SSO"),
             (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
             (r"\bgmdss\b", "gmdss", "GMDSS"),
             (r"\boil tanker endorsement\b|\boil tanker dce?\b|\boil tanker dc\b|\boil dc\b", "tanker_oil", "oil tanker endorsement"),
@@ -4428,7 +4437,7 @@ class AIResumeAnalyzer:
             return "unknown"
 
         for match in matches:
-            snippet = text[max(0, match.start() - 40):match.start() + 220]
+            snippet = text[max(0, match.start() - 80):match.start() + 220]
             local_window = text[max(0, match.start() - 20):min(len(text), match.end() + 80)]
             lowered = snippet.lower()
             lowered_local = local_window.lower()
@@ -4456,7 +4465,7 @@ class AIResumeAnalyzer:
                         return "expired"
                     return "present"
 
-            if re.search(r"\b(held|valid|completed|certificate|endorsement|familiarization|familiarisation)\b", lowered):
+            if re.search(r"\b(held|valid|completed|certificate|course|courses|training|endorsement|familiarization|familiarisation)\b", lowered):
                 return "present"
 
         return "unknown"
@@ -4647,6 +4656,53 @@ class AIResumeAnalyzer:
                 "gas tanker dc management",
                 "gas tanker dce management",
                 "liquefied gas tanker management",
+            ],
+            "cert_ecdis": [
+                "ecdis",
+                "electronic chart display",
+                "electronic chart display and information system",
+            ],
+            "cert_arpa": [
+                "arpa",
+                "automatic radar plotting aid",
+                "automatic radar plotting aids",
+            ],
+            "cert_brm_btm": [
+                "brm",
+                "btm",
+                "bridge resource management",
+                "bridge team management",
+            ],
+            "cert_erm": [
+                "erm",
+                "engine resource management",
+                "engine room resource management",
+            ],
+            "cert_pscrb": [
+                "pscrb",
+                "proficiency in survival craft",
+                "proficiency in survival craft and rescue boat",
+                "proficiency in survival craft and rescue boats",
+                "survival craft and rescue boat",
+                "survival craft and rescue boats",
+            ],
+            "cert_aff": [
+                "aff",
+                "advanced fire fighting",
+                "advance fire fighting",
+            ],
+            "cert_mfa": [
+                "mfa",
+                "medical first aid",
+            ],
+            "cert_medical_care": [
+                "medical care",
+                "medical care certificate",
+            ],
+            "cert_sso": [
+                "sso",
+                "ship security officer",
+                "ship security officer certificate",
             ],
             "dp_operational": ["dpo", "dp operator"],
             "gmdss": ["gmdss"],

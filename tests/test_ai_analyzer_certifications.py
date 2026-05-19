@@ -327,6 +327,21 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["tanker_gas"], "present")
         self.assertEqual(endorsements["tanker_gas_advanced_cop"], "present")
 
+    def test_extract_common_course_certificates_from_dense_list(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Courses completed: ECDIS, ARPA, BRM, ERM, PSCRB, AFF, "
+            "Medical First Aid, Medical Care, Ship Security Officer"
+        )
+        self.assertEqual(endorsements["cert_ecdis"], "present")
+        self.assertEqual(endorsements["cert_arpa"], "present")
+        self.assertEqual(endorsements["cert_brm_btm"], "present")
+        self.assertEqual(endorsements["cert_erm"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_aff"], "present")
+        self.assertEqual(endorsements["cert_mfa"], "present")
+        self.assertEqual(endorsements["cert_medical_care"], "present")
+        self.assertEqual(endorsements["cert_sso"], "present")
+
 
 if __name__ == "__main__":
     unittest.main()
