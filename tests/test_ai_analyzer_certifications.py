@@ -306,6 +306,27 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         )
         self.assertEqual(endorsements["igf_advanced_cop"], "present")
 
+    def test_extract_basic_igf_cop_from_certificate_list(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Certificate of Proficiency in Basic Training for Ships Subject to the IGF Code "
+            "Valid Until: 04-May-2028"
+        )
+        self.assertEqual(endorsements["igf_basic_cop"], "present")
+
+    def test_extract_tanker_dce_support_and_management_aliases(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Dangerous Cargo Endorsement Type of Ship DCE Levels Expiry Date "
+            "Oil Tanker Support 18-Feb-2028 "
+            "Chemical Tanker Management 09-Nov-2027 "
+            "Gas Tanker DC Management Valid Until 04-May-2028"
+        )
+        self.assertEqual(endorsements["tanker_oil"], "present")
+        self.assertEqual(endorsements["tanker_oil_basic_cop"], "present")
+        self.assertEqual(endorsements["tanker_chemical"], "present")
+        self.assertEqual(endorsements["tanker_chemical_advanced_cop"], "present")
+        self.assertEqual(endorsements["tanker_gas"], "present")
+        self.assertEqual(endorsements["tanker_gas_advanced_cop"], "present")
+
 
 if __name__ == "__main__":
     unittest.main()

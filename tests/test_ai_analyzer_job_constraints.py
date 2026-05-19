@@ -474,6 +474,27 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("IGF CoP", constraints["parsing_notes"])
         self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
 
+    def test_tanker_igf_and_dce_prompt_variants_map_to_endorsements(self):
+        cases = [
+            ("holding basic igf cop", ["igf_basic_cop"]),
+            ("advanced oil tanker cop required", ["tanker_oil_advanced_cop"]),
+            ("basic oil tanker endorsement", ["tanker_oil_basic_cop"]),
+            ("chemical tanker management", ["tanker_chemical_advanced_cop"]),
+            ("gas tanker support", ["tanker_gas_basic_cop"]),
+            ("oil tanker dc", ["tanker_oil"]),
+            ("chemical dc", ["tanker_chemical"]),
+            ("gas dc", ["tanker_gas"]),
+            ("DPO and advanced gas tanker certificate required", ["tanker_gas_advanced_cop", "dp_operational"]),
+        ]
+        for prompt, expected_ids in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["certifications"]["endorsements_required"],
+                    expected_ids,
+                )
+
     def test_coc_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid coc",

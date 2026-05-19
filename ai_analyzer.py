@@ -2060,11 +2060,46 @@ class AIResumeAnalyzer:
                 "igf_advanced_cop",
                 "advanced IGF CoP",
             ),
+            (
+                r"\bbasic\s+igf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bigf\s+basic\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bbasic\s+training\b.{0,80}\bigf\s+code\b",
+                "igf_basic_cop",
+                "basic IGF CoP",
+            ),
+            (
+                r"\badvanced\s+oil\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\boil\s+tanker\s+(?:advanced|management)\b|\boil\s+(?:tanker\s+)?dce?\s+management\b|\boil\s+tanker\s+dc\s+management\b",
+                "tanker_oil_advanced_cop",
+                "advanced oil tanker CoP",
+            ),
+            (
+                r"\bbasic\s+oil\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\boil\s+tanker\s+(?:basic|support|familiarization|familiarisation)\b|\boil\s+(?:tanker\s+)?dce?\s+support\b|\boil\s+tanker\s+dc\s+support\b",
+                "tanker_oil_basic_cop",
+                "basic oil tanker CoP",
+            ),
+            (
+                r"\badvanced\s+chemical\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\bchemical\s+tanker\s+(?:advanced|management)\b|\bchemical\s+(?:tanker\s+)?dce?\s+management\b|\bchemical\s+tanker\s+dc\s+management\b",
+                "tanker_chemical_advanced_cop",
+                "advanced chemical tanker CoP",
+            ),
+            (
+                r"\bbasic\s+chemical\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\bchemical\s+tanker\s+(?:basic|support|familiarization|familiarisation)\b|\bchemical\s+(?:tanker\s+)?dce?\s+support\b|\bchemical\s+tanker\s+dc\s+support\b",
+                "tanker_chemical_basic_cop",
+                "basic chemical tanker CoP",
+            ),
+            (
+                r"\badvanced\s+(?:gas|liquefied\s+gas)\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\b(?:gas|liquefied\s+gas)\s+tanker\s+(?:advanced|management)\b|\bgas\s+(?:tanker\s+)?dce?\s+management\b|\bgas\s+tanker\s+dc\s+management\b",
+                "tanker_gas_advanced_cop",
+                "advanced gas tanker CoP",
+            ),
+            (
+                r"\bbasic\s+(?:gas|liquefied\s+gas)\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\b(?:gas|liquefied\s+gas)\s+tanker\s+(?:basic|support|familiarization|familiarisation)\b|\bgas\s+(?:tanker\s+)?dce?\s+support\b|\bgas\s+tanker\s+dc\s+support\b",
+                "tanker_gas_basic_cop",
+                "basic gas tanker CoP",
+            ),
             (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
             (r"\bgmdss\b", "gmdss", "GMDSS"),
-            (r"\boil tanker endorsement\b", "tanker_oil", "oil tanker endorsement"),
-            (r"\bchemical tanker endorsement\b", "tanker_chemical", "chemical tanker endorsement"),
-            (r"\bgas tanker endorsement\b", "tanker_gas", "gas tanker endorsement"),
+            (r"\boil tanker endorsement\b|\boil tanker dce?\b|\boil tanker dc\b|\boil dc\b", "tanker_oil", "oil tanker endorsement"),
+            (r"\bchemical tanker endorsement\b|\bchemical tanker dce?\b|\bchemical tanker dc\b|\bchemical dc\b", "tanker_chemical", "chemical tanker endorsement"),
+            (r"\bgas tanker endorsement\b|\bgas tanker dce?\b|\bgas tanker dc\b|\bgas dc\b", "tanker_gas", "gas tanker endorsement"),
         ]
         matches = []
         for pattern, canonical_id, display_value in mappings:
@@ -2072,6 +2107,21 @@ class AIResumeAnalyzer:
                 matches.append((canonical_id, display_value))
         if matches:
             ordered = list(dict.fromkeys(matches))
+            specific_to_generic = {
+                "tanker_oil_basic_cop": "tanker_oil",
+                "tanker_oil_advanced_cop": "tanker_oil",
+                "tanker_chemical_basic_cop": "tanker_chemical",
+                "tanker_chemical_advanced_cop": "tanker_chemical",
+                "tanker_gas_basic_cop": "tanker_gas",
+                "tanker_gas_advanced_cop": "tanker_gas",
+            }
+            specific_ids = {canonical_id for canonical_id, _display in ordered if canonical_id in specific_to_generic}
+            generic_ids_to_drop = {specific_to_generic[canonical_id] for canonical_id in specific_ids}
+            ordered = [
+                (canonical_id, display)
+                for canonical_id, display in ordered
+                if canonical_id not in generic_ids_to_drop
+            ]
             return {
                 "endorsements_required": [canonical_id for canonical_id, _display in ordered],
                 "display_value": " and ".join(display for _canonical_id, display in ordered),
@@ -4406,7 +4456,7 @@ class AIResumeAnalyzer:
                         return "expired"
                     return "present"
 
-            if re.search(r"\b(held|valid|completed|certificate)\b", lowered):
+            if re.search(r"\b(held|valid|completed|certificate|endorsement|familiarization|familiarisation)\b", lowered):
                 return "present"
 
         return "unknown"
@@ -4502,9 +4552,102 @@ class AIResumeAnalyzer:
                 "advanced training for service on ships subject to the igf code",
                 "advanced training for ships using fuels covered by the igf code",
             ],
-            "tanker_oil": ["oil tanker endorsement"],
-            "tanker_chemical": ["chemical tanker endorsement"],
-            "tanker_gas": ["gas tanker endorsement"],
+            "igf_basic_cop": [
+                "basic igf cop",
+                "basic igf certificate",
+                "basic igf certificate of proficiency",
+                "igf basic cop",
+                "igf basic certificate",
+                "certificate of proficiency in basic training for ships subject to the igf code",
+                "certificate of proficiency basic training for ships subject to the igf code",
+                "basic training for ships subject to the igf code",
+                "basic training for service on ships subject to the igf code",
+                "basic training for ships using fuels covered by the igf code",
+            ],
+            "tanker_oil": [
+                "oil tanker endorsement",
+                "oil tanker dce",
+                "oil tanker dc",
+                "oil dc",
+                "oil tanker support",
+                "oil tanker management",
+            ],
+            "tanker_oil_basic_cop": [
+                "basic oil tanker cop",
+                "basic oil tanker certificate",
+                "oil tanker basic",
+                "oil tanker support",
+                "oil tanker familiarization",
+                "oil tanker familiarisation",
+                "oil tanker dc support",
+                "oil tanker dce support",
+            ],
+            "tanker_oil_advanced_cop": [
+                "advanced oil tanker cop",
+                "advanced oil tanker certificate",
+                "oil tanker advanced",
+                "oil tanker management",
+                "oil tanker dc management",
+                "oil tanker dce management",
+            ],
+            "tanker_chemical": [
+                "chemical tanker endorsement",
+                "chemical tanker dce",
+                "chemical tanker dc",
+                "chemical dc",
+                "chemical tanker support",
+                "chemical tanker management",
+            ],
+            "tanker_chemical_basic_cop": [
+                "basic chemical tanker cop",
+                "basic chemical tanker certificate",
+                "chemical tanker basic",
+                "chemical tanker support",
+                "chemical tanker familiarization",
+                "chemical tanker familiarisation",
+                "chemical tanker dc support",
+                "chemical tanker dce support",
+            ],
+            "tanker_chemical_advanced_cop": [
+                "advanced chemical tanker cop",
+                "advanced chemical tanker certificate",
+                "chemical tanker advanced",
+                "chemical tanker management",
+                "chemical tanker dc management",
+                "chemical tanker dce management",
+            ],
+            "tanker_gas": [
+                "gas tanker endorsement",
+                "gas tanker dce",
+                "gas tanker dc",
+                "gas dc",
+                "gas tanker support",
+                "gas tanker management",
+                "liquefied gas tanker support",
+                "liquefied gas tanker management",
+            ],
+            "tanker_gas_basic_cop": [
+                "basic gas tanker cop",
+                "basic gas tanker certificate",
+                "basic liquefied gas tanker cop",
+                "gas tanker basic",
+                "gas tanker support",
+                "gas tanker familiarization",
+                "gas tanker familiarisation",
+                "gas tanker dc support",
+                "gas tanker dce support",
+                "liquefied gas tanker support",
+            ],
+            "tanker_gas_advanced_cop": [
+                "advanced gas tanker cop",
+                "advanced gas tanker certificate",
+                "advanced liquefied gas tanker cop",
+                "gas tanker advanced",
+                "gas tanker management",
+                "gas tanker dc management",
+                "gas tanker dce management",
+                "liquefied gas tanker management",
+            ],
             "dp_operational": ["dpo", "dp operator"],
             "gmdss": ["gmdss"],
         }
