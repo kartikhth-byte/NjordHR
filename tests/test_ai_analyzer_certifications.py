@@ -306,6 +306,12 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         )
         self.assertEqual(endorsements["igf_advanced_cop"], "present")
 
+    def test_extract_advanced_igf_endorsement_alias_from_course_details(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Course Details Advance Fire Fighting (AFF) Advanced IGF Endorsement ARPA"
+        )
+        self.assertEqual(endorsements["igf_advanced_cop"], "present")
+
     def test_extract_basic_igf_cop_from_certificate_list(self):
         endorsements = self.analyzer._extract_endorsements_from_text(
             "Certificate of Proficiency in Basic Training for Ships Subject to the IGF Code "
@@ -388,6 +394,7 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["cert_mfa"], "present")
         self.assertEqual(endorsements["cert_pscrb"], "present")
         self.assertEqual(endorsements["cert_ecdis"], "absent")
+        self.assertEqual(endorsements["igf_advanced_cop"], "absent")
 
     def test_course_details_keeps_ecdis_present_when_listed(self):
         endorsements = self.analyzer._extract_endorsements_from_text(

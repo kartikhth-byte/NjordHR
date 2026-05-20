@@ -4554,9 +4554,11 @@ class AIResumeAnalyzer:
         endorsement_aliases = {
             "igf_advanced_cop": [
                 "advanced igf cop",
+                "advanced igf endorsement",
                 "advanced igf certificate",
                 "advanced igf certificate of proficiency",
                 "igf advanced cop",
+                "igf advanced endorsement",
                 "igf advanced certificate",
                 "certificate of proficiency in advanced training for ships subject to the igf code",
                 "certificate of proficiency advanced training for ships subject to the igf code",
@@ -4738,6 +4740,8 @@ class AIResumeAnalyzer:
         if course_match:
             course_section = course_match.group(0)
             course_presence_patterns = {
+                "igf_advanced_cop": r"\badvanced\s+igf\s+(?:cop|endorsement|certificate)\b|\bigf\s+advanced\s+(?:cop|endorsement|certificate)\b|\badvanced\s+training\b.{0,120}\bigf\s+code\b",
+                "igf_basic_cop": r"\bbasic\s+igf\s+(?:cop|endorsement|certificate)\b|\bigf\s+basic\s+(?:cop|endorsement|certificate)\b|\bbasic\s+training\b.{0,120}\bigf\s+code\b",
                 "cert_ecdis": r"\becdis\b|\belectronic\s+chart\s+display\b",
                 "cert_arpa": r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b",
                 "cert_brm_btm": r"\bbrm\b|\bbtm\b|\bbridge\s+(?:resource|team)\s+management\b",
