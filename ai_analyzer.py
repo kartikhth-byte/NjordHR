@@ -4734,6 +4734,23 @@ class AIResumeAnalyzer:
             for endorsement_id, pattern in dce_presence_patterns.items():
                 if states.get(endorsement_id) == "unknown" and not re.search(pattern, dce_section, flags=re.IGNORECASE):
                     states[endorsement_id] = "absent"
+        course_match = re.search(r"\bCourse\s+Details\b.{0,2000}", compact, flags=re.IGNORECASE)
+        if course_match:
+            course_section = course_match.group(0)
+            course_presence_patterns = {
+                "cert_ecdis": r"\becdis\b|\belectronic\s+chart\s+display\b",
+                "cert_arpa": r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b",
+                "cert_brm_btm": r"\bbrm\b|\bbtm\b|\bbridge\s+(?:resource|team)\s+management\b",
+                "cert_erm": r"\berm\b|\bengine(?:\s+room)?\s+resource\s+management\b",
+                "cert_pscrb": r"\bpscrb\b|\bproficiency\s+in\s+survival\s+craft\b|\bsurvival\s+craft\s+and\s+rescue\s+boats?\b",
+                "cert_aff": r"\baff\b|\badvanced?\s+fire\s+fighting\b",
+                "cert_mfa": r"\bmfa\b|\bmedical\s+first\s+aid\b",
+                "cert_medical_care": r"\bmedical\s+care\b",
+                "cert_sso": r"\bsso\b|\bship\s+security\s+officer\b",
+            }
+            for cert_id, pattern in course_presence_patterns.items():
+                if states.get(cert_id) == "unknown" and not re.search(pattern, course_section, flags=re.IGNORECASE):
+                    states[cert_id] = "absent"
         return states
 
     def _parse_dob_from_text(self, raw_text):

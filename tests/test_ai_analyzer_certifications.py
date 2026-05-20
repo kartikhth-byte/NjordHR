@@ -378,6 +378,23 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["cert_medical_care"], "present")
         self.assertEqual(endorsements["cert_sso"], "present")
 
+    def test_course_details_marks_missing_common_certificate_absent(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Course Details Advance Fire Fighting (AFF) "
+            "Medical First Aid (MFA) "
+            "Proficiency in Survival Craft and Rescue Boat (PSCRB)"
+        )
+        self.assertEqual(endorsements["cert_aff"], "present")
+        self.assertEqual(endorsements["cert_mfa"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_ecdis"], "absent")
+
+    def test_course_details_keeps_ecdis_present_when_listed(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Course Details ECDIS Advance Fire Fighting (AFF)"
+        )
+        self.assertEqual(endorsements["cert_ecdis"], "present")
+
 
 if __name__ == "__main__":
     unittest.main()
