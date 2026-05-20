@@ -2147,9 +2147,7 @@ class AIResumeAnalyzer:
     def _rank_certificate_expectations(self):
         deck_common = [
             "gmdss",
-            "cert_ecdis",
             "cert_arpa",
-            "cert_brm_btm",
             "cert_pscrb",
             "cert_mfa",
             "cert_sso",
@@ -4833,8 +4831,12 @@ class AIResumeAnalyzer:
                 "gmdss": r"\bgmdss\b",
             }
             for cert_id, pattern in course_presence_patterns.items():
-                if states.get(cert_id) == "unknown" and not re.search(pattern, course_section, flags=re.IGNORECASE):
-                    states[cert_id] = "absent"
+                if states.get(cert_id) == "unknown":
+                    states[cert_id] = (
+                        "present"
+                        if re.search(pattern, course_section, flags=re.IGNORECASE)
+                        else "absent"
+                    )
         return states
 
     def _parse_dob_from_text(self, raw_text):

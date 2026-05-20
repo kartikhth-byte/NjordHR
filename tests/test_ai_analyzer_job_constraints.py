@@ -523,7 +523,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("stcw_endorsement", constraints["applied_constraints"])
         self.assertEqual(
             constraints["hard_constraints"]["certifications"]["endorsements_required"],
-            ["gmdss", "cert_ecdis", "cert_arpa", "cert_brm_btm", "cert_pscrb", "cert_mfa", "cert_sso"],
+            ["gmdss", "cert_arpa", "cert_pscrb", "cert_mfa", "cert_sso"],
         )
 
     def test_rank_required_certificate_prompt_uses_prompt_rank_when_present(self):
@@ -545,7 +545,18 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("stcw_endorsement", constraints["applied_constraints"])
         self.assertEqual(
             constraints["hard_constraints"]["certifications"]["endorsements_required"],
-            ["cert_pscrb", "gmdss", "cert_ecdis", "cert_arpa", "cert_brm_btm", "cert_mfa", "cert_sso"],
+            ["cert_pscrb", "gmdss", "cert_arpa", "cert_mfa", "cert_sso"],
+        )
+
+    def test_rank_required_certificate_prompt_merges_explicit_ecdis(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "must have ECDIS and required certificates",
+            rank="2nd_Officer",
+        )
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["cert_ecdis", "gmdss", "cert_arpa", "cert_pscrb", "cert_mfa", "cert_sso"],
         )
 
     def test_rank_required_certificate_prompt_without_rank_is_ambiguous(self):

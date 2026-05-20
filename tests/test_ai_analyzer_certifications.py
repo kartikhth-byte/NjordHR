@@ -409,6 +409,19 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         )
         self.assertEqual(endorsements["gmdss"], "present")
 
+    def test_course_details_marks_compact_listed_courses_present(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Course Details Advance Fire Fighting (AFF)ARPAAUTOMATIC RADAR PLOTTING "
+            "AIDSElementary First Aid (EFA)GMDSSMedical First Aid (MFA)Personal "
+            "Safety & Social Responsibility (PSSR)PERSONAL SURVIVAL TECHNIQUES"
+            "Proficiency in Survival Craft and Rescue Boat Courses (PSCRB)ROCSSO"
+            "STSDSDSHIP SECURITY OFFICER"
+        )
+        self.assertEqual(endorsements["gmdss"], "present")
+        self.assertEqual(endorsements["cert_arpa"], "present")
+        self.assertEqual(endorsements["cert_mfa"], "present")
+        self.assertEqual(endorsements["cert_sso"], "present")
+
 
 if __name__ == "__main__":
     unittest.main()
