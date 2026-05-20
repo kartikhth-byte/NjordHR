@@ -354,6 +354,15 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["tanker_gas"], "present")
         self.assertEqual(endorsements["tanker_gas_advanced_cop"], "present")
 
+    def test_gas_tanker_familiarization_does_not_satisfy_dce_support(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Dangerous Cargo Endorsement Type of Ship DCE Levels Expiry Date "
+            "Oil Tanker Management 24-May-2029 "
+            "Courses: GASCO Liquefied Gas Tanker Familiarization Medical First Aid"
+        )
+        self.assertEqual(endorsements["tanker_gas"], "absent")
+        self.assertEqual(endorsements["tanker_gas_basic_cop"], "absent")
+
     def test_extract_common_course_certificates_from_dense_list(self):
         endorsements = self.analyzer._extract_endorsements_from_text(
             "Courses completed: ECDIS, ARPA, BRM, ERM, PSCRB, AFF, "
