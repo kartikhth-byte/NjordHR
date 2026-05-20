@@ -2144,6 +2144,68 @@ class AIResumeAnalyzer:
             return {"ambiguous": True, "fragment": re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt).group(0)}
         return None
 
+    def _rank_certificate_expectations(self):
+        deck_common = [
+            "gmdss",
+            "cert_ecdis",
+            "cert_arpa",
+            "cert_brm_btm",
+            "cert_pscrb",
+            "cert_mfa",
+            "cert_sso",
+        ]
+        engine_common = [
+            "cert_erm",
+            "cert_pscrb",
+            "cert_mfa",
+            "cert_aff",
+        ]
+        return {
+            "master": deck_common + ["cert_medical_care"],
+            "chief_officer": deck_common + ["cert_medical_care"],
+            "2nd_officer": deck_common,
+            "3rd_officer": deck_common,
+            "chief_engineer": engine_common,
+            "2nd_engineer": engine_common,
+        }
+
+    def _extract_rank_certificate_expectation_constraint(self, user_prompt, rank=None):
+        prompt = str(user_prompt or "")
+        normalized_prompt = self._normalize_rank_label(prompt)
+        if not normalized_prompt:
+            return None
+
+        intent_patterns = [
+            r"\b(?:rank\s+)?(?:required|mandatory|standard|expected)\s+(?:course\s+)?cert(?:ificate)?s\b",
+            r"\brequired\s+cert(?:ificate)?s\s+for\s+(?:the\s+)?rank\b",
+            r"\bcert(?:ificate)?s\s+for\s+(?:the\s+)?(?:rank|role)\b",
+            r"\brank\s+cert(?:ificate)?\s+check\b",
+        ]
+        if not any(re.search(pattern, normalized_prompt, flags=re.IGNORECASE) for pattern in intent_patterns):
+            return None
+
+        rank_constraint = self._extract_rank_constraint(prompt)
+        rank_id = None
+        if rank_constraint:
+            prompt_ranks = rank_constraint.get("applied_rank_normalized") or []
+            if len(prompt_ranks) == 1:
+                rank_id = prompt_ranks[0]
+            elif len(prompt_ranks) > 1:
+                return {"ambiguous": True, "fragment": "rank certificates"}
+
+        if not rank_id:
+            rank_id, _department, _seniority_bucket, _confidence = self._normalize_rank(rank)
+
+        expectations = self._rank_certificate_expectations()
+        required = expectations.get(rank_id)
+        if not rank_id or not required:
+            return {"ambiguous": True, "fragment": "rank certificates"}
+
+        return {
+            "endorsements_required": list(required),
+            "display_value": f"standard {rank_id.replace('_', ' ')} certificates",
+        }
+
     def _extract_job_constraints(self, user_prompt, rank=None):
         constraints = {
             "rank": str(rank or "").strip(),
@@ -2249,6 +2311,23 @@ class AIResumeAnalyzer:
                 certs = constraints["hard_constraints"].setdefault("certifications", {})
                 certs["endorsements_required"] = endorsement_constraint["endorsements_required"]
                 certs["endorsement_display_value"] = endorsement_constraint["display_value"]
+                constraints["applied_constraints"].append("stcw_endorsement")
+
+        rank_certificate_constraint = self._extract_rank_certificate_expectation_constraint(user_prompt, rank=rank)
+        if rank_certificate_constraint:
+            if rank_certificate_constraint.get("ambiguous"):
+                constraints["parsing_notes"].append(rank_certificate_constraint["fragment"])
+            else:
+                certs = constraints["hard_constraints"].setdefault("certifications", {})
+                existing = certs.get("endorsements_required") or []
+                combined = list(dict.fromkeys([*existing, *rank_certificate_constraint["endorsements_required"]]))
+                certs["endorsements_required"] = combined
+                existing_display = certs.get("endorsement_display_value")
+                certs["endorsement_display_value"] = (
+                    f"{existing_display} and {rank_certificate_constraint['display_value']}"
+                    if existing_display
+                    else rank_certificate_constraint["display_value"]
+                )
                 constraints["applied_constraints"].append("stcw_endorsement")
 
         if not constraints["applied_constraints"] and not constraints["unapplied_constraints"] and str(user_prompt or "").strip():
@@ -4751,6 +4830,7 @@ class AIResumeAnalyzer:
                 "cert_mfa": r"\bmfa\b|\bmedical\s+first\s+aid\b",
                 "cert_medical_care": r"\bmedical\s+care\b",
                 "cert_sso": r"\bsso\b|\bship\s+security\s+officer\b",
+                "gmdss": r"\bgmdss\b",
             }
             for cert_id, pattern in course_presence_patterns.items():
                 if states.get(cert_id) == "unknown" and not re.search(pattern, course_section, flags=re.IGNORECASE):

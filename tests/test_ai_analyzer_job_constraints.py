@@ -518,6 +518,41 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     expected_ids,
                 )
 
+    def test_rank_required_certificate_prompt_uses_folder_rank_expectations(self):
+        constraints = self.analyzer._extract_job_constraints("required certificates", rank="2nd_Officer")
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["gmdss", "cert_ecdis", "cert_arpa", "cert_brm_btm", "cert_pscrb", "cert_mfa", "cert_sso"],
+        )
+
+    def test_rank_required_certificate_prompt_uses_prompt_rank_when_present(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "chief engineer required certificates",
+            rank="2nd_Officer",
+        )
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["cert_erm", "cert_pscrb", "cert_mfa", "cert_aff"],
+        )
+
+    def test_rank_required_certificate_prompt_merges_specific_certificates(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "2nd officer required certificates and PSCRB",
+            rank="2nd_Officer",
+        )
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["cert_pscrb", "gmdss", "cert_ecdis", "cert_arpa", "cert_brm_btm", "cert_mfa", "cert_sso"],
+        )
+
+    def test_rank_required_certificate_prompt_without_rank_is_ambiguous(self):
+        constraints = self.analyzer._extract_job_constraints("required certificates", rank="")
+        self.assertIn("rank certificates", constraints["parsing_notes"])
+        self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
+
     def test_coc_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid coc",

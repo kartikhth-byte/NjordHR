@@ -395,12 +395,19 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["cert_pscrb"], "present")
         self.assertEqual(endorsements["cert_ecdis"], "absent")
         self.assertEqual(endorsements["igf_advanced_cop"], "absent")
+        self.assertEqual(endorsements["gmdss"], "absent")
 
     def test_course_details_keeps_ecdis_present_when_listed(self):
         endorsements = self.analyzer._extract_endorsements_from_text(
             "Course Details ECDIS Advance Fire Fighting (AFF)"
         )
         self.assertEqual(endorsements["cert_ecdis"], "present")
+
+    def test_course_details_keeps_gmdss_present_when_listed(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Course Details GMDSS ECDIS ARPA"
+        )
+        self.assertEqual(endorsements["gmdss"], "present")
 
 
 if __name__ == "__main__":
