@@ -4519,9 +4519,9 @@ class AIResumeAnalyzer:
             post_alias_window = text[match.end():min(len(text), match.end() + 80)]
             lowered = snippet.lower()
             lowered_local = local_window.lower()
-            if re.search(r"\b(?:not held|n/?a|none|absent)\b", lowered):
+            if re.search(r"\b(?:not held|none|absent)\b", lowered):
                 return "absent"
-            if re.search(r"\bno\b(?!\s*\.?\s*(?:date|cert(?:ificate)?|number|place|of|issue)\b)", lowered):
+            if re.search(r"\bno\b(?!\s*\.)(?!\s*(?:date|cert(?:ificate)?|number|place|of|issue)\b)", lowered):
                 return "absent"
             if re.search(r"\b(expired|lapsed|out of date)\b", lowered_local):
                 return "expired"
@@ -4813,7 +4813,15 @@ class AIResumeAnalyzer:
             for endorsement_id, pattern in dce_presence_patterns.items():
                 if states.get(endorsement_id) == "unknown" and not re.search(pattern, dce_section, flags=re.IGNORECASE):
                     states[endorsement_id] = "absent"
-        course_match = re.search(r"\bCourse\s+Details\b.{0,2000}", compact, flags=re.IGNORECASE)
+        course_heading_pattern = (
+            r"\bCourse\s+Details\b"
+            r"|\bCourses\s+And\s+Certificates\b"
+            r"|\bDetails\s*Of\s*Courses\s*&\s*Certificates\s*For\s*Officers\b"
+            r"|\bDetailsOfCourses&CertificatesForOfficers\b"
+            r"|\bSTCW\s+Cert\.?\s+Details\b"
+            r"|\bCertificates\s+Details\b"
+        )
+        course_match = re.search(rf"(?:{course_heading_pattern}).{{0,2500}}", compact, flags=re.IGNORECASE)
         if course_match:
             course_section = course_match.group(0)
             course_presence_patterns = {
@@ -4823,7 +4831,7 @@ class AIResumeAnalyzer:
                 "cert_arpa": r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b",
                 "cert_brm_btm": r"\bbrm\b|\bbtm\b|\bbridge\s+(?:resource|team)\s+management\b",
                 "cert_erm": r"\berm\b|\bengine(?:\s+room)?\s+resource\s+management\b",
-                "cert_pscrb": r"\bpscrb\b|\bproficiency\s+in\s+survival\s+craft\b|\bsurvival\s+craft\s+and\s+rescue\s+boats?\b",
+                "cert_pscrb": r"\bpscrb\b|\bproficiency\s*in\s*survival\s*craft(?:\s*/?\s*r\.?\s*b\.?)?\b|\bsurvival\s*craft\s*(?:and|&)\s*rescue\s*boats?\b",
                 "cert_aff": r"\baff\b|\badvanced?\s+fire\s+fighting\b",
                 "cert_mfa": r"\bmfa\b|\bmedical\s+first\s+aid\b",
                 "cert_medical_care": r"\bmedical\s+care\b",

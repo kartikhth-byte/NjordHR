@@ -422,6 +422,47 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["cert_mfa"], "present")
         self.assertEqual(endorsements["cert_sso"], "present")
 
+    def test_stcw_cert_details_heading_marks_missing_common_certificate_absent(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "STCW CERT. DETAILS DATE OF DATE OF PLACE OF COURSE CERTIFICATE NO. "
+            "ARPA 150099 21/08/2015 - MUMBAI "
+            "SSO 2070436511230221 29/07/2023 - MUMBAI "
+            "PSCRB (RF) 2010016212252493 18/10/2025 17/10/2030 MUMBAI"
+        )
+        self.assertEqual(endorsements["cert_arpa"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_sso"], "present")
+        self.assertEqual(endorsements["cert_mfa"], "absent")
+
+    def test_compact_details_of_courses_heading_is_treated_as_course_section(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "DETAILSOFCOURSES&CERTIFICATESFOROFFICERS: Courses CertificateNo. "
+            "Medicare 3030146421260023 SEI KOLKATA 26.02.2026 NA "
+            "ProficiencyinSurvivalCraft&RescueBoat(PSCRB) 3030166212260095 "
+            "SSO(ShipSecurityOfficersCourse) 201001104190302 "
+            "ARPA(AutomaticRadarPlottingAid) ARPA/0016/002/13 "
+            "GMDSS GOC-M-5522 GOI 20.07.2022 19.07.2042"
+        )
+        self.assertEqual(endorsements["gmdss"], "present")
+        self.assertEqual(endorsements["cert_arpa"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_sso"], "present")
+        self.assertEqual(endorsements["cert_mfa"], "absent")
+
+    def test_certificates_details_heading_marks_missing_common_certificate_absent(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "CERTIFICATES DETAILS : CERTIFICATE CERTIFICATE NO. INSTITUTE DATE OF ISSUE "
+            "Proficiency In Survival Craft/R.B 2010016212221977 B.P. Marine 25/07/2022 "
+            "ECDIS 1111961/848 South Tyneside 16/11/2012 "
+            "GMDSS GOC/M/112 Anglo Eastern Signal 18/03/2015 "
+            "SSO BPMA/SSO/728/2018 B.P. Marine 08/09/2018"
+        )
+        self.assertEqual(endorsements["gmdss"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_sso"], "present")
+        self.assertEqual(endorsements["cert_arpa"], "absent")
+        self.assertEqual(endorsements["cert_mfa"], "absent")
+
 
 if __name__ == "__main__":
     unittest.main()
