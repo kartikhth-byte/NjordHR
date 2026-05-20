@@ -564,6 +564,127 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("rank certificates", constraints["parsing_notes"])
         self.assertNotIn("stcw_endorsement", constraints["applied_constraints"])
 
+    def test_compound_igf_and_dual_fuel_prompt_keeps_both_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "holding advanced IGF CoP with dual fuel experience",
+            rank="2nd_Engineer",
+        )
+        self.assertIn("engine_experience", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["engine_experience"]["engine_type"],
+            "dual_fuel",
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["igf_advanced_cop"],
+        )
+
+    def test_compound_certificate_and_recent_vessel_prompt_keeps_both_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "must have ECDIS and 12 months tanker experience in recent 3 contracts",
+            rank="2nd_Officer",
+        )
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertNotIn("vessel_type", constraints["unapplied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"]["vessel_type"],
+            "tanker",
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"]["min_months"],
+            12,
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"]["lookback_contracts"],
+            3,
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["cert_ecdis"],
+        )
+
+    def test_compound_rank_certificates_and_recent_vessel_prompt_keeps_both_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "chief officer with required certificates and container experience in last 3 contracts",
+            rank="Chief_Officer",
+        )
+        self.assertIn("rank_match", constraints["applied_constraints"])
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertNotIn("vessel_type", constraints["unapplied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"]["vessel_type"],
+            "container",
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["gmdss", "cert_arpa", "cert_pscrb", "cert_mfa", "cert_sso", "cert_medical_care"],
+        )
+
+    def test_compound_engine_and_certificate_prompt_keeps_both_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "2nd engineer with MAN B&W experience and ERM",
+            rank="2nd_Engineer",
+        )
+        self.assertIn("rank_match", constraints["applied_constraints"])
+        self.assertIn("engine_experience", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["engine_experience"]["engine_type"],
+            "man_b_w_me",
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["cert_erm"],
+        )
+
+    def test_compound_dce_and_recent_vessel_prompt_keeps_both_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "oil tanker dc and 2 years tanker experience in last 3 contracts",
+            rank="Chief_Officer",
+        )
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertNotIn("vessel_type", constraints["unapplied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"]["vessel_type"],
+            "tanker",
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"]["min_months"],
+            24,
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["tanker_oil"],
+        )
+
+    def test_compound_required_certificates_and_dce_merge_endorsements(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "required certificates and oil tanker dc",
+            rank="Chief_Officer",
+        )
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["tanker_oil", "gmdss", "cert_arpa", "cert_pscrb", "cert_mfa", "cert_sso", "cert_medical_care"],
+        )
+
+    def test_compound_valid_coc_and_required_certificates_keep_both_certification_rules(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "required certificates and valid coc",
+            rank="Chief_Officer",
+        )
+        self.assertIn("coc_document_gate", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertTrue(constraints["hard_constraints"]["certifications"]["coc_required"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+            ["gmdss", "cert_arpa", "cert_pscrb", "cert_mfa", "cert_sso", "cert_medical_care"],
+        )
+
     def test_coc_family_variants_map_to_same_requirement(self):
         prompts = [
             "valid coc",

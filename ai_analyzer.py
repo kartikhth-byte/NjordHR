@@ -2291,7 +2291,7 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["sea_service"] = sea_service_constraint
             constraints["unapplied_constraints"].append("min_sea_service")
 
-        vessel_type_constraint = None if engine_vessel_experience_constraint else self._extract_vessel_type_constraint(user_prompt)
+        vessel_type_constraint = None if (engine_vessel_experience_constraint or recent_contract_vessel_experience_constraint) else self._extract_vessel_type_constraint(user_prompt)
         if vessel_type_constraint:
             constraints["hard_constraints"]["vessel_type"] = vessel_type_constraint
             constraints["unapplied_constraints"].append("vessel_type")
