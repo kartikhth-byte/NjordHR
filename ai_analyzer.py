@@ -4519,9 +4519,10 @@ class AIResumeAnalyzer:
             post_alias_window = text[match.end():min(len(text), match.end() + 80)]
             lowered = snippet.lower()
             lowered_local = local_window.lower()
+            lowered_before = text[max(0, match.start() - 20):match.start()].lower()
             if re.search(r"\b(?:not held|none|absent)\b", lowered):
                 return "absent"
-            if re.search(r"\bno\b(?!\s*\.)(?!\s*(?:date|cert(?:ificate)?|number|place|of|issue)\b)", lowered):
+            if re.search(r"\bno\s*$", lowered_before):
                 return "absent"
             if re.search(r"\b(expired|lapsed|out of date)\b", lowered_local):
                 return "expired"
@@ -4759,6 +4760,7 @@ class AIResumeAnalyzer:
             ],
             "cert_erm": [
                 "erm",
+                "errm",
                 "engine resource management",
                 "engine room resource management",
             ],
@@ -4782,6 +4784,7 @@ class AIResumeAnalyzer:
             "cert_medical_care": [
                 "medical care",
                 "medical care certificate",
+                "medicare",
             ],
             "cert_sso": [
                 "sso",
@@ -4819,9 +4822,13 @@ class AIResumeAnalyzer:
             r"|\bDetails\s*Of\s*Courses\s*&\s*Certificates\s*For\s*Officers\b"
             r"|\bDetailsOfCourses&CertificatesForOfficers\b"
             r"|\bSTCW\s+Cert\.?\s+Details\b"
+            r"|\bSTCW\s+Courses\b"
+            r"|\bSTCW\s+And\s+Other\s+Certificates\b"
+            r"|\bCourses\s+Certificate\s+No\.?\b"
+            r"|\bCourses\s*&\s*Certificates?\b"
             r"|\bCertificates\s+Details\b"
         )
-        course_match = re.search(rf"(?:{course_heading_pattern}).{{0,2500}}", compact, flags=re.IGNORECASE)
+        course_match = re.search(rf"(?:{course_heading_pattern}).{{0,3500}}", compact, flags=re.IGNORECASE)
         if course_match:
             course_section = course_match.group(0)
             course_presence_patterns = {
@@ -4830,11 +4837,11 @@ class AIResumeAnalyzer:
                 "cert_ecdis": r"\becdis\b|\belectronic\s+chart\s+display\b",
                 "cert_arpa": r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b",
                 "cert_brm_btm": r"\bbrm\b|\bbtm\b|\bbridge\s+(?:resource|team)\s+management\b",
-                "cert_erm": r"\berm\b|\bengine(?:\s+room)?\s+resource\s+management\b",
+                "cert_erm": r"\berrm\b|\berm\b|\bengine(?:\s+room)?\s+resource(?:\s*.{0,40}\s*management|\s+management)\b",
                 "cert_pscrb": r"\bpscrb\b|\bproficiency\s*in\s*survival\s*craft(?:\s*/?\s*r\.?\s*b\.?)?\b|\bsurvival\s*craft\s*(?:and|&)\s*rescue\s*boats?\b",
                 "cert_aff": r"\baff\b|\badvanced?\s+fire\s+fighting\b",
                 "cert_mfa": r"\bmfa\b|\bmedical\s+first\s+aid\b",
-                "cert_medical_care": r"\bmedical\s+care\b",
+                "cert_medical_care": r"\bmedical\s+care\b|\bmedicare\b",
                 "cert_sso": r"\bsso\b|\bship\s+security\s+officer\b",
                 "gmdss": r"\bgmdss\b",
             }

@@ -463,6 +463,36 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(endorsements["cert_arpa"], "absent")
         self.assertEqual(endorsements["cert_mfa"], "absent")
 
+    def test_stcw_and_other_certificates_heading_handles_table_headers(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "STCW AND OTHER CERTIFICATES STCW Courses Certificate No Date of Date of "
+            "Place of Issuing REVISION : 1 Issue Expiry Issue Authority YES NO "
+            "EFA / MFA / MEDICARE 0120090022005 12.03.05 MUM TS REHMAN "
+            "PST / PSCRB (Survival) 0050120022005 25.03.05 MUM TS REHMAN "
+            "FP & FF / AFF (Fire Fighting) 0020110022005 19.03.05 MUM TS REHMAN "
+            "BRM / ERM / VRM LARGE VESSEL HANDLING SIMULATOR COURSE"
+        )
+        self.assertEqual(endorsements["cert_mfa"], "present")
+        self.assertEqual(endorsements["cert_medical_care"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_aff"], "present")
+        self.assertEqual(endorsements["cert_erm"], "present")
+
+    def test_courses_certificate_no_heading_and_engine_room_resource_variant(self):
+        endorsements = self.analyzer._extract_endorsements_from_text(
+            "Courses Certificate No. Issued By DateIssued Date Of Expiry "
+            "MEDICARE 41/2020 BPMA 23/02/2019 NA "
+            "PSCRBU & PSTU 46 SIMS 07/11/2023 06/11/2028 "
+            "SSO - Ship Security Officers Course 53 SCOT 11/09/2013 NA "
+            "RANSCO - Radar, Arpa & Navigation Simulator NZMS 07/07/2009 NA "
+            "Engine room resource 1565329 26.04.2023 26.04.2028 (management level)"
+        )
+        self.assertEqual(endorsements["cert_medical_care"], "present")
+        self.assertEqual(endorsements["cert_pscrb"], "present")
+        self.assertEqual(endorsements["cert_sso"], "present")
+        self.assertEqual(endorsements["cert_arpa"], "present")
+        self.assertEqual(endorsements["cert_erm"], "present")
+
 
 if __name__ == "__main__":
     unittest.main()
