@@ -31,7 +31,8 @@ const APP_FILES = [
 const APP_DIRS = [
   "agent",
   "repositories",
-  "supabase"
+  "supabase",
+  "web_vendor"
 ];
 
 function resolveDefaultConfigSource() {
