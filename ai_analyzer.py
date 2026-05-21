@@ -886,6 +886,7 @@ class AIResumeAnalyzer:
         "coc_grade_match",
         "stcw_endorsement",
         "recency",
+        "rank_duration_experience",
     }
     RANK_ALIAS_TABLE = {
         "master": {
@@ -1544,6 +1545,36 @@ class AIResumeAnalyzer:
             months = value * 12 if unit.startswith("year") else value
             original_phrase = match.group(0).strip()
             return {"min_total_months": months, "display_value": original_phrase, "operator": "gte"}
+        return None
+
+    def _extract_rank_duration_experience_constraint(self, user_prompt):
+        prompt = " ".join(str(user_prompt or "").split())
+        if not prompt:
+            return None
+
+        duration_pattern = r"(?:minimum\s+|at\s+least\s+)?(\d+)\s*\+?\s*(years?|months?)"
+        rank_aliases = sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True)
+        for alias, rank_entry in rank_aliases:
+            alias_pattern = re.escape(alias)
+            patterns = [
+                rf"\b{duration_pattern}\s+(?:of\s+)?(?:experience\s+)?(?:as\s+)?{alias_pattern}\b",
+                rf"\b{duration_pattern}\s+{alias_pattern}\s+(?:rank\s+)?experience\b",
+                rf"\b(?:worked|served|sailed)\s+{duration_pattern}\s+(?:as\s+)?{alias_pattern}\b",
+                rf"\b{alias_pattern}\s+(?:rank\s+)?experience\s+(?:of\s+)?{duration_pattern}\b",
+            ]
+            for pattern in patterns:
+                match = re.search(pattern, prompt, flags=re.IGNORECASE)
+                if not match:
+                    continue
+                value = int(match.group(1))
+                unit = match.group(2).lower()
+                months = value * 12 if unit.startswith("year") else value
+                return {
+                    "rank_normalized": rank_entry["canonical_id"],
+                    "min_months": months,
+                    "requested_label": f"at least {months} months as {rank_entry['canonical_id'].replace('_', ' ')}",
+                    "display_value": match.group(0).strip(),
+                }
         return None
 
     def _extract_recent_contract_vessel_experience_constraint(self, user_prompt):
@@ -2276,6 +2307,11 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["engine_experience"] = engine_experience_constraint
             constraints["applied_constraints"].append("engine_experience")
 
+        rank_duration_experience_constraint = self._extract_rank_duration_experience_constraint(user_prompt)
+        if rank_duration_experience_constraint:
+            constraints["hard_constraints"]["rank_duration_experience"] = rank_duration_experience_constraint
+            constraints["applied_constraints"].append("rank_duration_experience")
+
         experienced_ship_type = None if (engine_vessel_experience_constraint or recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
@@ -2286,7 +2322,12 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["recency"] = recency_constraint
             constraints["applied_constraints"].append("recency")
 
-        sea_service_constraint = None if (engine_vessel_experience_constraint or recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_min_sea_service_constraint(user_prompt)
+        sea_service_constraint = None if (
+            engine_vessel_experience_constraint
+            or recent_contract_vessel_experience_constraint
+            or engine_experience_constraint
+            or rank_duration_experience_constraint
+        ) else self._extract_min_sea_service_constraint(user_prompt)
         if sea_service_constraint:
             constraints["hard_constraints"]["sea_service"] = sea_service_constraint
             constraints["unapplied_constraints"].append("min_sea_service")
@@ -6990,6 +7031,112 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_rank_duration_experience_rule(self, candidate_facts, constraint):
+        requested_rank = str((constraint or {}).get("rank_normalized") or "").strip()
+        try:
+            min_months = int((constraint or {}).get("min_months") or 0)
+        except (TypeError, ValueError):
+            min_months = 0
+        if not requested_rank or min_months <= 0:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "RANK_DURATION_CONSTRAINT_INVALID",
+                "Rank duration experience constraint is incomplete.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        experience = candidate_facts.get("experience") or {}
+        fact_meta = candidate_facts.get("fact_meta") or {}
+        rank_duration_meta = fact_meta.get("experience.rank_duration_rows") or {}
+        rank_duration_confidence = rank_duration_meta.get("confidence")
+        rank_duration_rows = experience.get("rank_duration_rows") or []
+        matching_rank_duration_rows = [
+            row for row in rank_duration_rows
+            if row.get("rank_normalized") == requested_rank and row.get("months_total") is not None
+        ]
+
+        if str(rank_duration_meta.get("status") or "MISSING") == "PARSED" and matching_rank_duration_rows:
+            matched_months = sum(int(row.get("months_total") or 0) for row in matching_rank_duration_rows)
+            actual_value = {
+                "matched_months": matched_months,
+                "matched_rows": len(matching_rank_duration_rows),
+                "source": "rank_duration_rows",
+            }
+            if matched_months >= min_months:
+                return self._base_rule_result(
+                    "PASS",
+                    "RANK_DURATION_MATCH",
+                    f"Candidate has {matched_months} month(s) as '{requested_rank.replace('_', ' ')}'.",
+                    actual_value=actual_value,
+                    expected_value=constraint,
+                    confidence=rank_duration_confidence,
+                )
+            return self._base_rule_result(
+                "FAIL",
+                "RANK_DURATION_INSUFFICIENT",
+                (
+                    f"Candidate has only {matched_months} month(s) as '{requested_rank.replace('_', ' ')}', "
+                    f"below the required {min_months}."
+                ),
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=rank_duration_confidence,
+            )
+
+        service_rows_meta = fact_meta.get("experience.service_rows") or {}
+        service_rows_status = str(service_rows_meta.get("status") or "MISSING")
+        service_rows_confidence = service_rows_meta.get("confidence")
+        if service_rows_status == "PARSED":
+            matched_months = 0
+            matched_rows = 0
+            for row in experience.get("service_rows") or []:
+                if row.get("rank_normalized") != requested_rank:
+                    continue
+                months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+                if months is None:
+                    continue
+                matched_months += months
+                matched_rows += 1
+
+            actual_value = {
+                "matched_months": matched_months,
+                "matched_rows": matched_rows,
+                "source": "service_rows",
+            }
+            if matched_months >= min_months:
+                return self._base_rule_result(
+                    "PASS",
+                    "RANK_DURATION_MATCH",
+                    f"Candidate has {matched_months} month(s) as '{requested_rank.replace('_', ' ')}'.",
+                    actual_value=actual_value,
+                    expected_value=constraint,
+                    confidence=service_rows_confidence,
+                )
+            return self._base_rule_result(
+                "FAIL",
+                "RANK_DURATION_INSUFFICIENT",
+                (
+                    f"Candidate has only {matched_months} month(s) as '{requested_rank.replace('_', ' ')}', "
+                    f"below the required {min_months}."
+                ),
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=service_rows_confidence,
+            )
+
+        return self._base_rule_result(
+            "UNKNOWN",
+            "RANK_DURATION_UNPARSED",
+            "Could not determine requested rank duration from parsed rank or contract experience rows.",
+            actual_value=None,
+            expected_value=constraint,
+            confidence=rank_duration_confidence or service_rows_confidence,
+            unknown_reason="FACTUAL_UNKNOWN",
+        )
+
     def _evaluate_engine_experience_rule(self, candidate_facts, constraint):
         requested_engine_type = self._normalize_engine_type((constraint or {}).get("engine_type")).replace(" ", "_")
         expected_engine_types = [
@@ -7645,6 +7792,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_recent_contract_vessel_experience_rule(candidate_facts, recent_contract_vessel_experience_constraint))
+
+        rank_duration_experience_constraint = hard_constraints.get("rank_duration_experience")
+        if "rank_duration_experience" in applied_constraints and rank_duration_experience_constraint:
+            activated_rules.append("rank_duration_experience")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "RANK_DURATION_RULE_REQUIRES_V2_FACTS",
+                    "Rank duration experience requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=rank_duration_experience_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_rank_duration_experience_rule(candidate_facts, rank_duration_experience_constraint))
 
         engine_experience_constraint = hard_constraints.get("engine_experience")
         if "engine_experience" in applied_constraints and engine_experience_constraint:

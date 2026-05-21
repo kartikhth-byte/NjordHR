@@ -540,6 +540,104 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "RECENT_CONTRACT_VESSEL_UNPARSED")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_rank_duration_rule_uses_seajobs_total_experience_rows(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "rank_duration_rows": [
+                        {"rank_normalized": "chief_officer", "months_total": 54},
+                    ],
+                },
+                "fact_meta": {"experience.rank_duration_rows": {"status": "PARSED", "confidence": 0.95}},
+            },
+            {
+                "applied_constraints": ["rank_duration_experience"],
+                "hard_constraints": {
+                    "rank_duration_experience": {"rank_normalized": "chief_officer", "min_months": 48},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "RANK_DURATION_MATCH")
+        self.assertEqual(result["results"][0]["actual_value"]["source"], "rank_duration_rows")
+
+    def test_rank_duration_rule_fails_short_seajobs_total_experience_row(self):
+        result = self.analyzer._evaluate_rank_duration_experience_rule(
+            {
+                "experience": {
+                    "rank_duration_rows": [
+                        {"rank_normalized": "2nd_engineer", "months_total": 17},
+                    ],
+                },
+                "fact_meta": {"experience.rank_duration_rows": {"status": "PARSED", "confidence": 0.95}},
+            },
+            {"rank_normalized": "2nd_engineer", "min_months": 24},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "RANK_DURATION_INSUFFICIENT")
+
+    def test_rank_duration_rule_falls_back_to_non_seajobs_service_rows(self):
+        result = self.analyzer._evaluate_rank_duration_experience_rule(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "rank_normalized": "3rd_engineer",
+                            "sign_in_date": date(2024, 1, 1),
+                            "sign_out_date": date(2024, 8, 28),
+                        },
+                        {
+                            "rank_normalized": "3rd_engineer",
+                            "sign_in_date": date(2023, 1, 1),
+                            "sign_out_date": date(2023, 6, 29),
+                        },
+                        {
+                            "rank_normalized": "4th_engineer",
+                            "sign_in_date": date(2022, 1, 1),
+                            "sign_out_date": date(2022, 11, 1),
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.rank_duration_rows": {"status": "SOURCE_EXCLUDED", "confidence": None},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {"rank_normalized": "3rd_engineer", "min_months": 12},
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "RANK_DURATION_MATCH")
+        self.assertEqual(result["actual_value"]["source"], "service_rows")
+        self.assertEqual(result["actual_value"]["matched_rows"], 2)
+
+    def test_rank_duration_rule_is_unknown_without_rank_or_service_rows(self):
+        result = self.analyzer._evaluate_rank_duration_experience_rule(
+            {
+                "experience": {},
+                "fact_meta": {
+                    "experience.rank_duration_rows": {"status": "MISSING", "confidence": None},
+                    "experience.service_rows": {"status": "SOURCE_EXCLUDED", "confidence": None},
+                },
+            },
+            {"rank_normalized": "chief_officer", "min_months": 48},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "RANK_DURATION_UNPARSED")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_rank_duration_rule_marks_v1_1_facts_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {"facts_version": "1.1"},
+            {
+                "applied_constraints": ["rank_duration_experience"],
+                "hard_constraints": {
+                    "rank_duration_experience": {"rank_normalized": "chief_officer", "min_months": 48},
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "RANK_DURATION_RULE_REQUIRES_V2_FACTS")
+
     def test_engine_experience_rule_matches_expected_family(self):
         result = self.analyzer._evaluate_hard_filters(
             {

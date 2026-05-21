@@ -276,6 +276,27 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             },
         )
 
+    def test_rank_duration_experience_family_maps_to_structured_constraint(self):
+        cases = {
+            "at least 4 years as chief officer": ("chief_officer", 48),
+            "minimum 24 months 2nd engineer experience": ("2nd_engineer", 24),
+            "has worked 1 year as 3rd engineer": ("3rd_engineer", 12),
+            "chief officer experience 18 months": ("chief_officer", 18),
+        }
+        for prompt, (expected_rank, expected_months) in cases.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("rank_duration_experience", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["rank_duration_experience"]["rank_normalized"],
+                    expected_rank,
+                )
+                self.assertEqual(
+                    constraints["hard_constraints"]["rank_duration_experience"]["min_months"],
+                    expected_months,
+                )
+                self.assertNotIn("min_sea_service", constraints["unapplied_constraints"])
+
     def test_engine_experience_family_maps_to_structured_constraint(self):
         cases = {
             "with me engine experience": "man_b_w_me",
