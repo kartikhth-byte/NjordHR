@@ -22,6 +22,8 @@ const APP_FILES = [
   "scraper_engine.py",
   "frontend.html",
   "requirements.txt",
+  "rank_folders.py",
+  "runtime_env.py",
   "config.example.ini",
   "Truncated_Njord_logo.jpg"
 ];
@@ -324,4 +326,11 @@ function main() {
   console.log(`[NjordHR] Electron runtime staged at ${stageRoot}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  APP_FILES,
+  APP_DIRS
+};
