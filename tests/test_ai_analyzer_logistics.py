@@ -323,6 +323,38 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
         self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
 
+    def test_extract_email_experience_rows_parses_to_delimited_table_rows(self):
+        raw_text = (
+            "Sea Service Details\n"
+            "Vessel GRT/\n"
+            "Company Vessel Rank Sea Time Sign Off Reason\n"
+            "Type DWT\n"
+            "Chellaram 26/01/2024\n"
+            "M.V. Darya Bulk 35035 t/ Second\n"
+            "Shipping Private To Finished Contract\n"
+            "Rama Carrier 61212 t Officer\n"
+            "Limited 11/08/2024\n"
+            "M.V. LONG 04/08/2025\n"
+            "54675 t/ Second\n"
+            "PG Maritime BEACH Container To Finished Contract\n"
+            "68618 t Officer\n"
+            "EXPRESS 06/02/2026\n"
+            "Documents Held\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 1, 26))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2024, 8, 11))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_officer")
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["bulk carrier"])
+        self.assertEqual(fact["rows"][1]["sign_in_date"], date(2025, 8, 4))
+        self.assertEqual(fact["rows"][1]["sign_out_date"], date(2026, 2, 6))
+        self.assertEqual(fact["rows"][1]["vessel_types"], ["container"])
+
     def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
         row_lines = [
             "02-Nov-",

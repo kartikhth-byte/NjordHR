@@ -3391,6 +3391,27 @@ class AIResumeAnalyzer:
         escaped_token = re.escape(str(date_tokens[0]).strip())
         return bool(re.search(rf"{escaped_token}\s*(?:[-–]\s*|\bto\b)", line, flags=re.IGNORECASE))
 
+    def _email_to_delimited_service_row_window(self, lines, line_index):
+        line = lines[line_index] if 0 <= line_index < len(lines) else ""
+        date_tokens = self._extract_ordered_date_tokens_from_seajobs_row([line])
+        if len(date_tokens) != 1 or self._email_line_starts_split_service_date_range(line):
+            return []
+        if self._parse_ordered_date_token(date_tokens[0]).get("status") != "PARSED":
+            return []
+
+        window = [line]
+        saw_to = False
+        for next_line in lines[line_index + 1:line_index + 6]:
+            next_dates = self._extract_ordered_date_tokens_from_seajobs_row([next_line])
+            if next_dates and not saw_to:
+                return []
+            window.append(next_line)
+            if re.search(r"\bto\b", next_line, flags=re.IGNORECASE):
+                saw_to = True
+            if saw_to and next_dates:
+                return window
+        return []
+
     def _build_email_experience_row(self, row_lines, row_index):
         date_tokens = self._extract_ordered_date_tokens_from_seajobs_row(row_lines)
         if len(date_tokens) < 2:
@@ -3427,8 +3448,8 @@ class AIResumeAnalyzer:
             (r"\bthird\s+engineer\b|\b3rd\s+engineer\b", "3rd engineer"),
             (r"\bfourth\s+engineer\b|\b4th\s+engineer\b", "4th engineer"),
             (r"\bchief\s+officer\b|\bchief\s+mate\b", "chief officer"),
-            (r"\bsecond\s+officer\b|\b2nd\b.{0,80}\bofficer\b", "2nd officer"),
-            (r"\bthird\s+officer\b|\b3rd\b.{0,80}\bofficer\b", "3rd officer"),
+            (r"\bsecond\b.{0,80}\bofficer\b|\b2nd\b.{0,80}\bofficer\b", "2nd officer"),
+            (r"\bthird\b.{0,80}\bofficer\b|\b3rd\b.{0,80}\bofficer\b", "3rd officer"),
             (r"\bdeck\s+cadet\b|\bcadet\b", "deck cadet"),
             (r"\bmaster\b|\bcaptain\b", "master"),
         ]
@@ -3496,6 +3517,14 @@ class AIResumeAnalyzer:
             if not self._email_service_row_has_context_cue(window):
                 continue
 
+            parsed_row = self._build_email_experience_row(window, len(parsed_rows) + 1)
+            if parsed_row:
+                parsed_rows.append(parsed_row)
+
+        for line_index, _line in enumerate(lines):
+            window = self._email_to_delimited_service_row_window(lines, line_index)
+            if not window or not self._email_service_row_has_context_cue(window):
+                continue
             parsed_row = self._build_email_experience_row(window, len(parsed_rows) + 1)
             if parsed_row:
                 parsed_rows.append(parsed_row)
