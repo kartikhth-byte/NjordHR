@@ -3329,6 +3329,136 @@ class AIResumeAnalyzer:
             "source_label": "seajobs_resume",
         }
 
+    def _extract_email_experience_section(self, text):
+        content = str(text or "")
+        if not content:
+            return ""
+
+        start_match = re.search(
+            r"\b(?:sea\s+service(?:\s+experience)?\s+details|sea\s+experience|work\s+experience)\b",
+            content,
+            flags=re.IGNORECASE,
+        )
+        if not start_match:
+            return ""
+
+        tail = content[start_match.start():]
+        upper_tail = tail.upper()
+        end = len(tail)
+        for marker in (
+            "DOCUMENTS",
+            "DOCUMENTS HELD",
+            "DOCUMENT DETAILS",
+            "COURSES",
+            "CERTIFICATES",
+            "EDUCATIONAL",
+            "ACADEMIC",
+            "PERSONAL DETAILS",
+            "DECLARATION",
+        ):
+            marker_index = upper_tail.find(marker, 60)
+            if marker_index >= 0:
+                end = min(end, marker_index)
+        return tail[: min(end, 8000)].strip()
+
+    def _email_line_has_complete_service_dates(self, line):
+        date_tokens = self._extract_ordered_date_tokens_from_seajobs_row([str(line or "")])
+        if len(date_tokens) < 2:
+            return False
+        parsed_dates = [self._parse_ordered_date_token(token).get("status") for token in date_tokens[:2]]
+        return parsed_dates == ["PARSED", "PARSED"]
+
+    def _extract_rank_from_email_service_row(self, row_lines):
+        snippet = " ".join(" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip())
+        rank_patterns = [
+            (r"\b2\s*e\s*o\b|\b2eo\b", "2nd engineer"),
+            (r"\b3\s*e\s*o\b|\b3eo\b", "3rd engineer"),
+            (r"\b4\s*e\s*o\b|\b4eo\b", "4th engineer"),
+            (r"\b2\s*o\b|\b2o\b", "2nd officer"),
+            (r"\b3\s*o\b|\b3o\b", "3rd officer"),
+            (r"\bchief\s+engineer\b", "chief engineer"),
+            (r"\bsecond\s+engineer\b|\b2nd\s+engineer\b", "2nd engineer"),
+            (r"\bthird\s+engineer\b|\b3rd\s+engineer\b", "3rd engineer"),
+            (r"\bfourth\s+engineer\b|\b4th\s+engineer\b", "4th engineer"),
+            (r"\bchief\s+officer\b|\bchief\s+mate\b", "chief officer"),
+            (r"\bsecond\s+officer\b|\b2nd\s+officer\b", "2nd officer"),
+            (r"\bthird\s+officer\b|\b3rd\s+officer\b", "3rd officer"),
+            (r"\bdeck\s+cadet\b|\bcadet\b", "deck cadet"),
+            (r"\bmaster\b|\bcaptain\b", "master"),
+        ]
+        for pattern, raw_rank in rank_patterns:
+            if not re.search(pattern, snippet, flags=re.IGNORECASE):
+                continue
+            canonical_id, department, seniority_bucket, confidence = self._normalize_rank(raw_rank)
+            if canonical_id:
+                return {
+                    "raw_rank": raw_rank,
+                    "canonical_id": canonical_id,
+                    "department": department,
+                    "seniority_bucket": seniority_bucket,
+                    "confidence": confidence,
+                }
+        return {
+            "raw_rank": None,
+            "canonical_id": None,
+            "department": None,
+            "seniority_bucket": None,
+            "confidence": None,
+        }
+
+    def _extract_email_experience_rows(self, raw_text):
+        section = self._extract_email_experience_section(raw_text)
+        if not section:
+            return {
+                "rows": [],
+                "status": "SOURCE_EXCLUDED",
+                "confidence": None,
+                "extraction_method": "email_date_complete_service_rows",
+                "source_label": "email_resume_excluded",
+            }
+
+        lines = [" ".join(line.split()) for line in section.splitlines() if line.strip()]
+        parsed_rows = []
+        for line_index, line in enumerate(lines):
+            if not self._email_line_has_complete_service_dates(line):
+                continue
+            if not re.search(r"\b(?:ship|vessel|tanker|carrier|bulk|container|oil|product|lng|lpg|engine|b&w|man|wartsila|sulzer|yanmar|rank|officer|engineer|eo|2o|3o)\b", line, flags=re.IGNORECASE):
+                continue
+
+            window = [line]
+            for next_line in lines[line_index + 1:line_index + 3]:
+                if self._email_line_has_complete_service_dates(next_line):
+                    break
+                window.append(next_line)
+
+            date_tokens = self._extract_ordered_date_tokens_from_seajobs_row([line])
+            sign_in_fact = self._parse_ordered_date_token(date_tokens[0])
+            sign_out_fact = self._parse_ordered_date_token(date_tokens[1])
+            sign_in_date = sign_in_fact.get("date") if sign_in_fact.get("status") == "PARSED" else None
+            sign_out_date = sign_out_fact.get("date") if sign_out_fact.get("status") == "PARSED" else None
+            if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+                continue
+
+            rank_fact = self._extract_rank_from_email_service_row(window)
+            parsed_rows.append({
+                "row_index": len(parsed_rows) + 1,
+                "rank_raw": rank_fact.get("raw_rank"),
+                "rank_normalized": rank_fact.get("canonical_id"),
+                "sign_in_date": sign_in_date,
+                "sign_out_date": sign_out_date,
+                "vessel_types": self._extract_row_ship_types_from_seajobs_row(window),
+                "engine_types": self._extract_engine_types_from_text(" ".join(window)),
+                "snippet": " ".join(window),
+            })
+
+        return {
+            "rows": parsed_rows,
+            "status": "PARSED" if parsed_rows else "SOURCE_EXCLUDED",
+            "confidence": 0.75 if parsed_rows else None,
+            "extraction_method": "email_date_complete_service_rows",
+            "source_label": "email_resume" if parsed_rows else "email_resume_excluded",
+        }
+
     def _extract_seajobs_experience_rows(self, raw_text, original_path=None):
         text = str(raw_text or "")
         if not text.strip():
@@ -3342,13 +3472,7 @@ class AIResumeAnalyzer:
 
         path_name = Path(original_path).name if original_path else ""
         if path_name.upper().startswith("EMAIL_"):
-            return {
-                "rows": [],
-                "status": "SOURCE_EXCLUDED",
-                "confidence": None,
-                "extraction_method": "seajobs_service_history",
-                "source_label": "email_resume_excluded",
-            }
+            return self._extract_email_experience_rows(text)
 
         upper = text.upper()
         has_seajobs_banner = (
@@ -6492,7 +6616,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RECENT_CONTRACT_VESSEL_SOURCE_EXCLUDED",
-                "Recent contract vessel experience is currently supported only for SeaJobs-style resumes.",
+                "Recent contract vessel experience needs contract service rows that can be parsed safely from the resume.",
                 actual_value=None,
                 expected_value=constraint,
                 confidence=confidence,
@@ -6891,7 +7015,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "ENGINE_VESSEL_EXPERIENCE_SOURCE_EXCLUDED",
-                "Engine/vessel row matching is currently supported only for SeaJobs-style resumes.",
+                "Engine/vessel row matching needs contract service rows that can be parsed safely from the resume.",
                 actual_value=None,
                 expected_value=constraint,
                 confidence=confidence,

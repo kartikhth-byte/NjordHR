@@ -236,6 +236,49 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["rows"][0]["engine_types"], ["wingd_x_df", "dual_fuel"])
 
+    def test_extract_email_experience_rows_parses_date_complete_table_rows(self):
+        raw_text = (
+            "SEA EXPERIENCE\n"
+            "VESSEL TYPE OF GRT ENGINE ENGINE COMPANY RANK FROM TO\n"
+            "NAME VESSEL TYPE BHP\n"
+            "MT OCEAN OIL 61,653 B&W 19,150 NORTHPOLE 2EO 06.11.2024 25.04.2025\n"
+            "FAYE TANKER 7S60MC MARINE\n"
+            "MT DESH OIL 61,978 B&W 14,640 THE SCI LTD 2EO 26.08.2022 29.06.2023\n"
+            "GAURAV TANKER 6S60MC\n"
+            "DOCUMENTS\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["source_label"], "email_resume")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 11, 6))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 4, 25))
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+
+    def test_extract_email_experience_rows_uses_continuation_lines_for_ship_type(self):
+        raw_text = (
+            "SEA EXPERIENCE:\n"
+            "VesselName Company Name Vessel Type DWT Rank SignOn SignOff\n"
+            "MT SCYLLA PRODUCT 03.09.2023 01.03.2024\n"
+            "MARSHAL SHIPMANAGEMENT 74401 2O\n"
+            "TANKER\n"
+            "MV TAMILNADU SCI BULK CARRIER 45792 TNOC 12.03.2011 28.10.2011\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_officer")
+        self.assertEqual(fact["rows"][1]["vessel_types"], ["bulk carrier"])
+
     def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
         row_lines = [
             "02-Nov-",
