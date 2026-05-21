@@ -3335,7 +3335,10 @@ class AIResumeAnalyzer:
             return ""
 
         start_match = re.search(
-            r"\b(?:sea\s+service(?:\s+experience)?\s+details|sea\s+experience|work\s+experience)\b",
+            (
+                r"\b(?:seamen\s+experience\s+details|sea\s+service(?:\s+experience)?(?:\s+details|\s+record)?|"
+                r"sea\s+experience|work\s+experience)\b"
+            ),
             content,
             flags=re.IGNORECASE,
         )
@@ -3368,6 +3371,49 @@ class AIResumeAnalyzer:
         parsed_dates = [self._parse_ordered_date_token(token).get("status") for token in date_tokens[:2]]
         return parsed_dates == ["PARSED", "PARSED"]
 
+    def _email_service_row_has_context_cue(self, row_lines):
+        snippet = " ".join(str(line or "") for line in (row_lines or []))
+        return bool(re.search(
+            r"\b(?:ship|vessel|tanker|carrier|bulk|container|oil|product|lng|lpg|engine|b&w|man|"
+            r"wartsila|sulzer|yanmar|rank|officer|engineer|eo|2o|3o)\b",
+            snippet,
+            flags=re.IGNORECASE,
+        ))
+
+    def _email_line_starts_split_service_date_range(self, line):
+        line = str(line or "")
+        date_tokens = self._extract_ordered_date_tokens_from_seajobs_row([line])
+        if len(date_tokens) != 1:
+            return False
+        parsed_date = self._parse_ordered_date_token(date_tokens[0])
+        if parsed_date.get("status") != "PARSED":
+            return False
+        escaped_token = re.escape(str(date_tokens[0]).strip())
+        return bool(re.search(rf"{escaped_token}\s*(?:[-–]\s*|\bto\b)", line, flags=re.IGNORECASE))
+
+    def _build_email_experience_row(self, row_lines, row_index):
+        date_tokens = self._extract_ordered_date_tokens_from_seajobs_row(row_lines)
+        if len(date_tokens) < 2:
+            return None
+        sign_in_fact = self._parse_ordered_date_token(date_tokens[0])
+        sign_out_fact = self._parse_ordered_date_token(date_tokens[1])
+        sign_in_date = sign_in_fact.get("date") if sign_in_fact.get("status") == "PARSED" else None
+        sign_out_date = sign_out_fact.get("date") if sign_out_fact.get("status") == "PARSED" else None
+        if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+            return None
+
+        rank_fact = self._extract_rank_from_email_service_row(row_lines)
+        return {
+            "row_index": row_index,
+            "rank_raw": rank_fact.get("raw_rank"),
+            "rank_normalized": rank_fact.get("canonical_id"),
+            "sign_in_date": sign_in_date,
+            "sign_out_date": sign_out_date,
+            "vessel_types": self._extract_row_ship_types_from_seajobs_row(row_lines),
+            "engine_types": self._extract_engine_types_from_text(" ".join(row_lines)),
+            "snippet": " ".join(row_lines),
+        }
+
     def _extract_rank_from_email_service_row(self, row_lines):
         snippet = " ".join(" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip())
         rank_patterns = [
@@ -3381,8 +3427,8 @@ class AIResumeAnalyzer:
             (r"\bthird\s+engineer\b|\b3rd\s+engineer\b", "3rd engineer"),
             (r"\bfourth\s+engineer\b|\b4th\s+engineer\b", "4th engineer"),
             (r"\bchief\s+officer\b|\bchief\s+mate\b", "chief officer"),
-            (r"\bsecond\s+officer\b|\b2nd\s+officer\b", "2nd officer"),
-            (r"\bthird\s+officer\b|\b3rd\s+officer\b", "3rd officer"),
+            (r"\bsecond\s+officer\b|\b2nd\b.{0,80}\bofficer\b", "2nd officer"),
+            (r"\bthird\s+officer\b|\b3rd\b.{0,80}\bofficer\b", "3rd officer"),
             (r"\bdeck\s+cadet\b|\bcadet\b", "deck cadet"),
             (r"\bmaster\b|\bcaptain\b", "master"),
         ]
@@ -3422,7 +3468,7 @@ class AIResumeAnalyzer:
         for line_index, line in enumerate(lines):
             if not self._email_line_has_complete_service_dates(line):
                 continue
-            if not re.search(r"\b(?:ship|vessel|tanker|carrier|bulk|container|oil|product|lng|lpg|engine|b&w|man|wartsila|sulzer|yanmar|rank|officer|engineer|eo|2o|3o)\b", line, flags=re.IGNORECASE):
+            if not self._email_service_row_has_context_cue([line]):
                 continue
 
             window = [line]
@@ -3431,25 +3477,28 @@ class AIResumeAnalyzer:
                     break
                 window.append(next_line)
 
-            date_tokens = self._extract_ordered_date_tokens_from_seajobs_row([line])
-            sign_in_fact = self._parse_ordered_date_token(date_tokens[0])
-            sign_out_fact = self._parse_ordered_date_token(date_tokens[1])
-            sign_in_date = sign_in_fact.get("date") if sign_in_fact.get("status") == "PARSED" else None
-            sign_out_date = sign_out_fact.get("date") if sign_out_fact.get("status") == "PARSED" else None
-            if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
+            parsed_row = self._build_email_experience_row(window, len(parsed_rows) + 1)
+            if not parsed_row:
+                continue
+            parsed_rows.append(parsed_row)
+
+        for line_index, line in enumerate(lines):
+            if not self._email_line_starts_split_service_date_range(line):
                 continue
 
-            rank_fact = self._extract_rank_from_email_service_row(window)
-            parsed_rows.append({
-                "row_index": len(parsed_rows) + 1,
-                "rank_raw": rank_fact.get("raw_rank"),
-                "rank_normalized": rank_fact.get("canonical_id"),
-                "sign_in_date": sign_in_date,
-                "sign_out_date": sign_out_date,
-                "vessel_types": self._extract_row_ship_types_from_seajobs_row(window),
-                "engine_types": self._extract_engine_types_from_text(" ".join(window)),
-                "snippet": " ".join(window),
-            })
+            window = [line]
+            for next_line in lines[line_index + 1:line_index + 5]:
+                if self._email_line_starts_split_service_date_range(next_line):
+                    break
+                window.append(next_line)
+            if len(self._extract_ordered_date_tokens_from_seajobs_row(window)) < 2:
+                continue
+            if not self._email_service_row_has_context_cue(window):
+                continue
+
+            parsed_row = self._build_email_experience_row(window, len(parsed_rows) + 1)
+            if parsed_row:
+                parsed_rows.append(parsed_row)
 
         return {
             "rows": parsed_rows,
@@ -3557,7 +3606,7 @@ class AIResumeAnalyzer:
         year_pattern = re.compile(r'\b(?:19|20)\d{2}\b')
         full_token_pattern = re.compile(
             rf'\d{{4}}[\/\-.]\d{{1,2}}[\/\-.]\d{{1,2}}|'
-            rf'\d{{1,2}}[\/\-.]\d{{1,2}}[\/\-.]\d{{4}}|'
+            rf'\d{{1,2}}[\/\-.]\d{{1,2}}[\/\-.]\d{{2,4}}|'
             rf'\d{{1,2}}[\s\/\-.]+{month_pattern}[\s\/\-.]+\d{{4}}|'
             rf'{month_pattern}[\s\/\-.]+\d{{1,2}},?[\s\/\-.]+\d{{4}}',
             flags=re.IGNORECASE,

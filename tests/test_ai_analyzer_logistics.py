@@ -279,6 +279,50 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_officer")
         self.assertEqual(fact["rows"][1]["vessel_types"], ["bulk carrier"])
 
+    def test_extract_email_experience_rows_parses_service_record_two_digit_years(self):
+        raw_text = (
+            "SEA SERVICE RECORD:\n"
+            "SHIP NAME COMPANY IMO TYPE GRT SIGN ON SIGN OFF RANK\n"
+            "M.V. MAHA FIVE STAR SHIPPING 9231004 BULK 38731 24.04.19 31.12.19 CADET\n"
+            "ROOS COMPANY PVT LTD\n"
+            "M.V. MAHA FIVE STAR SHIPPING 9525613 BULK 45999 12.06.24 21.07.24 2ND\n"
+            "YAYA COMPANY PVT LTD OFFICER\n"
+            "DOCUMENT DETAILS\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2019, 4, 24))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2019, 12, 31))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "deck_cadet")
+        self.assertEqual(fact["rows"][1]["rank_normalized"], "2nd_officer")
+
+    def test_extract_email_experience_rows_parses_split_date_range_rows(self):
+        raw_text = (
+            "Seamen Experience Details\n"
+            "18/04/2025 - Norse ship management\n"
+            "04/08/2025 2nd Engineer\n"
+            "Raffles pride / Oil/Chem Tanker 8539GT MAN & B&W\n"
+            "21/09/2024 - fleet management\n"
+            "14/11/2024 2nd Engineer\n"
+            "MT GISELE / Product Tanker 40953 MAN & B&W\n"
+            "Academic Details\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2025, 4, 18))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 8, 4))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+
     def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
         row_lines = [
             "02-Nov-",
