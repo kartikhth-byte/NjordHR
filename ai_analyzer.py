@@ -3412,8 +3412,90 @@ class AIResumeAnalyzer:
                 return window
         return []
 
+    def _extract_email_indexed_service_row_windows(self, lines):
+        if not any(re.search(r"#\s*rank\s+tonnage\s+engine\s+in\s+out", line, flags=re.IGNORECASE) for line in lines):
+            return []
+        anchors = [
+            idx for idx, line in enumerate(lines)
+            if re.match(r"^\d{1,2}\s", line)
+        ]
+        windows = []
+        for anchor_position, anchor_idx in enumerate(anchors):
+            next_anchor = anchors[anchor_position + 1] if anchor_position + 1 < len(anchors) else len(lines)
+            window_end = max(anchor_idx + 1, next_anchor - 2) if next_anchor < len(lines) else next_anchor
+            window = lines[max(0, anchor_idx - 2):window_end]
+            if self._email_service_row_has_context_cue(window):
+                windows.append(window)
+        return windows
+
+    def _extract_fragmented_email_date_tokens(self, row_lines):
+        lines = [" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip()]
+        if not lines:
+            return []
+
+        parsed_candidates = []
+        for token in self._extract_ordered_date_tokens_from_seajobs_row(lines):
+            parsed_fact = self._parse_ordered_date_token(token)
+            if parsed_fact.get("status") == "PARSED" and parsed_fact.get("date"):
+                parsed_candidates.append((parsed_fact["date"], token))
+
+        day_fragments = []
+        for line in lines:
+            match = re.search(r"\b(\d{1,2})-\s*$", line)
+            if match:
+                day_fragments.append(match.group(1))
+
+        month_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+        month_year_fragments = []
+        for line_index, line in enumerate(lines):
+            for match in re.finditer(rf"{month_pattern}[\s\-.]*(\d{{3,4}})\b", line, flags=re.IGNORECASE):
+                month, year = match.groups()
+                if len(year) == 3:
+                    for next_line in lines[line_index + 1:line_index + 3]:
+                        next_digit = re.fullmatch(r"(\d)", next_line.strip())
+                        if next_digit:
+                            year = f"{year}{next_digit.group(1)}"
+                            break
+                if len(year) == 4:
+                    month_year_fragments.append((month, year))
+        for day, (month, year) in zip(day_fragments, month_year_fragments):
+            token = f"{day}-{month}-{year}"
+            parsed_fact = self._parse_ordered_date_token(token)
+            if parsed_fact.get("status") == "PARSED" and parsed_fact.get("date"):
+                parsed_candidates.append((parsed_fact["date"], token))
+
+        year_tokens = []
+        for line in lines:
+            year_tokens.extend(re.findall(r"\b(?:19|20)\d{2}\b", line))
+        month_only_fragments = []
+        for line in lines:
+            if re.search(rf"\d{{1,2}}[\s\-.]+{month_pattern}", line, flags=re.IGNORECASE):
+                continue
+            match = re.search(rf"\b{month_pattern}-\s*$", line, flags=re.IGNORECASE)
+            if match:
+                month_only_fragments.append(match.group(1))
+        if day_fragments and month_only_fragments and year_tokens:
+            token = f"{day_fragments[0]}-{month_only_fragments[0]}-{year_tokens[-1]}"
+            parsed_fact = self._parse_ordered_date_token(token)
+            if parsed_fact.get("status") == "PARSED" and parsed_fact.get("date"):
+                parsed_candidates.append((parsed_fact["date"], token))
+
+        parsed_candidates.sort(key=lambda item: item[0])
+        rebuilt_tokens = []
+        seen_dates = set()
+        for parsed_date, token in parsed_candidates:
+            if parsed_date in seen_dates:
+                continue
+            seen_dates.add(parsed_date)
+            rebuilt_tokens.append(token)
+            if len(rebuilt_tokens) == 2:
+                return rebuilt_tokens
+        return []
+
     def _build_email_experience_row(self, row_lines, row_index):
         date_tokens = self._extract_ordered_date_tokens_from_seajobs_row(row_lines)
+        if len(date_tokens) < 2:
+            date_tokens = self._extract_fragmented_email_date_tokens(row_lines)
         if len(date_tokens) < 2:
             return None
         sign_in_fact = self._parse_ordered_date_token(date_tokens[0])
@@ -3443,10 +3525,10 @@ class AIResumeAnalyzer:
             (r"\b4\s*e\s*o\b|\b4eo\b", "4th engineer"),
             (r"\b2\s*o\b|\b2o\b", "2nd officer"),
             (r"\b3\s*o\b|\b3o\b", "3rd officer"),
-            (r"\bchief\s+engineer\b", "chief engineer"),
-            (r"\bsecond\s+engineer\b|\b2nd\s+engineer\b", "2nd engineer"),
-            (r"\bthird\s+engineer\b|\b3rd\s+engineer\b", "3rd engineer"),
-            (r"\bfourth\s+engineer\b|\b4th\s+engineer\b", "4th engineer"),
+            (r"\bchief\b.{0,80}\bengineer\b", "chief engineer"),
+            (r"\bsecond\b.{0,80}\bengineer\b|\b2nd\b.{0,80}\bengineer\b", "2nd engineer"),
+            (r"\bthird\b.{0,80}\bengineer\b|\b3rd\b.{0,80}\bengineer\b", "3rd engineer"),
+            (r"\bfourth\b.{0,80}\bengineer\b|\b4th\b.{0,80}\bengineer\b", "4th engineer"),
             (r"\bchief\s+officer\b|\bchief\s+mate\b", "chief officer"),
             (r"\bsecond\b.{0,80}\bofficer\b|\b2nd\b.{0,80}\bofficer\b", "2nd officer"),
             (r"\bthird\b.{0,80}\bofficer\b|\b3rd\b.{0,80}\bofficer\b", "3rd officer"),
@@ -3525,6 +3607,11 @@ class AIResumeAnalyzer:
             window = self._email_to_delimited_service_row_window(lines, line_index)
             if not window or not self._email_service_row_has_context_cue(window):
                 continue
+            parsed_row = self._build_email_experience_row(window, len(parsed_rows) + 1)
+            if parsed_row:
+                parsed_rows.append(parsed_row)
+
+        for window in self._extract_email_indexed_service_row_windows(lines):
             parsed_row = self._build_email_experience_row(window, len(parsed_rows) + 1)
             if parsed_row:
                 parsed_rows.append(parsed_row)

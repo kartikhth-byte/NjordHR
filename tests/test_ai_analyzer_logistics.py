@@ -355,6 +355,44 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["rows"][1]["sign_out_date"], date(2026, 2, 6))
         self.assertEqual(fact["rows"][1]["vessel_types"], ["container"])
 
+    def test_extract_email_experience_rows_rebuilds_indexed_day_month_year_fragments(self):
+        raw_text = (
+            "Sea service Experience Details\n"
+            "Sign Sign\n"
+            "Company\n"
+            "# Rank Tonnage Engine In Out\n"
+            "Name / Ship\n"
+            "/BHP Date Date\n"
+            "Type & Name\n"
+            "1 Holy angel Marine 81396/18 MAN 17-\n"
+            "2nd Engineer 01-\n"
+            "services/Crude oil 660kw B&W MC-CApr-2025\n"
+            "Oct-202\n"
+            "Tanker/MT LILIANA\n"
+            "5\n"
+            "Chief 12-\n"
+            "SCI / 18-Jul-\n"
+            "2 Engineer 427/2X6 Yanmar Feb-\n"
+            "Passenger 2023\n"
+            ",SCI 62 KW 2024\n"
+            "Ship/MV RANI\n"
+            "CHANGA\n"
+            "Academic Details\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2025, 4, 17))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 10, 1))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+        self.assertEqual(fact["rows"][1]["sign_in_date"], date(2023, 7, 18))
+        self.assertEqual(fact["rows"][1]["sign_out_date"], date(2024, 2, 12))
+        self.assertEqual(fact["rows"][1]["rank_normalized"], "chief_engineer")
+
     def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
         row_lines = [
             "02-Nov-",
