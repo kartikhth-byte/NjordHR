@@ -3934,6 +3934,72 @@ class AIResumeAnalyzer:
                 counts[normalized] += 1
         return counts
 
+    def _extract_seajobs_total_experience_rows(self, raw_text, original_path=None):
+        text = str(raw_text or "")
+        path_name = Path(original_path).name if original_path else ""
+        if not text.strip() or path_name.upper().startswith("EMAIL_"):
+            return {
+                "rows": [],
+                "status": "SOURCE_EXCLUDED" if path_name.upper().startswith("EMAIL_") else "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_total_experience",
+                "source_label": "email_resume_excluded" if path_name.upper().startswith("EMAIL_") else None,
+            }
+
+        upper = text.upper()
+        has_seajobs_banner = (
+            "NJORDSHIPS MANAGEMENT INDIA PVT LTD" in upper
+            or "NJORSHIPS MANAGEMENT INDIA PVT LTD" in upper
+        )
+        start = upper.find("TOTAL EXPERIENCE")
+        if start < 0 or not has_seajobs_banner:
+            return {
+                "rows": [],
+                "status": "SOURCE_EXCLUDED" if start >= 0 else "MISSING",
+                "confidence": None,
+                "extraction_method": "seajobs_total_experience",
+                "source_label": "non_seajobs_resume_excluded" if start >= 0 else "seajobs_resume",
+            }
+
+        lines = [" ".join(line.split()) for line in text[start:start + 1800].splitlines() if line.strip()]
+        rows = []
+        for rank_index, line in enumerate(lines):
+            rank_match = re.match(r"^Rank\s+(.+?)\s*$", line, flags=re.IGNORECASE)
+            if not rank_match or rank_index + 1 >= len(lines):
+                continue
+            experience_match = re.match(
+                r"^Experience\s+(\d{1,2})\s+Year(?:s)?\s+(\d{1,2})\s+Month(?:s)?(?:\s+(\d{1,2})\s+Day(?:s)?)?\s*$",
+                lines[rank_index + 1],
+                flags=re.IGNORECASE,
+            )
+            if not experience_match:
+                continue
+            canonical_id, department, seniority_bucket, rank_confidence = self._normalize_rank(rank_match.group(1))
+            if not canonical_id:
+                continue
+            years, months, days = experience_match.groups()
+            months_total = int(years) * 12 + int(months)
+            rows.append({
+                "rank_raw": rank_match.group(1),
+                "rank_normalized": canonical_id,
+                "department": department,
+                "seniority_bucket": seniority_bucket,
+                "rank_confidence": rank_confidence,
+                "years": int(years),
+                "months": int(months),
+                "days": int(days) if days is not None else None,
+                "months_total": months_total,
+                "snippet": f"{line} {lines[rank_index + 1]}",
+            })
+
+        return {
+            "rows": rows,
+            "status": "PARSED" if rows else "MISSING",
+            "confidence": 0.95 if rows else None,
+            "extraction_method": "seajobs_total_experience",
+            "source_label": "seajobs_resume",
+        }
+
     def _extract_last_sign_off_fact_from_text(self, raw_text, original_path=None, reference_date=None):
         text = str(raw_text or "")
         if not text.strip():
@@ -5417,6 +5483,7 @@ class AIResumeAnalyzer:
             applied_ship_types = []
         current_rank_fact = self._extract_rank_fact_from_text(source_text)
         experience_rows_fact = self._extract_seajobs_experience_rows(source_text, original_path=original_path)
+        total_experience_fact = self._extract_seajobs_total_experience_rows(source_text, original_path=original_path)
         same_company_fact = self._extract_same_company_contract_count_fact_from_text(source_text, original_path=original_path)
         last_sign_off_fact = self._extract_last_sign_off_fact_from_text(source_text, original_path=original_path)
         current_rank_months_fact = self._extract_current_rank_months_fact_from_text(source_text, original_path=original_path, experience_rows_fact=experience_rows_fact)
@@ -5479,6 +5546,7 @@ class AIResumeAnalyzer:
                 "last_sign_off_date": last_sign_off_fact.get("last_sign_off_date").isoformat() if last_sign_off_fact.get("last_sign_off_date") else None,
                 "last_sign_off_months_ago": last_sign_off_fact.get("last_sign_off_months_ago"),
                 "service_rows": experience_rows_fact.get("rows") or [],
+                "rank_duration_rows": total_experience_fact.get("rows") or [],
             },
             "travel": {
                 "us_visa_type": logistics_fact.get("visa_fact", {}).get("visa_type"),
@@ -5614,6 +5682,17 @@ class AIResumeAnalyzer:
                     status=experience_rows_fact.get("status", "MISSING"),
                     source_label=experience_rows_fact.get("source_label"),
                     context={"field": "experience.service_rows"},
+                ),
+                "experience.rank_duration_rows": self._build_fact_meta(
+                    len(total_experience_fact.get("rows") or []),
+                    confidence=total_experience_fact.get("confidence"),
+                    extraction_method=total_experience_fact.get("extraction_method", ""),
+                    status=total_experience_fact.get("status", "MISSING"),
+                    source_label=total_experience_fact.get("source_label"),
+                    context={
+                        "field": "experience.rank_duration_rows",
+                        "source_scope": "seajobs_total_experience",
+                    },
                 ),
                 "travel.visa_records": self._build_fact_meta(
                     [record.get("visa_type") for record in (logistics_fact.get("visa_fact", {}).get("visa_records") or [])],

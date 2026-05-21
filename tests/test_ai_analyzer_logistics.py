@@ -429,6 +429,48 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["matched_rows"], 2)
         self.assertEqual(fact["months_total"], 4)
 
+    def test_extract_seajobs_total_experience_rows_skips_placeholder_rank_durations(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Total Experience\n"
+            "Rank 2nd Engineer\n"
+            "Experience YY Year 8 Month 22 Days\n"
+            "Rank 4th Engineer\n"
+            "Experience 2 Year 0 Month 22 Days\n"
+            "Rank 5th Engineer\n"
+            "Experience Year 7 Month 13 Days\n"
+        )
+        fact = self.analyzer._extract_seajobs_total_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_315781.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 1)
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "4th_engineer")
+        self.assertEqual(fact["rows"][0]["months_total"], 24)
+        self.assertEqual(fact["rows"][0]["days"], 22)
+
+    def test_extract_current_rank_months_fact_keeps_service_row_sum_with_total_experience(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Chief Officer Present Rank Chief Officer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 Chief Officer Sygnius / Bulk Carrier 18000 01-Jan-2025 31-Jan-2025\n"
+            "Total Experience\n"
+            "Rank Chief Officer\n"
+            "Experience 04 Year 6 Month 20 Days\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Chief-Officer_11617.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["months_total"], 1)
+        self.assertEqual(fact["extraction_method"], "seajobs_service_history_rank_duration_sum")
+
     def test_extract_contract_gap_fact_flags_gap_over_six_months(self):
         raw_text = (
             "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
