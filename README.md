@@ -135,8 +135,12 @@ NJORDHR_REQUIRE_BUNDLED_CONVERTER=true \
 npm run dist:win
 ```
 
+The current Windows Electron NSIS installer build and GitHub Release upload flow has a dedicated operator runbook:
+- [Windows Electron installer build and upload runbook](docs/windows-electron-installer-release-runbook.md)
+
 Outputs under:
-- `build/windows/`
+- portable ZIP and Inno Setup artifacts: `build/windows/`
+- Electron NSIS installer: `build/electron/`
 
 Install desktop/start menu shortcuts on Windows:
 ```powershell
