@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ai_analyzer import AIResumeAnalyzer, AdvancedPDFProcessor, ConfigManager
 from query_understanding.shadow_audit import build_shadow_audit_rows
+from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
 
 
 DEFAULT_CORPUS_PATH = PROJECT_ROOT / "docs" / "AI_SEARCH_V3_4_BOOTSTRAP_PROMPT_CORPUS_2026-04-08.json"
@@ -71,7 +72,7 @@ def main():
                 }
             )
 
-    rows = build_shadow_audit_rows(analyzer, prompts)
+    rows = build_shadow_audit_rows(analyzer, prompts, llm_plan_provider=build_shadow_llm_query_plan)
     report = {
         "success": True,
         "shadow_mode": "disabled",

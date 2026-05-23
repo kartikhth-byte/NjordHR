@@ -25,6 +25,7 @@ def build_shadow_audit_entry(
     legacy_plan = adapter.adapt(prompt, rank=rank, prompt_template_version="legacy.parser.v1", prompt_id=prompt_id)
     legacy_records = [asdict(record) for record in canonical_comparison_records(legacy_plan, prompt_id=prompt_id)]
     shadow_enabled = is_enabled()
+    llm_plan_source = "disabled"
 
     if llm_plan is None and shadow_enabled and llm_plan_provider is not None:
         llm_plan = maybe_build_shadow_query_plan(
@@ -37,6 +38,7 @@ def build_shadow_audit_entry(
         )
 
     if llm_plan is None or not shadow_enabled:
+        llm_plan_source = "disabled"
         return {
             "prompt_id": prompt_id,
             "prompt": prompt,
@@ -46,6 +48,8 @@ def build_shadow_audit_entry(
                 "feature_flag_enabled": shadow_enabled,
                 "llm_plan_provider_attached": llm_plan_provider is not None,
                 "llm_plan_requested": shadow_enabled and llm_plan_provider is not None,
+                "llm_plan_source": llm_plan_source,
+                "llm_plan_fallback_used": False,
             },
             "catalog_snapshot_id": legacy_plan.get("normalizer", {}).get("catalog_version"),
             "legacy_plan": legacy_plan,
@@ -57,6 +61,7 @@ def build_shadow_audit_entry(
         }
 
     comparison_results = compare_query_plans(legacy_plan, llm_plan, prompt_id=prompt_id)
+    llm_normalizer_name = str(llm_plan.get("normalizer", {}).get("name") or "")
     return {
         "prompt_id": prompt_id,
         "prompt": prompt,
@@ -66,6 +71,8 @@ def build_shadow_audit_entry(
             "feature_flag_enabled": shadow_enabled,
             "llm_plan_provider_attached": llm_plan_provider is not None,
             "llm_plan_requested": True,
+            "llm_plan_source": "legacy_fallback" if llm_normalizer_name == "legacy" else "llm",
+            "llm_plan_fallback_used": llm_normalizer_name == "legacy",
         },
         "catalog_snapshot_id": legacy_plan.get("normalizer", {}).get("catalog_version"),
         "legacy_plan": legacy_plan,

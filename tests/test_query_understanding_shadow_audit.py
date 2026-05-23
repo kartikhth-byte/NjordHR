@@ -81,6 +81,8 @@ class ShadowAuditTests(unittest.TestCase):
         self.assertTrue(entry["shadow_wiring"]["feature_flag_enabled"])
         self.assertTrue(entry["shadow_wiring"]["llm_plan_provider_attached"])
         self.assertTrue(entry["shadow_wiring"]["llm_plan_requested"])
+        self.assertTrue(entry["shadow_wiring"]["llm_plan_fallback_used"])
+        self.assertEqual(entry["shadow_wiring"]["llm_plan_source"], "legacy_fallback")
         self.assertIsInstance(entry["comparison_results"], list)
         self.assertEqual(entry["llm_plan"]["schema_version"], "query_plan.v1")
 
