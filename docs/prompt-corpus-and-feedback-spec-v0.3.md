@@ -44,9 +44,11 @@ This spec does not require:
 - model fine-tuning in production
 - full recruiter-selection tracking
 - override-rate ranking analytics
-- explicit product feedback flows such as "results too broad" or "missing filter"
+- explicit product feedback flows such as "results too broad" or "missing filter" for the minimum baseline corpus
 
-Those may be added later, but they are not part of this minimum spec.
+Those may be added later, but they are not part of this minimum baseline spec.
+
+Known limitation: this minimum baseline spec is not sufficient by itself for LLM-normalizer launch evidence because it under-samples confident-but-wrong results. Any LLM-normalizer rollout must add the supplemental rollout-evidence signals and bootstrap rules defined in [llm-query-normalizer-and-candidate-facts-spec-v0.1.md](/Users/kartikraghavan/Tools/NjordHR/docs/llm-query-normalizer-and-candidate-facts-spec-v0.1.md). Those supplemental signals are launch prerequisites for LLM-normalizer activation, not baseline prompt-corpus requirements.
 
 ---
 
@@ -69,6 +71,24 @@ Raw recruiter prompts may contain operationally sensitive details such as candid
 - retained prompts must not be treated as open-ended permanent data by default
 - if prompt exports are shared outside the implementation/review group, sensitive fields should be redacted where practical
 - the retention and access decision must be documented, even if only as a short note in the implementation commit or rollout checklist
+
+Default production policy unless explicitly overridden:
+
+- retain raw prompts for at most 90 days
+- retain normalized prompt classifications and aggregate counts longer only after raw prompt text is removed or redacted
+- restrict prompt exports to implementation/review users
+- redact candidate names, phone numbers, email addresses, passport numbers, visa numbers, and certificate numbers from exported prompt-corpus review files where practical
+- record export owner, export date, and covered date range for each prompt-corpus export
+- provide a deletion path for prompt/audit rows by tenant/account/date range
+
+Role-based access defaults:
+
+- `admin`: may approve tenant-scoped raw prompt access and exports
+- `operator`: may view own/tenant operational search history needed for workflow; no bulk raw-prompt export by default
+- `reviewer`: may view/export redacted prompt-corpus review packs for approved review windows
+- `debug_only`: time-boxed approved access with owner, reason, expiry, and audit log
+
+Raw prompt exports must be tracked in an export registry with owner, role, tenant/account, date range, fields included, redaction mode, expiry, and revocation/deletion status.
 
 ---
 
@@ -144,6 +164,24 @@ This feedback path is intentionally narrow: it only captures feedback on uncerta
 - sudden growth in `unapplied_constraints`
 - prompt patterns that produce unexpectedly low match counts after a parser change
 
+For LLM-normalizer rollout, this minimum feedback path must be supplemented with at least one of:
+
+- explicit result feedback: `wrong_match`, `missing_expected_candidate`, `too_broad`, `too_narrow`, `good_result`
+- sampled review of confident passes and deterministic failures
+- prompt-to-action linkage such as candidate opened, exported, contacted, shortlisted, or ignored from a search result set
+
+Without one of these supplemental signals, the corpus may be used for parser-gap discovery but not as sole evidence for normalizer activation.
+
+Feedback conflict policy:
+
+- Explicit human feedback on a specific search result has higher evidentiary weight than passive action signals.
+- Later explicit human feedback supersedes earlier passive signals for the same search-result item.
+- Passive action signals are weak positive/negative indicators, not ground truth labels.
+- Conflicting labels must not be collapsed into a single truth value; store all signals and derive a review status.
+- Recommended derived review statuses: `confirmed_good`, `confirmed_wrong`, `conflicting_signals`, `weak_positive`, `weak_negative`, `unreviewed`.
+- Any `conflicting_signals` item must be excluded from launch-success metrics until manually reviewed.
+- Search-level feedback such as `too_broad` or `missing_expected_candidate` applies to the query/session, not automatically to every result.
+
 ### 6.4 Optional coarse downstream linkage
 
 Where practical, link later candidate statuses to the same candidate:
@@ -182,6 +220,10 @@ The storage requirement is functional, not relational:
 
 Minimum tooling requirement:
 - the stored format must support grouping prompts by intent family and summarizing frequent unsupported patterns without manual spreadsheet-only cleanup
+- evaluation and rollout evidence must use `detected_layout` as the canonical source/layout stratum
+- intake analytics may use `source_origin` as the intake-channel axis
+- canonical search/audit rows used for evaluation must persist both `source_origin` and `detected_layout`
+- review exports that include source analysis must include both `source_origin` and `detected_layout`; missing values must be explicit `unknown`, not omitted
 
 Acceptable first implementations:
 - a Python review script that reads the CSV/SQLite exports and produces grouped summaries
@@ -243,6 +285,28 @@ These stored prompts are the source for the architecture spec's launch-gate samp
 
 If a family has not yet reached the 20-prompt threshold, parser changes for that family may still proceed only for narrowly scoped bug fixes that correct a confirmed misparse on a specific observed prompt. Broader pattern expansion or new coverage claims for that family must not be made from thinner data, and launch-gate coverage claims must not be made until the threshold is met.
 
+Rollout governance: cold-start exception:
+
+This section is release policy for parser/normalizer family activation. It is not part of the minimum baseline prompt-corpus storage contract.
+
+Rare or newly introduced families may use a labelled bootstrap corpus for shadow-mode validation before 20 real prompts exist. Bootstrap corpora must:
+
+- be marked `bootstrap_evidence`, not production corpus evidence
+- contain expected parser/normalizer outputs
+- include prompts supplied or reviewed by a domain owner when possible
+- be replaced or supplemented with real prompt logs as usage grows
+
+Production activation from bootstrap evidence is restricted:
+
+- bootstrap-only evidence may activate only shadow mode or an explicitly labelled beta family
+- beta activation requires product/developer signoff, at least 30 bootstrap prompts, expected parser/normalizer outputs for every prompt, and manual review of candidate outcomes on a representative resume sample
+- beta activation must show a UI/internal warning that the family is under validation unless the feature is hidden behind an internal flag
+- beta activation expires after 30 days or 100 uses, whichever comes first, unless at least 5 real prompts have been collected and reviewed
+- mature production activation still requires the real-prompt threshold unless a written exception documents why the family is rare, business-critical, and covered by alternative evidence
+- exceptions must include a scheduled review date and an owner
+
+The phrase "when feasible" is intentionally not used here: real-prompt replacement is required for maturity, and bootstrap evidence alone must not become permanent launch evidence.
+
 ### 8.3 Expected outputs from review
 
 Examples:
@@ -276,6 +340,8 @@ Keep the metrics simple and achievable.
 
 Recommended review metrics:
 - prompt frequency by intent family
+- prompt/result frequency by `detected_layout` for extraction/evaluation analysis
+- prompt/result frequency by `source_origin` for intake-channel analysis
 - unsupported prompt frequency
 - ambiguous prompt frequency
 - uncertain-match frequency

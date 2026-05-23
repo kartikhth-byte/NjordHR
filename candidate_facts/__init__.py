@@ -1,0 +1,2 @@
+"""Candidate-facts foundation package."""
+

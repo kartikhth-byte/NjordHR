@@ -255,6 +255,21 @@ Setup Wizard installer URL overrides (optional):
 - `NJORDHR_WINDOWS_FULL_INSTALLER_URL`
 - `NJORDHR_WINDOWS_AGENT_INSTALLER_URL`
 
+## AI Search Query-Understanding Review Pack
+Use this when you want one local artifact that combines the bootstrap corpus eval, stored prompt-corpus review, and disabled shadow-audit output:
+
+```bash
+python3 scripts/query_understanding_review_pack.py
+```
+
+Output:
+- `AI_Search_Results/query_understanding_review_pack_current.json`
+
+Related helper scripts:
+- `scripts/bootstrap_prompt_corpus_eval.py`
+- `scripts/prompt_corpus_review_report.py`
+- `scripts/query_understanding_shadow_audit.py`
+
 ## Supabase Migrations (Scaffold)
 - SQL migrations are under:
   - `supabase/migrations/001_initial_schema.sql`
