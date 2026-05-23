@@ -93,6 +93,29 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
         validated = normalize_query_plan_v1(plan)
         self.assertEqual(validated["validation"]["status"], "valid")
 
+    def test_passport_validity_boolean_form_is_valid(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "passport_validity",
+                "mode": "required",
+                "constraint": {
+                    "type": "passport_validity",
+                    "must_be_valid": True,
+                    "minimum_months_remaining": None,
+                },
+                "source_text": "valid passport",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "passport_validity",
+                    "legacy_applied_constraint_id": "passport_validity",
+                },
+            }
+        ]
+        validated = normalize_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "valid")
+        self.assertTrue(validated["applied_constraints"][0]["constraint"]["must_be_valid"])
+
     def test_negated_requirement_phrase_is_not_mandatory(self):
         cases = [
             "passport not required for leadership",

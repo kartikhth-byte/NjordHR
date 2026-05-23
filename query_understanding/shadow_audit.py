@@ -10,6 +10,18 @@ from .normalizer_compare import compare_query_plans, canonical_comparison_record
 from .llm_normalizer import is_enabled, maybe_build_shadow_query_plan
 
 
+def _unwrap_shadow_llm_result(result: Any) -> tuple[Mapping[str, Any] | None, Dict[str, Any]]:
+    if isinstance(result, Mapping) and "plan" in result and "diagnostics" in result:
+        plan = result.get("plan")
+        diagnostics = result.get("diagnostics")
+        if not isinstance(diagnostics, Mapping):
+            diagnostics = {}
+        return (plan if isinstance(plan, Mapping) else None), dict(diagnostics)
+    if isinstance(result, Mapping):
+        return result, {}
+    return None, {}
+
+
 def build_shadow_audit_entry(
     analyzer: Any,
     prompt: str,
@@ -26,9 +38,10 @@ def build_shadow_audit_entry(
     legacy_records = [asdict(record) for record in canonical_comparison_records(legacy_plan, prompt_id=prompt_id)]
     shadow_enabled = is_enabled()
     llm_plan_source = "disabled"
+    shadow_llm_diagnostics: Dict[str, Any] = {}
 
     if llm_plan is None and shadow_enabled and llm_plan_provider is not None:
-        llm_plan = maybe_build_shadow_query_plan(
+        llm_plan_result = maybe_build_shadow_query_plan(
             llm_plan_provider,
             analyzer=analyzer,
             prompt=prompt,
@@ -36,6 +49,7 @@ def build_shadow_audit_entry(
             prompt_id=prompt_id,
             legacy_plan=legacy_plan,
         )
+        llm_plan, shadow_llm_diagnostics = _unwrap_shadow_llm_result(llm_plan_result)
 
     if llm_plan is None or not shadow_enabled:
         llm_plan_source = "disabled"
@@ -50,7 +64,9 @@ def build_shadow_audit_entry(
                 "llm_plan_requested": shadow_enabled and llm_plan_provider is not None,
                 "llm_plan_source": llm_plan_source,
                 "llm_plan_fallback_used": False,
+                "failure_reason": shadow_llm_diagnostics.get("reason"),
             },
+            "shadow_llm_diagnostics": shadow_llm_diagnostics,
             "catalog_snapshot_id": legacy_plan.get("normalizer", {}).get("catalog_version"),
             "legacy_plan": legacy_plan,
             "legacy_comparison_records": legacy_records,
@@ -73,7 +89,9 @@ def build_shadow_audit_entry(
             "llm_plan_requested": True,
             "llm_plan_source": "legacy_fallback" if llm_normalizer_name == "legacy" else "llm",
             "llm_plan_fallback_used": llm_normalizer_name == "legacy",
+            "failure_reason": shadow_llm_diagnostics.get("reason"),
         },
+        "shadow_llm_diagnostics": shadow_llm_diagnostics,
         "catalog_snapshot_id": legacy_plan.get("normalizer", {}).get("catalog_version"),
         "legacy_plan": legacy_plan,
         "legacy_comparison_records": legacy_records,

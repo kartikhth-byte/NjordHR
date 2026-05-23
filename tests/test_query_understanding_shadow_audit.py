@@ -67,7 +67,7 @@ class ShadowAuditTests(unittest.TestCase):
         self.assertEqual(entry["legacy_comparison_records"][0]["family"], "age_range")
 
     def test_shadow_provider_is_only_invoked_when_feature_flag_is_enabled(self):
-        provider = mock.Mock(side_effect=lambda **kwargs: kwargs["legacy_plan"])
+        provider = mock.Mock(side_effect=lambda **kwargs: {"plan": kwargs["legacy_plan"], "diagnostics": {"status": "fallback", "reason": "test"}})
         with mock.patch.dict(os.environ, {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
             entry = build_shadow_audit_entry(
                 self.analyzer,
@@ -83,6 +83,8 @@ class ShadowAuditTests(unittest.TestCase):
         self.assertTrue(entry["shadow_wiring"]["llm_plan_requested"])
         self.assertTrue(entry["shadow_wiring"]["llm_plan_fallback_used"])
         self.assertEqual(entry["shadow_wiring"]["llm_plan_source"], "legacy_fallback")
+        self.assertEqual(entry["shadow_wiring"]["failure_reason"], "test")
+        self.assertEqual(entry["shadow_llm_diagnostics"]["reason"], "test")
         self.assertIsInstance(entry["comparison_results"], list)
         self.assertEqual(entry["llm_plan"]["schema_version"], "query_plan.v1")
 

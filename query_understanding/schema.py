@@ -358,12 +358,16 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
     if family_id == "passport_validity":
         if payload.get("type") != "passport_validity":
             errors.append(_error("invalid_payload_type", "constraint.type", "type must be passport_validity"))
+        must_be_valid = payload.get("must_be_valid")
+        if must_be_valid is not True:
+            errors.append(_error("invalid_required", "constraint.must_be_valid", "must_be_valid must be true"))
         months = payload.get("minimum_months_remaining")
-        if not _is_int(months):
-            errors.append(_error("invalid_months", "constraint.minimum_months_remaining", "minimum_months_remaining must be an integer"))
-        elif months <= 0:
-            errors.append(_error("invalid_months", "constraint.minimum_months_remaining", "minimum_months_remaining must be positive"))
-        return {"type": "passport_validity", "minimum_months_remaining": months}, errors
+        if months is not None:
+            if not _is_int(months):
+                errors.append(_error("invalid_months", "constraint.minimum_months_remaining", "minimum_months_remaining must be an integer or null"))
+            elif months <= 0:
+                errors.append(_error("invalid_months", "constraint.minimum_months_remaining", "minimum_months_remaining must be positive"))
+        return {"type": "passport_validity", "must_be_valid": True, "minimum_months_remaining": months}, errors
 
     if family_id == "recent_contract_vessel_experience":
         if payload.get("type") != "recent_contract_vessel_experience":

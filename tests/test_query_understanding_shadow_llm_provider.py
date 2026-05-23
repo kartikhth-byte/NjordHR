@@ -103,15 +103,8 @@ class ShadowLLMProviderTests(unittest.TestCase):
             },
             "applied_constraints": [
                 {
-                    "id": "passport_validity",
-                    "mode": "required",
-                    "constraint": {"type": "passport_validity", "minimum_months_remaining": 6},
-                    "source_text": "valid passport",
-                    "confidence": "high",
-                    "compatibility": {
-                        "legacy_hard_constraints_key": "passport_validity",
-                        "legacy_applied_constraint_id": "passport_validity",
-                    },
+                    "filter_family": "passport_validity",
+                    "parameters": {"is_valid": True, "minimum_months_remaining": 6},
                 }
             ],
             "unapplied_constraints": [],
@@ -125,7 +118,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
             with mock.patch("query_understanding.shadow_llm_provider.requests.post", return_value=_DummyResponse(
                 {"candidates": [{"content": {"parts": [{"text": json.dumps(plan_payload)}]}}]}
             )) as post_mock:
-                plan = build_shadow_llm_query_plan(
+                result = build_shadow_llm_query_plan(
                     self.analyzer,
                     prompt="2nd engineer with valid passport and strong leadership",
                     rank="2nd Engineer",
@@ -133,10 +126,15 @@ class ShadowLLMProviderTests(unittest.TestCase):
                     legacy_plan=self.legacy_plan,
                 )
 
-        self.assertIsNotNone(plan)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        self.assertEqual(result["diagnostics"]["reason"], "ok")
+        plan = result["plan"]
         self.assertEqual(plan["normalizer"]["name"], "llm")
         self.assertEqual(plan["normalizer"]["model"], "gemini-test-model")
         self.assertEqual(plan["semantic_query"], "strong leadership")
+        self.assertTrue(plan["applied_constraints"][0]["constraint"]["must_be_valid"])
+        self.assertEqual(plan["applied_constraints"][0]["constraint"]["minimum_months_remaining"], 6)
         post_mock.assert_called_once()
         called_url = post_mock.call_args.args[0]
         self.assertIn("gemini-test-model", called_url)
@@ -147,7 +145,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
             with mock.patch("query_understanding.shadow_llm_provider.requests.post", return_value=_DummyResponse(
                 {"candidates": [{"content": {"parts": [{"text": "not json"}]}}]}
             )):
-                plan = build_shadow_llm_query_plan(
+                result = build_shadow_llm_query_plan(
                     self.analyzer,
                     prompt="2nd engineer with valid passport and strong leadership",
                     rank="2nd Engineer",
@@ -155,8 +153,10 @@ class ShadowLLMProviderTests(unittest.TestCase):
                     legacy_plan=self.legacy_plan,
                 )
 
-        self.assertEqual(plan["normalizer"]["name"], "legacy")
-        self.assertEqual(plan["semantic_query"], self.legacy_plan["semantic_query"])
+        self.assertEqual(result["diagnostics"]["status"], "fallback")
+        self.assertEqual(result["diagnostics"]["reason"], "invalid_model_json")
+        self.assertEqual(result["plan"]["normalizer"]["name"], "legacy")
+        self.assertEqual(result["plan"]["semantic_query"], self.legacy_plan["semantic_query"])
 
 
 if __name__ == "__main__":

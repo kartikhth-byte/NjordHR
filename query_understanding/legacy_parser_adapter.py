@@ -266,6 +266,7 @@ class LegacyParserAdapter:
                 "passport_validity",
                 {
                     "type": "passport_validity",
+                    "must_be_valid": True,
                     "minimum_months_remaining": passport.get("minimum_months_remaining"),
                 },
                 passport.get("display_value") or user_prompt,
