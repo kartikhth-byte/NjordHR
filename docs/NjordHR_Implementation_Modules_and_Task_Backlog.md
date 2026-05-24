@@ -27,7 +27,9 @@
   - `USE_CLOUD_EXPORT`
 - `M0-T3` Create branch/PR template with required checks.
 - `M0-T4` Create test matrix and smoke checklist baseline.
+  - Deliverable: [NjordHR_M0_Test_Matrix_and_Smoke_Checklist.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_M0_Test_Matrix_and_Smoke_Checklist.md)
 - `M0-T5` Define rollback playbook per module.
+  - Deliverable: [NjordHR_Module_Rollback_Playbook.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_Module_Rollback_Playbook.md)
 
 ### Exit criteria
 - Rules published and agreed.

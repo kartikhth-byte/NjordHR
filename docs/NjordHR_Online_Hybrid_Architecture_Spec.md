@@ -26,7 +26,8 @@ This spec covers:
 - No behavior regression:
   - Local download-to-folder must remain functional during every migration phase.
 - Strict boundary:
-  - Scraping and filesystem writes are local-agent only.
+  - Target state: scraping and filesystem writes are local-agent only.
+  - Migration state: until `USE_LOCAL_AGENT=true`, the existing local-process download/session path remains the approved behavior for user-visible workflows.
   - Cloud services must never write directly to user local folders.
 - Data access discipline:
   - New features must use repository/service abstractions, not direct CSV/SQLite access.
@@ -49,6 +50,37 @@ This spec covers:
   - Auto-update must verify signature and checksum before apply.
 - Controlled rollout:
   - All major changes must be behind feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, etc.) with staged enablement.
+
+### Phase naming
+- `M0` through `M6` in this hybrid spec are migration modules.
+- In the migration plan below, `Phase 0` through `Phase 6` refer to the same hybrid migration modules as `M0` through `M6`.
+- `Phase 1` / `Phase 2` / `Phase 3` in the candidate-intelligence spec refer to the AI-search rollout and are a separate numbering system.
+- When writing PRs, rollout notes, or smoke steps, label the module or spec explicitly to avoid ambiguity.
+
+### Feature flags
+- `USE_SUPABASE_DB`
+  - Default: `false`
+  - Scope: repository selection for shared dashboard/history/status data.
+  - Behavior:
+    - `false` keeps CSV/SQLite-backed read and write paths active.
+    - `true` enables Supabase-backed repositories for the flagged surfaces.
+  - Safety rule: reads may switch only after dual-write parity and smoke tests pass for the relevant slice.
+
+- `USE_LOCAL_AGENT`
+  - Default: `false`
+  - Scope: routing of scraper/session/download actions to the local agent runtime.
+  - Behavior:
+    - `false` keeps existing monolith/local-process handling in place.
+    - `true` routes supported session and download calls through the local agent API.
+  - Safety rule: the local folder download workflow must remain functional while the flag is off, and fallback behavior must be documented before enabling.
+
+- `USE_CLOUD_EXPORT`
+  - Default: `false`
+  - Scope: export generation and cloud object storage usage for resume artifacts.
+  - Behavior:
+    - `false` keeps export generation local and metadata-only where necessary.
+    - `true` enables cloud-backed export inputs when object storage coverage is sufficient.
+  - Safety rule: no export path may require cloud object availability until the upload/backfill plan is verified.
 
 ## 4. Current State (Code Reality)
 - Local scraper session in memory:

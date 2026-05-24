@@ -60,6 +60,37 @@ Do not remove query-time raw-text fallback early. Extraction correctness is not 
 
 The tests, prompt-corpus thresholds, sampled resume checks, migration observability, partial-evaluation notices, and rollback discipline are part of the implementation itself. Skipping them turns a staged rollout into an uncontrolled behavior change.
 
+## 0.8 Implementation Rules
+
+These rules apply to every implementation task in this spec, including Phase 1 work and any later hardening pass.
+
+### 0.8.1 Change boundaries
+
+- Keep Phase 1 changes behind the documented launch gates and feature flags.
+- Do not widen search, filter, or extraction behavior beyond the prompt corpus and explicit schema contracts in this document.
+- Do not move Phase 2 or Phase 3 concepts into Phase 1 code paths, tests, or reviewer-facing output.
+
+### 0.8.2 Safety and correctness
+
+- Treat deterministic hard-filter behavior as the source of truth for Phase 1 eligibility decisions.
+- Use `UNKNOWN` rather than guessing when evidence is incomplete or ambiguous.
+- Never use cached `derived.age_years` as a hard-filter input.
+- Preserve raw-text fallback until Phase 3 removes the need for it.
+- Keep schema evolution additive; do not rename or move existing CandidateFacts fields without a major-version migration plan.
+
+### 0.8.3 Parsing and corpus discipline
+
+- Derive supported prompt patterns from the real prompt corpus and review-pack evidence.
+- Emit unsupported structured content as `unapplied_constraints`; do not silently drop it.
+- Do not introduce fuzzy rank matching in Phase 1.
+- Keep unsupported or partial extractions explicit in logs, review artifacts, and tests.
+
+### 0.8.4 Rollout discipline
+
+- Every implementation task must include tests.
+- Any phase-gated behavior change must have a rollback path and observability notes.
+- Review-pack and prompt-corpus artifacts are part of the implementation record, not optional documentation.
+
 ---
 
 ## Table of Contents

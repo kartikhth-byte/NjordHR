@@ -2,21 +2,41 @@
 
 - What changed:
 - Why:
+- Related spec:
+- Feature flags touched:
 
 ## Scope Check
 
 - [ ] This PR is within the active implementation phase
-- [ ] Phase 2/3 items were not pulled into a Phase 1 change set
-- [ ] Existing age behavior is unchanged
-- [ ] Existing US visa behavior is unchanged
+- [ ] Candidate-intelligence Phase 2/3 items were not pulled into a Phase 1 change set
+- [ ] Existing search behavior was not changed outside the stated scope
+- [ ] Production routing was not changed outside the stated scope
+- [ ] No direct CSV/SQLite access was added where a repository/service abstraction was required
+- [ ] No local-folder writes were added outside the local-agent boundary
+- [ ] Feature flag behavior was reviewed for the touched paths
+
+## Feature Flags
+
+- [ ] `USE_SUPABASE_DB` reviewed
+- [ ] `USE_LOCAL_AGENT` reviewed
+- [ ] `USE_CLOUD_EXPORT` reviewed
+- [ ] Flag defaults documented in the relevant spec
+- [ ] Rollout / rollback behavior reviewed
 
 ## Required Checks
 
-- [ ] `python3 -m unittest -v /Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_dob_parsing.py /Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_age_filters.py /Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_visa_filters.py`
-- [ ] If evaluation path changed: reran validated baseline corpus
-- [ ] If new extractor added: dedicated test coverage added
-- [ ] If new rule activated: `applied_constraints` activation behavior verified
-- [ ] If dual-version path touched: partial-evaluation fallback behavior verified
+- [ ] `python3 -m unittest` targeted tests listed below
+- [ ] If evaluation / filter path changed: reran validated baseline corpus
+- [ ] If a new extractor or adapter was added: dedicated test coverage added
+- [ ] If a new rule was activated: `applied_constraints` activation behavior verified
+- [ ] If dual-version / replay path was touched: fallback and pinned replay behavior verified
+- [ ] If candidate-facts flow changed: replay audit metadata verified
+
+## Targeted Tests
+
+- List the exact commands you ran here.
+- Include any focused unit tests, corpus checks, or smoke checks relevant to the PR.
+- If no tests were needed, explain why in the PR description.
 
 ## Validated Baseline
 
@@ -31,13 +51,22 @@
 
 ## Risks
 
-- [ ] No change to `_extract_dob_fact_from_text` or `_extract_stated_age_fact_from_text`
-- [ ] If those methods changed, the change was isolated in a dedicated commit with regression proof
+- [ ] No hidden coupling to production search routing
+- [ ] If a replay or persistence helper changed, identity selection was verified
+- [ ] If a schema changed, validation and migration impact were reviewed
 - [ ] Rollback steps reviewed
+
+## Review Artifacts
+
+- [ ] Review pack regenerated if query-understanding or candidate-facts review artifacts changed
+- [ ] Shadow-audit artifact regenerated if relevant
+- [ ] Output JSON inspected for stale placeholders or demo data
 
 ## Notes
 
 - Spec reference: [candidate-intelligence-architecture-v3.4.md](/Users/kartikraghavan/Tools/NjordHR/docs/candidate-intelligence-architecture-v3.4.md)
+- Hybrid spec: [NjordHR_Online_Hybrid_Architecture_Spec.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_Online_Hybrid_Architecture_Spec.md)
+- Backlog: [NjordHR_Implementation_Modules_and_Task_Backlog.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_Implementation_Modules_and_Task_Backlog.md)
 - Prep checklist: [ai-search-v3.4-phase1-prep-checklist.md](/Users/kartikraghavan/Tools/NjordHR/docs/ai-search-v3.4-phase1-prep-checklist.md)
-- Smoke matrix: [ai-search-v3.4-smoke-matrix.md](/Users/kartikraghavan/Tools/NjordHR/docs/ai-search-v3.4-smoke-matrix.md)
-- Rollback playbook: [ai-search-v3.4-rollback-playbook.md](/Users/kartikraghavan/Tools/NjordHR/docs/ai-search-v3.4-rollback-playbook.md)
+- M0 smoke checklist: [NjordHR_M0_Test_Matrix_and_Smoke_Checklist.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_M0_Test_Matrix_and_Smoke_Checklist.md)
+- M0 rollback playbook: [NjordHR_Module_Rollback_Playbook.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_Module_Rollback_Playbook.md)
