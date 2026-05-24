@@ -33,6 +33,7 @@ def _stub_ai_dependencies():
 _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer  # noqa: E402
 
+from scripts.query_understanding_review_pack import _build_candidate_facts_replay  # noqa: E402
 from query_understanding.shadow_audit import build_shadow_audit_rows
 
 
@@ -50,6 +51,21 @@ class QueryUnderstandingReviewPackTests(unittest.TestCase):
         self.assertEqual(rows[0]["shadow_mode"], "disabled")
         self.assertIn("age_range", {record["family"] for record in rows[0]["legacy_comparison_records"]})
         self.assertIn("us_visa", {record["family"] for record in rows[1]["legacy_comparison_records"]})
+
+    def test_review_pack_candidate_facts_replay_uses_repository_adapter(self):
+        candidate_facts_replay = _build_candidate_facts_replay()
+        self.assertIn("candidate_facts", candidate_facts_replay)
+        self.assertIn("persist", candidate_facts_replay)
+        self.assertIn("replay", candidate_facts_replay)
+        self.assertIn("audit", candidate_facts_replay)
+        self.assertEqual(candidate_facts_replay["candidate_facts"]["validation"]["status"], "valid")
+        self.assertEqual(candidate_facts_replay["persist"]["committed"], True)
+        self.assertEqual(candidate_facts_replay["replay"]["status"], "resolved")
+        self.assertEqual(candidate_facts_replay["audit"]["selection_status"], "resolved")
+        self.assertEqual(
+            candidate_facts_replay["audit"]["pinned_facts_identity"]["candidate_resume_id"],
+            "candidate-resume-1",
+        )
 
 
 if __name__ == "__main__":

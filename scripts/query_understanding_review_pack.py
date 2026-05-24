@@ -22,6 +22,7 @@ from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS
 from query_understanding.shadow_audit import build_shadow_audit_rows
 from query_understanding.llm_normalizer import is_enabled
 from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
+from candidate_facts.repository import CandidateFactsRepository
 from scripts.bootstrap_prompt_corpus_eval import _evaluate_corpus as evaluate_bootstrap_corpus
 from scripts.prompt_corpus_review_report import _build_report as build_prompt_corpus_report, _load_rows as load_audit_rows
 
@@ -34,6 +35,49 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "AI_Search_Results" / "query_understanding_revie
 class _RegistryStub:
     def generate_resume_id(self, file_path):
         return Path(file_path).stem
+
+
+class _CandidateFactsDemoAnalyzer:
+    def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
+        return {
+            "candidate_id": filename,
+            "identity": {"full_name": "Jane Doe"},
+            "role": {"applied_rank_normalized": "2nd_engineer"},
+            "personal": {"dob": "1988-02-03"},
+            "certifications": {
+                "coc": {"grade": "chief_officer", "expiry_date": "2028-01-01", "status": "VALID"},
+                "stcw_basic_all_valid": True,
+                "endorsements": {"tanker_gas": "advanced"},
+            },
+            "logistics": {
+                "passport_expiry_date": "2029-01-01",
+                "passport_valid": True,
+                "us_visa_status": "VALID",
+                "us_visa_expiry_date": "2028-06-01",
+            },
+            "experience": {
+                "service_rows": [
+                    {
+                        "rank_normalized": "2nd_engineer",
+                        "vessel_name": "MV Aurora",
+                        "months_total": 60,
+                    }
+                ],
+                "rank_duration_rows": [
+                    {
+                        "rank_normalized": "2nd_engineer",
+                        "months_total": 60,
+                    }
+                ],
+            },
+            "application": {"applied_ship_types": ["tanker"]},
+            "derived": {
+                "age_years": 37,
+                "current_rank_months_total": 60,
+                "same_company_contract_count_max": 2,
+                "has_contract_gap_over_6_months": False,
+            },
+        }
 
 
 def _build_analyzer():
@@ -69,6 +113,27 @@ def _build_shadow_audit(corpus: dict):
         prompts,
         expected_delta_families=UNAPPLIED_FAMILY_IDS,
         llm_plan_provider=build_shadow_llm_query_plan,
+        candidate_resume_facts_row=None,
+        candidate_resume_facts_resolution=None,
+    )
+
+
+def _build_candidate_facts_replay():
+    repo = CandidateFactsRepository()
+    return repo.build_persist_replay_audit(
+        _CandidateFactsDemoAnalyzer(),
+        "resume-1",
+        "2nd Engineer",
+        [],
+        candidate_resume_id="candidate-resume-1",
+        resume_blob_id="blob-1",
+        parser_version="legacy_bridge.v1",
+        facts_revision="rev-1",
+        original_path="resume.pdf",
+        text_cache={"resume.pdf": "Jane Doe 2nd engineer resume"},
+        folder_metadata={},
+        source_origin="seajobs_download",
+        detected_layout="seajobs",
     )
 
 
@@ -102,6 +167,7 @@ def main():
         }
 
     shadow_audit_rows = _build_shadow_audit(bootstrap_corpus)
+    candidate_facts_replay = _build_candidate_facts_replay()
     pack = {
         "success": True,
         "bootstrap_corpus_path": str(bootstrap_path),
@@ -113,6 +179,7 @@ def main():
             "row_count": len(shadow_audit_rows),
             "rows": shadow_audit_rows,
         },
+        "candidate_facts_replay": candidate_facts_replay,
         "recommendation": (
             "Code review is a good next step once this pack is generated and the tests below stay green."
         ),

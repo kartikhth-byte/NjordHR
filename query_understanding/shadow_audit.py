@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Dict, Iterable, List, Mapping
 
+from candidate_facts.audit import build_candidate_resume_facts_audit_metadata
 from .legacy_parser_adapter import LegacyParserAdapter
 from .normalizer_compare import compare_query_plans, canonical_comparison_records
 from .llm_normalizer import is_enabled, maybe_build_shadow_query_plan
@@ -31,12 +32,18 @@ def build_shadow_audit_entry(
     expected_delta_families: Iterable[str] | None = None,
     llm_plan: Mapping[str, Any] | None = None,
     llm_plan_provider: Any | None = None,
+    candidate_resume_facts_row: Mapping[str, Any] | None = None,
+    candidate_resume_facts_resolution: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Build a shadow audit record without altering production flow."""
 
     adapter = LegacyParserAdapter(analyzer)
     legacy_plan = adapter.adapt(prompt, rank=rank, prompt_template_version="legacy.parser.v1", prompt_id=prompt_id)
     legacy_records = [asdict(record) for record in canonical_comparison_records(legacy_plan, prompt_id=prompt_id)]
+    candidate_facts_audit = build_candidate_resume_facts_audit_metadata(
+        candidate_resume_facts_row,
+        resolution=candidate_resume_facts_resolution,
+    )
     shadow_enabled = is_enabled()
     llm_plan_source = "disabled"
     shadow_llm_diagnostics: Dict[str, Any] = {}
@@ -75,6 +82,7 @@ def build_shadow_audit_entry(
             "comparison_results": [],
             "comparison_outcomes": [],
             "validation_status": legacy_plan.get("validation", {}).get("status"),
+            "candidate_facts_audit": candidate_facts_audit,
         }
 
     comparison_results = compare_query_plans(
@@ -105,6 +113,7 @@ def build_shadow_audit_entry(
         "comparison_results": [asdict(result) for result in comparison_results],
         "comparison_outcomes": [result.comparison_outcome for result in comparison_results],
         "validation_status": legacy_plan.get("validation", {}).get("status"),
+        "candidate_facts_audit": candidate_facts_audit,
     }
 
 
@@ -115,6 +124,8 @@ def build_shadow_audit_rows(
     rank: str | None = None,
     expected_delta_families: Iterable[str] | None = None,
     llm_plan_provider: Any | None = None,
+    candidate_resume_facts_row: Mapping[str, Any] | None = None,
+    candidate_resume_facts_resolution: Mapping[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for index, entry in enumerate(prompts, start=1):
@@ -129,6 +140,8 @@ def build_shadow_audit_rows(
                 expected_delta_families=expected_delta_families,
                 llm_plan=None,
                 llm_plan_provider=llm_plan_provider,
+                candidate_resume_facts_row=candidate_resume_facts_row,
+                candidate_resume_facts_resolution=candidate_resume_facts_resolution,
             )
         )
     return rows
