@@ -300,6 +300,7 @@
             const [adminSessionPassword, setAdminSessionPassword] = useState('');
             const [isSettingsLoading, setIsSettingsLoading] = useState(false);
             const [isSettingsSaving, setIsSettingsSaving] = useState(false);
+            const [settingsSaveNotice, setSettingsSaveNotice] = useState(null);
             const [settingsLoaded, setSettingsLoaded] = useState(false);
             const [settingsSection, setSettingsSection] = useState('runtime');
             const [usageLogs, setUsageLogs] = useState([]);
@@ -1540,6 +1541,58 @@
                 };
             })();
 
+            const syncStateSummary = (() => {
+                const agent = runtimeConfig?.local_agent || {};
+                const health = agent.health || {};
+                const lastResumeUpload = agent.last_resume_upload || health.sync?.last_resume_upload || null;
+                const pending = Number(health.sync?.pending ?? 0);
+                const enabled = Boolean(runtimeConfig?.feature_flags?.use_local_agent);
+                const reachable = Boolean(agent.reachable);
+                const uploadStatus = String(lastResumeUpload?.upload_status || '').trim().toLowerCase();
+
+                if (!enabled) {
+                    return {
+                        label: 'Local only',
+                        tone: 'slate',
+                        detail: 'Cloud-only mode is active, so local sync is disabled.',
+                    };
+                }
+
+                if (!reachable) {
+                    return {
+                        label: localAgentSummary.waitingToStart ? 'Sync pending' : 'Sync failed',
+                        tone: localAgentSummary.waitingToStart ? 'amber' : 'red',
+                        detail: localAgentSummary.waitingToStart
+                            ? 'The local agent is booting. Sync will resume once it is reachable.'
+                            : (localAgentSummary.reason || 'The local agent is unavailable.'),
+                    };
+                }
+
+                if (pending > 0) {
+                    return {
+                        label: 'Sync pending',
+                        tone: 'amber',
+                        detail: `${pending} item(s) waiting to sync.`,
+                    };
+                }
+
+                if (uploadStatus === 'failed') {
+                    return {
+                        label: 'Sync failed',
+                        tone: 'red',
+                        detail: lastResumeUpload?.message || 'The last resume upload failed.',
+                    };
+                }
+
+                return {
+                    label: 'Synced',
+                    tone: 'green',
+                    detail: lastResumeUpload
+                        ? `Last resume upload: ${formatResumeUploadStatus(lastResumeUpload)}`
+                        : 'All sync items are up to date.',
+                };
+            })();
+
             const handleRefreshLocalAgentStatus = () => fetchRuntimeConfig(true);
             const handleOpenDesktopLogs = async () => {
                 if (!window.NjordDesktop?.openLogs) return;
@@ -1911,9 +1964,21 @@
                         : '';
                     const toastType = warningText ? 'warning' : 'success';
                     handleSendMessage(toastType, `${data.message || 'Settings saved'}${warningText}`);
+                    setSettingsSaveNotice({
+                        type: toastType,
+                        title: warningText ? 'Settings saved with warnings' : 'Settings saved',
+                        message: data.message || 'Settings saved',
+                        warnings: Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [],
+                    });
                     setSettingsLoaded(false);
                     await loadAdminSettings();
                 } catch (error) {
+                    setSettingsSaveNotice({
+                        type: 'error',
+                        title: 'Settings save failed',
+                        message: 'Failed to save settings',
+                        warnings: [error?.message || 'The backend rejected the settings save.'],
+                    });
                     handleSendMessage('error', 'Failed to save settings');
                 } finally {
                     setIsSettingsSaving(false);
@@ -4211,10 +4276,32 @@
                                             setShowGeneratedAdminPassword(false);
                                         }}
                                         className="text-sm text-green-800 hover:underline"
-                                    >
+                                        >
                                         Switch Admin
                                     </button>
                                 </div>
+
+                                {settingsSaveNotice && (
+                                    <div
+                                        className={`rounded-lg border px-4 py-3 text-sm ${
+                                            settingsSaveNotice.type === 'success'
+                                                ? 'border-green-200 bg-green-50 text-green-900'
+                                                : settingsSaveNotice.type === 'warning'
+                                                    ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                    : 'border-red-200 bg-red-50 text-red-900'
+                                        }`}
+                                    >
+                                        <p className="font-semibold">{settingsSaveNotice.title}</p>
+                                        <p className="mt-1">{settingsSaveNotice.message}</p>
+                                        {Array.isArray(settingsSaveNotice.warnings) && settingsSaveNotice.warnings.length > 0 && (
+                                            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                                                {settingsSaveNotice.warnings.map((warning, idx) => (
+                                                    <li key={`${warning}-${idx}`}>{warning}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="flex flex-wrap gap-2">
                                     <button className={sectionButtonClass('runtime')} onClick={() => setSettingsSection('runtime')}>Runtime Flags</button>
@@ -4294,6 +4381,24 @@
                                                             </div>
                                                         );
                                                     })()}
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-[11px] uppercase tracking-wide text-gray-500">Sync state</span>
+                                                        <span
+                                                            className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${
+                                                                syncStateSummary.tone === 'green'
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                    : syncStateSummary.tone === 'amber'
+                                                                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                        : syncStateSummary.tone === 'red'
+                                                                            ? 'bg-red-50 text-red-700 border-red-200'
+                                                                            : 'bg-slate-50 text-slate-700 border-slate-200'
+                                                            }`}
+                                                            title={syncStateSummary.detail}
+                                                        >
+                                                            {syncStateSummary.label}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">{syncStateSummary.detail}</span>
+                                                    </div>
                                                     <p>
                                                         <span className="font-medium">Mode:</span>{" "}
                                                         {runtimeConfig.feature_flags?.use_local_agent ? "Cloud + Local Agent" : "Cloud only"}
@@ -4314,7 +4419,17 @@
                                                             </p>
                                                             <p>
                                                                 <span className="font-medium">Items waiting to sync:</span>{" "}
-                                                                {runtimeConfig.local_agent.health.sync?.pending ?? "-"}
+                                                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                                                                    syncStateSummary.tone === 'green'
+                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                        : syncStateSummary.tone === 'amber'
+                                                                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                            : syncStateSummary.tone === 'red'
+                                                                                ? 'bg-red-50 text-red-700 border-red-200'
+                                                                                : 'bg-slate-50 text-slate-700 border-slate-200'
+                                                                }`}>
+                                                                    {runtimeConfig.local_agent.health.sync?.pending ?? "-"}
+                                                                </span>
                                                             </p>
                                                             <p className="text-[11px] text-gray-600">
                                                                 This is sync queue count (events/logs and optional uploads), not direct resume count.
@@ -4349,6 +4464,9 @@
                                         <h3 className="font-semibold text-gray-900">Operational Settings</h3>
                                         <p className="text-xs text-gray-600">
                                             Cloud mode is active. Local folder paths are hidden from this UI.
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            Mailbox fields sync to the local agent separately. Download folder changes are applied after Save & Apply, and any follow-up warning is shown inline above.
                                         </p>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
@@ -5029,6 +5147,21 @@
                                     aria-label={runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud plus local agent mode' : 'Cloud only mode'}
                                 >
                                     {runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only'}
+                                </span>
+                                <span
+                                    className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
+                                        syncStateSummary.tone === 'green'
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            : syncStateSummary.tone === 'amber'
+                                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                : syncStateSummary.tone === 'red'
+                                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                                    : 'bg-slate-50 text-slate-700 border-slate-200'
+                                    }`}
+                                    aria-label={`Sync state: ${syncStateSummary.label}. ${syncStateSummary.detail}`}
+                                    title={syncStateSummary.detail}
+                                >
+                                    {syncStateSummary.label}
                                 </span>
                                 {localAgentSummary.enabled && (
                                     <span
