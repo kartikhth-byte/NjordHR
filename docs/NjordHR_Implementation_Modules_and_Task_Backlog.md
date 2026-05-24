@@ -10,7 +10,7 @@
 - `M1` Cloud foundation (Supabase + API scaffolding)
 - `M2` Data layer migration (CSV/SQLite -> Supabase)
 - `M3` Local Agent (scraping + local folder download) - complete
-- `M4` Frontend integration (cloud + local agent modes)
+- `M4` Frontend Integration (Cloud + Local Agent Modes) - complete
 - `M5` Installer + auto-update + signing
 - `M6` Cutover, hardening, and deprecation
 
@@ -138,14 +138,18 @@
 
 ### Status
 - Complete as of 2026-05-24.
-- Remaining active work has moved to `M4` Frontend integration.
+- Remaining active work has moved to `M5` Installer + auto-update + signing.
 
 ---
 
 ## M4. Frontend Integration (Cloud + Local Agent Modes)
 **Goal:** keep UX unified while routing to correct runtime.
 
-**Next active module:** `M4` Frontend integration.
+**Current module under review:** `M4` Frontend Integration (Cloud + Local Agent Modes) - complete
+
+### Status
+- Complete as of 2026-05-24.
+- `M4-T1` through `M4-T10` are now all implemented and committed.
 
 ### Tasks
 - `M4-T1` Replace hardcoded API URL with env-based config.
