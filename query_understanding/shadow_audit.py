@@ -28,6 +28,7 @@ def build_shadow_audit_entry(
     *,
     rank: str | None = None,
     prompt_id: str,
+    expected_delta_families: Iterable[str] | None = None,
     llm_plan: Mapping[str, Any] | None = None,
     llm_plan_provider: Any | None = None,
 ) -> Dict[str, Any]:
@@ -76,7 +77,12 @@ def build_shadow_audit_entry(
             "validation_status": legacy_plan.get("validation", {}).get("status"),
         }
 
-    comparison_results = compare_query_plans(legacy_plan, llm_plan, prompt_id=prompt_id)
+    comparison_results = compare_query_plans(
+        legacy_plan,
+        llm_plan,
+        prompt_id=prompt_id,
+        expected_delta_families=expected_delta_families,
+    )
     llm_normalizer_name = str(llm_plan.get("normalizer", {}).get("name") or "")
     return {
         "prompt_id": prompt_id,
@@ -107,6 +113,7 @@ def build_shadow_audit_rows(
     prompts: Iterable[Mapping[str, Any]],
     *,
     rank: str | None = None,
+    expected_delta_families: Iterable[str] | None = None,
     llm_plan_provider: Any | None = None,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
@@ -119,6 +126,7 @@ def build_shadow_audit_rows(
                 prompt,
                 rank=rank,
                 prompt_id=prompt_id,
+                expected_delta_families=expected_delta_families,
                 llm_plan=None,
                 llm_plan_provider=llm_plan_provider,
             )

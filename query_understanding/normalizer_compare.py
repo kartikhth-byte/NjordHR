@@ -163,15 +163,15 @@ def compare_query_plans(
             outcome = "expected_delta"
         elif legacy_invalid:
             outcome = "schema_error"
+        elif family in expected_delta_families:
+            outcome = "expected_delta"
+        elif legacy_record and llm_record and _is_equivalent(legacy_record, llm_record):
+            outcome = "equivalent"
         elif is_unsupported_family(family) or (
             (legacy_record and isinstance(legacy_record.normalized_payload, Mapping) and legacy_record.normalized_payload.get("reason") == "unsupported_filter_family")
             or (llm_record and isinstance(llm_record.normalized_payload, Mapping) and llm_record.normalized_payload.get("reason") == "unsupported_filter_family")
         ):
             outcome = "unsupported_family_delta"
-        elif legacy_record and llm_record and _is_equivalent(legacy_record, llm_record):
-            outcome = "equivalent"
-        elif family in expected_delta_families:
-            outcome = "expected_delta"
         else:
             outcome = "regression"
 

@@ -86,6 +86,68 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
         self.assertEqual(outcomes["rank_match"], "equivalent")
         self.assertEqual(outcomes["min_sea_service"], "unsupported_family_delta")
 
+    def test_compare_query_plans_can_treat_expected_unsupported_families_as_expected_delta(self):
+        legacy_plan = _base_plan()
+        llm_plan = _base_plan()
+
+        legacy_normalized = _base_plan()
+        llm_normalized = _base_plan()
+
+        legacy_record = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-2a",
+            family="min_sea_service",
+            mode="required",
+            normalized_payload={"type": "min_sea_service", "minimum_months": 60},
+            source_text="minimum 5 years sea service",
+            status="degraded",
+        )
+        llm_record = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-2a",
+            family="min_sea_service",
+            mode="required",
+            normalized_payload={"type": "min_sea_service", "minimum_months": 60},
+            source_text="minimum 5 years sea service",
+            status="degraded",
+        )
+        rank_legacy = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-2a",
+            family="rank_match",
+            mode="required",
+            normalized_payload={"type": "rank_match", "rank": "2nd_engineer"},
+            source_text="2nd engineer",
+            status="valid",
+        )
+        rank_llm = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-2a",
+            family="rank_match",
+            mode="required",
+            normalized_payload={"type": "rank_match", "rank": "2nd_engineer"},
+            source_text="2nd engineer",
+            status="valid",
+        )
+
+        with unittest.mock.patch(
+            "query_understanding.normalizer_compare.normalize_query_plan_v1",
+            side_effect=[legacy_normalized, llm_normalized],
+        ), unittest.mock.patch(
+            "query_understanding.normalizer_compare.canonical_comparison_records",
+            side_effect=[[legacy_record, rank_legacy], [llm_record, rank_llm]],
+        ):
+            results = compare_query_plans(
+                legacy_plan,
+                llm_plan,
+                prompt_id="prompt-2a",
+                expected_delta_families={"min_sea_service"},
+            )
+
+        outcomes = {result.family: result.comparison_outcome for result in results}
+        self.assertEqual(outcomes["rank_match"], "equivalent")
+        self.assertEqual(outcomes["min_sea_service"], "expected_delta")
+
     def test_compare_query_plans_classifies_schema_error_before_unsupported_delta(self):
         legacy_plan = _base_plan()
         llm_plan = _base_plan()

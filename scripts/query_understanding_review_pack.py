@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ai_analyzer import AIResumeAnalyzer, AdvancedPDFProcessor, ConfigManager
+from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS
 from query_understanding.shadow_audit import build_shadow_audit_rows
 from query_understanding.llm_normalizer import is_enabled
 from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
@@ -63,7 +64,12 @@ def _build_shadow_audit(corpus: dict):
                     "expected_primary_family": entry.get("expected_primary_family"),
                 }
             )
-    return build_shadow_audit_rows(analyzer, prompts, llm_plan_provider=build_shadow_llm_query_plan)
+    return build_shadow_audit_rows(
+        analyzer,
+        prompts,
+        expected_delta_families=UNAPPLIED_FAMILY_IDS,
+        llm_plan_provider=build_shadow_llm_query_plan,
+    )
 
 
 def main():
