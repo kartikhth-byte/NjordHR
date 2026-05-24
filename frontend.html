@@ -1456,6 +1456,55 @@
                 };
             })();
 
+            const localAgentSummary = (() => {
+                const agent = runtimeConfig?.local_agent || {};
+                const health = agent.health || {};
+                const sessionHealth = health.session_health || {};
+                const reachable = Boolean(agent.reachable);
+                const enabled = Boolean(runtimeConfig?.feature_flags?.use_local_agent);
+                const waitingToStart = enabled && !reachable && !agent.error && !sessionHealth.valid;
+                const disconnected = enabled && !reachable && !waitingToStart;
+                const reason = String(
+                    agent.error
+                    || health.reason
+                    || sessionHealth.reason
+                    || health.download_folder_message
+                    || ''
+                ).trim();
+                return {
+                    enabled,
+                    reachable,
+                    waitingToStart,
+                    disconnected,
+                    reason,
+                    pending: Number(health.sync?.pending ?? 0),
+                    downloadFolderOk: Boolean(health.download_folder_ok),
+                    canOpenLogs: Boolean(window.NjordDesktop?.openLogs),
+                    canRestart: Boolean(window.NjordDesktop?.retryStartup),
+                };
+            })();
+
+            const handleRefreshLocalAgentStatus = () => fetchRuntimeConfig(true);
+            const handleOpenDesktopLogs = async () => {
+                if (!window.NjordDesktop?.openLogs) return;
+                try {
+                    await window.NjordDesktop.openLogs();
+                    handleSendMessage('success', 'Opened runtime logs folder.');
+                } catch (error) {
+                    handleSendMessage('error', error?.message || 'Could not open runtime logs folder.');
+                }
+            };
+            const handleRestartDesktopApp = async () => {
+                if (!window.NjordDesktop?.retryStartup) return;
+                const confirmed = window.confirm('Restart NjordHR now? This will relaunch the app.');
+                if (!confirmed) return;
+                try {
+                    await window.NjordDesktop.retryStartup();
+                } catch (error) {
+                    handleSendMessage('error', error?.message || 'Could not restart NjordHR.');
+                }
+            };
+
             const fetchSetupManifest = async () => {
                 setIsSetupLoading(true);
                 try {
@@ -3209,7 +3258,7 @@
                                                 )}
                                             </button>
                                             {!agentReachable ? (
-                                                <p className="mt-3 text-xs text-amber-700">The local agent is not reachable. Start it before running Outlook fetch.</p>
+                                                <p className="mt-3 text-xs text-amber-700">The local agent is not reachable. Use the recovery banner above, then try Outlook fetch again.</p>
                                             ) : !outlookConnected ? (
                                                 <p className="mt-3 text-xs text-amber-700">Connect the configured Outlook mailbox before starting a fetch.</p>
                                             ) : mailboxNeedsReconnect ? (
@@ -4791,6 +4840,43 @@
                                 {agentReachable && syncPending === 0 && (
                                     <p className="text-green-700 text-xs">Ready: install/setup complete.</p>
                                 )}
+                                {!agentReachable && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-2">
+                                        <p className="font-medium">Recovery options</p>
+                                        <p>
+                                            {localAgentSummary.waitingToStart
+                                                ? 'The local agent is still booting. Refresh Status in a moment.'
+                                                : 'The local agent is disconnected. Use Refresh Status, Open Logs, or Restart App to recover.'}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2 pt-1">
+                                            <button
+                                                type="button"
+                                                onClick={handleRefreshLocalAgentStatus}
+                                                className="rounded-md border border-amber-300 px-2 py-1 font-medium text-amber-900 hover:bg-amber-100"
+                                            >
+                                                Refresh Status
+                                            </button>
+                                            {localAgentSummary.canOpenLogs && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleOpenDesktopLogs}
+                                                    className="rounded-md border border-amber-300 px-2 py-1 font-medium text-amber-900 hover:bg-amber-100"
+                                                >
+                                                    Open Logs
+                                                </button>
+                                            )}
+                                            {localAgentSummary.canRestart && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRestartDesktopApp}
+                                                    className="rounded-md border border-amber-300 px-2 py-1 font-medium text-amber-900 hover:bg-amber-100"
+                                                >
+                                                    Restart App
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -4870,6 +4956,21 @@
                                 }`}>
                                     {runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only'}
                                 </span>
+                                {localAgentSummary.enabled && (
+                                    <span className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
+                                        localAgentSummary.reachable
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            : localAgentSummary.waitingToStart
+                                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                : 'bg-red-50 text-red-700 border-red-200'
+                                    }`}>
+                                        {localAgentSummary.reachable
+                                            ? 'Agent online'
+                                            : localAgentSummary.waitingToStart
+                                                ? 'Agent starting'
+                                                : 'Agent offline'}
+                                    </span>
+                                )}
                                 <div className="text-sm text-gray-500">Phase 1: Core Engine</div>
                                 {authUser && (
                                     <div className="flex items-center gap-2">
@@ -4989,22 +5090,73 @@
                             {canAccessTab('settings') && <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>}
                             {canAccessTab('logs') && <button onClick={() => setActiveTab('logs')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'logs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Logs</button>}
                         </div>
-                        {runtimeConfig?.feature_flags?.use_local_agent && !runtimeConfig?.local_agent?.reachable && (
-                            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p className="text-sm font-semibold text-amber-900">Local agent is still starting</p>
-                                        <p className="mt-1 text-sm text-amber-800">
-                                            NjordHR is ready to use. Background sync features will come online automatically once the local agent finishes starting.
+                        {localAgentSummary.enabled && !localAgentSummary.reachable && (
+                            <div className={`mb-4 rounded-lg border px-4 py-3 ${
+                                localAgentSummary.waitingToStart
+                                    ? 'border-amber-200 bg-amber-50'
+                                    : 'border-red-200 bg-red-50'
+                            }`}>
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="space-y-1">
+                                        <p className={`text-sm font-semibold ${
+                                            localAgentSummary.waitingToStart ? 'text-amber-900' : 'text-red-900'
+                                        }`}>
+                                            {localAgentSummary.waitingToStart ? 'Local agent is still starting' : 'Local agent is disconnected'}
                                         </p>
+                                        <p className={`text-sm ${
+                                            localAgentSummary.waitingToStart ? 'text-amber-800' : 'text-red-800'
+                                        }`}>
+                                            {localAgentSummary.waitingToStart
+                                                ? 'Background sync features will come online automatically once the local agent finishes starting.'
+                                                : 'Downloads and mailbox sync are paused until the local agent comes back. Use the recovery actions below to get back online.'}
+                                        </p>
+                                        {localAgentSummary.reason && (
+                                            <p className={`text-xs ${
+                                                localAgentSummary.waitingToStart ? 'text-amber-700' : 'text-red-700'
+                                            }`}>
+                                                {localAgentSummary.reason}
+                                            </p>
+                                        )}
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => fetchRuntimeConfig(true)}
-                                        className="shrink-0 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
-                                    >
-                                        Refresh
-                                    </button>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleRefreshLocalAgentStatus}
+                                            className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                                                localAgentSummary.waitingToStart
+                                                    ? 'border-amber-300 text-amber-900 hover:bg-amber-100'
+                                                    : 'border-red-300 text-red-900 hover:bg-red-100'
+                                            }`}
+                                        >
+                                            Refresh Status
+                                        </button>
+                                        {localAgentSummary.canOpenLogs && (
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenDesktopLogs}
+                                                className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                                                    localAgentSummary.waitingToStart
+                                                        ? 'border-amber-300 text-amber-900 hover:bg-amber-100'
+                                                        : 'border-red-300 text-red-900 hover:bg-red-100'
+                                                }`}
+                                            >
+                                                Open Logs
+                                            </button>
+                                        )}
+                                        {localAgentSummary.canRestart && (
+                                            <button
+                                                type="button"
+                                                onClick={handleRestartDesktopApp}
+                                                className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                                                    localAgentSummary.waitingToStart
+                                                        ? 'border-amber-300 text-amber-900 hover:bg-amber-100'
+                                                        : 'border-red-300 text-red-900 hover:bg-red-100'
+                                                }`}
+                                            >
+                                                Restart App
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
