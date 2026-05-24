@@ -15,4 +15,4 @@ fi
 export NJORDHR_AGENT_HOST="${NJORDHR_AGENT_HOST:-127.0.0.1}"
 export NJORDHR_AGENT_PORT="${NJORDHR_AGENT_PORT:-5051}"
 
-exec "${NJORDHR_PYTHON_BIN:-python3}" agent_server.py
+exec "${NJORDHR_PYTHON_BIN:-python3}" -m agent

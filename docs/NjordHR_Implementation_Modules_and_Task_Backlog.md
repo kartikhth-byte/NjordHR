@@ -9,7 +9,7 @@
 - `M0` Program setup and guardrails
 - `M1` Cloud foundation (Supabase + API scaffolding)
 - `M2` Data layer migration (CSV/SQLite -> Supabase)
-- `M3` Local Agent (scraping + local folder download)
+- `M3` Local Agent (scraping + local folder download) - complete
 - `M4` Frontend integration (cloud + local agent modes)
 - `M5` Installer + auto-update + signing
 - `M6` Cutover, hardening, and deprecation
@@ -51,8 +51,11 @@
 - `M1-T3` Add indexes for candidate/event/job query paths.
 - `M1-T4` Implement RLS policies and service-role usage boundaries.
 - `M1-T5` Create cloud API service skeleton (container runtime).
+  - Deliverable: `cloud_api/` package with `create_app()`, `/health`, `/runtime/ready`, and auth guard scaffold.
 - `M1-T6` Add auth middleware and environment secret loading.
+  - Deliverable: `python3 -m cloud_api` entrypoint plus shared cloud runtime settings helper.
 - `M1-T7` Add health and readiness endpoints.
+  - Deliverable: cloud API health check runbook in `docs/cloud_api_health_check_runbook.md`.
 
 ### Exit criteria
 - Supabase schema + RLS applied in dev.
@@ -68,15 +71,22 @@
   - `CandidateEventRepo`
   - `FeedbackRepo`
   - `RegistryRepo`
+  - Deliverable: abstract contracts for candidate events, feedback, and file-registry stores plus analyzer implementations wired to them.
 - `M2-T2` Implement CSV-backed adapters (existing behavior).
+  - Deliverable: `CSVFileRegistry` and `CSVFeedbackStore` adapters in `repositories/` with analyzer wired to them.
 - `M2-T3` Implement Supabase-backed adapters.
+  - Deliverable: `SupabaseFileRegistry` and `SupabaseFeedbackStore` adapters in `repositories/` with analyzer wired to them.
 - `M2-T4` Wire feature-flagged dependency injection for repo selection.
+  - Deliverable: `build_ai_store_bundle(...)` plus analyzer/backend startup paths that receive injected feature flags and store bundles.
 - `M2-T5` Build one-time migration scripts:
   - `verified_resumes.csv -> candidate_events/candidates`
   - `feedback.db -> analysis_feedback`
   - `registry.db -> registry table`
+  - Deliverable: `scripts/migrate_local_state_to_supabase.py` orchestration plus reusable helper functions for each migration target.
 - `M2-T6` Add dual-write mode (CSV + Supabase) with idempotency keys.
+  - Deliverable: dual-write registry/feedback adapters with idempotency tracking, feature-flagged bundle selection, and coverage for repeated-write deduplication plus primary-read fallback.
 - `M2-T7` Build parity report script (CSV vs Supabase counts and spot-checks).
+  - Deliverable: `scripts/ai_store_parity_report.py` with count comparisons, sampled field checks, and missing-row detection for registry and feedback stores.
 - `M2-T8` Switch read paths to Supabase under flag:
   - dashboard, history, status, notes, rank counts, export metadata.
 
@@ -92,14 +102,18 @@
 
 ### Tasks
 - `M3-T1` Create `agent/` service package with process entrypoint.
+  - Deliverable: `agent/__main__.py` plus launcher wiring so the local agent can start via `python -m agent` and `scripts/run_agent.sh`.
 - `M3-T2` Move scraper endpoints from monolith into local agent API:
   - `session/start`, `session/verify-otp`, `jobs/download`, `session/disconnect`.
+  - Deliverable: canonical local-agent route stubs plus backend proxy coverage so session and download flows can run through the agent when `USE_LOCAL_AGENT=true`.
 - `M3-T3` Add local settings store:
   - download folder
   - cloud API URL
   - device token
   - sync toggles.
+  - Deliverable: normalized agent config store with persisted download folder, cloud API URL, device token, and sync flags plus tests for round-trip defaults and updates.
 - `M3-T4` Implement folder validation and writability checks.
+  - Deliverable: folder normalization plus actual write-probe validation in the agent filesystem helper and health/settings routes.
 - `M3-T5` Add job queue and worker in agent runtime.
 - `M3-T6` Add job progress and log streaming (`/jobs/:id/stream`).
 - `M3-T7` Add cloud sync client:
@@ -122,10 +136,16 @@
 - Cloud receives job/event updates from agent.
 - Cloud resume uploads are idempotent and recover after restart/network loss.
 
+### Status
+- Complete as of 2026-05-24.
+- Remaining active work has moved to `M4` Frontend integration.
+
 ---
 
 ## M4. Frontend Integration (Cloud + Local Agent Modes)
 **Goal:** keep UX unified while routing to correct runtime.
+
+**Next active module:** `M4` Frontend integration.
 
 ### Tasks
 - `M4-T1` Replace hardcoded API URL with env-based config.
@@ -148,6 +168,10 @@
   - `Sync pending`
   - `Synced`
   - `Sync failed`.
+- `M4-T10` Refresh the Settings UX and warning surfacing:
+  - split backend save vs local-agent sync feedback more clearly
+  - surface partial-success warnings with actionable detail
+  - reduce full-form coupling so mailbox and folder updates are easier to observe and debug.
 
 ### Exit criteria
 - User can choose local download folder in Settings.
@@ -225,7 +249,7 @@
 
 ## 3. Parallel work lanes
 - Lane A (Backend/Data): `M1`, `M2`
-- Lane B (Agent): `M3`
+- Lane B (Agent): `M3` complete
 - Lane C (Frontend): `M4`
 - Lane D (DevOps/Release): `M5`
 
@@ -314,7 +338,7 @@ Suggested overlap:
 - `M5-*` Installer, signing, and auto-update.
 - `M6-*` Cutover, deprecation, DR drills, and full hardening.
 
-### 6.5 First 10 tasks to execute (strict order)
+### 6.5 First 10 tasks to execute (historical rollout order)
 1. `M0-T2` Feature flags and defaults.
 2. `M1-T1` Supabase project/environment setup.
 3. `M1-T2` DB schema migrations.

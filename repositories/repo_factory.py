@@ -36,6 +36,8 @@ def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url
         service_role_key=supabase_api_key,
         server_url=server_url,
         audit_base_folder=base_folder,
+        # Mirror writes stay cloud-canonical by default; local fallback is opt-in only.
+        allow_local_resume_url_fallback=False,
     )
 
     if getattr(flags, "use_dual_write", False):

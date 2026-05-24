@@ -258,6 +258,18 @@
                 liveUncertain: [],
                 liveUnknown: []
             });
+
+            const formatResumeUploadStatus = (resumeUpload) => {
+                if (!resumeUpload) {
+                    return '-';
+                }
+
+                const rawStatus = resumeUpload.upload_status || 'unknown';
+                const statusLabel = rawStatus === 'duplicate' ? 'Already synced' : rawStatus;
+                const detail = resumeUpload.resume_storage_path || resumeUpload.object_path || resumeUpload.resume_source || '';
+
+                return `${statusLabel}${detail ? ` | ${detail}` : ''}`;
+            };
             
             const [selectedFiles, setSelectedFiles] = useState(new Set());
             const [feedbackNotes, setFeedbackNotes] = useState({});
@@ -1711,7 +1723,11 @@
                         handleSendMessage('error', data.message || 'Failed to save settings');
                         return;
                     }
-                    handleSendMessage('success', data.message || 'Settings saved');
+                    const warningText = Array.isArray(data.warnings) && data.warnings.length > 0
+                        ? ` Warning: ${data.warnings.join(' ')}`
+                        : '';
+                    const toastType = warningText ? 'warning' : 'success';
+                    handleSendMessage(toastType, `${data.message || 'Settings saved'}${warningText}`);
                     setSettingsLoaded(false);
                     await loadAdminSettings();
                 } catch (error) {
@@ -4005,6 +4021,7 @@
                                                     {(() => {
                                                         const agent = runtimeConfig.local_agent || {};
                                                         const health = agent.health || {};
+                                                        const lastResumeUpload = agent.last_resume_upload || health.sync?.last_resume_upload || null;
                                                         const pending = Number(health.sync?.pending ?? 0);
                                                         const reachable = Boolean(agent.reachable);
                                                         let statusLabel = "Healthy";
@@ -4062,6 +4079,10 @@
                                                             <p>
                                                                 <span className="font-medium">Session:</span>{" "}
                                                                 {runtimeConfig.local_agent.health.session_health?.reason || "-"}
+                                                            </p>
+                                                            <p>
+                                                                <span className="font-medium">Latest Resume Upload:</span>{" "}
+                                                                {formatResumeUploadStatus(lastResumeUpload)}
                                                             </p>
                                                         </>
                                                     )}
@@ -4535,6 +4556,8 @@
             const SetupTabContent = () => {
                 const localAgent = runtimeConfig?.local_agent || {};
                 const agentHealth = localAgent.health || {};
+                const lastResumeUpload = localAgent.last_resume_upload || agentHealth.sync?.last_resume_upload || null;
+                const resumeUploadLabel = formatResumeUploadStatus(lastResumeUpload);
                 const syncPending = Number(agentHealth?.sync?.pending ?? 0);
                 const backendOk = Boolean(runtimeConfig?.success);
                 const agentReachable = Boolean(localAgent?.reachable);
@@ -4631,6 +4654,10 @@
                                 <p><span className="font-medium">Backend:</span> {backendOk ? 'Reachable' : 'Not reachable'}</p>
                                 <p><span className="font-medium">Agent:</span> {agentReachable ? 'Reachable' : 'Not reachable'}</p>
                                 <p><span className="font-medium">Sync pending:</span> {syncPending}</p>
+                                <p>
+                                    <span className="font-medium">Latest Resume Upload:</span>{" "}
+                                    {resumeUploadLabel === '-' ? 'Not available' : resumeUploadLabel}
+                                </p>
                                 {agentReachable && syncPending > 0 && (
                                     <p className="text-yellow-700 text-xs">Keep app and agent running until sync reaches 0.</p>
                                 )}

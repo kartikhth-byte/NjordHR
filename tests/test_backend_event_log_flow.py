@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 import os
 import sys
@@ -328,6 +329,42 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(fake_scraper.quit_called)
         self.assertIsNone(backend_server.scraper_session)
 
+    def test_session_health_skips_idle_disconnect_for_local_agent(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        backend_server.scraper_session = object()
+        backend_server.seajobs_last_activity_at = time.time() - 360
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "success": True,
+                    "health": {
+                        "active": True,
+                        "valid": True,
+                        "otp_pending": False,
+                        "otp_expired": False,
+                        "reason": "Session valid",
+                    },
+                }
+
+        try:
+            with patch.object(backend_server, "_disconnect_seajobs_best_effort") as disconnect_mock, \
+                patch("backend_server.requests.request", return_value=DummyResponse()) as request_mock:
+                resp = self.client.get("/session_health")
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+            backend_server.scraper_session = None
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body.get("success"))
+        self.assertTrue(body.get("connected"))
+        disconnect_mock.assert_not_called()
+        request_mock.assert_called_once()
+
     def test_logout_disconnects_seajobs_session(self):
         class FakeScraper:
             def __init__(self):
@@ -485,7 +522,47 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(data["health"]["otp_expired"])
 
     def test_runtime_config_reports_backend_mode(self):
-        resp = self.client.get("/config/runtime")
+        fake_health = {
+            "success": True,
+            "status": "ok",
+            "sync": {
+                "pending": 1,
+                "queue_path": "/tmp/pending_sync_queue.json",
+                "reconnect_wakeup_pending": False,
+                "last_resume_upload": {
+                    "upload_status": "uploaded",
+                    "resume_source": "cloud_synced",
+                    "resume_upload_status": "uploaded",
+                    "resume_storage_path": "storage://resumes/Chief_Officer/1001/resume.pdf",
+                    "resume_checksum_sha256": "abc123",
+                    "duplicate": False,
+                    "message": "",
+                },
+            },
+        }
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self):
+                return fake_health
+
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        try:
+            with patch("backend_server.requests.get", return_value=DummyResponse()) as mock_get:
+                old_base = os.environ.get("NJORDHR_AGENT_BASE_URL")
+                os.environ["NJORDHR_AGENT_BASE_URL"] = "http://127.0.0.1:5053"
+                try:
+                    resp = self.client.get("/config/runtime")
+                finally:
+                    if old_base is None:
+                        os.environ.pop("NJORDHR_AGENT_BASE_URL", None)
+                    else:
+                        os.environ["NJORDHR_AGENT_BASE_URL"] = old_base
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data["success"])
@@ -493,6 +570,85 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("feature_flags", data)
         self.assertIn("use_supabase_db", data["feature_flags"])
         self.assertIn("use_supabase_reads", data["feature_flags"])
+        self.assertIn("cloud_api", data)
+        self.assertIn("ready", data["cloud_api"])
+        self.assertEqual(data["cloud_api"]["service_name"], "njordhr-cloud-api")
+        self.assertIn("local_agent", data)
+        self.assertEqual(data["local_agent"]["base_url"], "http://127.0.0.1:5053")
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["resume_storage_path"], "storage://resumes/Chief_Officer/1001/resume.pdf")
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["upload_status"], "uploaded")
+        mock_get.assert_called_once()
+
+    def test_runtime_config_exposes_local_agent_summary_without_session(self):
+        fake_health = {
+            "success": True,
+            "status": "ok",
+            "sync": {
+                "pending": 0,
+                "queue_path": "/tmp/pending_sync_queue.json",
+                "reconnect_wakeup_pending": False,
+                "last_resume_upload": {
+                    "upload_status": "uploaded",
+                    "resume_source": "cloud_synced",
+                    "resume_upload_status": "uploaded",
+                    "resume_storage_path": "storage://resumes/Chief_Officer/9002/live_upload_check_2.pdf",
+                    "resume_checksum_sha256": "e3bec64fb8669f3ae7970c1672b9b1f368133a7c8fcf5d1e518f27e5386f892b",
+                    "duplicate": False,
+                    "message": "",
+                },
+            },
+        }
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self):
+                return fake_health
+
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        try:
+            with self.client.session_transaction() as sess:
+                sess.clear()
+            with patch("backend_server.requests.get", return_value=DummyResponse()) as mock_get:
+                resp = self.client.get("/config/runtime")
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["success"])
+        self.assertIn("local_agent", data)
+        self.assertTrue(data["local_agent"]["configured"])
+        self.assertTrue(data["local_agent"]["reachable"])
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["resume_storage_path"], "storage://resumes/Chief_Officer/9002/live_upload_check_2.pdf")
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["upload_status"], "uploaded")
+        self.assertIn("cloud_api", data)
+        self.assertTrue(data["cloud_api"]["ready"])
+        mock_get.assert_called_once()
+
+    def test_build_analyzer_threads_feature_flags_into_analyzer(self):
+        captured = {}
+
+        class DummyAnalyzer:
+            def __init__(self, config, *, feature_flags=None, store_bundle=None):
+                captured["feature_flags"] = feature_flags
+                captured["store_bundle"] = store_bundle
+                captured["settings_folder"] = config.get("Settings", "Default_Download_Folder")
+
+        original_analyzer = backend_server.Analyzer
+        original_active_download_root = backend_server._active_download_root
+        try:
+            backend_server.Analyzer = DummyAnalyzer
+            backend_server._active_download_root = lambda: self.download_root.as_posix()
+            built = backend_server._build_analyzer()
+            self.assertIsInstance(built, DummyAnalyzer)
+            self.assertIs(captured["feature_flags"], backend_server.feature_flags)
+            self.assertIsNone(captured["store_bundle"])
+            self.assertEqual(captured["settings_folder"], self.download_root.as_posix())
+        finally:
+            backend_server.Analyzer = original_analyzer
+            backend_server._active_download_root = original_active_download_root
 
     def test_runtime_ready_reports_unauthenticated_backend_identity(self):
         with self.client.session_transaction() as sess:
@@ -516,6 +672,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
             self.assertEqual(data["process_identity"]["runtime_dir"], os.path.abspath(self.temp_dir.name))
             self.assertEqual(data["process_identity"]["config_path"], os.path.abspath(self.temp_config_path))
             self.assertTrue(data["process_identity"]["project_dir"])
+            self.assertIn("cloud_api", data)
+            self.assertIn("ready_reason", data["cloud_api"])
         finally:
             if old_port is None:
                 os.environ.pop("NJORDHR_PORT", None)
@@ -615,6 +773,90 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn('"type": "log"', payload)
         self.assertIn('"type": "complete"', payload)
         self.assertIn('"success": true', payload.lower())
+
+    def test_resume_upload_pipeline_records_checksum_storage_and_status(self):
+        file_bytes = b"%PDF-1.4 uploaded resume bytes"
+        expected_checksum = hashlib.sha256(file_bytes).hexdigest()
+        metadata = {
+            "job_id": "job-123",
+            "candidate_external_id": "1001",
+            "rank_applied_for": "Chief Officer",
+            "device_id": "device-123",
+        }
+
+        captured = {}
+
+        def fake_append(kind, payload):
+            captured["kind"] = kind
+            captured["payload"] = payload
+
+        with patch.object(
+            backend_server,
+            "_supabase_storage_upload",
+            return_value=("storage://resumes/Chief_Officer/1001/Chief_Officer_1001.pdf", ""),
+        ) as upload_mock, patch.object(backend_server, "_append_agent_sync_jsonl", side_effect=fake_append):
+            resp = self.client.post(
+                "/api/agent/resume-upload",
+                data={
+                    "metadata": json.dumps(metadata),
+                    "file": (io.BytesIO(file_bytes), "Chief_Officer_1001.pdf"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["upload_status"], "uploaded")
+        self.assertEqual(body["resume_source"], "cloud_synced")
+        self.assertEqual(body["resume_upload_status"], "uploaded")
+        self.assertEqual(body["resume_storage_path"], "storage://resumes/Chief_Officer/1001/Chief_Officer_1001.pdf")
+        self.assertEqual(body["resume_checksum_sha256"], expected_checksum)
+        upload_mock.assert_called_once()
+        args, _kwargs = upload_mock.call_args
+        self.assertEqual(args[1], "Chief_Officer/1001/Chief_Officer_1001.pdf")
+        self.assertEqual(captured["kind"], "resume_upload")
+        self.assertEqual(captured["payload"]["resume_storage_path"], "storage://resumes/Chief_Officer/1001/Chief_Officer_1001.pdf")
+        self.assertEqual(captured["payload"]["resume_upload_status"], "uploaded")
+        self.assertEqual(captured["payload"]["resume_checksum_sha256"], expected_checksum)
+        self.assertEqual(captured["payload"]["resume_source"], "cloud_synced")
+        self.assertEqual(captured["payload"]["object_path"], "Chief_Officer/1001/Chief_Officer_1001.pdf")
+
+    def test_download_stream_forwards_local_agent_progress_events(self):
+        queued = backend_server._translate_agent_stream_event({
+            "type": "queued",
+            "message": "Job queued",
+            "data": {"stage": "queued", "percent": 0},
+        })
+        running = backend_server._translate_agent_stream_event({
+            "type": "running",
+            "message": "Job started",
+            "data": {"stage": "running", "percent": 5},
+        })
+        progress = backend_server._translate_agent_stream_event({
+            "type": "progress",
+            "message": "Validated session",
+            "data": {"stage": "preflight", "percent": 10},
+        })
+        log_event = backend_server._translate_agent_stream_event({
+            "type": "log",
+            "message": "Downloading for Chief Officer / Bulk Carrier",
+            "data": {"level": "INFO"},
+        })
+        complete = backend_server._translate_agent_stream_event({
+            "type": "complete",
+            "message": "Download done",
+            "data": {"result": {"success": True, "message": "Download done", "saved_files": []}},
+        })
+
+        self.assertEqual(queued["type"], "progress")
+        self.assertEqual(queued["stage"], "queued")
+        self.assertEqual(running["percent"], 5)
+        self.assertEqual(progress["stage"], "preflight")
+        self.assertEqual(log_event["type"], "log")
+        self.assertEqual(log_event["line"], "Downloading for Chief Officer / Bulk Carrier")
+        self.assertEqual(complete["type"], "complete")
+        self.assertTrue(complete["success"])
 
     def test_get_rank_folder_ship_types_reads_manifest_metadata(self):
         manifest_path = self.rank_dir / "manifest.json"
@@ -743,6 +985,126 @@ class BackendEventLogFlowTests(unittest.TestCase):
         agent_payload = put_calls[0][2]
         self.assertEqual(agent_payload["email_intake_mailbox"], "crewing@example.com")
         self.assertEqual(agent_payload["outlook_client_id"], "client-456")
+
+    def test_admin_settings_propagates_download_folder_to_local_agent(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "default_download_folder": str(self.download_root),
+                        "use_local_agent": True,
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertIn(("PUT", "/settings/download-folder", {"download_folder": str(self.download_root)}), captured)
+
+    def test_admin_settings_same_request_can_enable_local_agent_and_mailbox(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=False)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            if method == "GET" and path == "/settings":
+                return self._agent_json_response({
+                    "success": True,
+                    "settings": {
+                        "email_intake_enabled": False,
+                    },
+                })
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "use_local_agent": True,
+                        "email_intake_enabled": True,
+                        "email_intake_mailbox": "crewing@example.com",
+                        "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        self.assertEqual(put_calls[0][2]["email_intake_mailbox"], "crewing@example.com")
+        self.assertEqual(put_calls[0][2]["email_intake_enabled"], True)
+
+    def test_admin_settings_reports_agent_folder_sync_warning_without_failing_backend_save(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            if method == "PUT" and path == "/settings/download-folder":
+                raise OSError("agent unavailable")
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "default_download_folder": str(self.download_root),
+                        "use_local_agent": True,
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertIn("warnings", body)
+        self.assertTrue(body["warnings"])
+        self.assertIn("agent unavailable", body["warnings"][0])
+
+    def test_admin_settings_string_false_does_not_enable_local_agent(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=False)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "use_local_agent": "false",
+                        "default_download_folder": str(self.download_root),
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(captured, [])
 
     def test_admin_settings_does_not_clear_mailbox_settings_with_blank_form_values(self):
         backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)

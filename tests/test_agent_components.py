@@ -20,23 +20,40 @@ class AgentComponentsTests(unittest.TestCase):
             self.assertTrue(cfg["device_id"])
             self.assertTrue(os.path.isabs(cfg["download_folder"]))
             self.assertEqual(cfg["download_folder"], os.path.join(tmp, "Resumes"))
+            self.assertEqual(cfg["api_base_url"], "")
+            self.assertEqual(cfg["device_token"], "")
+            self.assertTrue(cfg["cloud_sync_enabled"])
+            self.assertFalse(cfg["cloud_upload_resumes"])
+            self.assertFalse(cfg["auto_start"])
             self.assertEqual(cfg["email_intake_monitored_folder"], "Inbox/NjordHR Resumes")
             self.assertEqual(cfg["email_intake_processed_folder"], "Inbox/NjordHR Processed")
             self.assertEqual(cfg["email_intake_failed_folder"], "Inbox/NjordHR Failed")
             self.assertEqual(cfg["email_intake_poll_interval_seconds"], 60)
 
             updated = store.update({
+                "api_base_url": "https://api.example.supabase.co/",
+                "device_token": "  device-token-123  ",
                 "cloud_sync_enabled": False,
+                "cloud_upload_resumes": True,
+                "auto_start": True,
                 "download_folder": tmp,
                 "email_intake_mailbox": "recruitment@njordships.com",
                 "email_intake_poll_interval_seconds": "90",
                 "outlook_client_id": "test-client-id",
+                "update_manifest_url": " https://updates.example.com/manifest.json ",
+                "log_level": " debug ",
             })
+            self.assertEqual(updated["api_base_url"], "https://api.example.supabase.co")
+            self.assertEqual(updated["device_token"], "device-token-123")
             self.assertFalse(updated["cloud_sync_enabled"])
+            self.assertTrue(updated["cloud_upload_resumes"])
+            self.assertTrue(updated["auto_start"])
             self.assertEqual(updated["download_folder"], tmp)
             self.assertEqual(updated["email_intake_mailbox"], "recruitment@njordships.com")
             self.assertEqual(updated["email_intake_poll_interval_seconds"], 90)
             self.assertEqual(updated["outlook_client_id"], "test-client-id")
+            self.assertEqual(updated["update_manifest_url"], "https://updates.example.com/manifest.json")
+            self.assertEqual(updated["log_level"], "debug")
 
     def test_config_store_migrates_legacy_download_folder_into_app_managed_storage(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -65,6 +82,22 @@ class AgentComponentsTests(unittest.TestCase):
             ok, msg, path = ensure_writable_folder(tmp)
             self.assertTrue(ok, msg)
             self.assertEqual(path, tmp)
+
+    def test_ensure_writable_folder_rejects_empty_value(self):
+        ok, msg, path = ensure_writable_folder("")
+        self.assertFalse(ok)
+        self.assertEqual(msg, "Folder path is empty")
+        self.assertEqual(path, "")
+
+    def test_ensure_writable_folder_rejects_file_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file_path = os.path.join(tmp, "not-a-folder.txt")
+            with open(file_path, "w", encoding="utf-8") as fh:
+                fh.write("hello")
+            ok, msg, path = ensure_writable_folder(file_path)
+            self.assertFalse(ok)
+            self.assertIn("Path is not a directory", msg)
+            self.assertEqual(path, os.path.abspath(file_path))
 
     def test_secret_store_uses_backend(self):
         class FakeBackend:

@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, Response, send_f
 from flask_cors import CORS
 import configparser
 import csv
+import hashlib
 import io
 import os
 import re
@@ -33,6 +34,7 @@ from scraper_engine import Scraper
 from logger_config import setup_logger
 from resume_extractor import ResumeExtractor
 from app_settings import load_app_settings, FeatureFlags
+from cloud_api.runtime import cloud_api_settings_payload, load_cloud_api_settings
 from repositories.repo_factory import build_candidate_event_repo
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import normalize_env_value, normalized_url
@@ -71,7 +73,7 @@ def _build_analyzer():
     if not analyzer_config.has_section("Settings"):
         analyzer_config.add_section("Settings")
     analyzer_config.set("Settings", "Default_Download_Folder", _active_download_root())
-    return Analyzer(analyzer_config)
+    return Analyzer(analyzer_config, feature_flags=feature_flags)
 
 
 def _resolve_verified_resumes_dir():
@@ -96,6 +98,22 @@ def _env_bool(name, default=False):
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _payload_bool(payload, key, default=False):
+    if key not in payload:
+        return default
+    value = payload.get(key)
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _cloud_api_runtime_summary():
+    settings = load_cloud_api_settings()
+    return cloud_api_settings_payload(settings)
 
 
 def _refresh_runtime_managers():
@@ -1204,6 +1222,32 @@ def _agent_request(method, path, *, json_body=None, params=None, stream=False, t
     )
 
 
+def _translate_agent_stream_event(event, default_error_message="Download failed"):
+    ev_type = str((event or {}).get("type", "")).strip()
+    if ev_type == "log":
+        return {"type": "log", "line": (event or {}).get("message", "")}
+    if ev_type in {"queued", "running", "progress"}:
+        event_data = (event or {}).get("data") or {}
+        payload = {
+            "type": "progress",
+            "stage": str(event_data.get("stage", ev_type)),
+            "message": (event or {}).get("message", ""),
+        }
+        if "percent" in event_data:
+            payload["percent"] = event_data["percent"]
+        if event_data:
+            payload["data"] = event_data
+        return payload
+    if ev_type == "complete":
+        result = ((event or {}).get("data") or {}).get("result", {}) or {}
+        if result.get("success"):
+            return {"type": "complete", **result}
+        return {"type": "error", "message": result.get("message", default_error_message)}
+    if ev_type == "error":
+        return {"type": "error", "message": (event or {}).get("message", default_error_message)}
+    return None
+
+
 def _agent_health_summary():
     base = _local_agent_base_url()
     try:
@@ -1211,7 +1255,15 @@ def _agent_health_summary():
         if resp.status_code >= 400:
             return {"configured": True, "reachable": False, "base_url": base, "error": f"HTTP {resp.status_code}"}
         data = resp.json()
-        return {"configured": True, "reachable": True, "base_url": base, "health": data}
+        sync = data.get("sync") if isinstance(data, dict) else {}
+        last_resume_upload = sync.get("last_resume_upload") if isinstance(sync, dict) else None
+        return {
+            "configured": True,
+            "reachable": True,
+            "base_url": base,
+            "last_resume_upload": last_resume_upload,
+            "health": data,
+        }
     except Exception as exc:
         return {"configured": True, "reachable": False, "base_url": base, "error": str(exc)}
 
@@ -1227,6 +1279,12 @@ def _storage_bucket_name():
 def _safe_storage_segment(value):
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
     return cleaned.strip("._") or "unknown"
+
+
+def _sha256_bytes(data_bytes):
+    h = hashlib.sha256()
+    h.update(data_bytes or b"")
+    return h.hexdigest()
 
 
 def _supabase_storage_upload(file_bytes, object_path, content_type="application/pdf"):
@@ -1814,18 +1872,11 @@ def download_stream():
                             event = json.loads(payload_text)
                         except Exception:
                             continue
-                        ev_type = event.get("type")
-                        if ev_type == "log":
-                            yield f"data: {json.dumps({'type': 'log', 'line': event.get('message', '')})}\n\n"
-                        elif ev_type == "complete":
-                            result = (event.get("data") or {}).get("result", {}) or {}
-                            if result.get("success"):
-                                yield f"data: {json.dumps({'type': 'complete', **result})}\n\n"
-                            else:
-                                yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', 'Download failed')})}\n\n"
-                            return
-                        elif ev_type == "error":
-                            yield f"data: {json.dumps({'type': 'error', 'message': event.get('message', 'Download failed')})}\n\n"
+                        translated = _translate_agent_stream_event(event)
+                        if not translated:
+                            continue
+                        yield f"data: {json.dumps(translated)}\n\n"
+                        if translated.get("type") in {"complete", "error"}:
                             return
             except Exception as exc:
                 yield f"data: {json.dumps({'type': 'error', 'message': f'Local agent unavailable: {exc}'})}\n\n"
@@ -1970,18 +2021,11 @@ def outlook_fetch_stream():
                         event = json.loads(payload_text)
                     except Exception:
                         continue
-                    ev_type = event.get("type")
-                    if ev_type == "log":
-                        yield f"data: {json.dumps({'type': 'log', 'line': event.get('message', '')})}\n\n"
-                    elif ev_type == "complete":
-                        result = (event.get("data") or {}).get("result", {}) or {}
-                        if result.get("success"):
-                            yield f"data: {json.dumps({'type': 'complete', **result})}\n\n"
-                        else:
-                            yield f"data: {json.dumps({'type': 'error', 'message': result.get('message', 'Outlook fetch failed')})}\n\n"
-                        return
-                    elif ev_type == "error":
-                        yield f"data: {json.dumps({'type': 'error', 'message': event.get('message', 'Outlook fetch failed')})}\n\n"
+                    translated = _translate_agent_stream_event(event, default_error_message="Outlook fetch failed")
+                    if not translated:
+                        continue
+                    yield f"data: {json.dumps(translated)}\n\n"
+                    if translated.get("type") in {"complete", "error"}:
                         return
         except Exception as exc:
             yield f"data: {json.dumps({'type': 'error', 'message': f'Local agent unavailable: {exc}'})}\n\n"
@@ -2125,23 +2169,6 @@ def disconnect_session():
 def session_health():
     """Return current scraper session health for OTP/session timeout handling."""
     global scraper_session
-    timeout_info = _enforce_seajobs_idle_timeout()
-    if timeout_info:
-        return jsonify({
-            "success": True,
-            "connected": False,
-            "idle_timeout_seconds": _seajobs_idle_timeout_seconds(),
-            "idle_seconds": timeout_info["idle_seconds"],
-            "health": {
-                "active": False,
-                "valid": False,
-                "otp_pending": False,
-                "otp_expired": True,
-                "reason": "Idle timeout reached"
-            },
-            "message": timeout_info["message"]
-        })
-
     if _use_local_agent():
         try:
             resp = _agent_request("GET", "/session/health", timeout=15)
@@ -2163,6 +2190,23 @@ def session_health():
                     "reason": f"Local agent unavailable: {exc}"
                 }
             }), 502
+
+    timeout_info = _enforce_seajobs_idle_timeout()
+    if timeout_info:
+        return jsonify({
+            "success": True,
+            "connected": False,
+            "idle_timeout_seconds": _seajobs_idle_timeout_seconds(),
+            "idle_seconds": timeout_info["idle_seconds"],
+            "health": {
+                "active": False,
+                "valid": False,
+                "otp_pending": False,
+                "otp_expired": True,
+                "reason": "Idle timeout reached"
+            },
+            "message": timeout_info["message"]
+        })
 
     if not scraper_session:
         return jsonify({
@@ -2224,6 +2268,12 @@ def runtime_config():
                 "valid_user_count": int(bootstrap.get("valid_user_count", 0) or 0),
                 "auth_mode": bootstrap.get("auth_mode", _auth_mode()),
             },
+            "cloud_api": _cloud_api_runtime_summary(),
+            "local_agent": _agent_health_summary() if _use_local_agent() else {
+                "configured": False,
+                "reachable": False,
+                "base_url": _local_agent_base_url(),
+            },
             "ui_auto_shutdown": {
                 "enabled": _ui_idle_autoshutdown_enabled(),
                 "idle_seconds": _ui_idle_shutdown_seconds(),
@@ -2278,6 +2328,7 @@ def runtime_config():
             "valid_user_count": int(bootstrap.get("valid_user_count", 0) or 0),
             "auth_mode": bootstrap.get("auth_mode", _auth_mode()),
         },
+        "cloud_api": _cloud_api_runtime_summary(),
         "local_agent": _agent_health_summary() if _use_local_agent() else {
             "configured": False,
             "reachable": False,
@@ -2327,6 +2378,7 @@ def runtime_ready():
             "bootstrap_required": False,
             "bootstrap_reason": "startup_ready",
         },
+        "cloud_api": _cloud_api_runtime_summary(),
         "version": {
             "backend": "python-backend",
         },
@@ -2584,10 +2636,17 @@ def ingest_agent_resume_upload():
     if not content:
         return jsonify({"success": False, "message": "Empty file"}), 400
 
+    checksum = _sha256_bytes(content)
     storage_url, error = _supabase_storage_upload(content, object_path)
     _append_agent_sync_jsonl("resume_upload", {
         "filename": filename,
         "metadata": metadata,
+        "resume_source": "cloud_synced" if storage_url else "local_only",
+        "resume_upload_status": "uploaded" if storage_url else "failed",
+        "resume_storage_path": storage_url or "",
+        "resume_checksum_sha256": checksum,
+        "resume_uploaded_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "object_path": object_path,
         "storage_url": storage_url,
         "error": error,
     })
@@ -2599,11 +2658,17 @@ def ingest_agent_resume_upload():
             "upload_status": "failed",
             "message": error or "Upload failed",
             "resume_storage_path": "",
+            "resume_source": "local_only",
+            "resume_upload_status": "failed",
+            "resume_checksum_sha256": checksum,
         }), 500
     return jsonify({
         "success": True,
         "upload_status": "uploaded",
         "resume_storage_path": storage_url,
+        "resume_source": "cloud_synced",
+        "resume_upload_status": "uploaded",
+        "resume_checksum_sha256": checksum,
     })
 
 
@@ -2729,9 +2794,13 @@ def save_admin_settings():
             return jsonify({"success": False, "message": "otp_window_seconds must be an integer between 30 and 900"}), 400
         _config_set_literal(config, "Advanced", "otp_window_seconds", str(otp_seconds))
 
+    intended_use_local_agent = _payload_bool(payload, "use_local_agent", feature_flags.use_local_agent)
+    requested_download_folder = normalize_env_value(payload.get("default_download_folder", "")) if "default_download_folder" in payload else ""
+    pending_agent_download_folder = requested_download_folder or ""
+
     email_intake_payload = {}
     if "email_intake_enabled" in payload:
-        email_intake_payload["email_intake_enabled"] = bool(payload.get("email_intake_enabled"))
+        email_intake_payload["email_intake_enabled"] = _payload_bool(payload, "email_intake_enabled")
     for key in [
         "email_intake_mailbox",
         "email_intake_monitored_folder",
@@ -2752,7 +2821,7 @@ def save_admin_settings():
             except Exception:
                 return jsonify({"success": False, "message": "email_intake_poll_interval_seconds must be an integer"}), 400
     if email_intake_payload:
-        if not _use_local_agent():
+        if not intended_use_local_agent:
             return jsonify({"success": False, "message": "Local agent is required to save Outlook mailbox intake settings."}), 400
         try:
             resp = _agent_request("PUT", "/settings", json_body=email_intake_payload, timeout=15)
@@ -2802,8 +2871,9 @@ def save_admin_settings():
     for flag_name in env_flags:
         if flag_name in payload:
             env_name = flag_name.upper()
-            _config_set_literal(config, "Advanced", env_name.lower(), "true" if bool(payload.get(flag_name)) else "false")
-            os.environ[env_name] = "true" if bool(payload.get(flag_name)) else "false"
+            coerced = _payload_bool(payload, flag_name)
+            _config_set_literal(config, "Advanced", env_name.lower(), "true" if coerced else "false")
+            os.environ[env_name] = "true" if coerced else "false"
 
     config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
     with open(config_path, "w", encoding="utf-8") as fh:
@@ -2827,7 +2897,25 @@ def save_admin_settings():
         settings = app_settings.settings
         return jsonify({"success": False, "message": str(exc)}), 400
 
-    return jsonify({
+    warnings = []
+    if pending_agent_download_folder and intended_use_local_agent:
+        try:
+            resp = _agent_request(
+                "PUT",
+                "/settings/download-folder",
+                json_body={"download_folder": pending_agent_download_folder},
+                timeout=15,
+            )
+            if getattr(resp, "status_code", 500) >= 400:
+                try:
+                    message = resp.json().get("message", "Local agent rejected download folder setting.")
+                except Exception:
+                    message = "Local agent rejected download folder setting."
+                warnings.append(message)
+        except Exception as exc:
+            warnings.append(f"Local agent unavailable: {exc}")
+
+    response = {
         "success": True,
         "message": "Admin settings saved and applied.",
         "runtime": {
@@ -2840,7 +2928,11 @@ def save_admin_settings():
                 "use_cloud_export": bool(feature_flags.use_cloud_export),
             }
         }
-    })
+    }
+    if warnings:
+        response["warnings"] = warnings
+        response["message"] = "Admin settings saved and applied, but local agent sync needs attention."
+    return jsonify(response)
 
 
 @app.route('/admin/fs/list', methods=['GET'])

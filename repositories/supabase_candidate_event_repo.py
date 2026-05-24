@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pandas as pd
 import requests
@@ -19,6 +19,8 @@ def resolve_supabase_api_key():
 
 class SupabaseCandidateEventRepo(CandidateEventRepo):
     """Supabase REST-backed candidate event repository."""
+
+    PAGE_SIZE = 1000
 
     COLUMNS = [
         'Candidate_ID',
@@ -46,10 +48,12 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         server_url='http://127.0.0.1:5000',
         timeout_seconds=20,
         audit_base_folder='Verified_Resumes',
+        allow_local_resume_url_fallback=False,
     ):
         self.supabase_url = normalized_url(supabase_url)
         self.server_url = server_url
         self.timeout_seconds = timeout_seconds
+        self.allow_local_resume_url_fallback = bool(allow_local_resume_url_fallback)
         self._audit_manager = CSVManager(base_folder=audit_base_folder, server_url=server_url)
         self.headers = {
             "apikey": service_role_key,
@@ -82,7 +86,9 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
     def _event_to_csv_row(self, row):
         rank = row.get("rank_applied_for", "") or ""
         filename = row.get("filename", "") or ""
-        resume_url = row.get("resume_url") or f"{self.server_url}/get_resume/{rank}/{filename}"
+        resume_url = str(row.get("resume_url") or "").strip()
+        if not resume_url and self.allow_local_resume_url_fallback:
+            resume_url = f"{self.server_url}/get_resume/{rank}/{filename}"
         return {
             "Candidate_ID": str(row.get("candidate_external_id", "") or ""),
             "Filename": filename,
@@ -106,7 +112,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         body = [{
             "candidate_external_id": str(candidate_external_id),
             **payload,
-            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }]
         self._request(
             "POST",
@@ -125,14 +131,30 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         )
 
     def _fetch_events(self, filters=None, order_desc=True):
-        params = {
+        return self._fetch_all_events(filters=filters, order_desc=order_desc)
+
+    def _fetch_all_events(self, filters=None, order_desc=True):
+        rows = []
+        offset = 0
+        base_params = {
             "select": "candidate_external_id,filename,resume_url,event_type,status,notes,rank_applied_for,"
                       "search_ship_type,ai_search_prompt,ai_match_reason,name,present_rank,email,country,mobile_no,created_at",
             "order": f"created_at.{ 'desc' if order_desc else 'asc' }",
         }
         if filters:
-            params.update(filters)
-        return self._request("GET", "/rest/v1/candidate_events", params=params)
+            base_params.update(filters)
+        page_size = max(1, int(self.PAGE_SIZE))
+        while True:
+            params = dict(base_params)
+            params["limit"] = page_size
+            params["offset"] = offset
+            batch = self._request("GET", "/rest/v1/candidate_events", params=params)
+            batch = batch or []
+            rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+        return rows
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
@@ -140,7 +162,9 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         try:
             extracted_data = extracted_data or {}
             candidate_external_id = str(candidate_id)
-            resolved_resume_url = str(resume_url or "").strip() or f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
+            resolved_resume_url = str(resume_url or "").strip()
+            if not resolved_resume_url and self.allow_local_resume_url_fallback:
+                resolved_resume_url = f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
 
             self._upsert_candidate(
                 candidate_external_id,
@@ -203,7 +227,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
     def get_candidate_history(self, candidate_id):
         try:
-            events = self._fetch_events(
+            events = self._fetch_all_events(
                 filters={"candidate_external_id": f"eq.{str(candidate_id)}"},
                 order_desc=False
             )
@@ -283,11 +307,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         latest = self.get_latest_status_per_candidate()
         total_rows = 0
         try:
-            rows = self._request(
-                "GET",
-                "/rest/v1/candidate_events",
-                params={"select": "id"},
-            )
+            rows = self._fetch_all_events(filters={}, order_desc=True)
             total_rows = len(rows)
         except Exception:
             total_rows = 0

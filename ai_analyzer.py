@@ -20,6 +20,13 @@ import fitz  # PyMuPDF
 from PIL import Image
 from pinecone import Pinecone, ServerlessSpec
 from rank_folders import rank_folder_path
+from repositories.csv_feedback_repo import CSVFeedbackStore
+from repositories.csv_registry_repo import CSVFileRegistry
+from repositories.ai_store_factory import AIStoreBundle, build_ai_store_bundle
+from repositories.feedback_repo import FeedbackRepo
+from repositories.registry_repo import RegistryRepo
+from repositories.supabase_feedback_repo import SupabaseFeedbackStore
+from repositories.supabase_registry_repo import SupabaseFileRegistry
 from runtime_env import normalize_env_value, normalized_url
 
 # --- Optional/Specialized Dependencies ---
@@ -86,7 +93,7 @@ class ConfigManager:
 # ==============================================================================
 # 2. LOCAL FILE REGISTRY (SQLite)
 # ==============================================================================
-class FileRegistry:
+class FileRegistry(RegistryRepo):
     """Manages a local SQLite database to track file states and avoid reprocessing."""
     DB_VERSION = 2
     
@@ -163,7 +170,7 @@ class FileRegistry:
 # ==============================================================================
 # 3. FEEDBACK STORE
 # ==============================================================================
-class FeedbackStore:
+class FeedbackStore(FeedbackRepo):
     """Stores user feedback on match decisions for learning"""
     
     def __init__(self, db_path='feedback.db'):
@@ -226,14 +233,6 @@ def _resolve_supabase_api_key():
     )
 
 
-def _should_use_cloud_ai_store():
-    return (
-        normalize_env_value(os.getenv("USE_SUPABASE_DB", "")).lower() in {"1", "true", "yes", "on"}
-        and bool(normalized_url(os.getenv("SUPABASE_URL", "")))
-        and bool(_resolve_supabase_api_key())
-    )
-
-
 class SupabaseStoreBase:
     DEFAULT_TIMEOUT_SECONDS = 30
 
@@ -271,7 +270,7 @@ class SupabaseStoreBase:
             return []
 
 
-class SupabaseFileRegistry(SupabaseStoreBase):
+class SupabaseFileRegistryLegacy(SupabaseStoreBase, RegistryRepo):
     """Cloud-backed replacement for local registry.db."""
 
     @staticmethod
@@ -328,7 +327,7 @@ class SupabaseFileRegistry(SupabaseStoreBase):
         return self.generate_resume_id(file_path)
 
 
-class SupabaseFeedbackStore(SupabaseStoreBase):
+class SupabaseFeedbackStoreLegacy(SupabaseStoreBase, FeedbackRepo):
     """Cloud-backed replacement for local feedback.db."""
 
     def add_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence,
@@ -1141,21 +1140,31 @@ class AIResumeAnalyzer:
         },
     }
     
-    def __init__(self, config_parser):
+    def __init__(self, config_parser, *, store_bundle: AIStoreBundle | None = None):
         print("[INIT] Initializing AIResumeAnalyzer with Multi-Stage Retrieval...")
         self.config = ConfigManager(config_parser)
-        self.ingest_registry_cache = None
-        if _should_use_cloud_ai_store():
+        if store_bundle is None:
             try:
-                self.registry = SupabaseFileRegistry()
-                self.feedback = SupabaseFeedbackStore()
-                self.ingest_registry_cache = FileRegistry(self.config.registry_db_path)
-                print("[INIT] Using Supabase-backed AI registry/feedback stores.")
+                repo_feature_flags = getattr(config_parser, "feature_flags", None)
+                if repo_feature_flags is None:
+                    repo_feature_flags = type("RepoFeatureFlags", (), {
+                        "use_supabase_db": normalize_env_value(os.getenv("USE_SUPABASE_DB", "")).lower() in {"1", "true", "yes", "on"},
+                    })()
+                store_bundle = build_ai_store_bundle(
+                    repo_feature_flags,
+                    registry_db_path=self.config.registry_db_path,
+                    feedback_db_path=self.config.feedback_db_path,
+                    supabase_url=normalized_url(os.getenv("SUPABASE_URL", "")),
+                    supabase_api_key=_resolve_supabase_api_key(),
+                )
             except Exception as exc:
-                raise RuntimeError(f"Cloud AI stores are required but unavailable: {exc}")
+                raise RuntimeError(f"AI store selection failed: {exc}")
+        self.registry = store_bundle.registry
+        self.feedback = store_bundle.feedback
+        self.ingest_registry_cache = store_bundle.ingest_registry_cache
+        if self.ingest_registry_cache is not None:
+            print("[INIT] Using Supabase-backed AI registry/feedback stores.")
         else:
-            self.registry = FileRegistry(self.config.registry_db_path)
-            self.feedback = FeedbackStore(self.config.feedback_db_path)
             print("[INIT] Using local AI registry/feedback stores.")
         self.pdf_processor = AdvancedPDFProcessor()
         self.prepper = RAGPrepper(self.config)
@@ -8830,7 +8839,7 @@ class Analyzer:
     """Backward-compatible wrapper"""
     _instance = None
 
-    def __init__(self, config_source):
+    def __init__(self, config_source, *, feature_flags=None, store_bundle: AIStoreBundle | None = None):
         print("\n*** RUNNING with Multi-Stage Retrieval + Learning ***\n")
         if Analyzer._instance is None:
             if hasattr(config_source, "get") and hasattr(config_source, "has_section"):
@@ -8840,7 +8849,9 @@ class Analyzer:
                 config = configparser.ConfigParser()
                 config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
                 config.read(config_path)
-            Analyzer._instance = AIResumeAnalyzer(config)
+            if feature_flags is not None:
+                setattr(config, "feature_flags", feature_flags)
+            Analyzer._instance = AIResumeAnalyzer(config, store_bundle=store_bundle)
 
     def run_analysis(self, target_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')

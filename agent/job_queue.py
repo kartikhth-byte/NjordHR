@@ -27,6 +27,7 @@ class AgentJobQueue:
             "payload": payload,
             "result": None,
             "error": "",
+            "progress": {"stage": "queued", "percent": 0, "message": "Job queued"},
         }
         with self._cond:
             self._jobs[job_id] = record
@@ -65,12 +66,43 @@ class AgentJobQueue:
     def _append_event(self, job_id, event_type, message, data):
         rows = self._events.setdefault(job_id, [])
         seq = rows[-1]["seq"] + 1 if rows else 1
+        payload = data or {}
+        job = self._jobs.get(job_id)
+        if job is not None:
+            if event_type in {"queued", "running", "progress"}:
+                progress = {
+                    "stage": str(payload.get("stage", event_type)),
+                    "message": message,
+                }
+                if "percent" in payload:
+                    progress["percent"] = payload["percent"]
+                if "detail" in payload:
+                    progress["detail"] = payload["detail"]
+                for key, value in payload.items():
+                    if key not in {"stage", "percent", "detail"}:
+                        progress[key] = value
+                if "percent" not in progress:
+                    progress["percent"] = 0
+                job["progress"] = progress
+            elif event_type == "complete":
+                result = payload.get("result") or {}
+                job["progress"] = {
+                    "stage": "complete",
+                    "percent": 100 if result.get("success") else 0,
+                    "message": message,
+                }
+            elif event_type == "error":
+                job["progress"] = {
+                    "stage": "error",
+                    "percent": job.get("progress", {}).get("percent", 0),
+                    "message": message,
+                }
         rows.append({
             "seq": seq,
             "ts": time.time(),
             "type": event_type,
             "message": message,
-            "data": data,
+            "data": payload,
         })
         self._cond.notify_all()
 
@@ -110,4 +142,3 @@ class AgentJobQueue:
                     job["error"] = str(exc)
                     job["ended_at"] = time.time()
                     self._append_event(job_id, "error", f"Job failed: {exc}", {})
-

@@ -1,11 +1,9 @@
 import hashlib
 import json
 import os
-import sqlite3
-import threading
-from datetime import UTC, datetime
 
 from repositories.candidate_event_repo import CandidateEventRepo
+from repositories.dual_write_state_store import DualWriteStateStore
 
 
 class DualWriteCandidateEventRepo(CandidateEventRepo):
@@ -20,19 +18,7 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         self.secondary_repo = secondary_repo
         self.read_repo = read_repo or primary_repo
         self.idempotency_db_path = idempotency_db_path
-        os.makedirs(os.path.dirname(idempotency_db_path), exist_ok=True)
-        self._lock = threading.RLock()
-        self._conn = sqlite3.connect(idempotency_db_path, check_same_thread=False)
-        with self._lock:
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS idempotency_keys (
-                    key TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-            self._conn.commit()
+        self._state = DualWriteStateStore(idempotency_db_path)
 
     def _canonical_event_key(self, payload):
         payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -40,20 +26,11 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
         return f"candidate_event:{digest}"
 
     def _has_key(self, key):
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT 1 FROM idempotency_keys WHERE key = ?",
-                (key,)
-            ).fetchone()
-        return bool(row)
+        return self._state.is_complete(key)
 
     def _store_key(self, key):
-        with self._lock:
-            self._conn.execute(
-                "INSERT OR IGNORE INTO idempotency_keys(key, created_at) VALUES (?, ?)",
-                (key, datetime.now(UTC).isoformat().replace("+00:00", "Z"))
-            )
-            self._conn.commit()
+        self._state.mark_primary_done(key)
+        self._state.mark_secondary_done(key)
 
     def log_event(
         self,
@@ -86,45 +63,49 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
             "admin_override": bool(admin_override),
         }
         key = idempotency_key or self._canonical_event_key(event_payload)
-        if self._has_key(key):
+        primary_ok = True
+        if self._state.is_complete(key):
             print(f"[DUAL-WRITE] Skipping duplicate log_event for key={key}")
             return True
 
-        primary_ok = self.primary_repo.log_event(
-            candidate_id=candidate_id,
-            filename=filename,
-            event_type=event_type,
-            status=status,
-            notes=notes,
-            rank_applied_for=rank_applied_for,
-            search_ship_type=search_ship_type,
-            ai_prompt=ai_prompt,
-            ai_reason=ai_reason,
-            extracted_data=extracted_data,
-            resume_url=resume_url,
-            admin_override=admin_override,
-        )
-        if not primary_ok:
-            return False
+        if not self._state.is_primary_done(key):
+            primary_ok = self.primary_repo.log_event(
+                candidate_id=candidate_id,
+                filename=filename,
+                event_type=event_type,
+                status=status,
+                notes=notes,
+                rank_applied_for=rank_applied_for,
+                search_ship_type=search_ship_type,
+                ai_prompt=ai_prompt,
+                ai_reason=ai_reason,
+                extracted_data=extracted_data,
+                resume_url=resume_url,
+                admin_override=admin_override,
+            )
+            if not primary_ok:
+                return False
+            self._state.mark_primary_done(key)
 
-        self._store_key(key)
-
-        secondary_ok = self.secondary_repo.log_event(
-            candidate_id=candidate_id,
-            filename=filename,
-            event_type=event_type,
-            status=status,
-            notes=notes,
-            rank_applied_for=rank_applied_for,
-            search_ship_type=search_ship_type,
-            ai_prompt=ai_prompt,
-            ai_reason=ai_reason,
-            extracted_data=extracted_data,
-            resume_url=resume_url,
-            admin_override=admin_override,
-        )
-        if not secondary_ok:
-            print(f"[DUAL-WRITE] Secondary write failed for key={key}")
+        if not self._state.is_secondary_done(key):
+            secondary_ok = self.secondary_repo.log_event(
+                candidate_id=candidate_id,
+                filename=filename,
+                event_type=event_type,
+                status=status,
+                notes=notes,
+                rank_applied_for=rank_applied_for,
+                search_ship_type=search_ship_type,
+                ai_prompt=ai_prompt,
+                ai_reason=ai_reason,
+                extracted_data=extracted_data,
+                resume_url=resume_url,
+                admin_override=admin_override,
+            )
+            if not secondary_ok:
+                print(f"[DUAL-WRITE] Secondary write failed for key={key}")
+                return True
+            self._state.mark_secondary_done(key)
         return primary_ok
 
     def get_latest_status_per_candidate(self, *args, **kwargs):
@@ -208,10 +189,8 @@ class DualWriteCandidateEventRepo(CandidateEventRepo):
     def get_csv_stats(self, *args, **kwargs):
         stats = self.primary_repo.get_csv_stats(*args, **kwargs)
         if isinstance(stats, dict):
-            with self._lock:
-                keys_count = self._conn.execute("SELECT COUNT(*) FROM idempotency_keys").fetchone()[0]
             stats = dict(stats)
-            stats["dual_write_idempotency_keys"] = int(keys_count)
+            stats["dual_write_idempotency_keys"] = self._state.count()
             stats["write_mode"] = "dual_write"
             stats["read_mode"] = type(self.read_repo).__name__
         return stats

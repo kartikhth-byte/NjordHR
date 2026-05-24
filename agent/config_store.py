@@ -51,6 +51,14 @@ def _default_download_folder(base_dir=None):
     return os.path.join(target_base, "Resumes")
 
 
+def _coerce_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def agent_config_path():
     override = os.getenv("NJORDHR_AGENT_CONFIG_PATH", "").strip()
     if override:
@@ -91,6 +99,19 @@ class AgentConfigStore:
         if not str(cfg.get("download_folder", "")).strip():
             cfg["download_folder"] = _default_download_folder(self.base_dir)
         cfg["download_folder"] = os.path.abspath(os.path.expanduser(cfg["download_folder"]))
+        cfg["api_base_url"] = str(cfg.get("api_base_url", "")).strip().rstrip("/")
+        cfg["device_token"] = str(cfg.get("device_token", "")).strip()
+        cfg["update_manifest_url"] = str(cfg.get("update_manifest_url", "")).strip()
+        cfg["auto_start"] = _coerce_bool(cfg.get("auto_start", DEFAULTS["auto_start"]), DEFAULTS["auto_start"])
+        cfg["cloud_sync_enabled"] = _coerce_bool(
+            cfg.get("cloud_sync_enabled", DEFAULTS["cloud_sync_enabled"]),
+            DEFAULTS["cloud_sync_enabled"],
+        )
+        cfg["cloud_upload_resumes"] = _coerce_bool(
+            cfg.get("cloud_upload_resumes", DEFAULTS["cloud_upload_resumes"]),
+            DEFAULTS["cloud_upload_resumes"],
+        )
+        cfg["log_level"] = str(cfg.get("log_level", DEFAULTS["log_level"])).strip() or DEFAULTS["log_level"]
         cfg["email_intake_mailbox"] = str(cfg.get("email_intake_mailbox", "")).strip()
         cfg["email_intake_monitored_folder"] = str(
             cfg.get("email_intake_monitored_folder", DEFAULTS["email_intake_monitored_folder"])
