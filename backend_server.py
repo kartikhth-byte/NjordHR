@@ -1212,11 +1212,16 @@ def _use_local_agent():
 def _agent_request(method, path, *, json_body=None, params=None, stream=False, timeout=30):
     base = _local_agent_base_url()
     url = f"{base}{path}"
+    headers = {}
+    token = _agent_sync_token()
+    if token:
+        headers["X-Device-Token"] = token
     return requests.request(
         method=method,
         url=url,
         json=json_body,
         params=params,
+        headers=headers or None,
         stream=stream,
         timeout=timeout,
     )
@@ -3571,6 +3576,16 @@ def preview_downloaded_resume(rank_folder, filename):
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return reason, 403
+    if _use_local_agent():
+        try:
+            resp = _agent_request("GET", f"/preview_downloaded_resume/{quote(rank_folder, safe='')}/{quote(filename, safe='')}", timeout=15)
+            if resp.status_code < 400:
+                content_type = resp.headers.get("Content-Type", "application/pdf")
+                return Response(resp.content, status=resp.status_code, content_type=content_type)
+            if resp.status_code != 404:
+                return jsonify({"success": False, "message": resp.text or "Local preview unavailable"}), resp.status_code
+        except Exception as exc:
+            print(f"[RESUME] Local agent preview proxy failed: {exc}")
     return _serve_local_resume(rank_folder, filename)
 
 @app.route('/verify_resumes', methods=['POST'])

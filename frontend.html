@@ -469,7 +469,7 @@
                 return null;
             };
             const buildDownloadedResumePreviewUrl = (rankFolder, filename) =>
-                `${getSessionBaseUrl()}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
+                `${getCloudApiBaseUrl()}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
 
             const resolveDashboardResumeTargets = (row) => {
                 const resumeUrl = String(row?.resume_url || '').trim();

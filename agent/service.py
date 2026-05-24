@@ -44,29 +44,40 @@ def create_agent_app():
             return {"active": False, "valid": False, "reason": "No active session"}
         return scraper.get_session_health()
 
+    def _preview_auth_token():
+        return os.getenv("NJORDHR_AGENT_SYNC_TOKEN", "").strip()
+
+    def _require_preview_auth():
+        expected = _preview_auth_token()
+        if not expected:
+            return True, ""
+        auth = request.headers.get("Authorization", "").strip()
+        bearer = ""
+        if auth.lower().startswith("bearer "):
+            bearer = auth.split(" ", 1)[1].strip()
+        device_token = request.headers.get("X-Device-Token", "").strip()
+        if bearer == expected or device_token == expected:
+            return True, ""
+        return False, "Unauthorized preview token."
+
     def _resolved_download_root():
         cfg = settings_store.get()
         return os.path.abspath(os.path.expanduser(str(cfg.get("download_folder", "")).strip()))
 
     def _resolve_downloaded_resume_path(rank_folder, filename):
-        base_dir = _resolved_download_root()
+        base_dir = os.path.realpath(_resolved_download_root())
         safe_rank = str(rank_folder or "").strip()
         safe_name = str(filename or "").strip()
         if not base_dir or not safe_name:
             raise FileNotFoundError("Missing resume path")
 
-        full_path = os.path.abspath(os.path.join(base_dir, safe_rank, safe_name))
-        if not full_path.startswith(base_dir + os.sep) and full_path != base_dir:
+        full_path = os.path.realpath(os.path.join(base_dir, safe_rank, safe_name))
+        if os.path.commonpath([base_dir, full_path]) != base_dir:
             raise ValueError("Access denied")
 
-        if os.path.isfile(full_path):
-            return full_path
-
-        requested_name = os.path.basename(safe_name)
-        for root, _, files in os.walk(base_dir):
-            if requested_name in files:
-                return os.path.join(root, requested_name)
-        raise FileNotFoundError("File not found")
+        if not os.path.isfile(full_path):
+            raise FileNotFoundError("File not found")
+        return full_path
 
     def _build_scraper():
         cfg = settings_store.get()
@@ -225,6 +236,9 @@ def create_agent_app():
 
     @app.route("/preview_downloaded_resume/<path:rank_folder>/<path:filename>", methods=["GET"])
     def preview_downloaded_resume(rank_folder, filename):
+        ok, reason = _require_preview_auth()
+        if not ok:
+            return jsonify({"success": False, "message": reason}), 403
         try:
             full_path = _resolve_downloaded_resume_path(rank_folder, filename)
             return send_file(full_path, as_attachment=False)

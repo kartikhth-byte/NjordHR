@@ -112,7 +112,9 @@ class AgentSessionRouteTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.prev_agent_cfg = os.environ.get("NJORDHR_AGENT_CONFIG_PATH")
+        self.prev_agent_token = os.environ.get("NJORDHR_AGENT_SYNC_TOKEN")
         os.environ["NJORDHR_AGENT_CONFIG_PATH"] = os.path.join(self.temp_dir.name, "agent.json")
+        os.environ["NJORDHR_AGENT_SYNC_TOKEN"] = "agent-preview-token"
 
         parser = configparser.ConfigParser()
         parser["Advanced"] = {
@@ -152,6 +154,10 @@ class AgentSessionRouteTests(unittest.TestCase):
             os.environ.pop("NJORDHR_AGENT_CONFIG_PATH", None)
         else:
             os.environ["NJORDHR_AGENT_CONFIG_PATH"] = self.prev_agent_cfg
+        if self.prev_agent_token is None:
+            os.environ.pop("NJORDHR_AGENT_SYNC_TOKEN", None)
+        else:
+            os.environ["NJORDHR_AGENT_SYNC_TOKEN"] = self.prev_agent_token
         self.temp_dir.cleanup()
 
     def test_session_start_verify_disconnect_are_exposed_on_agent_api(self):
@@ -181,8 +187,30 @@ class AgentSessionRouteTests(unittest.TestCase):
             fh.write(b"%PDF-1.4 preview content")
 
         resp = self.client.get("/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf")
+        self.assertEqual(resp.status_code, 403)
+
+        resp = self.client.get(
+            "/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf",
+            headers={"X-Device-Token": "agent-preview-token"},
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"preview content", resp.data)
+
+    def test_agent_preview_downloaded_resume_rejects_symlink_escape(self):
+        rank_dir = os.path.join(self.temp_dir.name, "Chief_Officer")
+        os.makedirs(rank_dir, exist_ok=True)
+        with tempfile.TemporaryDirectory() as outside_tmp:
+            outside_file = os.path.join(outside_tmp, "escape.pdf")
+            with open(outside_file, "wb") as fh:
+                fh.write(b"%PDF-1.4 escaped")
+            link_path = os.path.join(rank_dir, "escape.pdf")
+            os.symlink(outside_file, link_path)
+
+            resp = self.client.get(
+                "/preview_downloaded_resume/Chief_Officer/escape.pdf",
+                headers={"X-Device-Token": "agent-preview-token"},
+            )
+            self.assertEqual(resp.status_code, 403)
 
     def test_session_start_cleans_up_scraper_when_bootstrap_fails(self):
         import agent.service as agent_service

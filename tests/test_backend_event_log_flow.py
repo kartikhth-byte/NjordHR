@@ -938,6 +938,34 @@ class BackendEventLogFlowTests(unittest.TestCase):
         summaries = {row["folder"]: row["pdf_count"] for row in summaries_resp.get_json()["folders"]}
         self.assertEqual(summaries, {"Chief_Officer": 1})
 
+    def test_preview_downloaded_resume_proxies_through_agent_when_local_agent_enabled(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = {}
+
+        class DummyResponse:
+            status_code = 200
+            content = b"%PDF-1.4 proxied preview"
+            headers = {"Content-Type": "application/pdf"}
+            text = ""
+
+        def fake_requests_request(method, url, **kwargs):
+            captured["method"] = method
+            captured["url"] = url
+            captured["headers"] = kwargs.get("headers") or {}
+            return DummyResponse()
+
+        with patch.dict(os.environ, {"NJORDHR_AGENT_SYNC_TOKEN": "agent-preview-token"}, clear=False):
+            with patch.object(backend_server.requests, "request", side_effect=fake_requests_request):
+                resp = self.client.get(
+                    "/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf"
+                )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, b"%PDF-1.4 proxied preview")
+        self.assertEqual(captured["method"], "GET")
+        self.assertIn("/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf", captured["url"])
+        self.assertEqual(captured["headers"].get("X-Device-Token"), "agent-preview-token")
+
     def test_admin_settings_loads_and_saves_mailbox_intake_settings_via_local_agent(self):
         backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
         captured = []
