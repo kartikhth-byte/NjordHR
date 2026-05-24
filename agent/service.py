@@ -44,6 +44,30 @@ def create_agent_app():
             return {"active": False, "valid": False, "reason": "No active session"}
         return scraper.get_session_health()
 
+    def _resolved_download_root():
+        cfg = settings_store.get()
+        return os.path.abspath(os.path.expanduser(str(cfg.get("download_folder", "")).strip()))
+
+    def _resolve_downloaded_resume_path(rank_folder, filename):
+        base_dir = _resolved_download_root()
+        safe_rank = str(rank_folder or "").strip()
+        safe_name = str(filename or "").strip()
+        if not base_dir or not safe_name:
+            raise FileNotFoundError("Missing resume path")
+
+        full_path = os.path.abspath(os.path.join(base_dir, safe_rank, safe_name))
+        if not full_path.startswith(base_dir + os.sep) and full_path != base_dir:
+            raise ValueError("Access denied")
+
+        if os.path.isfile(full_path):
+            return full_path
+
+        requested_name = os.path.basename(safe_name)
+        for root, _, files in os.walk(base_dir):
+            if requested_name in files:
+                return os.path.join(root, requested_name)
+        raise FileNotFoundError("File not found")
+
     def _build_scraper():
         cfg = settings_store.get()
         download_folder = cfg.get("download_folder", "")
@@ -175,7 +199,16 @@ def create_agent_app():
             scraper = scraper_session["scraper"]
         if not scraper:
             return jsonify({"success": False, "message": "No active session"}), 400
-        return jsonify(scraper.verify_otp(otp))
+        result = scraper.verify_otp(otp)
+        if result.get("success"):
+            try:
+                ranks_str = parser.get("Ranks", "rank_options", fallback="").strip()
+                ship_types_str = parser.get("ShipTypes", "ship_type_options", fallback="").strip()
+                result["ranks"] = [r.strip() for r in ranks_str.split("\n") if r.strip()]
+                result["ship_types"] = [s.strip() for s in ship_types_str.split("\n") if s.strip()]
+            except Exception as exc:
+                return jsonify({"success": False, "message": f"Error in config.ini: {exc}"}), 500
+        return jsonify(result)
 
     @app.route("/session/disconnect", methods=["POST"])
     def session_disconnect():
@@ -189,6 +222,16 @@ def create_agent_app():
     @app.route("/session/health", methods=["GET"])
     def session_health():
         return jsonify({"success": True, "health": _session_health()})
+
+    @app.route("/preview_downloaded_resume/<path:rank_folder>/<path:filename>", methods=["GET"])
+    def preview_downloaded_resume(rank_folder, filename):
+        try:
+            full_path = _resolve_downloaded_resume_path(rank_folder, filename)
+            return send_file(full_path, as_attachment=False)
+        except ValueError:
+            return "Access denied.", 403
+        except FileNotFoundError:
+            return "File not found", 404
 
     @app.route("/jobs/download", methods=["POST"])
     def jobs_download():

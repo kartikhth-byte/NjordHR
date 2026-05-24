@@ -121,6 +121,7 @@ class AgentSessionRouteTests(unittest.TestCase):
             "seajob_dashboard_url": "http://seajob.net/company/dashboard.php",
         }
         parser["Ranks"] = {"rank_options": "Chief Officer\n2nd Engineer"}
+        parser["ShipTypes"] = {"ship_type_options": "Bulk Carrier\nOil Tanker"}
 
         patchers = [
             patch(
@@ -163,12 +164,25 @@ class AgentSessionRouteTests(unittest.TestCase):
         self.assertEqual(verify_resp.status_code, 200)
         verify_body = verify_resp.get_json()
         self.assertTrue(verify_body["success"])
+        self.assertEqual(verify_body["ranks"], ["Chief Officer", "2nd Engineer"])
+        self.assertEqual(verify_body["ship_types"], ["Bulk Carrier", "Oil Tanker"])
 
         disconnect_resp = self.client.post("/session/disconnect")
         self.assertEqual(disconnect_resp.status_code, 200)
         disconnect_body = disconnect_resp.get_json()
         self.assertTrue(disconnect_body["success"])
         self.assertTrue(_FakeScraper.last_instance.quit_called)
+
+    def test_agent_preview_downloaded_resume_serves_local_file(self):
+        rank_dir = os.path.join(self.temp_dir.name, "Chief_Officer")
+        os.makedirs(rank_dir, exist_ok=True)
+        file_path = os.path.join(rank_dir, "Chief-Officer_Bulk-Carrier_1001.pdf")
+        with open(file_path, "wb") as fh:
+            fh.write(b"%PDF-1.4 preview content")
+
+        resp = self.client.get("/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"preview content", resp.data)
 
     def test_session_start_cleans_up_scraper_when_bootstrap_fails(self):
         import agent.service as agent_service

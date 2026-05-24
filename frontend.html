@@ -411,6 +411,10 @@
                 }
                 return API_BASE_URL;
             };
+            const getSessionHealthUrl = () => {
+                const sessionBaseUrl = getSessionBaseUrl();
+                return `${sessionBaseUrl}${sessionBaseUrl === API_BASE_URL ? '/session_health' : '/session/health'}`;
+            };
             const normalizeDownloadStreamEvent = (rawEvent) => {
                 const event = rawEvent && typeof rawEvent === 'object' ? rawEvent : {};
                 const eventType = String(event.type || '').trim();
@@ -465,7 +469,7 @@
                 return null;
             };
             const buildDownloadedResumePreviewUrl = (rankFolder, filename) =>
-                `${getCloudApiBaseUrl()}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
+                `${getSessionBaseUrl()}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
 
             const resolveDashboardResumeTargets = (row) => {
                 const resumeUrl = String(row?.resume_url || '').trim();
@@ -934,7 +938,7 @@
 
                 const checkHealth = async () => {
                     try {
-                        const response = await fetch(`${getSessionBaseUrl()}/session_health`);
+                        const response = await fetch(getSessionHealthUrl());
                         const data = await response.json();
                         if (!data.success) return;
 
@@ -2670,7 +2674,7 @@
                         stream.close();
                         downloadEventSourceRef.current = null;
                         resetDownloadActivityState();
-                        fetch(`${getSessionBaseUrl()}/session_health`)
+                        fetch(getSessionHealthUrl())
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success && data.health && !data.health.valid) {
@@ -5921,7 +5925,7 @@
                                             </div>
                                             <iframe
                                                 title={`Preview ${downloadFolderBrowser.selectedFile}`}
-                                                src={`${API_BASE_URL}/preview_downloaded_resume/${downloadFolderBrowser.rankFolder}/${encodeURIComponent(downloadFolderBrowser.selectedFile)}`}
+                                                src={buildDownloadedResumePreviewUrl(downloadFolderBrowser.rankFolder, downloadFolderBrowser.selectedFile)}
                                                 className="w-full flex-1 min-h-0"
                                             />
                                         </>
