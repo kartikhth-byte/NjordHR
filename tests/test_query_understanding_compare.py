@@ -105,6 +105,76 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
         results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-3")
         self.assertEqual(results[0].comparison_outcome, "schema_error")
 
+    def test_compare_query_plans_treats_legacy_invalid_but_llm_valid_equivalent_rows_as_expected_delta(self):
+        legacy_plan = _base_plan()
+        legacy_plan["semantic_query"] = "2nd engineer with valid passport"
+        legacy_plan["validation"] = {
+            "status": "invalid",
+            "errors": [
+                {
+                    "code": "mandatory_marker_in_semantic_query",
+                    "path": "semantic_query",
+                    "message": "mandatory fragments must not remain in semantic_query",
+                }
+            ],
+        }
+
+        llm_plan = _base_plan()
+        llm_plan["semantic_query"] = ""
+        llm_plan["validation"] = {"status": "valid", "errors": []}
+
+        results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-4")
+        self.assertEqual(results[0].comparison_outcome, "expected_delta")
+
+    def test_compare_query_plans_keeps_non_mandatory_legacy_schema_failures_as_schema_error(self):
+        legacy_plan = _base_plan()
+        llm_plan = _base_plan()
+
+        legacy_normalized = _base_plan()
+        legacy_normalized["validation"] = {
+            "status": "invalid",
+            "errors": [
+                {
+                    "code": "catalogue_drift",
+                    "path": "normalizer.catalog_version",
+                    "message": "catalog version mismatch",
+                }
+            ],
+        }
+
+        llm_normalized = _base_plan()
+        llm_normalized["validation"] = {"status": "valid", "errors": []}
+
+        legacy_record = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-5",
+            family="rank_match",
+            mode="required",
+            normalized_payload={"type": "rank_match", "rank": "2nd_engineer"},
+            source_text="2nd engineer",
+            status="invalid",
+        )
+        llm_record = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-5",
+            family="rank_match",
+            mode="required",
+            normalized_payload={"type": "rank_match", "rank": "2nd_engineer"},
+            source_text="2nd engineer",
+            status="invalid",
+        )
+
+        with unittest.mock.patch(
+            "query_understanding.normalizer_compare.normalize_query_plan_v1",
+            side_effect=[legacy_normalized, llm_normalized],
+        ), unittest.mock.patch(
+            "query_understanding.normalizer_compare.canonical_comparison_records",
+            side_effect=[[legacy_record], [llm_record]],
+        ):
+            results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-5")
+
+        self.assertEqual(results[0].comparison_outcome, "schema_error")
+
 
 if __name__ == "__main__":
     unittest.main()
