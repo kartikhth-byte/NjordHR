@@ -58,10 +58,13 @@ class QueryUnderstandingReviewPackTests(unittest.TestCase):
         self.assertIn("persist", candidate_facts_replay)
         self.assertIn("replay", candidate_facts_replay)
         self.assertIn("audit", candidate_facts_replay)
+        self.assertIn("review_capture", candidate_facts_replay)
+        self.assertIn("review_cache_dir", candidate_facts_replay)
         self.assertEqual(candidate_facts_replay["candidate_facts"]["validation"]["status"], "valid")
         self.assertEqual(candidate_facts_replay["persist"]["committed"], True)
         self.assertEqual(candidate_facts_replay["replay"]["status"], "resolved")
         self.assertEqual(candidate_facts_replay["audit"]["selection_status"], "resolved")
+        self.assertEqual(candidate_facts_replay["review_capture"]["review_item"]["review_status"], "pending_review")
         self.assertEqual(
             candidate_facts_replay["audit"]["pinned_facts_identity"]["candidate_resume_id"],
             "candidate-resume-1",

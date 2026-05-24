@@ -233,6 +233,13 @@
             const [manualReviewDetail, setManualReviewDetail] = useState(null);
             const [manualReviewSelectedRole, setManualReviewSelectedRole] = useState('');
             const [manualReviewMoveConfirmOpen, setManualReviewMoveConfirmOpen] = useState(false);
+            const [candidateFactsReviewItems, setCandidateFactsReviewItems] = useState([]);
+            const [candidateFactsReviewSelectedId, setCandidateFactsReviewSelectedId] = useState('');
+            const [candidateFactsReviewDetail, setCandidateFactsReviewDetail] = useState(null);
+            const [candidateFactsReviewLoading, setCandidateFactsReviewLoading] = useState(false);
+            const [candidateFactsReviewDetailLoading, setCandidateFactsReviewDetailLoading] = useState(false);
+            const [candidateFactsReviewActionLoading, setCandidateFactsReviewActionLoading] = useState(false);
+            const [candidateFactsReviewStatusFilter, setCandidateFactsReviewStatusFilter] = useState('pending_review');
             const [downloadFolderBrowser, setDownloadFolderBrowser] = useState({
                 open: false,
                 rankFolder: '',
@@ -545,11 +552,11 @@
             })();
             const role = authUser?.role || '';
             const allowedTabs = role === 'admin'
-                ? ['download', 'search', 'dashboard', 'setup', 'settings', 'logs']
+                ? ['download', 'search', 'dashboard', 'setup', 'facts_review', 'settings', 'logs']
                 : role === 'manager'
-                    ? ['download', 'search', 'dashboard', 'setup']
+                    ? ['download', 'search', 'dashboard', 'setup', 'facts_review']
                     : role === 'recruiter'
-                    ? ['search', 'dashboard', 'setup']
+                    ? ['search', 'dashboard', 'setup', 'facts_review']
                     : [];
             const canAccessTab = (tab) => allowedTabs.includes(tab);
 
@@ -818,6 +825,9 @@
                     fetchRuntimeConfig();
                     fetchSetupManifest();
                 }
+                if (activeTab === 'facts_review') {
+                    fetchCandidateFactsReviewItems();
+                }
                 if (activeTab === 'logs' && role === 'admin') {
                     loadUsageLogs();
                 }
@@ -858,6 +868,12 @@
                 if (activeTab !== 'dashboard') return;
                 fetchDashboardData({ resetPage: true });
             }, [dashboardSection, dashboardView, dashboardRank, authUser, activeTab]);
+
+            useEffect(() => {
+                if (!authUser) return;
+                if (activeTab !== 'facts_review') return;
+                fetchCandidateFactsReviewItems();
+            }, [candidateFactsReviewStatusFilter, authUser, activeTab]);
             
             useEffect(() => {
                 filterAndSortData();
@@ -1274,6 +1290,121 @@
                     document.activeElement.blur();
                 }
                 setManualReviewMoveConfirmOpen(true);
+            };
+
+            const mapCandidateFactsReviewItemSummary = (item) => {
+                const candidateFacts = item?.candidate_facts || {};
+                const source = candidateFacts.source || {};
+                const name = candidateFacts.identity?.candidate_name?.value
+                    || candidateFacts.identity?.full_name
+                    || source.candidate_id
+                    || item?.candidate_id
+                    || '-';
+                const rank = candidateFacts.rank?.value
+                    || candidateFacts.role?.applied_rank_normalized
+                    || '-';
+                const extractionStatus = candidateFacts.extraction?.status || item?.extraction_status || '-';
+                return {
+                    name,
+                    rank,
+                    extractionStatus,
+                    sourceOrigin: source.source_origin || '-',
+                    detectedLayout: source.detected_layout || '-',
+                    warningCount: Array.isArray(candidateFacts.extraction?.warnings) ? candidateFacts.extraction.warnings.length : 0,
+                };
+            };
+
+            const fetchCandidateFactsReviewItems = async (reviewStatus = candidateFactsReviewStatusFilter) => {
+                setCandidateFactsReviewLoading(true);
+                try {
+                    const params = new URLSearchParams();
+                    if (reviewStatus) {
+                        params.set('status', reviewStatus);
+                    }
+                    const response = await fetch(`${API_BASE_URL}/candidate-facts/review/items${params.toString() ? `?${params.toString()}` : ''}`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load candidate facts review items.');
+                        setCandidateFactsReviewItems([]);
+                        setCandidateFactsReviewSelectedId('');
+                        setCandidateFactsReviewDetail(null);
+                        return;
+                    }
+                    const items = Array.isArray(data.items) ? data.items : [];
+                    setCandidateFactsReviewItems(items);
+                    const nextSelectedId = items.some(item => String(item.id) === String(candidateFactsReviewSelectedId))
+                        ? candidateFactsReviewSelectedId
+                        : (items[0]?.id || '');
+                    setCandidateFactsReviewSelectedId(nextSelectedId);
+                    if (nextSelectedId) {
+                        await fetchCandidateFactsReviewItemDetail(nextSelectedId);
+                    } else {
+                        setCandidateFactsReviewDetail(null);
+                    }
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load candidate facts review items.');
+                    setCandidateFactsReviewItems([]);
+                    setCandidateFactsReviewSelectedId('');
+                    setCandidateFactsReviewDetail(null);
+                } finally {
+                    setCandidateFactsReviewLoading(false);
+                }
+            };
+
+            const fetchCandidateFactsReviewItemDetail = async (itemId) => {
+                if (!itemId) {
+                    setCandidateFactsReviewDetail(null);
+                    return;
+                }
+                setCandidateFactsReviewDetailLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/candidate-facts/review/item?id=${encodeURIComponent(itemId)}`);
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load candidate facts review item.');
+                        setCandidateFactsReviewDetail(null);
+                        return;
+                    }
+                    setCandidateFactsReviewDetail(data.item || null);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load candidate facts review item.');
+                    setCandidateFactsReviewDetail(null);
+                } finally {
+                    setCandidateFactsReviewDetailLoading(false);
+                }
+            };
+
+            const openCandidateFactsReviewItem = (itemId) => {
+                if (!itemId || itemId === candidateFactsReviewSelectedId) return;
+                setCandidateFactsReviewSelectedId(itemId);
+                fetchCandidateFactsReviewItemDetail(itemId);
+            };
+
+            const refreshCandidateFactsReview = async () => {
+                await fetchCandidateFactsReviewItems();
+            };
+
+            const updateCandidateFactsReviewItem = async (endpoint, successMessage, errorMessage, payload = {}) => {
+                if (!candidateFactsReviewDetail?.id) return;
+                setCandidateFactsReviewActionLoading(true);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/candidate-facts/review/${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: candidateFactsReviewDetail.id, ...payload }),
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || errorMessage);
+                        return;
+                    }
+                    handleSendMessage('success', successMessage);
+                    await fetchCandidateFactsReviewItems();
+                } catch (_error) {
+                    handleSendMessage('error', errorMessage);
+                } finally {
+                    setCandidateFactsReviewActionLoading(false);
+                }
             };
 
             const confirmMoveManualReviewItem = async () => {
@@ -4861,6 +4992,239 @@
                 );
             };
 
+            const CandidateFactsReviewTabContent = () => {
+                if (!['admin', 'manager', 'recruiter'].includes(role)) {
+                    return (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                            Candidate facts review is available to admin, manager, and recruiter users only.
+                        </div>
+                    );
+                }
+
+                const selectedItem = candidateFactsReviewDetail || candidateFactsReviewItems.find(item => String(item.id) === String(candidateFactsReviewSelectedId)) || null;
+                const selectedSummary = selectedItem ? mapCandidateFactsReviewItemSummary(selectedItem) : null;
+                const selectedCandidateFacts = selectedItem?.candidate_facts || {};
+                const reviewWarnings = Array.isArray(selectedCandidateFacts.extraction?.warnings) ? selectedCandidateFacts.extraction.warnings : [];
+                const reviewEvidence = Array.isArray(selectedCandidateFacts.evidence) ? selectedCandidateFacts.evidence : [];
+
+                return (
+                    <div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                            <div>
+                                <h2 className="text-2xl font-semibold">Candidate Facts Review</h2>
+                                <p className="text-sm text-gray-600">
+                                    Inspect extracted candidate facts locally before promoting them into persisted storage.
+                                </p>
+                            </div>
+                            <button
+                                onClick={refreshCandidateFactsReview}
+                                disabled={candidateFactsReviewLoading}
+                                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                {candidateFactsReviewLoading ? 'Refreshing...' : 'Refresh Queue'}
+                            </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 mb-4">
+                            {[
+                                ['pending_review', 'Pending'],
+                                ['approved', 'Approved'],
+                                ['rejected', 'Rejected'],
+                                ['', 'All'],
+                            ].map(([value, label]) => (
+                                <button
+                                    key={label}
+                                    onClick={() => setCandidateFactsReviewStatusFilter(value)}
+                                    className={`px-3 py-1.5 text-sm rounded-md border ${
+                                        candidateFactsReviewStatusFilter === value
+                                            ? 'bg-blue-600 text-white border-blue-600'
+                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                            <div className="xl:col-span-1 bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                                    <p className="font-medium text-gray-900">Queue</p>
+                                    <p className="text-xs text-gray-500">{candidateFactsReviewItems.length} item(s)</p>
+                                </div>
+                                {candidateFactsReviewLoading ? (
+                                    <div className="p-4 text-sm text-gray-500">Loading candidate facts review items...</div>
+                                ) : candidateFactsReviewItems.length === 0 ? (
+                                    <div className="p-4 text-sm text-gray-500">No candidate facts review items found.</div>
+                                ) : (
+                                    <div className="max-h-[32rem] overflow-y-auto divide-y divide-gray-100">
+                                        {candidateFactsReviewItems.map((item) => {
+                                            const summary = mapCandidateFactsReviewItemSummary(item);
+                                            const isSelected = String(item.id) === String(candidateFactsReviewSelectedId);
+                                            return (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    onClick={() => openCandidateFactsReviewItem(item.id)}
+                                                    className={`w-full text-left px-4 py-3 transition ${
+                                                        isSelected ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="font-medium text-gray-900 truncate">{summary.name}</p>
+                                                            <p className="text-xs text-gray-500 truncate">{summary.rank} · {item.candidate_resume_id}</p>
+                                                            <p className="text-xs text-gray-500 truncate">
+                                                                {item.review_status} · {item.persistence_status || 'not_persisted'}
+                                                            </p>
+                                                        </div>
+                                                        <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
+                                                            {summary.extractionStatus}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="xl:col-span-2 bg-white border border-gray-200 rounded-lg p-5">
+                                {!selectedItem ? (
+                                    <p className="text-sm text-gray-500">Select a candidate facts item to inspect its details.</p>
+                                ) : candidateFactsReviewDetailLoading ? (
+                                    <p className="text-sm text-gray-500">Loading review item...</p>
+                                ) : (
+                                    <div className="space-y-5">
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-xl font-semibold text-gray-900">{selectedSummary?.name || '-'}</h3>
+                                                <p className="text-sm text-gray-600">{selectedSummary?.rank || '-'}</p>
+                                                <p className="text-xs text-gray-500 mt-1">Resume ID: {selectedItem.candidate_resume_id || '-'}</p>
+                                                <p className="text-xs text-gray-500">Review item: {selectedItem.id || '-'}</p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="px-2 py-1 text-xs rounded-full border border-slate-200 bg-slate-50 text-slate-700">
+                                                    {selectedItem.review_status || 'pending_review'}
+                                                </span>
+                                                <span className="px-2 py-1 text-xs rounded-full border border-slate-200 bg-slate-50 text-slate-700">
+                                                    {selectedItem.persistence_status || 'not_persisted'}
+                                                </span>
+                                                <span className="px-2 py-1 text-xs rounded-full border border-slate-200 bg-slate-50 text-slate-700">
+                                                    {selectedSummary?.sourceOrigin || '-'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                <p className="text-xs uppercase text-gray-500">Extraction Status</p>
+                                                <p className="font-medium text-gray-900">{selectedSummary?.extractionStatus || '-'}</p>
+                                            </div>
+                                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                <p className="text-xs uppercase text-gray-500">Detected Layout</p>
+                                                <p className="font-medium text-gray-900">{selectedSummary?.detectedLayout || '-'}</p>
+                                            </div>
+                                            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                                <p className="text-xs uppercase text-gray-500">Warnings</p>
+                                                <p className="font-medium text-gray-900">{reviewWarnings.length}</p>
+                                            </div>
+                                        </div>
+
+                                        {reviewWarnings.length > 0 && (
+                                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                                                <p className="text-sm font-medium text-amber-900">Warnings</p>
+                                                <ul className="mt-2 list-disc pl-5 space-y-1 text-xs text-amber-900">
+                                                    {reviewWarnings.map((warning, idx) => (
+                                                        <li key={`${warning}-${idx}`}>{warning}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {reviewEvidence.length > 0 && (
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-900 mb-2">Evidence</p>
+                                                <div className="space-y-2">
+                                                    {reviewEvidence.map((item, idx) => (
+                                                        <div key={`${item.evidence_id || idx}-${idx}`} className="rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+                                                            <p><span className="font-medium">Evidence ID:</span> {item.evidence_id || '-'}</p>
+                                                            <p><span className="font-medium">Source Kind:</span> {item.source_kind || '-'}</p>
+                                                            <p><span className="font-medium">Source ID:</span> {item.source_id || '-'}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-900 mb-2">Candidate Facts JSON</p>
+                                                <pre className="max-h-[24rem] overflow-auto rounded-lg border border-gray-200 bg-slate-50 p-3 text-[11px] leading-5 text-slate-800">
+                                                    {JSON.stringify(selectedCandidateFacts, null, 2)}
+                                                </pre>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <div className="rounded-lg border border-gray-200 bg-white p-4">
+                                                    <p className="text-sm font-medium text-gray-900">Review Actions</p>
+                                                    <p className="text-xs text-gray-600 mt-1">
+                                                        Approve before promotion into persisted rows. Rejected items remain in the local review cache.
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-2 mt-3">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateCandidateFactsReviewItem('approve', 'Candidate facts approved.', 'Failed to approve candidate facts review item.', {
+                                                                reviewed_by: authUser?.username || '',
+                                                                review_notes: 'Approved from frontend review panel',
+                                                            })}
+                                                            disabled={candidateFactsReviewActionLoading}
+                                                            className="px-3 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                                                        >
+                                                            {candidateFactsReviewActionLoading ? 'Working...' : 'Approve'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateCandidateFactsReviewItem('reject', 'Candidate facts rejected.', 'Failed to reject candidate facts review item.', {
+                                                                reviewed_by: authUser?.username || '',
+                                                                review_notes: 'Rejected from frontend review panel',
+                                                            })}
+                                                            disabled={candidateFactsReviewActionLoading}
+                                                            className="px-3 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateCandidateFactsReviewItem('promote', 'Candidate facts promoted to persisted rows.', 'Failed to promote candidate facts review item.')}
+                                                            disabled={candidateFactsReviewActionLoading || String(selectedItem.review_status || '') !== 'approved'}
+                                                            className="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                                                        >
+                                                            Promote
+                                                        </button>
+                                                    </div>
+                                                    {String(selectedItem.review_status || '') !== 'approved' && (
+                                                        <p className="text-xs text-gray-500 mt-2">Promotion is enabled after approval.</p>
+                                                    )}
+                                                </div>
+                                                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-xs text-gray-700">
+                                                    <p className="font-medium text-gray-900 mb-2">Review Metadata</p>
+                                                    <p><span className="font-medium">Parser:</span> {selectedItem.parser_version || '-'}</p>
+                                                    <p><span className="font-medium">Facts Revision:</span> {selectedItem.facts_revision || '-'}</p>
+                                                    <p><span className="font-medium">Created:</span> {selectedItem.created_at || '-'}</p>
+                                                    <p><span className="font-medium">Updated:</span> {selectedItem.updated_at || '-'}</p>
+                                                    <p><span className="font-medium">Reviewed By:</span> {selectedItem.reviewed_by || '-'}</p>
+                                                    <p><span className="font-medium">Reviewed At:</span> {selectedItem.reviewed_at || '-'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             const LogsTabContent = () => {
                 if (role !== 'admin') {
                     return (
@@ -5307,6 +5671,7 @@
                             {canAccessTab('search') && <button onClick={() => setActiveTab('search')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'search' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>AI Search</button>}
                             {canAccessTab('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>}
                             {canAccessTab('setup') && <button onClick={() => setActiveTab('setup')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'setup' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Setup</button>}
+                            {canAccessTab('facts_review') && <button onClick={() => setActiveTab('facts_review')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'facts_review' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Facts Review</button>}
                             {canAccessTab('settings') && <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>}
                             {canAccessTab('logs') && <button onClick={() => setActiveTab('logs')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'logs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Logs</button>}
                         </div>
@@ -5799,6 +6164,7 @@
                             )}
                              {activeTab === 'dashboard' && DashboardTabContent()}
                              {activeTab === 'setup' && SetupTabContent()}
+                             {activeTab === 'facts_review' && CandidateFactsReviewTabContent()}
                              {activeTab === 'settings' && SettingsTabContent()}
                              {activeTab === 'logs' && LogsTabContent()}
                         </main>

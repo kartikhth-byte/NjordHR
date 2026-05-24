@@ -39,6 +39,8 @@ from repositories.repo_factory import build_candidate_event_repo
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import normalize_env_value, normalized_url
 from ai_analyzer import Analyzer
+from candidate_facts.repository import CandidateFactsRepository
+from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -61,6 +63,7 @@ ui_client_seen_once = False
 auto_shutdown_started = False
 auto_shutdown_in_progress = False
 cloud_auth_state_cache = {"ts": 0, "mode": "local", "reason": "not_checked"}
+candidate_facts_repo = None
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
@@ -114,6 +117,21 @@ def _payload_bool(payload, key, default=False):
 def _cloud_api_runtime_summary():
     settings = load_cloud_api_settings()
     return cloud_api_settings_payload(settings)
+
+
+def _candidate_facts_review_cache_dir():
+    override = str(os.getenv("NJORDHR_CANDIDATE_FACTS_CACHE_DIR", "")).strip()
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
+    return candidate_facts_validation_cache_base_dir()
+
+
+def _candidate_facts_repository():
+    global candidate_facts_repo
+    if candidate_facts_repo is None:
+        cache_dir = _candidate_facts_review_cache_dir()
+        candidate_facts_repo = CandidateFactsRepository(validation_cache_dir=cache_dir)
+    return candidate_facts_repo
 
 
 def _refresh_runtime_managers():
@@ -2111,6 +2129,134 @@ def proxy_email_intake_manual_review_open():
         return jsonify(resp.json()), resp.status_code
     except Exception as exc:
         return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
+
+
+@app.route('/candidate-facts/review/capture', methods=['POST'])
+def capture_candidate_facts_review_item():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    payload = request.json or {}
+    candidate_resume_id = str(payload.get("candidate_resume_id", "")).strip()
+    resume_blob_id = str(payload.get("resume_blob_id", "")).strip()
+    parser_version = str(payload.get("parser_version", "")).strip()
+    facts_revision = str(payload.get("facts_revision", "")).strip()
+    candidate_facts = payload.get("candidate_facts") or {}
+    if not candidate_resume_id:
+        return jsonify({"success": False, "message": "candidate_resume_id is required"}), 400
+    if not resume_blob_id:
+        return jsonify({"success": False, "message": "resume_blob_id is required"}), 400
+    if not parser_version:
+        return jsonify({"success": False, "message": "parser_version is required"}), 400
+    if not facts_revision:
+        return jsonify({"success": False, "message": "facts_revision is required"}), 400
+    if not isinstance(candidate_facts, dict) or not candidate_facts:
+        return jsonify({"success": False, "message": "candidate_facts is required"}), 400
+    try:
+        repo = _candidate_facts_repository()
+        item = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id=candidate_resume_id,
+            resume_blob_id=resume_blob_id,
+            candidate_facts=candidate_facts,
+            parser_version=parser_version,
+            facts_revision=facts_revision,
+        )
+        return jsonify({"success": True, "review_item": item["review_item"], "candidate_facts": item["candidate_facts"]})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Candidate facts capture failed: {exc}"}), 500
+
+
+@app.route('/candidate-facts/review/items', methods=['GET'])
+def list_candidate_facts_review_items():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    review_status = str(request.args.get("status", "")).strip() or None
+    try:
+        repo = _candidate_facts_repository()
+        return jsonify({"success": True, "items": repo.list_candidate_facts_review_items(review_status=review_status)})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Candidate facts review items unavailable: {exc}"}), 500
+
+
+@app.route('/candidate-facts/review/item', methods=['GET'])
+def get_candidate_facts_review_item():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    item_id = str(request.args.get("id", "")).strip()
+    if not item_id:
+        return jsonify({"success": False, "message": "id is required"}), 400
+    try:
+        repo = _candidate_facts_repository()
+        item = repo.validation_cache.get_review_item(item_id) if repo.validation_cache else None
+        if item is None:
+            return jsonify({"success": False, "message": "Review item not found"}), 404
+        return jsonify({"success": True, "item": item})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Candidate facts review item unavailable: {exc}"}), 500
+
+
+@app.route('/candidate-facts/review/approve', methods=['POST'])
+def approve_candidate_facts_review_item():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    payload = request.json or {}
+    item_id = str(payload.get("id", "")).strip()
+    if not item_id:
+        return jsonify({"success": False, "message": "id is required"}), 400
+    try:
+        repo = _candidate_facts_repository()
+        item = repo.approve_candidate_facts_review_item(
+            item_id,
+            reviewed_by=str(payload.get("reviewed_by", "")).strip(),
+            review_notes=str(payload.get("review_notes", "")).strip(),
+        )
+        return jsonify({"success": True, "review_item": item})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Candidate facts approval failed: {exc}"}), 500
+
+
+@app.route('/candidate-facts/review/reject', methods=['POST'])
+def reject_candidate_facts_review_item():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    payload = request.json or {}
+    item_id = str(payload.get("id", "")).strip()
+    if not item_id:
+        return jsonify({"success": False, "message": "id is required"}), 400
+    try:
+        repo = _candidate_facts_repository()
+        item = repo.reject_candidate_facts_review_item(
+            item_id,
+            reviewed_by=str(payload.get("reviewed_by", "")).strip(),
+            review_notes=str(payload.get("review_notes", "")).strip(),
+        )
+        return jsonify({"success": True, "review_item": item})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Candidate facts rejection failed: {exc}"}), 500
+
+
+@app.route('/candidate-facts/review/promote', methods=['POST'])
+def promote_candidate_facts_review_item():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    payload = request.json or {}
+    item_id = str(payload.get("id", "")).strip()
+    if not item_id:
+        return jsonify({"success": False, "message": "id is required"}), 400
+    try:
+        repo = _candidate_facts_repository()
+        result = repo.promote_candidate_facts_review_item(
+            item_id,
+            acceptable_extraction_statuses=payload.get("acceptable_extraction_statuses"),
+        )
+        return jsonify({"success": True, "review_item": result["review_item"], "persist": result["persist"]})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Candidate facts promotion failed: {exc}"}), 500
 
 
 @app.route('/email-intake/auth/start', methods=['POST'])

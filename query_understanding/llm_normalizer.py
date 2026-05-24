@@ -29,9 +29,10 @@ def is_enabled() -> bool:
 
 
 def normalize_prompt_to_query_plan_v1(*_args: Any, **_kwargs: Any) -> Mapping[str, Any] | None:
-    """Return no plan while the LLM normalizer remains disabled."""
+    """Return a shadow query plan only when a provider is attached and the feature is enabled."""
 
-    return None
+    llm_plan_provider = _kwargs.pop("llm_plan_provider", None)
+    return maybe_build_shadow_query_plan(llm_plan_provider, *_args, **_kwargs)
 
 
 def maybe_build_shadow_query_plan(

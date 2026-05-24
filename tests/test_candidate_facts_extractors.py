@@ -67,8 +67,23 @@ class _HollowAnalyzer:
 
 
 class CandidateFactsExtractorStubTests(unittest.TestCase):
-    def test_all_source_extractors_raise_not_implemented(self):
-        modules = [generic_pdf, certificates, endorsements, contracts, engines]
+    def test_generic_pdf_extractor_builds_portable_candidate_facts(self):
+        payload = generic_pdf.extract_candidate_facts(
+            filename="resume-1",
+            rank="2nd Engineer",
+            chunks=[],
+            raw_text="Jane Doe\n2nd Engineer\nPassport\nEmail: jane@example.com",
+        )
+        self.assertEqual(payload["schema_version"], "candidate_facts.v1")
+        self.assertEqual(payload["source"]["source_origin"], "manual_upload")
+        self.assertEqual(payload["source"]["detected_layout"], "unknown")
+        self.assertEqual(payload["rank"]["value"], "2nd_engineer")
+        self.assertEqual(payload["validation"]["status"], "degraded")
+        self.assertEqual(payload["identity"]["candidate_name"]["value"], "Jane Doe")
+        self.assertTrue(payload["evidence"])
+
+    def test_remaining_source_extractors_raise_not_implemented(self):
+        modules = [certificates, endorsements, contracts, engines]
         for module in modules:
             with self.subTest(module=module.__name__):
                 with self.assertRaises(NotImplementedError):
@@ -154,6 +169,7 @@ class CandidateFactsExtractorStubTests(unittest.TestCase):
         self.assertEqual(payload["source"]["detected_layout"], "unknown")
         self.assertEqual(payload["extraction"]["status"], "partial")
         self.assertEqual(payload["documents"], [])
+        self.assertEqual(payload["rank"]["value"], "2nd_engineer")
 
 
 if __name__ == "__main__":

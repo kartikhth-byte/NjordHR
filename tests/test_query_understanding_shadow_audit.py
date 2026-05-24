@@ -51,6 +51,18 @@ class ShadowAuditTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
             self.assertTrue(is_enabled())
 
+    def test_llm_normalizer_wrapper_delegates_when_enabled(self):
+        provider = mock.Mock(return_value={"plan": {"schema_version": "query_plan.v1"}, "diagnostics": {"status": "success"}})
+        with mock.patch.dict(os.environ, {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
+            result = normalize_prompt_to_query_plan_v1(
+                prompt="2nd engineer",
+                rank="2nd engineer",
+                llm_plan_provider=provider,
+            )
+        provider.assert_called_once()
+        self.assertEqual(result["plan"]["schema_version"], "query_plan.v1")
+        self.assertEqual(result["diagnostics"]["status"], "success")
+
     def test_shadow_audit_entry_logs_legacy_plan_when_llm_disabled(self):
         entry = build_shadow_audit_entry(
             self.analyzer,

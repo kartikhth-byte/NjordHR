@@ -52,6 +52,8 @@ def _stub_external_modules():
 
 
 _stub_external_modules()
+_prev_use_supabase_db = os.environ.get("USE_SUPABASE_DB")
+os.environ["USE_SUPABASE_DB"] = "false"
 import backend_server  # noqa: E402
 from csv_manager import CSVManager  # noqa: E402
 
@@ -62,6 +64,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.base = Path(self.temp_dir.name)
         self.download_root = self.base / "Source"
         self.verified_root = self.base / "Verified_Resumes"
+        self.candidate_facts_cache_root = self.base / "candidate-facts-cache"
         self.rank = "Chief_Officer"
         self.rank_dir = self.download_root / self.rank
         self.rank_dir.mkdir(parents=True, exist_ok=True)
@@ -97,10 +100,13 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.prev_admin_token = os.environ.get("NJORDHR_ADMIN_TOKEN")
         os.environ["NJORDHR_ADMIN_TOKEN"] = "test-admin-token"
         self.prev_config_path = os.environ.get("NJORDHR_CONFIG_PATH")
+        self.prev_candidate_facts_cache_dir = os.environ.get("NJORDHR_CANDIDATE_FACTS_CACHE_DIR")
+        os.environ["NJORDHR_CANDIDATE_FACTS_CACHE_DIR"] = str(self.candidate_facts_cache_root)
         self.temp_config_path = str(self.base / "config.test.ini")
         with open(self.temp_config_path, "w", encoding="utf-8") as fh:
             backend_server.config.write(fh)
         os.environ["NJORDHR_CONFIG_PATH"] = self.temp_config_path
+        backend_server.candidate_facts_repo = None
         self.client = backend_server.app.test_client()
         with self.client.session_transaction() as sess:
             sess["username"] = "admin"
@@ -118,6 +124,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
             os.environ.pop("NJORDHR_CONFIG_PATH", None)
         else:
             os.environ["NJORDHR_CONFIG_PATH"] = self.prev_config_path
+        if self.prev_candidate_facts_cache_dir is None:
+            os.environ.pop("NJORDHR_CANDIDATE_FACTS_CACHE_DIR", None)
+        else:
+            os.environ["NJORDHR_CANDIDATE_FACTS_CACHE_DIR"] = self.prev_candidate_facts_cache_dir
+        backend_server.candidate_facts_repo = None
         self.temp_dir.cleanup()
         backend_server.cloud_auth_state_cache.update({"ts": 0, "mode": "local", "reason": "not_checked"})
 
@@ -150,6 +161,63 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 return self_inner._body
 
         return DummyResponse(payload, status_code)
+
+    def _candidate_facts_payload(self):
+        return {
+            "schema_version": "candidate_facts.v1",
+            "source": {
+                "resume_id": "candidate-resume-1",
+                "candidate_id": "candidate-1",
+                "source_origin": "manual_upload",
+                "detected_layout": "unknown",
+                "file_name": "resume.pdf",
+                "content_hash": "abc123",
+            },
+            "identity": {
+                "candidate_name": {
+                    "value": "Jane Doe",
+                    "presence": "observed_true",
+                    "confidence": "high",
+                    "evidence_ids": ["ev-1"],
+                },
+            },
+            "rank": {
+                "value": "2nd_engineer",
+                "presence": "observed_true",
+                "confidence": "high",
+                "evidence_ids": ["ev-1"],
+            },
+            "documents": [],
+            "certificates": [],
+            "endorsements": [],
+            "courses": [],
+            "contracts": [],
+            "rank_experience": [],
+            "engine_experience": [],
+            "vessel_experience": [],
+            "application": {"applied_ship_types": []},
+            "derived": {},
+            "evidence": [
+                {
+                    "evidence_id": "ev-1",
+                    "source_kind": "raw_text_chunk",
+                    "source_id": "resume-1/chunk-1",
+                }
+            ],
+            "extraction": {
+                "parser_version": "generic_pdf.v1",
+                "status": "partial",
+                "minimums_satisfied": [],
+                "minimums_missing": [],
+                "provenance": {
+                    "mode": "semantic_chunk",
+                    "raw_text_version": "v1",
+                    "chunk_index_version": "v1",
+                    "fallback_reason": "generic_fallback",
+                },
+                "warnings": ["generic_candidate_facts_fallback"],
+            },
+        }
 
     def test_initial_verification_logs_events_without_file_copy(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -1622,6 +1690,42 @@ class BackendEventLogFlowTests(unittest.TestCase):
             body = resp.get_json()
             self.assertFalse(body["success"])
             self.assertIn("no users are configured", body["message"].lower())
+
+    def test_candidate_facts_review_capture_approve_and_promote(self):
+        payload = {
+            "candidate_resume_id": "candidate-resume-1",
+            "resume_blob_id": "blob-1",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": self._candidate_facts_payload(),
+        }
+
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        capture_body = capture_resp.get_json()
+        self.assertTrue(capture_body["success"])
+        self.assertEqual(capture_body["review_item"]["review_status"], "pending_review")
+
+        items_resp = self.client.get("/candidate-facts/review/items")
+        self.assertEqual(items_resp.status_code, 200)
+        items = items_resp.get_json()["items"]
+        self.assertEqual(len(items), 1)
+        item_id = items[0]["id"]
+
+        approve_resp = self.client.post("/candidate-facts/review/approve", json={
+            "id": item_id,
+            "reviewed_by": "reviewer",
+            "review_notes": "looks good",
+        })
+        self.assertEqual(approve_resp.status_code, 200)
+        self.assertEqual(approve_resp.get_json()["review_item"]["review_status"], "approved")
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": item_id})
+        self.assertEqual(promote_resp.status_code, 200)
+        promote_body = promote_resp.get_json()
+        self.assertTrue(promote_body["success"])
+        self.assertTrue(promote_body["persist"]["committed"])
+        self.assertEqual(promote_body["review_item"]["persistence_status"], "persisted")
 
 
 if __name__ == "__main__":

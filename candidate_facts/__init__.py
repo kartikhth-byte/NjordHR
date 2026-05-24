@@ -24,6 +24,11 @@ from .persistence import (
     select_current_candidate_resume_facts_row,
     upsert_candidate_resume_facts_row,
 )
+from .validation_cache import (
+    CandidateFactsValidationCache,
+    build_candidate_facts_review_id,
+    candidate_facts_validation_cache_base_dir,
+)
 
 __all__ = [
     "CANDIDATE_FACTS_SCHEMA_VERSION",
@@ -32,9 +37,12 @@ __all__ = [
     "build_candidate_resume_facts_audit_metadata",
     "build_candidate_resume_facts_row",
     "build_candidate_resume_facts_row_id",
+    "CandidateFactsValidationCache",
     "build_candidate_facts_v1",
+    "build_candidate_facts_review_id",
     "CandidateFactsRepository",
     "build_transient_facts_id",
+    "candidate_facts_validation_cache_base_dir",
     "ensure_single_current_candidate_resume_facts_row",
     "persist_candidate_resume_facts",
     "resolve_candidate_resume_facts_for_replay",

@@ -30,6 +30,20 @@ First MVP scope:
 - do not change production search decisions
 - do not require Supabase candidate-facts persistence
 
+For avoidance of doubt, this MVP scope refers to the query-normalizer shadow path and migration bridge. Candidate-facts persistence is a separate user-testing milestone that comes after local extraction shape is validated.
+
+Platform and rollout constraints for the MVP:
+
+- keep the implementation OS-portable from the start
+- use pathlib/os.path and portable temp/runtime paths in the new query-understanding and candidate-facts layers
+- avoid shell-only runtime dependencies in those layers
+- do not hardcode `/Users`, `~/Library`, or other macOS-specific runtime locations in the new shared modules
+- validate the MVP on macOS first, since that is the development platform
+- persist extracted candidate-facts JSON in Supabase once the MVP extraction flow is available, so the shared data model is ready for user testing
+- before broad user testing or Supabase persistence becomes authoritative, run a minimal Windows runtime smoke gate for the extraction pipeline to confirm shared code does not rely on macOS-only paths, permissions, or process behavior
+- defer Windows packaging, installer hardening, and full Windows installer/distribution smoke validation until after the macOS MVP has been validated with users
+- do not introduce macOS-only runtime assumptions into the query-understanding or candidate-facts layers
+
 Candidate-facts expansion is a parallel architecture track, not a blocker for prompt-normalizer shadow mode.
 
 ---
@@ -44,7 +58,7 @@ Target flow:
 
 ```text
 Resume ingestion:
-PDF/text -> candidate facts JSON -> stored/cache/indexed
+PDF/text -> candidate facts JSON -> local validation cache -> Supabase stored/cache/indexed for user-testing and later phases
 
 Search time:
 Recruiter prompt -> LLM normalized query JSON
@@ -957,7 +971,7 @@ Short term:
 
 Medium term:
 
-- store one candidate-facts row per resume version in Supabase/Postgres
+- after local extraction is validated, store one candidate-facts row per resume version in Supabase/Postgres for user testing and later phases
 - use JSONB for `facts_json` initially
 - include `parser_version`, `schema_version`, `content_hash`, `extraction_status`, and timestamps
 
@@ -1577,3 +1591,11 @@ This work does not initially:
 - require Supabase storage before local validation
 - claim that the hard-filter catalogue covers every possible recruiter request
 - let the LLM invent new hard-filter types at runtime
+
+OS-portability acceptance checklist for the MVP implementation:
+
+- no hardcoded macOS-only filesystem paths in shared query-understanding or candidate-facts code
+- no shell-only runtime dependencies in shared query-understanding or candidate-facts code
+- tests and fixtures use portable paths and temp directories
+- a minimal Windows runtime smoke gate exists for extraction, cache, and persistence behavior before user-test data is treated as authoritative
+- Windows packaging, installer, and full installer/distribution smoke validation remain deferred until the macOS MVP has been validated with users

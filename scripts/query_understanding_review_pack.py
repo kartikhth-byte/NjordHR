@@ -30,6 +30,7 @@ from scripts.prompt_corpus_review_report import _build_report as build_prompt_co
 DEFAULT_BOOTSTRAP_CORPUS = PROJECT_ROOT / "docs" / "AI_SEARCH_V3_4_BOOTSTRAP_PROMPT_CORPUS_2026-04-08.json"
 DEFAULT_AUDIT_CSV = PROJECT_ROOT / "Verified_Resumes" / "ai_search_audit.csv"
 DEFAULT_OUTPUT = PROJECT_ROOT / "AI_Search_Results" / "query_understanding_review_pack_current.json"
+DEFAULT_CANDIDATE_FACTS_REVIEW_CACHE_DIR = PROJECT_ROOT / "AI_Search_Results" / "candidate_facts_review_cache"
 
 
 class _RegistryStub:
@@ -119,8 +120,17 @@ def _build_shadow_audit(corpus: dict):
 
 
 def _build_candidate_facts_replay():
-    repo = CandidateFactsRepository()
-    return repo.build_persist_replay_audit(
+    repo = CandidateFactsRepository(validation_cache_dir=str(DEFAULT_CANDIDATE_FACTS_REVIEW_CACHE_DIR))
+    def _capture_review(candidate_facts, context):
+        return repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id=str(context.get("candidate_resume_id") or ""),
+            resume_blob_id=str(context.get("resume_blob_id") or ""),
+            candidate_facts=candidate_facts,
+            parser_version=str(context.get("parser_version") or ""),
+            facts_revision=str(context.get("facts_revision") or ""),
+        )
+
+    replay = repo.build_persist_replay_audit(
         _CandidateFactsDemoAnalyzer(),
         "resume-1",
         "2nd Engineer",
@@ -134,7 +144,10 @@ def _build_candidate_facts_replay():
         folder_metadata={},
         source_origin="seajobs_download",
         detected_layout="seajobs",
+        review_capture_callback=_capture_review,
     )
+    replay["review_cache_dir"] = str(DEFAULT_CANDIDATE_FACTS_REVIEW_CACHE_DIR)
+    return replay
 
 
 def main():
