@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ai_analyzer import AIResumeAnalyzer, AdvancedPDFProcessor, ConfigManager
 from query_understanding.shadow_audit import build_shadow_audit_rows
+from query_understanding.llm_normalizer import is_enabled
 from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
 from scripts.bootstrap_prompt_corpus_eval import _evaluate_corpus as evaluate_bootstrap_corpus
 from scripts.prompt_corpus_review_report import _build_report as build_prompt_corpus_report, _load_rows as load_audit_rows
@@ -102,7 +103,7 @@ def main():
         "bootstrap_report": bootstrap_report,
         "prompt_corpus_report": prompt_corpus_report,
         "shadow_audit": {
-            "shadow_mode": "disabled",
+            "shadow_mode": "enabled" if is_enabled() else "disabled",
             "row_count": len(shadow_audit_rows),
             "rows": shadow_audit_rows,
         },

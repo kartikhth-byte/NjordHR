@@ -19,6 +19,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ai_analyzer import AIResumeAnalyzer, AdvancedPDFProcessor, ConfigManager
 from query_understanding.shadow_audit import build_shadow_audit_rows
+from query_understanding.llm_normalizer import is_enabled
 from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
 
 
@@ -75,7 +76,7 @@ def main():
     rows = build_shadow_audit_rows(analyzer, prompts, llm_plan_provider=build_shadow_llm_query_plan)
     report = {
         "success": True,
-        "shadow_mode": "disabled",
+        "shadow_mode": "enabled" if is_enabled() else "disabled",
         "corpus_status": corpus.get("status"),
         "corpus_date": corpus.get("date"),
         "prompt_count": len(rows),
