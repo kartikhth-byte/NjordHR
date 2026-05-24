@@ -163,6 +163,12 @@ After building platform installers, create a distribution-ready release bundle:
 ./scripts/packaging/create_release_bundle.sh
 ```
 
+Windows packaging hosts can use the PowerShell equivalent:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\create_release_bundle.ps1
+```
+
 Optional version override:
 
 ```bash

@@ -4,6 +4,14 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERSION="${1:-$(date +%Y.%m.%d.%H%M)}"
 RELEASE_DIR="$PROJECT_DIR/release/$VERSION"
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="python"
+else
+  echo "[NjordHR] Python is required to build release metadata."
+  exit 1
+fi
 
 mkdir -p "$RELEASE_DIR"
 rm -f "$RELEASE_DIR/checksums.txt" "$RELEASE_DIR/manifest.json" "$RELEASE_DIR/INSTALL.md"
@@ -40,7 +48,7 @@ fi
 artifacts=()
 while IFS= read -r artifact; do
   artifacts+=("$artifact")
-done < <(find "$RELEASE_DIR" -maxdepth 1 -type f ! -name "checksums.txt" ! -name "manifest.json" ! -name "INSTALL.md" -print | sort)
+done < <(find "$RELEASE_DIR" -maxdepth 1 -type f ! -name "checksums.txt" ! -name "manifest.json" ! -name "INSTALL.md" ! -name "*.sig" -print | sort)
 artifact_count="${#artifacts[@]}"
 if [[ "$artifact_count" -eq 0 ]]; then
   echo "[NjordHR] No artifacts found in build/ folders. Build installers first."
@@ -58,14 +66,6 @@ for artifact in "${artifacts[@]}"; do
     WINDOWS_INSTALLER_NAME="$bn"
   fi
 done
-
-(
-  cd "$RELEASE_DIR"
-  for f in "${artifacts[@]}"; do
-    bn="$(basename "$f")"
-    shasum -a 256 "$bn"
-  done > checksums.txt
-)
 
 cat > "$RELEASE_DIR/INSTALL.md" <<EOF
 # NjordHR Validation Build Install Notes
@@ -133,51 +133,9 @@ Expected:
 Verify them after copying artifacts to another machine.
 EOF
 
-export VERSION RELEASE_DIR
-python3 - <<'PY'
-import hashlib
-import json
-import os
-from datetime import datetime, timezone
-
-version = os.environ["VERSION"]
-release_dir = os.environ["RELEASE_DIR"]
-
-artifacts = []
-for name in sorted(os.listdir(release_dir)):
-    path = os.path.join(release_dir, name)
-    if not os.path.isfile(path):
-        continue
-    if name in {"checksums.txt", "manifest.json", "INSTALL.md"}:
-        continue
-    with open(path, "rb") as fh:
-        sha256 = hashlib.sha256(fh.read()).hexdigest()
-    sig_path = f"{path}.sig"
-    signature = ""
-    if os.path.isfile(sig_path):
-        try:
-            with open(sig_path, "r", encoding="utf-8") as sfh:
-                signature = sfh.read().strip()
-        except Exception:
-            signature = ""
-    artifacts.append({
-        "name": name,
-        "size_bytes": os.path.getsize(path),
-        "sha256": sha256,
-        "signature": signature,
-    })
-
-manifest = {
-    "version": version,
-    "created_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-    "artifact_count": len(artifacts),
-    "artifacts": artifacts,
-}
-
-with open(os.path.join(release_dir, "manifest.json"), "w", encoding="utf-8") as fh:
-    json.dump(manifest, fh, indent=2)
-    fh.write("\n")
-PY
+"$PYTHON_BIN" "$PROJECT_DIR/scripts/packaging/release_bundle_common.py" \
+  --release-dir "$RELEASE_DIR" \
+  --version "$VERSION"
 
 echo "[NjordHR] Release bundle created:"
 echo "  $RELEASE_DIR"
