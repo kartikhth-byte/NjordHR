@@ -4949,21 +4949,27 @@
                                 </div>
                              </div>
                             <div className="flex flex-col items-end gap-2">
-                                <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${
+                                <span
+                                    className={`text-xs font-semibold px-3 py-1 rounded-full border ${
                                     runtimeConfig?.feature_flags?.use_local_agent
                                         ? 'bg-green-50 text-green-700 border-green-200'
                                         : 'bg-blue-50 text-blue-700 border-blue-200'
-                                }`}>
+                                }`}
+                                    aria-label={runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud plus local agent mode' : 'Cloud only mode'}
+                                >
                                     {runtimeConfig?.feature_flags?.use_local_agent ? 'Cloud + Local Agent' : 'Cloud only'}
                                 </span>
                                 {localAgentSummary.enabled && (
-                                    <span className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
+                                    <span
+                                        className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
                                         localAgentSummary.reachable
                                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                             : localAgentSummary.waitingToStart
                                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
                                                 : 'bg-red-50 text-red-700 border-red-200'
-                                    }`}>
+                                    }`}
+                                        aria-label={localAgentSummary.reachable ? 'Agent online' : localAgentSummary.waitingToStart ? 'Agent starting' : 'Agent offline'}
+                                    >
                                         {localAgentSummary.reachable
                                             ? 'Agent online'
                                             : localAgentSummary.waitingToStart
@@ -4992,7 +4998,7 @@
                                     First-time setup is required before users can sign in.
                                 </p>
                                 {runtimeConfig && (
-                                    <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                                    <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900" aria-live="polite">
                                         <p><span className="font-semibold">Auth mode:</span> {authRuntimeSummary.effectiveAuthMode}</p>
                                         <p><span className="font-semibold">Configured users:</span> {authRuntimeSummary.validUserCount}</p>
                                         <p><span className="font-semibold">Runtime:</span> {authRuntimeSummary.runtimeLabel}</p>
@@ -5027,7 +5033,7 @@
                             <main className="bg-white p-8 rounded-xl shadow-lg max-w-lg mx-auto mb-6">
                                 <h2 className="text-2xl font-semibold mb-4">Login</h2>
                                 {runtimeConfig && (
-                                    <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                                    <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700" aria-live="polite">
                                         <p><span className="font-semibold">Auth mode:</span> {authRuntimeSummary.effectiveAuthMode}</p>
                                         <p><span className="font-semibold">Configured users:</span> {authRuntimeSummary.validUserCount}</p>
                                         <p><span className="font-semibold">Runtime:</span> {authRuntimeSummary.runtimeLabel}</p>
@@ -5062,25 +5068,31 @@
                         )}
                         {!authChecking && authUser && (
                         <>
-                        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Workflow</p>
-                            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div className="mb-6 bg-white border border-gray-200 rounded-xl p-4" aria-labelledby="workflow-heading">
+                            <p id="workflow-heading" className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Workflow</p>
+                            <ol className="grid grid-cols-1 md:grid-cols-5 gap-3" role="list">
                                 {WORKFLOW_STEPS.map((step, index) => {
                                     const isDone = workflowState[step];
                                     const isCurrent = currentWorkflowStep === step;
+                                    const statusLabel = isDone ? 'Done' : isCurrent ? 'Current' : 'Pending';
                                     return (
-                                        <div key={step} className={`rounded-lg border px-3 py-2 ${isDone ? 'border-green-300 bg-green-50' : isCurrent ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                                        <li
+                                            key={step}
+                                            aria-current={isCurrent ? 'step' : undefined}
+                                            aria-label={`Step ${index + 1}: ${step}, ${statusLabel}`}
+                                            className={`rounded-lg border px-3 py-2 ${isDone ? 'border-green-300 bg-green-50' : isCurrent ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}
+                                        >
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-gray-500">Step {index + 1}</span>
                                                 <span className={`text-xs font-semibold ${isDone ? 'text-green-700' : isCurrent ? 'text-blue-700' : 'text-gray-500'}`}>
-                                                    {isDone ? 'Done' : isCurrent ? 'Current' : 'Pending'}
+                                                    {statusLabel}
                                                 </span>
                                             </div>
                                             <p className={`mt-1 font-semibold ${isDone ? 'text-green-800' : isCurrent ? 'text-blue-800' : 'text-gray-700'}`}>{step}</p>
-                                        </div>
+                                        </li>
                                     );
                                 })}
-                            </div>
+                            </ol>
                         </div>
                         <div className="flex border-b border-gray-300 mb-6">
                             {canAccessTab('download') && <button onClick={() => setActiveTab('download')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'download' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Download</button>}
@@ -5095,7 +5107,7 @@
                                 localAgentSummary.waitingToStart
                                     ? 'border-amber-200 bg-amber-50'
                                     : 'border-red-200 bg-red-50'
-                            }`}>
+                            }`} role="status" aria-live="polite">
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div className="space-y-1">
                                         <p className={`text-sm font-semibold ${
