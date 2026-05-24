@@ -15,6 +15,7 @@ const RUNTIME_ENV_COMPAT_KEYS = [
   "USE_LOCAL_AGENT",
   "NJORDHR_AUTH_MODE",
   "NJORDHR_PASSWORD_HASH_METHOD",
+  "NJORDHR_API_BASE_URL",
   "SUPABASE_URL",
   "SUPABASE_SECRET_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -369,6 +370,11 @@ function buildEnvironment(paths, ports, options = {}) {
     NJORDHR_SERVER_URL: ports.backendUrl,
     NJORDHR_AGENT_URL: ports.agentUrl,
     NJORDHR_AGENT_BASE_URL: ports.agentUrl,
+    NJORDHR_API_BASE_URL: normalizeEnvValue(
+      process.env.NJORDHR_API_BASE_URL
+        || envDefaults.NJORDHR_API_BASE_URL
+        || ports.backendUrl
+    ),
     NJORDHR_CONFIG_PATH: paths.configPath,
     NJORDHR_RUNTIME_DIR: paths.runtimeDir
   };

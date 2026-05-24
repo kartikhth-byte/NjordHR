@@ -1,6 +1,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const apiBaseUrl = String(
+  process.env.NJORDHR_API_BASE_URL
+    || process.env.NJORDHR_SERVER_URL
+    || ""
+).trim();
+
 contextBridge.exposeInMainWorld("NjordDesktop", {
+  runtimeConfig: {
+    apiBaseUrl
+  },
   diagnostics: () => ipcRenderer.invoke("njordhr:diagnostics"),
   startupErrorDetails: () => ipcRenderer.invoke("njordhr:get-startup-error-details"),
   onStartupErrorDetails: (callback) => {

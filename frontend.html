@@ -383,8 +383,85 @@
                 }
             })());
             
-            const API_BASE_URL = window.NJORDHR_API_BASE_URL
-                || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://127.0.0.1:5000');
+            const resolveApiBaseUrl = () => {
+                const fromElectron = window.NjordDesktop?.runtimeConfig?.apiBaseUrl;
+                if (fromElectron) {
+                    return String(fromElectron).trim();
+                }
+                const fromWindow = window.NJORDHR_API_BASE_URL;
+                if (fromWindow) {
+                    return String(fromWindow).trim();
+                }
+                if (window.location.protocol.startsWith('http')) {
+                    return window.location.origin;
+                }
+                return 'http://127.0.0.1:5000';
+            };
+            const API_BASE_URL = resolveApiBaseUrl();
+            const getSessionBaseUrl = () => {
+                const localAgent = runtimeConfig?.local_agent || {};
+                if (
+                    runtimeConfig?.feature_flags?.use_local_agent &&
+                    localAgent.reachable &&
+                    localAgent.base_url
+                ) {
+                    return String(localAgent.base_url).trim();
+                }
+                return API_BASE_URL;
+            };
+            const normalizeDownloadStreamEvent = (rawEvent) => {
+                const event = rawEvent && typeof rawEvent === 'object' ? rawEvent : {};
+                const eventType = String(event.type || '').trim();
+                const eventData = event.data && typeof event.data === 'object' ? event.data : {};
+                if (eventType === 'started') {
+                    return {
+                        type: 'started',
+                        message: event.message || 'Download stream started.',
+                        log_file: event.log_file || eventData.log_file || '',
+                    };
+                }
+                if (eventType === 'log') {
+                    return {
+                        type: 'log',
+                        line: event.line || event.message || '',
+                    };
+                }
+                if (eventType === 'queued' || eventType === 'running' || eventType === 'progress') {
+                    const progressData = eventData && Object.keys(eventData).length > 0 ? eventData : event;
+                    return {
+                        type: 'progress',
+                        stage: progressData.stage || eventType,
+                        message: event.message || progressData.message || '',
+                        percent: progressData.percent,
+                        data: progressData,
+                    };
+                }
+                if (eventType === 'complete') {
+                    const result = eventData.result && typeof eventData.result === 'object'
+                        ? eventData.result
+                        : (event.result && typeof event.result === 'object' ? event.result : eventData);
+                    if (result && result.success === false) {
+                        return {
+                            type: 'error',
+                            message: result.message || event.message || 'Download failed.',
+                        };
+                    }
+                    return {
+                        type: 'complete',
+                        success: result && typeof result.success === 'boolean' ? result.success : true,
+                        message: result.message || event.message || 'Download finished.',
+                        log_file: result.log_file || event.log_file || '',
+                        ...result,
+                    };
+                }
+                if (eventType === 'error') {
+                    return {
+                        type: 'error',
+                        message: event.message || 'Download failed.',
+                    };
+                }
+                return null;
+            };
             const buildDownloadedResumePreviewUrl = (rankFolder, filename) =>
                 `${API_BASE_URL}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
 
@@ -799,7 +876,7 @@
 
                 const checkHealth = async () => {
                     try {
-                        const response = await fetch(`${API_BASE_URL}/session_health`);
+                        const response = await fetch(`${getSessionBaseUrl()}/session_health`);
                         const data = await response.json();
                         if (!data.success) return;
 
@@ -2249,10 +2326,17 @@
                 setIsOtpSending(true);
                 setSessionDisconnectNotice('');
                 try {
-                    const response = await fetch(`${API_BASE_URL}/start_session`, {
+                    const sessionBaseUrl = getSessionBaseUrl();
+                    const response = await fetch(
+                        `${sessionBaseUrl}${sessionBaseUrl === API_BASE_URL ? '/start_session' : '/session/start'}`,
+                        {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ mobileNumber: phoneNumber }),
+                        body: JSON.stringify(
+                            sessionBaseUrl === API_BASE_URL
+                                ? { mobileNumber: phoneNumber }
+                                : { mobile_number: phoneNumber }
+                        ),
                     });
                     const data = await response.json();
                     if (data.success) {
@@ -2269,7 +2353,10 @@
                 if (!otp) return handleSendMessage('error', 'Please enter the OTP.');
                 setIsOtpVerifying(true);
                 try {
-                    const response = await fetch(`${API_BASE_URL}/verify_otp`, {
+                    const sessionBaseUrl = getSessionBaseUrl();
+                    const response = await fetch(
+                        `${sessionBaseUrl}${sessionBaseUrl === API_BASE_URL ? '/verify_otp' : '/session/verify-otp'}`,
+                        {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ otp }),
@@ -2314,13 +2401,37 @@
                         downloadEventSourceRef.current.close();
                     }
 
-                    const params = new URLSearchParams({
-                        rank: selectedRank,
-                        shipType: selectedShipType,
-                        forceRedownload: forceRedownload ? 'true' : 'false'
-                    });
+                    const sessionBaseUrl = getSessionBaseUrl();
+                    const directAgentMode = sessionBaseUrl !== API_BASE_URL;
+                    let stream;
 
-                    const stream = new EventSource(`${API_BASE_URL}/download_stream?${params.toString()}`);
+                    if (directAgentMode) {
+                        const response = await fetch(`${sessionBaseUrl}/jobs/download`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                rank: selectedRank,
+                                ship_type: selectedShipType,
+                                force_redownload: Boolean(forceRedownload),
+                            }),
+                        });
+                        const data = await response.json();
+                        if (!data.success) {
+                            throw new Error(data.message || 'Failed to start local agent job.');
+                        }
+                        const jobId = String(data.job_id || '').trim();
+                        if (!jobId) {
+                            throw new Error('Local agent did not return a job id.');
+                        }
+                        stream = new EventSource(`${sessionBaseUrl}/jobs/${encodeURIComponent(jobId)}/stream`);
+                    } else {
+                        const params = new URLSearchParams({
+                            rank: selectedRank,
+                            shipType: selectedShipType,
+                            forceRedownload: forceRedownload ? 'true' : 'false'
+                        });
+                        stream = new EventSource(`${sessionBaseUrl}/download_stream?${params.toString()}`);
+                    }
                     downloadEventSourceRef.current = stream;
 
                     stream.onmessage = (event) => {
@@ -2330,22 +2441,26 @@
                         } catch {
                             return;
                         }
+                        const normalized = normalizeDownloadStreamEvent(data);
+                        if (!normalized) {
+                            return;
+                        }
 
-                        if (data.type === 'started') {
-                            if (data.log_file) {
-                                setLogFile(data.log_file);
+                        if (normalized.type === 'started') {
+                            if (normalized.log_file) {
+                                setLogFile(normalized.log_file);
                             }
                             return;
                         }
 
-                        if (data.type === 'log') {
-                            setDownloadLog(prev => [...prev, data.line]);
+                        if (normalized.type === 'log') {
+                            setDownloadLog(prev => [...prev, normalized.line]);
                             return;
                         }
 
-                        if (data.type === 'error') {
-                            handleSendMessage('error', data.message || 'Download failed.');
-                            setDownloadLog(prev => [...prev, `ERROR: ${data.message || 'Download failed.'}`]);
+                        if (normalized.type === 'error') {
+                            handleSendMessage('error', normalized.message || 'Download failed.');
+                            setDownloadLog(prev => [...prev, `ERROR: ${normalized.message || 'Download failed.'}`]);
                             setIsDownloadLoading(false);
                             setIsDownloadInProgress(false);
                             stream.close();
@@ -2353,18 +2468,25 @@
                             return;
                         }
 
-                        if (data.type === 'complete') {
-                            if (data.log_file) {
-                                setLogFile(data.log_file);
+                        if (normalized.type === 'progress') {
+                            if (normalized.message) {
+                                setDownloadLog(prev => [...prev, normalized.message]);
                             }
-                            if (data.success) {
-                                handleSendMessage('success', data.message || 'Download finished.');
+                            return;
+                        }
+
+                        if (normalized.type === 'complete') {
+                            if (normalized.log_file) {
+                                setLogFile(normalized.log_file);
+                            }
+                            if (normalized.success) {
+                                handleSendMessage('success', normalized.message || 'Download finished.');
                                 setDownloadCompleted(true);
                                 fetchRankFolders();
                                 fetchDownloadFolderSummaries();
                                 fetchDownloadResultsSummary();
                             } else {
-                                handleSendMessage('error', data.message || 'Download failed.');
+                                handleSendMessage('error', normalized.message || 'Download failed.');
                             }
                             setIsDownloadLoading(false);
                             setIsDownloadInProgress(false);
@@ -2377,7 +2499,7 @@
                         stream.close();
                         downloadEventSourceRef.current = null;
                         resetDownloadActivityState();
-                        fetch(`${API_BASE_URL}/session_health`)
+                        fetch(`${getSessionBaseUrl()}/session_health`)
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success && data.health && !data.health.valid) {
@@ -2546,7 +2668,11 @@
                         downloadEventSourceRef.current.close();
                         downloadEventSourceRef.current = null;
                     }
-                    await fetch(`${API_BASE_URL}/disconnect_session`, { method: 'POST' });
+                    const sessionBaseUrl = getSessionBaseUrl();
+                    await fetch(
+                        `${sessionBaseUrl}${sessionBaseUrl === API_BASE_URL ? '/disconnect_session' : '/session/disconnect'}`,
+                        { method: 'POST' }
+                    );
                     setSessionConnected(false);
                     setSessionDisconnectNotice('');
                     setSessionHealthInfo({ idleSeconds: 0, idleTimeoutSeconds: 0 });

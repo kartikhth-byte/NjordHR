@@ -37,7 +37,8 @@ test("persistRuntimeEnvironment writes clean compatibility keys and ports", () =
   const env = {
     USE_SUPABASE_DB: "false",
     SUPABASE_SECRET_KEY: "secret-value",
-    NJORDHR_AUTH_MODE: "local"
+    NJORDHR_AUTH_MODE: "local",
+    NJORDHR_API_BASE_URL: "http://127.0.0.1:5050"
   };
 
   const runtimeEnvPath = persistRuntimeEnvironment(paths, ports, env);
@@ -50,6 +51,7 @@ test("persistRuntimeEnvironment writes clean compatibility keys and ports", () =
   assert.match(content, /^NJORDHR_BACKEND_PORT='5050'$/m);
   assert.match(content, /^NJORDHR_AGENT_RUNTIME_PORT='5051'$/m);
   assert.match(content, /^NJORDHR_SERVER_URL='http:\/\/127\.0\.0\.1:5050'$/m);
+  assert.match(content, /^NJORDHR_API_BASE_URL='http:\/\/127\.0\.0\.1:5050'$/m);
   assert.match(content, /^NJORDHR_CONFIG_PATH='.*config\.ini'$/m);
   assert.doesNotMatch(content, /^export /m);
 });
@@ -224,6 +226,38 @@ test("buildEnvironment disables Supabase mode when credentials are incomplete", 
       } else {
         process.env[key] = value;
       }
+    }
+  }
+});
+
+test("buildEnvironment resolves frontend API base URL from env defaults before backend fallback", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-api-base-"));
+  const paths = createPaths(tempRoot);
+  const ports = {
+    backendPort: 6200,
+    agentPort: 6201,
+    backendUrl: "http://127.0.0.1:6200",
+    agentUrl: "http://127.0.0.1:6201"
+  };
+
+  const original = {
+    NJORDHR_API_BASE_URL: process.env.NJORDHR_API_BASE_URL
+  };
+
+  process.env.NJORDHR_API_BASE_URL = "https://example.invalid/api";
+
+  try {
+    const env = buildEnvironment(paths, ports);
+    assert.equal(env.NJORDHR_API_BASE_URL, "https://example.invalid/api");
+
+    const runtimeEnvPath = persistRuntimeEnvironment(paths, ports, env);
+    const content = fs.readFileSync(runtimeEnvPath, "utf8");
+    assert.match(content, /^NJORDHR_API_BASE_URL='https:\/\/example\.invalid\/api'$/m);
+  } finally {
+    if (original.NJORDHR_API_BASE_URL === undefined) {
+      delete process.env.NJORDHR_API_BASE_URL;
+    } else {
+      process.env.NJORDHR_API_BASE_URL = original.NJORDHR_API_BASE_URL;
     }
   }
 });
