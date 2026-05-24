@@ -466,13 +466,69 @@
             const buildDownloadedResumePreviewUrl = (rankFolder, filename) =>
                 `${getCloudApiBaseUrl()}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
 
-            const buildDashboardResumeUrl = (row) => {
+            const resolveDashboardResumeTargets = (row) => {
+                const resumeUrl = String(row?.resume_url || '').trim();
                 const rankFolder = String(row?.rank_applied_for || '').trim();
                 const filename = String(row?.filename || '').trim();
-                if (rankFolder && filename) {
-                    return buildDownloadedResumePreviewUrl(rankFolder, filename);
+                const localPreviewUrl = rankFolder && filename ? buildDownloadedResumePreviewUrl(rankFolder, filename) : '';
+                const hasCloudTarget = Boolean(resumeUrl && resumeUrl !== '#');
+                return {
+                    primaryUrl: hasCloudTarget ? resumeUrl : localPreviewUrl,
+                    fallbackUrl: hasCloudTarget ? localPreviewUrl : '',
+                    prefersCloud: hasCloudTarget,
+                };
+            };
+
+            const buildDashboardResumeUrl = (row) => {
+                const { primaryUrl } = resolveDashboardResumeTargets(row);
+                return primaryUrl || '#';
+            };
+
+            const openDashboardResume = async (row) => {
+                const { primaryUrl, fallbackUrl, prefersCloud } = resolveDashboardResumeTargets(row);
+                if (!primaryUrl) {
+                    handleSendMessage('error', 'No resume preview is available for this record.');
+                    return;
                 }
-                return row?.resume_url || '#';
+
+                const previewWindow = window.open('about:blank', '_blank');
+                if (!previewWindow) {
+                    handleSendMessage('error', 'Allow pop-ups to open resume previews.');
+                    return;
+                }
+                previewWindow.opener = null;
+
+                let finalUrl = primaryUrl;
+                if (prefersCloud) {
+                    try {
+                        const response = await fetch(primaryUrl, {
+                            method: 'GET',
+                            redirect: 'manual',
+                        });
+                        if (response.status >= 400) {
+                            if (fallbackUrl) {
+                                finalUrl = fallbackUrl;
+                            } else {
+                                const data = await response.json().catch(() => null);
+                                throw new Error(data?.message || 'Cloud resume preview is unavailable.');
+                            }
+                        } else if (response.status >= 300 && response.status < 400) {
+                            const location = response.headers.get('location');
+                            if (location) {
+                                finalUrl = location;
+                            }
+                        }
+                    } catch (error) {
+                        if (fallbackUrl) {
+                            finalUrl = fallbackUrl;
+                        } else {
+                            handleSendMessage('error', error?.message || 'Cloud resume preview is unavailable.');
+                            return;
+                        }
+                    }
+                }
+
+                previewWindow.location.href = finalUrl;
             };
             const STATUS_OPTIONS = ['New', 'Contacted', 'Interested', 'Mail Sent (handoff complete)', 'Not Interested'];
             const WORKFLOW_STEPS = ['Connect', 'Download', 'Analyze', 'Review', 'Export'];
@@ -3864,6 +3920,11 @@
                                                                 href={buildDashboardResumeUrl(row)} 
                                                                 target="_blank" 
                                                                 rel="noopener noreferrer"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    openDashboardResume(row);
+                                                                }}
+                                                                title="Open cloud preview first, with local fallback if needed"
                                                                 className="text-blue-600 hover:underline"
                                                             >
                                                                 {row.filename}
@@ -4013,7 +4074,17 @@
                                         </div>
                                         <div>
                                             <p className="text-xs uppercase text-gray-500">Resume</p>
-                                            <a href={buildDashboardResumeUrl(drawerCandidate)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                                            <a
+                                                href={buildDashboardResumeUrl(drawerCandidate)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    openDashboardResume(drawerCandidate);
+                                                }}
+                                                title="Open cloud preview first, with local fallback if needed"
+                                                className="text-blue-600 hover:underline break-all"
+                                            >
                                                 {drawerCandidate.filename}
                                             </a>
                                         </div>
