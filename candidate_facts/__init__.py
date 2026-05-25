@@ -26,6 +26,7 @@ from .persistence import (
 )
 from .validation_cache import (
     CandidateFactsValidationCache,
+    build_candidate_facts_content_hash,
     build_candidate_facts_review_id,
     candidate_facts_validation_cache_base_dir,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "build_candidate_resume_facts_row_id",
     "CandidateFactsValidationCache",
     "build_candidate_facts_v1",
+    "build_candidate_facts_content_hash",
     "build_candidate_facts_review_id",
     "CandidateFactsRepository",
     "build_transient_facts_id",

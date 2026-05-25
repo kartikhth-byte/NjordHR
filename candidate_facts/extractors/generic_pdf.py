@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, Mapping
 
 from ..schema import CANDIDATE_FACTS_SCHEMA_VERSION, normalize_candidate_facts_v1
@@ -171,6 +171,15 @@ def _build_evidence(*, source_id: str, source_kind: str) -> list[Dict[str, Any]]
     ]
 
 
+def _basename_for_display(path_value: str | None) -> str:
+    text = str(path_value or "").strip()
+    if not text:
+        return ""
+    if "\\" in text and "/" not in text:
+        return PureWindowsPath(text).name
+    return Path(text.replace("\\", "/")).name
+
+
 def build_candidate_facts_v1(
     analyzer: Any,
     filename: str,
@@ -193,9 +202,9 @@ def build_candidate_facts_v1(
         pdf_path=pdf_path,
     )
 
-    candidate_id = str(filename or original_path or pdf_path or "candidate")
-    resolved_filename = str(filename or Path(original_path or pdf_path or candidate_id).name or candidate_id)
-    evidence_source_id = str(original_path or pdf_path or resolved_filename)
+    candidate_id = _basename_for_display(str(filename or original_path or pdf_path or "candidate")) or "candidate"
+    resolved_filename = _basename_for_display(str(filename or original_path or pdf_path or candidate_id)) or candidate_id
+    evidence_source_id = _basename_for_display(str(original_path or pdf_path or resolved_filename))
     evidence_kind = "pdf_page" if (original_path or pdf_path) else "raw_text_chunk"
     evidence = _build_evidence(source_id=evidence_source_id, source_kind=evidence_kind)
     evidence_ids = [item["evidence_id"] for item in evidence]

@@ -1294,13 +1294,16 @@
 
             const mapCandidateFactsReviewItemSummary = (item) => {
                 const candidateFacts = item?.candidate_facts || {};
+                const summary = item?.candidate_facts_summary || {};
                 const source = candidateFacts.source || {};
                 const name = candidateFacts.identity?.candidate_name?.value
+                    || summary.candidate_name
                     || candidateFacts.identity?.full_name
                     || source.candidate_id
                     || item?.candidate_id
                     || '-';
                 const rank = candidateFacts.rank?.value
+                    || summary.rank
                     || candidateFacts.role?.applied_rank_normalized
                     || '-';
                 const extractionStatus = candidateFacts.extraction?.status || item?.extraction_status || '-';
@@ -1308,9 +1311,9 @@
                     name,
                     rank,
                     extractionStatus,
-                    sourceOrigin: source.source_origin || '-',
-                    detectedLayout: source.detected_layout || '-',
-                    warningCount: Array.isArray(candidateFacts.extraction?.warnings) ? candidateFacts.extraction.warnings.length : 0,
+                    sourceOrigin: summary.source_origin || source.source_origin || '-',
+                    detectedLayout: summary.detected_layout || source.detected_layout || '-',
+                    warningCount: summary.warning_count ?? (Array.isArray(candidateFacts.extraction?.warnings) ? candidateFacts.extraction.warnings.length : 0),
                 };
             };
 
@@ -1395,10 +1398,19 @@
                     });
                     const data = await response.json();
                     if (!data.success) {
+                        if (endpoint === 'promote' && data.persist && data.persist.committed === false) {
+                            handleSendMessage('warning', data.message || 'Candidate facts were written but not marked current.');
+                            await fetchCandidateFactsReviewItems();
+                            return;
+                        }
                         handleSendMessage('error', data.message || errorMessage);
                         return;
                     }
-                    handleSendMessage('success', successMessage);
+                    if (endpoint === 'promote' && data.persist && data.persist.committed === false) {
+                        handleSendMessage('warning', data.message || 'Candidate facts were written but not marked current.');
+                    } else {
+                        handleSendMessage('success', successMessage);
+                    }
                     await fetchCandidateFactsReviewItems();
                 } catch (_error) {
                     handleSendMessage('error', errorMessage);

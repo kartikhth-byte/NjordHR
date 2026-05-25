@@ -2174,7 +2174,7 @@ def list_candidate_facts_review_items():
     review_status = str(request.args.get("status", "")).strip() or None
     try:
         repo = _candidate_facts_repository()
-        return jsonify({"success": True, "items": repo.list_candidate_facts_review_items(review_status=review_status)})
+        return jsonify({"success": True, "items": repo.list_candidate_facts_review_summaries(review_status=review_status)})
     except Exception as exc:
         return jsonify({"success": False, "message": f"Candidate facts review items unavailable: {exc}"}), 500
 
@@ -2252,8 +2252,15 @@ def promote_candidate_facts_review_item():
         repo = _candidate_facts_repository()
         result = repo.promote_candidate_facts_review_item(
             item_id,
-            acceptable_extraction_statuses=payload.get("acceptable_extraction_statuses"),
         )
+        committed = bool(result.get("persist", {}).get("committed"))
+        if not committed:
+            return jsonify({
+                "success": False,
+                "message": "Candidate facts were written but not marked current for this resume. Nothing was promoted to authoritative state.",
+                "review_item": result["review_item"],
+                "persist": result["persist"],
+            }), 409
         return jsonify({"success": True, "review_item": result["review_item"], "persist": result["persist"]})
     except Exception as exc:
         return jsonify({"success": False, "message": f"Candidate facts promotion failed: {exc}"}), 500

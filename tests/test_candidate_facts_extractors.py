@@ -82,6 +82,19 @@ class CandidateFactsExtractorStubTests(unittest.TestCase):
         self.assertEqual(payload["identity"]["candidate_name"]["value"], "Jane Doe")
         self.assertTrue(payload["evidence"])
 
+    def test_generic_pdf_extractor_normalizes_windows_style_paths_for_display(self):
+        payload = generic_pdf.build_candidate_facts_v1(
+            _FakeAnalyzer(),
+            "C:\\Users\\Kartik\\Downloads\\resume.pdf",
+            "2nd Engineer",
+            [],
+            original_path="C:\\Users\\Kartik\\Downloads\\resume.pdf",
+            raw_text="Jane Doe\n2nd Engineer",
+        )
+        self.assertEqual(payload["source"]["file_name"], "resume.pdf")
+        self.assertEqual(payload["source"]["candidate_id"], "resume.pdf")
+        self.assertEqual(payload["evidence"][0]["source_id"], "resume.pdf")
+
     def test_remaining_source_extractors_raise_not_implemented(self):
         modules = [certificates, endorsements, contracts, engines]
         for module in modules:

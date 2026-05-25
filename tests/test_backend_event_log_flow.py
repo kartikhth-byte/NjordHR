@@ -1710,6 +1710,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(items_resp.status_code, 200)
         items = items_resp.get_json()["items"]
         self.assertEqual(len(items), 1)
+        self.assertNotIn("candidate_facts", items[0])
+        self.assertIn("candidate_facts_summary", items[0])
         item_id = items[0]["id"]
 
         approve_resp = self.client.post("/candidate-facts/review/approve", json={
@@ -1726,6 +1728,45 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(promote_body["success"])
         self.assertTrue(promote_body["persist"]["committed"])
         self.assertEqual(promote_body["review_item"]["persistence_status"], "persisted")
+
+    def test_candidate_facts_review_promote_rejects_client_override_of_acceptance_policy(self):
+        payload = {
+            "candidate_resume_id": "candidate-resume-2",
+            "resume_blob_id": "blob-2",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": {
+                **self._candidate_facts_payload(),
+                "extraction": {
+                    **self._candidate_facts_payload()["extraction"],
+                    "status": "failed",
+                },
+            },
+        }
+
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        item_id = capture_resp.get_json()["review_item"]["id"]
+        self.assertEqual(
+            self.client.post("/candidate-facts/review/approve", json={
+                "id": item_id,
+                "reviewed_by": "reviewer",
+            }).status_code,
+            200,
+        )
+
+        promote_resp = self.client.post(
+            "/candidate-facts/review/promote",
+            json={
+                "id": item_id,
+                "acceptable_extraction_statuses": ["failed"],
+            },
+        )
+        self.assertEqual(promote_resp.status_code, 409)
+        body = promote_resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertFalse(body["persist"]["committed"])
+        self.assertEqual(body["review_item"]["persistence_status"], "persisted_non_current")
 
 
 if __name__ == "__main__":

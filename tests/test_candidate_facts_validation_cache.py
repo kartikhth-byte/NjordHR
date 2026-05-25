@@ -4,6 +4,7 @@ from pathlib import Path
 
 from candidate_facts.validation_cache import (
     CandidateFactsValidationCache,
+    build_candidate_facts_content_hash,
     build_candidate_facts_review_id,
     candidate_facts_validation_cache_base_dir,
 )
@@ -112,12 +113,14 @@ class CandidateFactsValidationCacheTests(unittest.TestCase):
                 cache.promote_review_item_to_persisted([], record["id"])
 
     def test_review_id_is_deterministic(self):
+        candidate_facts_hash = build_candidate_facts_content_hash(_candidate_facts_payload())
         review_id = build_candidate_facts_review_id(
             candidate_resume_id="candidate-resume-1",
             resume_blob_id="blob-1",
             schema_version="candidate_facts.v1",
             parser_version="generic_pdf.v1",
             facts_revision="rev-1",
+            candidate_facts_hash=candidate_facts_hash,
         )
         self.assertEqual(
             review_id,
@@ -127,8 +130,31 @@ class CandidateFactsValidationCacheTests(unittest.TestCase):
                 schema_version="candidate_facts.v1",
                 parser_version="generic_pdf.v1",
                 facts_revision="rev-1",
+                candidate_facts_hash=candidate_facts_hash,
             ),
         )
+
+    def test_recapture_with_changed_content_creates_new_review_item(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = CandidateFactsValidationCache(base_dir=tmpdir)
+            first = cache.capture_candidate_facts_for_review(
+                candidate_resume_id="candidate-resume-1",
+                resume_blob_id="blob-1",
+                candidate_facts=_candidate_facts_payload(),
+                parser_version="generic_pdf.v1",
+                facts_revision="rev-1",
+            )
+            second_payload = _candidate_facts_payload()
+            second_payload["identity"]["candidate_name"]["value"] = "Jane Smith"
+            second = cache.capture_candidate_facts_for_review(
+                candidate_resume_id="candidate-resume-1",
+                resume_blob_id="blob-1",
+                candidate_facts=second_payload,
+                parser_version="generic_pdf.v1",
+                facts_revision="rev-1",
+            )
+            self.assertNotEqual(first["id"], second["id"])
+            self.assertEqual(len(cache.list_review_items()), 2)
 
 
 if __name__ == "__main__":

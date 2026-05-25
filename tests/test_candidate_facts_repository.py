@@ -182,6 +182,57 @@ class CandidateFactsRepositoryTests(unittest.TestCase):
             self.assertEqual(len(repo.list_candidate_facts_review_items()), 1)
             self.assertFalse(replay["review_capture_error"])
 
+    def test_repository_persists_rows_across_restart_when_cache_dir_configured(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = CandidateFactsRepository(validation_cache_dir=tmpdir)
+            result = repo.build_persist_replay_audit(
+                _FakeAnalyzer(),
+                "resume-5",
+                "2nd Engineer",
+                [],
+                candidate_resume_id="candidate-resume-5",
+                resume_blob_id="blob-5",
+                parser_version="legacy_bridge.v1",
+                facts_revision="rev-1",
+                original_path="resume.pdf",
+                text_cache={"resume.pdf": "Jane Doe 2nd engineer resume"},
+                folder_metadata={},
+                source_origin="seajobs_download",
+                detected_layout="seajobs",
+            )
+            self.assertTrue(result["persist"]["committed"])
+            self.assertEqual(len(repo.rows), 1)
+            restarted = CandidateFactsRepository(validation_cache_dir=tmpdir)
+            self.assertEqual(len(restarted.rows), 1)
+            self.assertEqual(restarted.rows[0]["id"], repo.rows[0]["id"])
+
+    def test_repository_replay_fails_closed_when_pinned_id_is_missing(self):
+        repo = CandidateFactsRepository()
+        result = repo.build_persist_replay_audit(
+            _FakeAnalyzer(),
+            "resume-6",
+            "2nd Engineer",
+            [],
+            candidate_resume_id="candidate-resume-6",
+            resume_blob_id="blob-6",
+            parser_version="legacy_bridge.v1",
+            facts_revision="rev-1",
+            original_path="resume.pdf",
+            text_cache={"resume.pdf": "Jane Doe 2nd engineer resume"},
+            folder_metadata={},
+            source_origin="seajobs_download",
+            detected_layout="seajobs",
+        )
+        replay = repo.replay_candidate_facts(
+            candidate_resume_id="candidate-resume-6",
+            schema_version=str(result["candidate_facts"]["schema_version"]),
+            parser_version="legacy_bridge.v1",
+            facts_revision="rev-1",
+            candidate_resume_facts_id="missing-row-id",
+        )
+        self.assertEqual(replay["status"], "unavailable")
+        self.assertEqual(replay["reason"], "not_found")
+
 
 if __name__ == "__main__":
     unittest.main()

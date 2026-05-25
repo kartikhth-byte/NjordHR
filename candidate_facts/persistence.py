@@ -8,6 +8,7 @@ storage backend.
 from __future__ import annotations
 
 import hashlib
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Mapping, MutableSequence, Sequence
@@ -23,14 +24,23 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def build_candidate_resume_facts_content_hash(candidate_facts: Mapping[str, Any]) -> str:
+    payload = json.dumps(candidate_facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def build_candidate_resume_facts_row_id(
     *,
     candidate_resume_id: str,
     schema_version: str,
     parser_version: str,
     facts_revision: str,
+    candidate_facts_hash: str | None = None,
 ) -> str:
-    payload = "::".join([candidate_resume_id, schema_version, parser_version, facts_revision])
+    payload_parts = [candidate_resume_id, schema_version, parser_version, facts_revision]
+    if candidate_facts_hash:
+        payload_parts.append(candidate_facts_hash)
+    payload = "::".join(payload_parts)
     return f"candidate_resume_facts:{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]}"
 
 
@@ -41,6 +51,7 @@ def build_candidate_resume_facts_row(
     candidate_facts: Mapping[str, Any],
     parser_version: str,
     facts_revision: str,
+    candidate_facts_hash: str | None = None,
     row_id: str | None = None,
     is_current_for_resume: bool = False,
     created_at: str | None = None,
@@ -49,12 +60,14 @@ def build_candidate_resume_facts_row(
 ) -> Dict[str, Any]:
     normalized = normalize_candidate_facts_v1(candidate_facts)
     schema_version = str(normalized.get("schema_version") or "candidate_facts.v1")
+    candidate_facts_hash = candidate_facts_hash or build_candidate_resume_facts_content_hash(normalized)
     row = {
         "id": row_id or build_candidate_resume_facts_row_id(
             candidate_resume_id=candidate_resume_id,
             schema_version=schema_version,
             parser_version=parser_version,
             facts_revision=facts_revision,
+            candidate_facts_hash=candidate_facts_hash,
         ),
         "candidate_id": str((normalized.get("source") or {}).get("candidate_id") or candidate_resume_id),
         "candidate_resume_id": candidate_resume_id,
@@ -62,6 +75,7 @@ def build_candidate_resume_facts_row(
         "schema_version": schema_version,
         "parser_version": parser_version,
         "facts_revision": facts_revision,
+        "candidate_facts_hash": candidate_facts_hash,
         "facts_json": deepcopy(normalized),
         "extraction_status": str((normalized.get("extraction") or {}).get("status") or "failed"),
         "extraction_warnings": list(extraction_warnings or (normalized.get("extraction") or {}).get("warnings") or []),
@@ -79,7 +93,9 @@ def select_candidate_resume_facts_row_by_identity(
     schema_version: str,
     parser_version: str,
     facts_revision: str,
+    candidate_facts_hash: str | None = None,
 ) -> Mapping[str, Any] | None:
+    matches = []
     for row in rows:
         if (
             str(row.get("candidate_resume_id") or "") == candidate_resume_id
@@ -87,8 +103,15 @@ def select_candidate_resume_facts_row_by_identity(
             and str(row.get("parser_version") or "") == parser_version
             and str(row.get("facts_revision") or "") == facts_revision
         ):
-            return row
-    return None
+            if candidate_facts_hash and str(row.get("candidate_facts_hash") or "") != candidate_facts_hash:
+                continue
+            matches.append(row)
+    if not matches:
+        return None
+    current_matches = [row for row in matches if bool(row.get("is_current_for_resume"))]
+    if current_matches:
+        return current_matches[0]
+    return matches[-1]
 
 
 def select_current_candidate_resume_facts_row(
@@ -124,6 +147,11 @@ def resolve_candidate_resume_facts_for_replay(
                     "reason": "id",
                     "row": row,
                 }
+        return {
+            "status": "unavailable",
+            "reason": "not_found",
+            "row": None,
+        }
 
     row = select_candidate_resume_facts_row_by_identity(
         rows,
@@ -195,6 +223,7 @@ def persist_candidate_resume_facts(
     candidate_facts: Mapping[str, Any],
     parser_version: str,
     facts_revision: str,
+    candidate_facts_hash: str | None = None,
     row_id: str | None = None,
     acceptable_extraction_statuses: Iterable[str] | None = None,
     extraction_warnings: Sequence[str] | None = None,
@@ -205,6 +234,7 @@ def persist_candidate_resume_facts(
         candidate_facts=candidate_facts,
         parser_version=parser_version,
         facts_revision=facts_revision,
+        candidate_facts_hash=candidate_facts_hash,
         row_id=row_id,
         extraction_warnings=extraction_warnings,
     )

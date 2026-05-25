@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+import threading
 from typing import Any, Callable, Dict, Iterable, Mapping, MutableSequence, Sequence
 
 from .audit import build_candidate_resume_facts_audit_metadata
+from .local_row_store import load_candidate_resume_facts_rows, save_candidate_resume_facts_rows
 from .orchestrator import build_candidate_facts_v1
 from .persistence import (
     persist_candidate_resume_facts,
     resolve_candidate_resume_facts_for_replay,
+    select_candidate_resume_facts_row_by_identity,
 )
 from .validation_cache import CandidateFactsValidationCache
 
@@ -22,10 +25,18 @@ class CandidateFactsRepository:
     rows: list[Dict[str, Any]] = field(default_factory=list)
     validation_cache_dir: str | None = None
     validation_cache: CandidateFactsValidationCache | None = field(default=None, repr=False, compare=False)
+    _rows_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.validation_cache is None and self.validation_cache_dir:
             self.validation_cache = CandidateFactsValidationCache(base_dir=self.validation_cache_dir)
+        if self.validation_cache_dir:
+            with self._rows_lock:
+                self.rows = load_candidate_resume_facts_rows(self.validation_cache_dir)
+
+    def _save_rows(self) -> None:
+        if self.validation_cache_dir:
+            save_candidate_resume_facts_rows(self.validation_cache_dir, self.rows)
 
     def build_candidate_facts(
         self,
@@ -64,19 +75,21 @@ class CandidateFactsRepository:
         acceptable_extraction_statuses: Iterable[str] | None = None,
         extraction_warnings: Sequence[str] | None = None,
     ) -> Dict[str, Any]:
-        result = persist_candidate_resume_facts(
-            self.rows,
-            candidate_resume_id=candidate_resume_id,
-            resume_blob_id=resume_blob_id,
-            candidate_facts=candidate_facts,
-            parser_version=parser_version,
-            facts_revision=facts_revision,
-            row_id=row_id,
-            acceptable_extraction_statuses=acceptable_extraction_statuses,
-            extraction_warnings=extraction_warnings,
-        )
-        self.rows = list(result["rows"])
-        return result
+        with self._rows_lock:
+            result = persist_candidate_resume_facts(
+                self.rows,
+                candidate_resume_id=candidate_resume_id,
+                resume_blob_id=resume_blob_id,
+                candidate_facts=candidate_facts,
+                parser_version=parser_version,
+                facts_revision=facts_revision,
+                row_id=row_id,
+                acceptable_extraction_statuses=acceptable_extraction_statuses,
+                extraction_warnings=extraction_warnings,
+            )
+            self.rows = list(result["rows"])
+            self._save_rows()
+            return result
 
     def replay_candidate_facts(
         self,
@@ -87,14 +100,15 @@ class CandidateFactsRepository:
         facts_revision: str,
         candidate_resume_facts_id: str | None = None,
     ) -> Dict[str, Any]:
-        return resolve_candidate_resume_facts_for_replay(
-            self.rows,
-            candidate_resume_id=candidate_resume_id,
-            schema_version=schema_version,
-            parser_version=parser_version,
-            facts_revision=facts_revision,
-            candidate_resume_facts_id=candidate_resume_facts_id,
-        )
+        with self._rows_lock:
+            return resolve_candidate_resume_facts_for_replay(
+                self.rows,
+                candidate_resume_id=candidate_resume_id,
+                schema_version=schema_version,
+                parser_version=parser_version,
+                facts_revision=facts_revision,
+                candidate_resume_facts_id=candidate_resume_facts_id,
+            )
 
     def audit_candidate_facts(
         self,
@@ -185,6 +199,11 @@ class CandidateFactsRepository:
             return []
         return self.validation_cache.list_review_items(review_status=review_status)
 
+    def list_candidate_facts_review_summaries(self, *, review_status: str | None = None) -> list[Dict[str, Any]]:
+        if self.validation_cache is None:
+            return []
+        return self.validation_cache.list_review_item_summaries(review_status=review_status)
+
     def approve_candidate_facts_review_item(
         self,
         record_id: str,
@@ -223,13 +242,55 @@ class CandidateFactsRepository:
     ) -> Dict[str, Any]:
         if self.validation_cache is None:
             raise RuntimeError("validation cache is not configured")
-        result = self.validation_cache.promote_review_item_to_persisted(
-            self.rows,
-            record_id,
-            acceptable_extraction_statuses=acceptable_extraction_statuses,
-        )
-        self.rows = list(result["persist"]["rows"])
-        return result
+        with self._rows_lock:
+            record = self.validation_cache.get_review_item(record_id)
+            if record is None:
+                raise KeyError(record_id)
+            if str(record.get("review_status") or "") != "approved":
+                raise ValueError("candidate facts must be approved before persistence")
+
+            existing_row = select_candidate_resume_facts_row_by_identity(
+                self.rows,
+                candidate_resume_id=str(record.get("candidate_resume_id") or ""),
+                schema_version=str(record.get("schema_version") or ""),
+                parser_version=str(record.get("parser_version") or ""),
+                facts_revision=str(record.get("facts_revision") or ""),
+                candidate_facts_hash=str(record.get("candidate_facts_hash") or ""),
+            )
+            if existing_row is not None:
+                persist_result = {
+                    "rows": list(self.rows),
+                    "row": dict(existing_row),
+                    "current_row": dict(existing_row) if bool(existing_row.get("is_current_for_resume")) else None,
+                    "committed": bool(existing_row.get("is_current_for_resume")),
+                }
+            else:
+                persist_result = persist_candidate_resume_facts(
+                    self.rows,
+                    candidate_resume_id=str(record.get("candidate_resume_id") or ""),
+                    resume_blob_id=str(record.get("resume_blob_id") or ""),
+                    candidate_facts=record.get("candidate_facts") or {},
+                    parser_version=str(record.get("parser_version") or ""),
+                    facts_revision=str(record.get("facts_revision") or ""),
+                    candidate_facts_hash=str(record.get("candidate_facts_hash") or ""),
+                    acceptable_extraction_statuses=acceptable_extraction_statuses,
+                    extraction_warnings=list((record.get("candidate_facts") or {}).get("extraction", {}).get("warnings") or []),
+                )
+                self.rows = list(persist_result["rows"])
+                self._save_rows()
+
+            persistence_status = "persisted" if persist_result.get("committed") else "persisted_non_current"
+            updated_review_item = self.validation_cache._update_record(
+                record_id,
+                {
+                    "persistence_status": persistence_status,
+                    "persistence_row_id": str((persist_result.get("row") or {}).get("id") or ""),
+                },
+            )
+            return {
+                "review_item": updated_review_item,
+                "persist": persist_result,
+            }
 
     def build_persist_replay_audit(
         self,
@@ -251,58 +312,59 @@ class CandidateFactsRepository:
         extraction_warnings: Sequence[str] | None = None,
         review_capture_callback: Callable[[Dict[str, Any], Dict[str, Any]], Any] | None = None,
     ) -> Dict[str, Any]:
-        candidate_facts = self.build_candidate_facts(
-            analyzer,
-            filename,
-            rank,
-            chunks,
-            original_path=original_path,
-            text_cache=text_cache,
-            folder_metadata=folder_metadata,
-            source_origin=source_origin,
-            detected_layout=detected_layout,
-        )
-        review_capture = None
-        review_capture_error = ""
-        if callable(review_capture_callback):
-            capture_context = {
-                "candidate_resume_id": candidate_resume_id,
-                "resume_blob_id": resume_blob_id,
-                "parser_version": parser_version,
-                "facts_revision": facts_revision,
-                "original_path": original_path,
-                "source_origin": source_origin,
-                "detected_layout": detected_layout,
+        with self._rows_lock:
+            candidate_facts = self.build_candidate_facts(
+                analyzer,
+                filename,
+                rank,
+                chunks,
+                original_path=original_path,
+                text_cache=text_cache,
+                folder_metadata=folder_metadata,
+                source_origin=source_origin,
+                detected_layout=detected_layout,
+            )
+            review_capture = None
+            review_capture_error = ""
+            if callable(review_capture_callback):
+                capture_context = {
+                    "candidate_resume_id": candidate_resume_id,
+                    "resume_blob_id": resume_blob_id,
+                    "parser_version": parser_version,
+                    "facts_revision": facts_revision,
+                    "original_path": original_path,
+                    "source_origin": source_origin,
+                    "detected_layout": detected_layout,
+                }
+                try:
+                    review_capture = review_capture_callback(deepcopy(candidate_facts), capture_context)
+                except Exception as exc:
+                    review_capture_error = f"{type(exc).__name__}: {exc}"
+            persist_result = self.persist_candidate_facts(
+                candidate_resume_id=candidate_resume_id,
+                resume_blob_id=resume_blob_id,
+                candidate_facts=candidate_facts,
+                parser_version=parser_version,
+                facts_revision=facts_revision,
+                acceptable_extraction_statuses=acceptable_extraction_statuses,
+                extraction_warnings=extraction_warnings,
+            )
+            resolution = self.replay_candidate_facts(
+                candidate_resume_id=candidate_resume_id,
+                schema_version=str(candidate_facts.get("schema_version") or "candidate_facts.v1"),
+                parser_version=parser_version,
+                facts_revision=facts_revision,
+                candidate_resume_facts_id=str(persist_result["row"].get("id") or ""),
+            )
+            audit = build_candidate_resume_facts_audit_metadata(
+                resolution.get("row"),
+                resolution=resolution,
+            )
+            return {
+                "candidate_facts": candidate_facts,
+                "review_capture": review_capture,
+                "review_capture_error": review_capture_error,
+                "persist": persist_result,
+                "replay": resolution,
+                "audit": audit,
             }
-            try:
-                review_capture = review_capture_callback(deepcopy(candidate_facts), capture_context)
-            except Exception as exc:
-                review_capture_error = f"{type(exc).__name__}: {exc}"
-        persist_result = self.persist_candidate_facts(
-            candidate_resume_id=candidate_resume_id,
-            resume_blob_id=resume_blob_id,
-            candidate_facts=candidate_facts,
-            parser_version=parser_version,
-            facts_revision=facts_revision,
-            acceptable_extraction_statuses=acceptable_extraction_statuses,
-            extraction_warnings=extraction_warnings,
-        )
-        resolution = self.replay_candidate_facts(
-            candidate_resume_id=candidate_resume_id,
-            schema_version=str(candidate_facts.get("schema_version") or "candidate_facts.v1"),
-            parser_version=parser_version,
-            facts_revision=facts_revision,
-            candidate_resume_facts_id=str(persist_result["row"].get("id") or ""),
-        )
-        audit = build_candidate_resume_facts_audit_metadata(
-            resolution.get("row"),
-            resolution=resolution,
-        )
-        return {
-            "candidate_facts": candidate_facts,
-            "review_capture": review_capture,
-            "review_capture_error": review_capture_error,
-            "persist": persist_result,
-            "replay": resolution,
-            "audit": audit,
-        }

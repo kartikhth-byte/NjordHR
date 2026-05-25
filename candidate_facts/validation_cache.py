@@ -44,6 +44,7 @@ def build_candidate_facts_review_id(
     schema_version: str,
     parser_version: str,
     facts_revision: str,
+    candidate_facts_hash: str,
 ) -> str:
     payload = "::".join(
         [
@@ -52,9 +53,15 @@ def build_candidate_facts_review_id(
             schema_version,
             parser_version,
             facts_revision,
+            candidate_facts_hash,
         ]
     )
     return f"candidate_facts_review:{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]}"
+
+
+def build_candidate_facts_content_hash(candidate_facts: Mapping[str, Any]) -> str:
+    payload = json.dumps(candidate_facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _sort_key(record: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -149,6 +156,7 @@ class CandidateFactsValidationCache:
         facts_revision: str,
     ) -> Dict[str, Any]:
         normalized = normalize_candidate_facts_v1(candidate_facts)
+        candidate_facts_hash = build_candidate_facts_content_hash(normalized)
         record = {
             "id": build_candidate_facts_review_id(
                 candidate_resume_id=candidate_resume_id,
@@ -156,6 +164,7 @@ class CandidateFactsValidationCache:
                 schema_version=str(normalized.get("schema_version") or "candidate_facts.v1"),
                 parser_version=parser_version,
                 facts_revision=facts_revision,
+                candidate_facts_hash=candidate_facts_hash,
             ),
             "candidate_resume_id": candidate_resume_id,
             "resume_blob_id": resume_blob_id,
@@ -163,6 +172,7 @@ class CandidateFactsValidationCache:
             "schema_version": str(normalized.get("schema_version") or "candidate_facts.v1"),
             "parser_version": parser_version,
             "facts_revision": facts_revision,
+            "candidate_facts_hash": candidate_facts_hash,
             "review_status": "pending_review",
             "persistence_status": "not_persisted",
             "candidate_facts": deepcopy(normalized),
@@ -177,12 +187,51 @@ class CandidateFactsValidationCache:
         }
         return self._write_record(record)
 
+    def _summarize_record(self, record: Mapping[str, Any]) -> Dict[str, Any]:
+        candidate_facts = record.get("candidate_facts") if isinstance(record.get("candidate_facts"), Mapping) else {}
+        source = candidate_facts.get("source") if isinstance(candidate_facts, Mapping) else {}
+        identity = candidate_facts.get("identity") if isinstance(candidate_facts, Mapping) else {}
+        rank = candidate_facts.get("rank") if isinstance(candidate_facts, Mapping) else {}
+        extraction = candidate_facts.get("extraction") if isinstance(candidate_facts, Mapping) else {}
+        warnings = list((extraction or {}).get("warnings") or [])
+        evidence = list(candidate_facts.get("evidence") or []) if isinstance(candidate_facts, Mapping) else []
+        return {
+            "id": record.get("id"),
+            "candidate_resume_id": record.get("candidate_resume_id"),
+            "resume_blob_id": record.get("resume_blob_id"),
+            "candidate_id": record.get("candidate_id"),
+            "schema_version": record.get("schema_version"),
+            "parser_version": record.get("parser_version"),
+            "facts_revision": record.get("facts_revision"),
+            "candidate_facts_hash": record.get("candidate_facts_hash"),
+            "review_status": record.get("review_status"),
+            "persistence_status": record.get("persistence_status"),
+            "extraction_status": record.get("extraction_status"),
+            "reviewed_by": record.get("reviewed_by"),
+            "reviewed_at": record.get("reviewed_at"),
+            "persistence_row_id": record.get("persistence_row_id"),
+            "created_at": record.get("created_at"),
+            "updated_at": record.get("updated_at"),
+            "candidate_facts_summary": {
+                "candidate_name": ((identity or {}).get("candidate_name") or {}).get("value") or "",
+                "rank": ((rank or {}).get("value") or ""),
+                "source_origin": (source or {}).get("source_origin") or "",
+                "detected_layout": (source or {}).get("detected_layout") or "",
+                "warning_count": len(warnings),
+                "evidence_count": len(evidence),
+                "extraction_status": str((extraction or {}).get("status") or record.get("extraction_status") or "failed"),
+            },
+        }
+
     def list_review_items(self, *, review_status: str | None = None) -> List[Dict[str, Any]]:
         with self._lock:
             records = [dict(record) for record in self._load_records()]
         if review_status:
             records = [record for record in records if str(record.get("review_status") or "") == review_status]
         return sorted(records, key=_sort_key, reverse=True)
+
+    def list_review_item_summaries(self, *, review_status: str | None = None) -> List[Dict[str, Any]]:
+        return [self._summarize_record(record) for record in self.list_review_items(review_status=review_status)]
 
     def get_review_item(self, record_id: str) -> Dict[str, Any] | None:
         with self._lock:
