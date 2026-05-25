@@ -96,6 +96,7 @@ class CandidateFactsValidationCacheTests(unittest.TestCase):
             self.assertEqual(result["review_item"]["persistence_status"], "persisted")
             self.assertTrue(Path(cache.path).exists())
             self.assertEqual(cache.get_review_item(record["id"])["persistence_row_id"], result["persist"]["row"]["id"])
+            self.assertEqual(result["persist"]["row"]["candidate_facts_hash"], record["candidate_facts_hash"])
 
     def test_reject_review_item_keeps_item_out_of_persistence(self):
         with tempfile.TemporaryDirectory() as tmpdir:

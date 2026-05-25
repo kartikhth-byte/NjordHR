@@ -182,6 +182,9 @@ class CandidateFactsValidationCache:
             "reviewed_by": "",
             "reviewed_at": "",
             "persistence_row_id": "",
+            "supabase_persistence_status": "not_configured",
+            "supabase_row_id": "",
+            "supabase_error": "",
             "created_at": _utc_now_iso(),
             "updated_at": _utc_now_iso(),
         }
@@ -210,6 +213,9 @@ class CandidateFactsValidationCache:
             "reviewed_by": record.get("reviewed_by"),
             "reviewed_at": record.get("reviewed_at"),
             "persistence_row_id": record.get("persistence_row_id"),
+            "supabase_persistence_status": record.get("supabase_persistence_status"),
+            "supabase_row_id": record.get("supabase_row_id"),
+            "supabase_error": record.get("supabase_error"),
             "created_at": record.get("created_at"),
             "updated_at": record.get("updated_at"),
             "candidate_facts_summary": {
@@ -220,6 +226,7 @@ class CandidateFactsValidationCache:
                 "warning_count": len(warnings),
                 "evidence_count": len(evidence),
                 "extraction_status": str((extraction or {}).get("status") or record.get("extraction_status") or "failed"),
+                "supabase_persistence_status": record.get("supabase_persistence_status") or "not_configured",
             },
         }
 
@@ -295,6 +302,7 @@ class CandidateFactsValidationCache:
             candidate_facts=record.get("candidate_facts") or {},
             parser_version=str(record.get("parser_version") or ""),
             facts_revision=str(record.get("facts_revision") or ""),
+            candidate_facts_hash=str(record.get("candidate_facts_hash") or ""),
             acceptable_extraction_statuses=acceptable_extraction_statuses,
             extraction_warnings=list((record.get("candidate_facts") or {}).get("extraction", {}).get("warnings") or []),
         )

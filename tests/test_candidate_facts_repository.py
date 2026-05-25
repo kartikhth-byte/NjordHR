@@ -153,6 +153,77 @@ class CandidateFactsRepositoryTests(unittest.TestCase):
             self.assertEqual(promoted["review_item"]["persistence_status"], "persisted")
             self.assertEqual(len(repo.rows), 1)
 
+    def test_repository_repromotes_existing_non_current_exact_row(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = CandidateFactsRepository(validation_cache_dir=tmpdir)
+            capture = repo.capture_candidate_facts_for_review(
+                _FakeAnalyzer(),
+                "resume-3c",
+                "2nd Engineer",
+                [],
+                candidate_resume_id="candidate-resume-3c",
+                resume_blob_id="blob-3c",
+                parser_version="generic_pdf.v1",
+                facts_revision="rev-1",
+                original_path="resume.pdf",
+                text_cache={"resume.pdf": "Jane Doe 2nd engineer resume"},
+                folder_metadata={},
+                source_origin="manual_upload",
+                detected_layout="unknown",
+            )
+            review_id = capture["review_item"]["id"]
+            repo.approve_candidate_facts_review_item(review_id, reviewed_by="reviewer")
+            first_promote = repo.promote_candidate_facts_review_item(review_id)
+            self.assertTrue(first_promote["persist"]["committed"])
+            repo.rows[0]["is_current_for_resume"] = False
+            repo._save_rows()
+            repromote = repo.promote_candidate_facts_review_item(review_id)
+            self.assertTrue(repromote["persist"]["committed"])
+            self.assertEqual(repromote["review_item"]["persistence_status"], "persisted")
+            self.assertTrue(repromote["persist"]["current_row"]["is_current_for_resume"])
+
+    def test_repository_promote_syncs_to_supabase_and_surfaces_warnings(self):
+        class _FakeSupabaseStore:
+            def __init__(self):
+                self.calls = []
+
+            def promote_candidate_resume_facts_row(self, row):
+                self.calls.append(dict(row))
+                return {
+                    "success": True,
+                    "status": "persisted",
+                    "row": dict(row),
+                    "committed": True,
+                    "row_id": str(row.get("id") or ""),
+                }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = CandidateFactsRepository(validation_cache_dir=tmpdir)
+            repo.supabase_store = _FakeSupabaseStore()
+            capture = repo.capture_candidate_facts_for_review(
+                _FakeAnalyzer(),
+                "resume-3b",
+                "2nd Engineer",
+                [],
+                candidate_resume_id="candidate-resume-3b",
+                resume_blob_id="blob-3b",
+                parser_version="generic_pdf.v1",
+                facts_revision="rev-1",
+                original_path="resume.pdf",
+                text_cache={"resume.pdf": "Jane Doe 2nd engineer resume"},
+                folder_metadata={},
+                source_origin="manual_upload",
+                detected_layout="unknown",
+            )
+            repo.approve_candidate_facts_review_item(capture["review_item"]["id"], reviewed_by="reviewer")
+            promoted = repo.promote_candidate_facts_review_item(capture["review_item"]["id"])
+            self.assertTrue(promoted["persist"]["committed"])
+            self.assertEqual(promoted["supabase"]["status"], "persisted")
+            self.assertFalse(promoted["warnings"])
+            self.assertEqual(promoted["review_item"]["supabase_persistence_status"], "persisted")
+            self.assertEqual(promoted["review_item"]["supabase_row_id"], promoted["persist"]["row"]["id"])
+            self.assertEqual(len(repo.supabase_store.calls), 1)
+
     def test_repository_can_auto_capture_review_during_replay_audit(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = CandidateFactsRepository(validation_cache_dir=tmpdir)

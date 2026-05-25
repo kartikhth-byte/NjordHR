@@ -1729,6 +1729,42 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(promote_body["persist"]["committed"])
         self.assertEqual(promote_body["review_item"]["persistence_status"], "persisted")
 
+    def test_candidate_facts_review_promote_surfaces_supabase_sync_warnings(self):
+        class _FailingSupabaseStore:
+            def promote_candidate_resume_facts_row(self, _row):
+                raise RuntimeError("simulated supabase outage")
+
+        repo = backend_server._candidate_facts_repository()
+        repo.supabase_store = _FailingSupabaseStore()
+        backend_server.candidate_facts_repo = repo
+
+        payload = {
+            "candidate_resume_id": "candidate-resume-1b",
+            "resume_blob_id": "blob-1b",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": self._candidate_facts_payload(),
+        }
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        item_id = capture_resp.get_json()["review_item"]["id"]
+        self.assertEqual(
+            self.client.post("/candidate-facts/review/approve", json={
+                "id": item_id,
+                "reviewed_by": "reviewer",
+            }).status_code,
+            200,
+        )
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": item_id})
+        self.assertEqual(promote_resp.status_code, 200)
+        body = promote_resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertTrue(body["persist"]["committed"])
+        self.assertGreater(len(body.get("warnings") or []), 0)
+        self.assertEqual(body["review_item"]["supabase_persistence_status"], "failed")
+        self.assertIn("supabase outage", body["warnings"][0].lower())
+
     def test_candidate_facts_review_promote_rejects_client_override_of_acceptance_policy(self):
         payload = {
             "candidate_resume_id": "candidate-resume-2",
@@ -1767,6 +1803,31 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertFalse(body["success"])
         self.assertFalse(body["persist"]["committed"])
         self.assertEqual(body["review_item"]["persistence_status"], "persisted_non_current")
+
+    def test_candidate_facts_repository_rebuilds_when_supabase_runtime_changes(self):
+        backend_server.candidate_facts_repo = None
+        backend_server.feature_flags = replace(
+            backend_server.feature_flags,
+            use_supabase_db=False,
+        )
+        repo_local = backend_server._candidate_facts_repository()
+        self.assertIsNone(getattr(repo_local, "supabase_store", None))
+
+        backend_server.feature_flags = replace(
+            backend_server.feature_flags,
+            use_supabase_db=True,
+        )
+        with patch.object(backend_server, "_supabase_url", return_value="https://example.supabase.co"), patch.object(
+            backend_server,
+            "resolve_supabase_api_key",
+            return_value="service-role-key",
+        ):
+            repo_remote = backend_server._candidate_facts_repository()
+
+        self.assertIsNot(repo_local, repo_remote)
+        self.assertIsNotNone(repo_remote.supabase_store)
+        self.assertEqual(repo_remote.supabase_url, "https://example.supabase.co")
+        self.assertEqual(repo_remote.supabase_service_role_key, "service-role-key")
 
 
 if __name__ == "__main__":

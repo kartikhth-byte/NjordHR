@@ -126,16 +126,49 @@ def _candidate_facts_review_cache_dir():
     return candidate_facts_validation_cache_base_dir()
 
 
+def _candidate_facts_supabase_config():
+    if not bool(getattr(feature_flags, "use_supabase_db", False)):
+        return {}
+    supabase_url = _supabase_url()
+    supabase_key = resolve_supabase_api_key()
+    if not supabase_url or not supabase_key:
+        return {}
+    return {
+        "supabase_url": supabase_url,
+        "supabase_service_role_key": supabase_key,
+    }
+
+
 def _candidate_facts_repository():
     global candidate_facts_repo
+    cache_dir = _candidate_facts_review_cache_dir()
+    supabase_config = _candidate_facts_supabase_config()
     if candidate_facts_repo is None:
-        cache_dir = _candidate_facts_review_cache_dir()
-        candidate_facts_repo = CandidateFactsRepository(validation_cache_dir=cache_dir)
+        candidate_facts_repo = CandidateFactsRepository(
+            validation_cache_dir=cache_dir,
+            **supabase_config,
+        )
+        return candidate_facts_repo
+
+    repo_cache_dir = os.path.abspath(os.path.expanduser(str(candidate_facts_repo.validation_cache_dir or ""))) if candidate_facts_repo.validation_cache_dir else ""
+    current_supabase_url = str(getattr(candidate_facts_repo, "supabase_url", "") or "")
+    current_supabase_key = str(getattr(candidate_facts_repo, "supabase_service_role_key", "") or "")
+    expected_supabase_url = str(supabase_config.get("supabase_url", "") or "")
+    expected_supabase_key = str(supabase_config.get("supabase_service_role_key", "") or "")
+    if (
+        repo_cache_dir != os.path.abspath(os.path.expanduser(cache_dir))
+        or current_supabase_url != expected_supabase_url
+        or current_supabase_key != expected_supabase_key
+    ):
+        candidate_facts_repo = CandidateFactsRepository(
+            validation_cache_dir=cache_dir,
+            **supabase_config,
+        )
     return candidate_facts_repo
 
 
 def _refresh_runtime_managers():
-    global feature_flags, csv_manager, VERIFIED_RESUMES_DIR
+    global feature_flags, csv_manager, VERIFIED_RESUMES_DIR, candidate_facts_repo
     feature_flags = FeatureFlags(
         use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
         use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
@@ -151,6 +184,7 @@ def _refresh_runtime_managers():
         base_folder=VERIFIED_RESUMES_DIR,
         server_url=app_settings.server_url
     )
+    candidate_facts_repo = None
     try:
         Analyzer._instance = None
     except Exception:
@@ -2261,7 +2295,19 @@ def promote_candidate_facts_review_item():
                 "review_item": result["review_item"],
                 "persist": result["persist"],
             }), 409
-        return jsonify({"success": True, "review_item": result["review_item"], "persist": result["persist"]})
+        response = {"success": True, "review_item": result["review_item"], "persist": result["persist"]}
+        warnings = [warning for warning in (result.get("warnings") or []) if warning]
+        review_item = result.get("review_item") or {}
+        supabase_status = str(review_item.get("supabase_persistence_status") or "").strip()
+        supabase_error = str(review_item.get("supabase_error") or "").strip()
+        if not warnings:
+            if supabase_status == "failed":
+                warnings.append(f"Supabase candidate facts sync failed: {supabase_error or 'unknown error'}")
+            elif supabase_status in {"not_current", "skipped_non_current"}:
+                warnings.append("Supabase candidate facts row was written but not marked current.")
+        if warnings:
+            response["warnings"] = warnings
+        return jsonify(response)
     except Exception as exc:
         return jsonify({"success": False, "message": f"Candidate facts promotion failed: {exc}"}), 500
 

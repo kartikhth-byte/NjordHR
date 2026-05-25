@@ -30,6 +30,7 @@ from .validation_cache import (
     build_candidate_facts_review_id,
     candidate_facts_validation_cache_base_dir,
 )
+from .supabase_store import SupabaseCandidateFactsStore
 
 __all__ = [
     "CANDIDATE_FACTS_SCHEMA_VERSION",
@@ -45,6 +46,7 @@ __all__ = [
     "CandidateFactsRepository",
     "build_transient_facts_id",
     "candidate_facts_validation_cache_base_dir",
+    "SupabaseCandidateFactsStore",
     "ensure_single_current_candidate_resume_facts_row",
     "persist_candidate_resume_facts",
     "resolve_candidate_resume_facts_for_replay",

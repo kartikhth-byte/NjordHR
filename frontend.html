@@ -1406,8 +1406,13 @@
                         handleSendMessage('error', data.message || errorMessage);
                         return;
                     }
-                    if (endpoint === 'promote' && data.persist && data.persist.committed === false) {
-                        handleSendMessage('warning', data.message || 'Candidate facts were written but not marked current.');
+                    const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+                    if (endpoint === 'promote' && (data.persist && data.persist.committed === false || warnings.length > 0)) {
+                        const warningText = [
+                            data.message || 'Candidate facts were promoted with warnings.',
+                            ...warnings,
+                        ].filter(Boolean).join(' ');
+                        handleSendMessage('warning', warningText);
                     } else {
                         handleSendMessage('success', successMessage);
                     }
@@ -5226,6 +5231,13 @@
                                                     <p><span className="font-medium">Updated:</span> {selectedItem.updated_at || '-'}</p>
                                                     <p><span className="font-medium">Reviewed By:</span> {selectedItem.reviewed_by || '-'}</p>
                                                     <p><span className="font-medium">Reviewed At:</span> {selectedItem.reviewed_at || '-'}</p>
+                                                    <p><span className="font-medium">Supabase:</span> {selectedItem.supabase_persistence_status || '-'}</p>
+                                                    {selectedItem.supabase_row_id && (
+                                                        <p><span className="font-medium">Supabase Row:</span> {selectedItem.supabase_row_id}</p>
+                                                    )}
+                                                    {selectedItem.supabase_error && (
+                                                        <p className="text-red-700"><span className="font-medium">Supabase Error:</span> {selectedItem.supabase_error}</p>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

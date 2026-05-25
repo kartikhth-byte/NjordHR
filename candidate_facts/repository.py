@@ -15,6 +15,7 @@ from .persistence import (
     resolve_candidate_resume_facts_for_replay,
     select_candidate_resume_facts_row_by_identity,
 )
+from .supabase_store import SupabaseCandidateFactsStore
 from .validation_cache import CandidateFactsValidationCache
 
 
@@ -24,12 +25,26 @@ class CandidateFactsRepository:
 
     rows: list[Dict[str, Any]] = field(default_factory=list)
     validation_cache_dir: str | None = None
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
+    supabase_timeout_seconds: int = 20
     validation_cache: CandidateFactsValidationCache | None = field(default=None, repr=False, compare=False)
+    supabase_store: SupabaseCandidateFactsStore | None = field(default=None, repr=False, compare=False)
     _rows_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.validation_cache is None and self.validation_cache_dir:
             self.validation_cache = CandidateFactsValidationCache(base_dir=self.validation_cache_dir)
+        if (
+            self.supabase_store is None
+            and self.supabase_url
+            and self.supabase_service_role_key
+        ):
+            self.supabase_store = SupabaseCandidateFactsStore(
+                supabase_url=self.supabase_url,
+                service_role_key=self.supabase_service_role_key,
+                timeout_seconds=self.supabase_timeout_seconds,
+            )
         if self.validation_cache_dir:
             with self._rows_lock:
                 self.rows = load_candidate_resume_facts_rows(self.validation_cache_dir)
@@ -257,12 +272,12 @@ class CandidateFactsRepository:
                 facts_revision=str(record.get("facts_revision") or ""),
                 candidate_facts_hash=str(record.get("candidate_facts_hash") or ""),
             )
-            if existing_row is not None:
+            if existing_row is not None and bool(existing_row.get("is_current_for_resume")):
                 persist_result = {
                     "rows": list(self.rows),
                     "row": dict(existing_row),
-                    "current_row": dict(existing_row) if bool(existing_row.get("is_current_for_resume")) else None,
-                    "committed": bool(existing_row.get("is_current_for_resume")),
+                    "current_row": dict(existing_row),
+                    "committed": True,
                 }
             else:
                 persist_result = persist_candidate_resume_facts(
@@ -280,16 +295,56 @@ class CandidateFactsRepository:
                 self._save_rows()
 
             persistence_status = "persisted" if persist_result.get("committed") else "persisted_non_current"
+            supabase_result = {
+                "status": "not_configured",
+                "row_id": "",
+                "error": "",
+            }
+            warnings: list[str] = []
+            if persist_result.get("committed") and self.supabase_store is not None:
+                try:
+                    supabase_result = self.supabase_store.promote_candidate_resume_facts_row(persist_result["row"])
+                    if not bool(supabase_result.get("committed")):
+                        supabase_result = {
+                            "status": "not_current",
+                            "row_id": str((supabase_result.get("row") or {}).get("id") or ""),
+                            "error": "",
+                        }
+                        warnings.append("Supabase candidate facts row was written but not marked current.")
+                except Exception as exc:
+                    supabase_result = {
+                        "status": "failed",
+                        "row_id": "",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                    warnings.append(f"Supabase candidate facts sync failed: {exc}")
+            elif persist_result.get("committed") and self.supabase_store is None:
+                supabase_result = {
+                    "status": "not_configured",
+                    "row_id": "",
+                    "error": "",
+                }
+            elif not persist_result.get("committed") and self.supabase_store is not None:
+                supabase_result = {
+                    "status": "skipped_non_current",
+                    "row_id": "",
+                    "error": "",
+                }
             updated_review_item = self.validation_cache._update_record(
                 record_id,
                 {
                     "persistence_status": persistence_status,
                     "persistence_row_id": str((persist_result.get("row") or {}).get("id") or ""),
+                    "supabase_persistence_status": str(supabase_result.get("status") or "not_configured"),
+                    "supabase_row_id": str(supabase_result.get("row_id") or ""),
+                    "supabase_error": str(supabase_result.get("error") or ""),
                 },
             )
             return {
                 "review_item": updated_review_item,
                 "persist": persist_result,
+                "supabase": supabase_result,
+                "warnings": warnings,
             }
 
     def build_persist_replay_audit(
