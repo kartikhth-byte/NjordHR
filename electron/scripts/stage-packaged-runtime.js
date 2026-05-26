@@ -30,6 +30,9 @@ const APP_FILES = [
 
 const APP_DIRS = [
   "agent",
+  "candidate_facts",
+  "cloud_api",
+  "query_understanding",
   "repositories",
   "supabase",
   "web_vendor"

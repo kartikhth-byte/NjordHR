@@ -11,3 +11,9 @@ test("packaged runtime includes root helpers imported by backend and agent code"
 test("packaged runtime includes local frontend vendor assets", () => {
   assert.equal(APP_DIRS.includes("web_vendor"), true);
 });
+
+test("packaged runtime includes backend package imports", () => {
+  assert.equal(APP_DIRS.includes("cloud_api"), true);
+  assert.equal(APP_DIRS.includes("candidate_facts"), true);
+  assert.equal(APP_DIRS.includes("query_understanding"), true);
+});
