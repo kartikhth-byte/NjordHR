@@ -176,7 +176,8 @@ def _looks_like_candidate_name(value: str, *, allow_single_word: bool = False) -
         "kw",
         "till",
     )
-    if any(re.search(rf"\b{re.escape(token).replace(r'\ ', r'\s+')}\b", lowered) for token in blocked_tokens):
+    blocked_patterns = [re.escape(token).replace(r"\ ", r"\s+") for token in blocked_tokens]
+    if any(re.search(rf"\b{pattern}\b", lowered) for pattern in blocked_patterns):
         return False
     if any(char.isdigit() for char in candidate):
         return False
