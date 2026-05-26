@@ -41,6 +41,8 @@ from runtime_env import normalize_env_value, normalized_url
 from ai_analyzer import Analyzer
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
+from query_understanding import build_shadow_audit_entry, build_shadow_llm_query_plan
+from query_understanding.supabase_telemetry_store import SupabaseTelemetryStore
 
 # --- App Initialization ---
 app = Flask(__name__)
@@ -64,6 +66,7 @@ auto_shutdown_started = False
 auto_shutdown_in_progress = False
 cloud_auth_state_cache = {"ts": 0, "mode": "local", "reason": "not_checked"}
 candidate_facts_repo = None
+supabase_telemetry_store = None
 
 # --- Initialize Extractors ---
 resume_extractor = ResumeExtractor()
@@ -165,6 +168,252 @@ def _candidate_facts_repository():
             **supabase_config,
         )
     return candidate_facts_repo
+
+
+def _supabase_telemetry_store():
+    global supabase_telemetry_store
+    supabase_url = _supabase_url()
+    supabase_key = resolve_supabase_api_key()
+    if not supabase_url or not supabase_key:
+        return None
+    if (
+        supabase_telemetry_store is None
+        or str(getattr(supabase_telemetry_store, "supabase_url", "") or "") != supabase_url
+        or str(getattr(supabase_telemetry_store, "service_role_key", "") or "") != supabase_key
+    ):
+        supabase_telemetry_store = SupabaseTelemetryStore(
+            supabase_url=supabase_url,
+            service_role_key=supabase_key,
+        )
+    return supabase_telemetry_store
+
+
+def _should_force_shadow_llm(actor_role=None):
+    override = os.getenv("NJORDHR_QUERY_UNDERSTANDING_SHADOW_LLM_FORCE", "").strip().lower()
+    if override in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if override in {"0", "false", "no", "off", "disabled"}:
+        return False
+    role = str(actor_role or "").strip().lower()
+    if role:
+        return role == "recruiter"
+    if has_request_context():
+        return _session_role() == "recruiter"
+    return False
+
+
+def _record_supabase_telemetry(
+    *,
+    telemetry_kind,
+    category,
+    status,
+    summary,
+    payload,
+    prompt_hash="",
+    prompt_text="",
+    actor_role="",
+    actor_username="",
+    session_id="",
+):
+    store = _supabase_telemetry_store()
+    if store is None:
+        return None
+    request_id = str(session_id or "")
+    if not request_id and has_request_context():
+        request_id = str(session.get("session_id") or request.headers.get("X-Request-Id") or "")
+    try:
+        return store.log_event(
+            store.build_payload(
+                telemetry_kind=telemetry_kind,
+                category=category,
+                status=status,
+                summary=summary,
+                payload=payload or {},
+                prompt_hash=prompt_hash,
+                prompt_text=prompt_text,
+                actor_role=actor_role or (_session_role() if has_request_context() else ""),
+                actor_username=actor_username or (_session_username() if has_request_context() else ""),
+                session_id=request_id,
+                source="backend_server",
+            )
+        )
+    except Exception as exc:
+        print(f"[BACKEND WARN] Failed to persist telemetry: {exc}")
+        return None
+
+
+def _list_all_prompt_audit_summaries(store, page_size=200):
+    rows = []
+    offset = 0
+    page_size = max(1, min(int(page_size or 200), 1000))
+    while True:
+        page = store.list_prompt_audit_summaries(limit=page_size, offset=offset)
+        if not page:
+            break
+        rows.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return rows
+
+
+def _telemetry_store_raw_prompts_enabled():
+    override = os.getenv("NJORDHR_TELEMETRY_STORE_RAW_PROMPTS", "").strip().lower()
+    if override in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if override in {"0", "false", "no", "off", "disabled"}:
+        return False
+    return False
+
+
+def _scrub_shadow_audit_value(value):
+    sensitive_keys = {"prompt", "raw_prompt", "source_text", "prompt_text"}
+    if isinstance(value, dict):
+        scrubbed = {}
+        for key, item in value.items():
+            key_text = str(key or "").strip().lower()
+            if key_text in sensitive_keys:
+                continue
+            scrubbed[key] = _scrub_shadow_audit_value(item)
+        return scrubbed
+    if isinstance(value, list):
+        return [_scrub_shadow_audit_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_scrub_shadow_audit_value(item) for item in value)
+    return value
+
+
+def _redact_shadow_audit_payload(payload):
+    if not isinstance(payload, dict):
+        return payload
+    redacted = _scrub_shadow_audit_value(dict(payload))
+    redacted.pop("prompt", None)
+    redacted.pop("legacy_plan", None)
+    redacted.pop("llm_plan", None)
+    redacted["payload_redacted"] = True
+    return redacted
+
+
+def _schedule_search_prompt_audit(analyzer, prompt, rank_folder, *, search_session_id="", actor_role="", actor_username=""):
+    def _worker():
+        try:
+            audit_analyzer = _build_analyzer()
+            _log_search_prompt_audit(
+                audit_analyzer,
+                prompt,
+                rank_folder,
+                search_session_id=search_session_id,
+                actor_role=actor_role,
+                actor_username=actor_username,
+            )
+        except Exception as exc:
+            print(f"[BACKEND WARN] Failed to schedule prompt audit: {exc}")
+
+    try:
+        thread = threading.Thread(
+            target=_worker,
+            name=f"njordhr-prompt-audit-{search_session_id or 'search'}",
+            daemon=True,
+        )
+        thread.start()
+        return thread
+    except Exception as exc:
+        print(f"[BACKEND WARN] Failed to start prompt audit thread: {exc}")
+        return None
+
+
+def _log_search_prompt_audit(analyzer, prompt, rank_folder, *, search_session_id="", actor_role="", actor_username=""):
+    force_shadow = _should_force_shadow_llm(actor_role=actor_role)
+    try:
+        shadow_audit = build_shadow_audit_entry(
+            analyzer,
+            prompt,
+            rank=rank_folder,
+            prompt_id=search_session_id or hashlib.sha256(f"{rank_folder}::{prompt}".encode("utf-8")).hexdigest()[:16],
+            llm_plan_provider=build_shadow_llm_query_plan,
+            force_shadow=force_shadow,
+        )
+    except Exception as exc:
+        payload = {
+            "rank_folder": rank_folder,
+            "force_shadow": force_shadow,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        _record_supabase_telemetry(
+            telemetry_kind="prompt_audit",
+            category="query_understanding",
+            status="failed",
+            summary="Shadow prompt audit failed.",
+            payload=payload,
+            prompt_hash=hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest(),
+            prompt_text=str(prompt or "")[:5000] if _telemetry_store_raw_prompts_enabled() else "",
+            actor_role=actor_role,
+            actor_username=actor_username,
+            session_id=search_session_id,
+        )
+        return None
+
+    comparison_results = shadow_audit.get("comparison_results") or []
+    outcome_counts = {}
+    for item in comparison_results:
+        outcome = str(item.get("comparison_outcome") or "unknown")
+        outcome_counts[outcome] = outcome_counts.get(outcome, 0) + 1
+    llm_status = ((shadow_audit.get("shadow_wiring") or {}).get("llm_plan_source") or "disabled")
+    issue_outcomes = {"regression", "schema_error", "catalogue_drift"}
+    has_issue = any(outcome in issue_outcomes for outcome in outcome_counts)
+    status = "disabled"
+    if shadow_audit.get("shadow_mode") == "enabled":
+        status = "issue" if has_issue or bool((shadow_audit.get("shadow_wiring") or {}).get("failure_reason")) else "ok"
+    summary = (
+        f"shadow={shadow_audit.get('shadow_mode')} llm={llm_status} "
+        f"comparisons={len(comparison_results)} outcomes={outcome_counts}"
+    )
+    _record_supabase_telemetry(
+        telemetry_kind="prompt_audit",
+        category="query_understanding",
+        status=status,
+        summary=summary,
+        payload=_redact_shadow_audit_payload(shadow_audit),
+        prompt_hash=hashlib.sha256(str(prompt or "").encode("utf-8")).hexdigest(),
+        prompt_text=str(prompt or "")[:5000] if _telemetry_store_raw_prompts_enabled() else "",
+        actor_role=actor_role,
+        actor_username=actor_username,
+        session_id=search_session_id,
+    )
+    return shadow_audit
+
+
+def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
+    try:
+        repo = _candidate_facts_repository()
+        candidate_resume_id = str((capture_context or {}).get("candidate_resume_id") or (capture_context or {}).get("candidate_id") or "").strip()
+        resume_blob_id = str((capture_context or {}).get("resume_blob_id") or (capture_context or {}).get("filename") or candidate_resume_id).strip()
+        parser_version = str((capture_context or {}).get("parser_version") or ((candidate_facts or {}).get("extraction") or {}).get("parser_version") or "generic_pdf.v1").strip()
+        facts_revision = str((capture_context or {}).get("facts_revision") or (candidate_facts or {}).get("facts_version") or (candidate_facts or {}).get("schema_version") or "candidate_facts.v1").strip()
+        review_alignment_report = capture_context.get("review_alignment_report") if isinstance(capture_context, dict) else None
+        review_alignment_status = str((capture_context or {}).get("review_alignment_status") or "").strip()
+        review_alignment_mismatch_count = capture_context.get("review_alignment_mismatch_count") if isinstance(capture_context, dict) else None
+        review_alignment_mismatches = capture_context.get("review_alignment_mismatches") if isinstance(capture_context, dict) else None
+        if not candidate_resume_id:
+            raise RuntimeError("candidate_resume_id is required for review capture")
+        if not resume_blob_id:
+            raise RuntimeError("resume_blob_id is required for review capture")
+        if not isinstance(candidate_facts, dict) or not candidate_facts:
+            raise RuntimeError("candidate_facts payload is required for review capture")
+        return repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id=candidate_resume_id,
+            resume_blob_id=resume_blob_id,
+            candidate_facts=candidate_facts,
+            parser_version=parser_version,
+            facts_revision=facts_revision,
+            review_alignment_report=review_alignment_report if isinstance(review_alignment_report, dict) else None,
+            review_alignment_status=review_alignment_status or None,
+            review_alignment_mismatch_count=review_alignment_mismatch_count,
+            review_alignment_mismatches=review_alignment_mismatches if isinstance(review_alignment_mismatches, list) else None,
+        )
+    except Exception as exc:
+        print(f"[REVIEW CAPTURE WARN] Failed to capture candidate facts from live analysis: {exc}")
+        return {"success": False, "message": str(exc)}
 
 
 def _refresh_runtime_managers():
@@ -982,6 +1231,10 @@ def _require_admin():
     if request_token != token:
         return False, "Unauthorized admin token."
     return True, ""
+
+
+def _require_admin_session():
+    return _require_role("admin")
 
 
 def _agent_sync_token():
@@ -2167,7 +2420,7 @@ def proxy_email_intake_manual_review_open():
 
 @app.route('/candidate-facts/review/capture', methods=['POST'])
 def capture_candidate_facts_review_item():
-    ok, reason = _require_role("admin", "manager", "recruiter")
+    ok, reason = _require_admin_session()
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     payload = request.json or {}
@@ -2202,7 +2455,7 @@ def capture_candidate_facts_review_item():
 
 @app.route('/candidate-facts/review/items', methods=['GET'])
 def list_candidate_facts_review_items():
-    ok, reason = _require_role("admin", "manager", "recruiter")
+    ok, reason = _require_admin_session()
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     review_status = str(request.args.get("status", "")).strip() or None
@@ -2215,7 +2468,7 @@ def list_candidate_facts_review_items():
 
 @app.route('/candidate-facts/review/item', methods=['GET'])
 def get_candidate_facts_review_item():
-    ok, reason = _require_role("admin", "manager", "recruiter")
+    ok, reason = _require_admin_session()
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     item_id = str(request.args.get("id", "")).strip()
@@ -2233,7 +2486,7 @@ def get_candidate_facts_review_item():
 
 @app.route('/candidate-facts/review/approve', methods=['POST'])
 def approve_candidate_facts_review_item():
-    ok, reason = _require_role("admin", "manager", "recruiter")
+    ok, reason = _require_admin_session()
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     payload = request.json or {}
@@ -2254,7 +2507,7 @@ def approve_candidate_facts_review_item():
 
 @app.route('/candidate-facts/review/reject', methods=['POST'])
 def reject_candidate_facts_review_item():
-    ok, reason = _require_role("admin", "manager", "recruiter")
+    ok, reason = _require_admin_session()
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     payload = request.json or {}
@@ -2275,7 +2528,7 @@ def reject_candidate_facts_review_item():
 
 @app.route('/candidate-facts/review/promote', methods=['POST'])
 def promote_candidate_facts_review_item():
-    ok, reason = _require_role("admin", "manager", "recruiter")
+    ok, reason = _require_admin_session()
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     payload = request.json or {}
@@ -2308,6 +2561,16 @@ def promote_candidate_facts_review_item():
         if warnings:
             response["warnings"] = warnings
         return jsonify(response)
+    except ValueError as exc:
+        try:
+            review_item = repo.validation_cache.get_review_item(item_id) if getattr(repo, "validation_cache", None) else None
+        except Exception:
+            review_item = None
+        return jsonify({
+            "success": False,
+            "message": str(exc),
+            "review_item": review_item,
+        }), 409
     except Exception as exc:
         return jsonify({"success": False, "message": f"Candidate facts promotion failed: {exc}"}), 500
 
@@ -3317,6 +3580,105 @@ def admin_usage_logs():
     rows = _read_usage_logs(limit=limit)
     return jsonify({"success": True, "rows": rows, "count": len(rows)})
 
+
+@app.route('/admin/telemetry_logs', methods=['GET'])
+def admin_telemetry_logs():
+    ok, reason = _require_admin_session()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    try:
+        limit = int(str(request.args.get("limit", "200")).strip())
+    except Exception:
+        limit = 200
+    limit = max(1, min(limit, 1000))
+    telemetry_kind = str(request.args.get("telemetry_kind", "")).strip() or None
+    category = str(request.args.get("category", "")).strip() or None
+    store = _supabase_telemetry_store()
+    if store is None:
+        return jsonify({"success": True, "rows": [], "count": 0, "message": "Telemetry store not configured."})
+    try:
+        rows = store.list_events(limit=limit, telemetry_kind=telemetry_kind, category=category)
+        return jsonify({"success": True, "rows": rows, "count": len(rows), "table_name": store.table_name})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Telemetry logs unavailable: {exc}"}), 500
+
+
+@app.route('/admin/telemetry_summary', methods=['GET'])
+def admin_telemetry_summary():
+    ok, reason = _require_admin_session()
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    try:
+        limit = int(str(request.args.get("limit", "100")).strip())
+    except Exception:
+        limit = 100
+    limit = max(1, min(limit, 1000))
+    try:
+        threshold = int(str(request.args.get("threshold", "10")).strip())
+    except Exception:
+        threshold = 10
+    threshold = max(1, threshold)
+    store = _supabase_telemetry_store()
+    if store is None:
+        return jsonify({
+            "success": True,
+            "summary": {
+                "prompt_audit_count": 0,
+                "prompt_audit_issue_count": 0,
+                "prompt_audit_ok_count": 0,
+                "prompt_audit_disabled_count": 0,
+                "prompt_audit_hash_count": 0,
+                "prompt_audit_threshold": threshold,
+                "prompt_audit_over_threshold_count": 0,
+                "prompt_audit_over_threshold_is_partial": False,
+                "system_error_count": 0,
+            },
+            "prompt_audit_summaries": [],
+            "recent_system_errors": [],
+            "message": "Telemetry store not configured.",
+        })
+    try:
+        all_prompt_audit_summaries = _list_all_prompt_audit_summaries(store, page_size=1000)
+        prompt_audit_summaries = all_prompt_audit_summaries[:limit]
+        prompt_audit_totals = store.get_prompt_audit_totals()
+        recent_system_errors = store.list_events(
+            limit=limit,
+            telemetry_kind="system_log",
+            status="error",
+        )
+        prompt_audit_count = int(prompt_audit_totals.get("total_count") or 0)
+        prompt_audit_issue_count = int(prompt_audit_totals.get("issue_count") or 0)
+        prompt_audit_ok_count = int(prompt_audit_totals.get("ok_count") or 0)
+        prompt_audit_disabled_count = int(prompt_audit_totals.get("disabled_count") or 0)
+        prompt_hash_count = int(prompt_audit_totals.get("prompt_hash_count") or 0)
+        over_threshold = [
+            row for row in all_prompt_audit_summaries
+            if int(row.get("total_count") or 0) >= threshold
+        ]
+        summary_is_partial = len(all_prompt_audit_summaries) > len(prompt_audit_summaries)
+        summary = {
+            "prompt_audit_count": prompt_audit_count,
+            "prompt_audit_issue_count": prompt_audit_issue_count,
+            "prompt_audit_ok_count": prompt_audit_ok_count,
+            "prompt_audit_disabled_count": prompt_audit_disabled_count,
+            "prompt_audit_hash_count": prompt_hash_count,
+            "prompt_audit_threshold": threshold,
+            "prompt_audit_over_threshold_count": len(over_threshold),
+            "prompt_audit_over_threshold_is_partial": summary_is_partial,
+            "system_error_count": len(recent_system_errors),
+        }
+        return jsonify({
+            "success": True,
+            "summary": summary,
+            "prompt_audit_summaries": prompt_audit_summaries,
+            "prompt_audit_over_threshold": over_threshold,
+            "recent_system_errors": recent_system_errors,
+            "prompt_audit_totals": prompt_audit_totals,
+            "table_name": getattr(store, "table_name", "njordhr_telemetry_logs"),
+        })
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Telemetry summary unavailable: {exc}"}), 500
+
 @app.route('/get_rank_folders', methods=['GET'])
 def get_rank_folders():
     ok, reason = _require_role("admin", "manager", "recruiter")
@@ -3533,6 +3895,8 @@ def analyze_stream():
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
     search_session_id = str(uuid.uuid4())
+    actor_role = _session_role()
+    actor_username = _session_username()
 
     def _log_ai_search_audit_rows(audit_rows, rank_folder, prompt, applied_ship_type, experienced_ship_type, search_session_id):
         for row in audit_rows or []:
@@ -3580,6 +3944,29 @@ def analyze_stream():
             
             # Create analyzer and run streaming analysis
             analyzer = _build_analyzer()
+            _record_supabase_telemetry(
+                telemetry_kind="system_log",
+                category="ai_search",
+                status="started",
+                summary=f"Streaming AI search started for rank={rank_folder}.",
+                payload={
+                    "rank_folder": rank_folder,
+                    "applied_ship_type": applied_ship_type,
+                    "experienced_ship_type": experienced_ship_type,
+                    "search_session_id": search_session_id,
+                },
+                actor_role=actor_role,
+                actor_username=actor_username,
+                session_id=search_session_id,
+            )
+            _schedule_search_prompt_audit(
+                analyzer,
+                prompt,
+                rank_folder,
+                search_session_id=search_session_id,
+                actor_role=actor_role,
+                actor_username=actor_username,
+            )
             
             # Stream progress events
             for progress_event in analyzer.run_analysis_stream(
@@ -3587,6 +3974,7 @@ def analyze_stream():
                 prompt,
                 applied_ship_type=applied_ship_type,
                 experienced_ship_type=experienced_ship_type,
+                review_capture_callback=_candidate_facts_review_capture_callback,
             ):
                 event_to_client = progress_event
                 if progress_event.get("type") == "complete":
@@ -3608,12 +3996,45 @@ def analyze_stream():
                         for key, value in progress_event.items()
                         if key != "hard_filter_audit"
                     }
+                    _record_supabase_telemetry(
+                        telemetry_kind="system_log",
+                        category="ai_search",
+                        status="complete",
+                        summary=f"Streaming AI search completed for rank={rank_folder}.",
+                        payload={
+                            "rank_folder": rank_folder,
+                            "applied_ship_type": applied_ship_type,
+                            "experienced_ship_type": experienced_ship_type,
+                            "search_session_id": search_session_id,
+                            "verified_matches": len(progress_event.get("verified_matches", [])),
+                            "uncertain_matches": len(progress_event.get("uncertain_matches", [])),
+                        },
+                        actor_role=actor_role,
+                        actor_username=actor_username,
+                        session_id=search_session_id,
+                    )
                 yield f"data: {json.dumps(event_to_client)}\n\n"
             
         except Exception as e:
             print(f"[BACKEND ERROR] {e}")
             import traceback
             traceback.print_exc()
+            _record_supabase_telemetry(
+                telemetry_kind="system_log",
+                category="ai_search",
+                status="error",
+                summary=f"Streaming AI search failed for rank={rank_folder}.",
+                payload={
+                    "rank_folder": rank_folder,
+                    "applied_ship_type": applied_ship_type,
+                    "experienced_ship_type": experienced_ship_type,
+                    "search_session_id": search_session_id,
+                    "error": f"{type(e).__name__}: {e}",
+                },
+                actor_role=actor_role,
+                actor_username=actor_username,
+                session_id=search_session_id,
+            )
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
     return Response(generate(), mimetype='text/event-stream')
@@ -3642,17 +4063,57 @@ def analyze():
         print(f"[BACKEND] Prompt: {prompt}")
         
         analyzer = _build_analyzer()
+        actor_role = _session_role()
+        actor_username = _session_username()
+        _record_supabase_telemetry(
+            telemetry_kind="system_log",
+            category="ai_search",
+            status="started",
+            summary=f"AI search started for rank={rank_folder}.",
+            payload={
+                "rank_folder": rank_folder,
+                "applied_ship_type": applied_ship_type,
+                "experienced_ship_type": experienced_ship_type,
+            },
+            actor_role=actor_role,
+            actor_username=actor_username,
+        )
+        _schedule_search_prompt_audit(
+            analyzer,
+            prompt,
+            rank_folder,
+            search_session_id=str(request.headers.get("X-Request-Id") or ""),
+            actor_role=actor_role,
+            actor_username=actor_username,
+        )
         result = analyzer.run_analysis(
             rank_folder,
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            review_capture_callback=_candidate_facts_review_capture_callback,
         )
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
             "success": bool(result.get("success")),
             "verified_matches": len(result.get("verified_matches", [])),
             "uncertain_matches": len(result.get("uncertain_matches", [])),
         })
+        _record_supabase_telemetry(
+            telemetry_kind="system_log",
+            category="ai_search",
+            status="complete",
+            summary=f"AI search completed for rank={rank_folder}.",
+            payload={
+                "rank_folder": rank_folder,
+                "applied_ship_type": applied_ship_type,
+                "experienced_ship_type": experienced_ship_type,
+                "success": bool(result.get("success")),
+                "verified_matches": len(result.get("verified_matches", [])),
+                "uncertain_matches": len(result.get("uncertain_matches", [])),
+            },
+            actor_role=actor_role,
+            actor_username=actor_username,
+        )
         
         print(f"[BACKEND] Analysis complete. Success: {result.get('success')}")
         return jsonify(result)
@@ -3661,6 +4122,20 @@ def analyze():
         print(f"[BACKEND ERROR] {e}")
         import traceback
         traceback.print_exc()
+        _record_supabase_telemetry(
+            telemetry_kind="system_log",
+            category="ai_search",
+            status="error",
+            summary=f"AI search failed for rank={rank_folder}.",
+            payload={
+                "rank_folder": rank_folder,
+                "applied_ship_type": applied_ship_type,
+                "experienced_ship_type": experienced_ship_type,
+                "error": f"{type(e).__name__}: {e}",
+            },
+            actor_role=actor_role,
+            actor_username=actor_username,
+        )
         return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
 
 @app.route('/submit_feedback', methods=['POST'])

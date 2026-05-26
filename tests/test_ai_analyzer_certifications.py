@@ -101,6 +101,18 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(fact["expiry_date"], date(2030, 4, 4))
         self.assertEqual(fact["expiry_status"], "PARSED")
 
+    def test_extract_coc_fact_from_certificate_details_table(self):
+        fact = self.analyzer._extract_coc_fact_from_text(
+            "Certificate Details\n"
+            "Certificate NoCertificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+            "202990536 Panama First EngineerPanama 17-Sep-202103-Sep-202601RL5314\n"
+            "Academic Details\n"
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["grade"], "chief_engineer")
+        self.assertEqual(fact["expiry_date"], date(2026, 9, 3))
+        self.assertEqual(fact["expiry_status"], "PARSED")
+
     def test_extract_coc_fact_from_first_mate_certificate_table_row(self):
         fact = self.analyzer._extract_coc_fact_from_text(
             "CoC0097228 First Mate (FG) UK 14-Jun-2022 18-May-2027 07NL1786"

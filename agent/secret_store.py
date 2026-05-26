@@ -22,9 +22,17 @@ class SecretStore:
 
     def available(self):
         try:
-            self._backend()
-            return True
-        except SecretStoreError:
+            backend = self._backend()
+            probe_key = "__njordhr_secret_store_probe__"
+            probe_value = "ok"
+            backend.set_password(self.service_name, probe_key, probe_value)
+            readable = backend.get_password(self.service_name, probe_key) == probe_value
+            try:
+                backend.delete_password(self.service_name, probe_key)
+            except Exception:
+                pass
+            return readable
+        except Exception:
             return False
 
     def get(self, key):

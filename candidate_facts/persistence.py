@@ -243,10 +243,14 @@ def persist_candidate_resume_facts(
         row,
         acceptable_extraction_statuses=acceptable_extraction_statuses,
     )
-    current_row = row if any(
-        str(item.get("id") or "") == str(row.get("id") or "") and item.get("is_current_for_resume")
-        for item in updated_rows
-    ) else None
+    current_row = next(
+        (
+            dict(item)
+            for item in updated_rows
+            if str(item.get("id") or "") == str(row.get("id") or "") and item.get("is_current_for_resume")
+        ),
+        None,
+    )
     return {
         "rows": updated_rows,
         "row": row,

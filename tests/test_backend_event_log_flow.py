@@ -1313,7 +1313,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs):
                 pass
 
-            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
                 captured["rank_folder"] = rank_folder
                 captured["prompt"] = prompt
                 captured["applied_ship_type"] = applied_ship_type
@@ -1348,7 +1348,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs):
                 pass
 
-            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -1504,7 +1504,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs):
                 pass
 
-            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
                 yield {
                     "type": "complete",
                     "verified_matches": [
@@ -1692,18 +1692,23 @@ class BackendEventLogFlowTests(unittest.TestCase):
             self.assertIn("no users are configured", body["message"].lower())
 
     def test_candidate_facts_review_capture_approve_and_promote(self):
-        payload = {
-            "candidate_resume_id": "candidate-resume-1",
-            "resume_blob_id": "blob-1",
-            "parser_version": "generic_pdf.v1",
-            "facts_revision": "rev-1",
-            "candidate_facts": self._candidate_facts_payload(),
-        }
-
-        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
-        self.assertEqual(capture_resp.status_code, 200)
-        capture_body = capture_resp.get_json()
-        self.assertTrue(capture_body["success"])
+        repo = backend_server._candidate_facts_repository()
+        capture_body = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-1",
+            resume_blob_id="blob-1",
+            candidate_facts=self._candidate_facts_payload(),
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "match",
+                "compared_field_count": 2,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            review_alignment_status="match",
+            review_alignment_mismatch_count=0,
+            review_alignment_mismatches=[],
+        )
         self.assertEqual(capture_body["review_item"]["review_status"], "pending_review")
 
         items_resp = self.client.get("/candidate-facts/review/items")
@@ -1738,16 +1743,23 @@ class BackendEventLogFlowTests(unittest.TestCase):
         repo.supabase_store = _FailingSupabaseStore()
         backend_server.candidate_facts_repo = repo
 
-        payload = {
-            "candidate_resume_id": "candidate-resume-1b",
-            "resume_blob_id": "blob-1b",
-            "parser_version": "generic_pdf.v1",
-            "facts_revision": "rev-1",
-            "candidate_facts": self._candidate_facts_payload(),
-        }
-        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
-        self.assertEqual(capture_resp.status_code, 200)
-        item_id = capture_resp.get_json()["review_item"]["id"]
+        capture_body = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-1b",
+            resume_blob_id="blob-1b",
+            candidate_facts=self._candidate_facts_payload(),
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "match",
+                "compared_field_count": 2,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            review_alignment_status="match",
+            review_alignment_mismatch_count=0,
+            review_alignment_mismatches=[],
+        )
+        item_id = capture_body["review_item"]["id"]
         self.assertEqual(
             self.client.post("/candidate-facts/review/approve", json={
                 "id": item_id,
@@ -1766,23 +1778,30 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("supabase outage", body["warnings"][0].lower())
 
     def test_candidate_facts_review_promote_rejects_client_override_of_acceptance_policy(self):
-        payload = {
-            "candidate_resume_id": "candidate-resume-2",
-            "resume_blob_id": "blob-2",
-            "parser_version": "generic_pdf.v1",
-            "facts_revision": "rev-1",
-            "candidate_facts": {
+        repo = backend_server._candidate_facts_repository()
+        capture_body = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-2",
+            resume_blob_id="blob-2",
+            candidate_facts={
                 **self._candidate_facts_payload(),
                 "extraction": {
                     **self._candidate_facts_payload()["extraction"],
                     "status": "failed",
                 },
             },
-        }
-
-        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
-        self.assertEqual(capture_resp.status_code, 200)
-        item_id = capture_resp.get_json()["review_item"]["id"]
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "match",
+                "compared_field_count": 2,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            review_alignment_status="match",
+            review_alignment_mismatch_count=0,
+            review_alignment_mismatches=[],
+        )
+        item_id = capture_body["review_item"]["id"]
         self.assertEqual(
             self.client.post("/candidate-facts/review/approve", json={
                 "id": item_id,
@@ -1803,6 +1822,368 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertFalse(body["success"])
         self.assertFalse(body["persist"]["committed"])
         self.assertEqual(body["review_item"]["persistence_status"], "persisted_non_current")
+
+    def test_candidate_facts_review_and_telemetry_are_admin_only_without_token(self):
+        with self.client.session_transaction() as sess:
+            sess["username"] = "recruiter"
+            sess["role"] = "recruiter"
+
+        review_items_resp = self.client.get(
+            "/candidate-facts/review/items",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(review_items_resp.status_code, 403)
+        self.assertFalse(review_items_resp.get_json()["success"])
+
+        review_capture_resp = self.client.post("/candidate-facts/review/capture", json={
+            "candidate_resume_id": "candidate-resume-3",
+            "resume_blob_id": "blob-3",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": self._candidate_facts_payload(),
+        }, headers={"X-Admin-Token": "test-admin-token"})
+        self.assertEqual(review_capture_resp.status_code, 403)
+        self.assertFalse(review_capture_resp.get_json()["success"])
+
+        telemetry_resp = self.client.get(
+            "/admin/telemetry_logs",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(telemetry_resp.status_code, 403)
+        self.assertFalse(telemetry_resp.get_json()["success"])
+
+        telemetry_summary_resp = self.client.get(
+            "/admin/telemetry_summary",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(telemetry_summary_resp.status_code, 403)
+        self.assertFalse(telemetry_summary_resp.get_json()["success"])
+
+    def test_candidate_facts_review_promote_blocks_when_alignment_report_missing(self):
+        payload = {
+            "candidate_resume_id": "candidate-resume-3b",
+            "resume_blob_id": "blob-3b",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": self._candidate_facts_payload(),
+        }
+
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        item = capture_resp.get_json()["review_item"]
+        self.assertEqual(item["review_alignment_status"], "not_checked")
+        self.assertFalse(item["review_alignment_checked"])
+
+        approve_resp = self.client.post("/candidate-facts/review/approve", json={
+            "id": item["id"],
+            "reviewed_by": "reviewer",
+        })
+        self.assertEqual(approve_resp.status_code, 200)
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": item["id"]})
+        self.assertEqual(promote_resp.status_code, 409)
+        body = promote_resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("explicit alignment report", body["message"])
+
+    def test_candidate_facts_review_capture_ignores_client_supplied_alignment_state(self):
+        payload = {
+            "candidate_resume_id": "candidate-resume-3c",
+            "resume_blob_id": "blob-3c",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "review_alignment_report": {
+                "status": "match",
+                "compared_field_count": 99,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            "review_alignment_status": "match",
+            "review_alignment_mismatch_count": 0,
+            "review_alignment_mismatches": [],
+            "candidate_facts": self._candidate_facts_payload(),
+        }
+
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        item = capture_resp.get_json()["review_item"]
+        self.assertEqual(item["review_alignment_status"], "not_checked")
+        self.assertFalse(item["review_alignment_checked"])
+
+    def test_candidate_facts_promotion_blocks_when_review_alignment_mismatches(self):
+        repo = backend_server._candidate_facts_repository()
+        record = repo.validation_cache.capture_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-4",
+            resume_blob_id="blob-4",
+            candidate_facts=self._candidate_facts_payload(),
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "mismatch",
+                "compared_field_count": 1,
+                "mismatch_count": 1,
+                "mismatches": [{
+                    "field_path": "logistics.passport_expiry_date",
+                    "reason": "missing_review_fact",
+                }],
+            },
+            review_alignment_status="mismatch",
+            review_alignment_mismatch_count=1,
+            review_alignment_mismatches=[{
+                "field_path": "logistics.passport_expiry_date",
+                "reason": "missing_review_fact",
+            }],
+        )
+        self.assertEqual(record["review_alignment_status"], "mismatch")
+
+        approve_resp = self.client.post("/candidate-facts/review/approve", json={
+            "id": record["id"],
+            "reviewed_by": "reviewer",
+        })
+        self.assertEqual(approve_resp.status_code, 200)
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": record["id"]})
+        self.assertEqual(promote_resp.status_code, 409)
+        body = promote_resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("diverges from live search facts", body["message"])
+
+    def test_admin_telemetry_summary_reports_prompt_audit_counts(self):
+        class _FakeTelemetryStore:
+            table_name = "njordhr_telemetry_logs"
+
+            def list_prompt_audit_summaries(self, *, limit=100, offset=0):
+                self.limit = limit
+                self.offset = offset
+                return [
+                    {
+                        "prompt_hash": "hash-1",
+                        "total_count": 12,
+                        "issue_count": 2,
+                        "ok_count": 10,
+                        "disabled_count": 0,
+                        "first_seen_at": "2025-05-01T00:00:00Z",
+                        "last_seen_at": "2025-05-25T00:00:00Z",
+                    },
+                    {
+                        "prompt_hash": "hash-2",
+                        "total_count": 4,
+                        "issue_count": 0,
+                        "ok_count": 4,
+                        "disabled_count": 0,
+                        "first_seen_at": "2025-05-02T00:00:00Z",
+                        "last_seen_at": "2025-05-23T00:00:00Z",
+                    },
+                ]
+
+            def get_prompt_audit_totals(self):
+                return {
+                    "total_count": 16,
+                    "issue_count": 2,
+                    "ok_count": 12,
+                    "disabled_count": 2,
+                    "prompt_hash_count": 2,
+                }
+
+            def list_events(self, *, limit=100, telemetry_kind=None, category=None, status=None):
+                return [
+                    {
+                        "id": "evt-1",
+                        "telemetry_kind": "system_log",
+                        "category": "ai_search",
+                        "status": "error",
+                        "summary": "something went wrong",
+                    }
+                ]
+
+        with patch.object(backend_server, "_supabase_telemetry_store", return_value=_FakeTelemetryStore()):
+            resp = self.client.get("/admin/telemetry_summary?threshold=10")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["summary"]["prompt_audit_count"], 16)
+        self.assertEqual(body["summary"]["prompt_audit_issue_count"], 2)
+        self.assertEqual(body["summary"]["prompt_audit_hash_count"], 2)
+        self.assertEqual(body["summary"]["prompt_audit_ok_count"], 12)
+        self.assertEqual(body["summary"]["prompt_audit_disabled_count"], 2)
+        self.assertEqual(body["summary"]["prompt_audit_over_threshold_count"], 1)
+        self.assertFalse(body["summary"]["prompt_audit_over_threshold_is_partial"])
+        self.assertEqual(body["summary"]["system_error_count"], 1)
+        self.assertEqual(body["prompt_audit_over_threshold"][0]["prompt_hash"], "hash-1")
+
+    def test_admin_telemetry_summary_counts_prompt_audit_threshold_exactly_across_pages(self):
+        class _FakeTelemetryStore:
+            table_name = "njordhr_telemetry_logs"
+
+            def __init__(self):
+                self.rows = [
+                    {"prompt_hash": "hash-1", "total_count": 12, "issue_count": 2, "ok_count": 10, "disabled_count": 0, "first_seen_at": "2025-05-01T00:00:00Z", "last_seen_at": "2025-05-25T00:00:00Z"},
+                    {"prompt_hash": "hash-2", "total_count": 4, "issue_count": 0, "ok_count": 4, "disabled_count": 0, "first_seen_at": "2025-05-02T00:00:00Z", "last_seen_at": "2025-05-23T00:00:00Z"},
+                    {"prompt_hash": "hash-3", "total_count": 15, "issue_count": 1, "ok_count": 14, "disabled_count": 0, "first_seen_at": "2025-05-03T00:00:00Z", "last_seen_at": "2025-05-24T00:00:00Z"},
+                ]
+
+            def list_prompt_audit_summaries(self, *, limit=100, offset=0):
+                batch = self.rows[offset:offset + limit]
+                return batch
+
+            def get_prompt_audit_totals(self):
+                return {
+                    "total_count": 31,
+                    "issue_count": 3,
+                    "ok_count": 28,
+                    "disabled_count": 0,
+                    "prompt_hash_count": 3,
+                }
+
+            def list_events(self, *, limit=100, telemetry_kind=None, category=None, status=None):
+                return []
+
+        with patch.object(backend_server, "_supabase_telemetry_store", return_value=_FakeTelemetryStore()):
+            resp = self.client.get("/admin/telemetry_summary?limit=2&threshold=10")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["summary"]["prompt_audit_over_threshold_count"], 2)
+        self.assertTrue(body["summary"]["prompt_audit_over_threshold_is_partial"])
+        self.assertEqual(len(body["prompt_audit_summaries"]), 2)
+        self.assertEqual(len(body["prompt_audit_over_threshold"]), 2)
+
+    def test_prompt_audit_logging_redacts_raw_prompt_and_flags_issues(self):
+        fake_shadow_audit = {
+            "prompt_id": "prompt-1",
+            "prompt": "2nd engineer with valid passport",
+            "shadow_mode": "enabled",
+            "shadow_wiring": {
+                "feature_flag_enabled": True,
+                "llm_plan_provider_attached": True,
+                "llm_plan_requested": True,
+                "llm_plan_source": "llm",
+                "llm_plan_fallback_used": False,
+                "failure_reason": None,
+            },
+            "legacy_plan": {"normalizer": {"name": "legacy"}},
+            "llm_plan": {"normalizer": {"name": "llm"}},
+            "legacy_comparison_records": [
+                {
+                    "family": "passport",
+                    "source_text": "passport 123456",
+                }
+            ],
+            "comparison_results": [
+                {
+                    "comparison_outcome": "equivalent",
+                    "legacy_record": {"source_text": "2nd engineer with valid passport"},
+                    "llm_record": {"source_text": "2nd engineer with valid passport"},
+                },
+                {
+                    "comparison_outcome": "regression",
+                    "legacy_record": {"source_text": "passport 123456"},
+                    "llm_record": {"source_text": "passport number"},
+                },
+            ],
+            "comparison_outcomes": ["equivalent", "regression"],
+            "validation_status": "valid",
+            "candidate_facts_audit": {},
+        }
+
+        captured = {}
+
+        def fake_record(**kwargs):
+            captured.update(kwargs)
+            return {"success": True}
+
+        with patch.dict(os.environ, {"NJORDHR_TELEMETRY_STORE_RAW_PROMPTS": "false"}, clear=False), patch.object(
+            backend_server, "build_shadow_audit_entry", return_value=fake_shadow_audit
+        ), patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record):
+            backend_server._log_search_prompt_audit(
+                analyzer=object(),
+                prompt="2nd engineer with valid passport",
+                rank_folder="Chief_Officer",
+                search_session_id="session-1",
+                actor_role="recruiter",
+                actor_username="demo",
+            )
+
+        self.assertEqual(captured["telemetry_kind"], "prompt_audit")
+        self.assertEqual(captured["status"], "issue")
+        self.assertEqual(captured["prompt_text"], "")
+        self.assertNotIn("prompt", captured["payload"])
+        self.assertNotIn("legacy_plan", captured["payload"])
+        self.assertNotIn("llm_plan", captured["payload"])
+        self.assertNotIn("source_text", json.dumps(captured["payload"]))
+
+    def test_prompt_audit_logging_can_store_raw_prompt_when_explicitly_enabled(self):
+        fake_shadow_audit = {
+            "prompt_id": "prompt-1",
+            "prompt": "2nd engineer with valid passport",
+            "shadow_mode": "enabled",
+            "shadow_wiring": {
+                "feature_flag_enabled": True,
+                "llm_plan_provider_attached": True,
+                "llm_plan_requested": True,
+                "llm_plan_source": "llm",
+                "llm_plan_fallback_used": False,
+                "failure_reason": None,
+            },
+            "legacy_plan": {"normalizer": {"name": "legacy"}},
+            "llm_plan": {"normalizer": {"name": "llm"}},
+            "comparison_results": [{"comparison_outcome": "equivalent"}],
+            "comparison_outcomes": ["equivalent"],
+            "validation_status": "valid",
+            "candidate_facts_audit": {},
+        }
+
+        captured = {}
+
+        def fake_record(**kwargs):
+            captured.update(kwargs)
+            return {"success": True}
+
+        with patch.dict(os.environ, {"NJORDHR_TELEMETRY_STORE_RAW_PROMPTS": "true"}, clear=False), patch.object(
+            backend_server, "build_shadow_audit_entry", return_value=fake_shadow_audit
+        ), patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record):
+            backend_server._log_search_prompt_audit(
+                analyzer=object(),
+                prompt="2nd engineer with valid passport",
+                rank_folder="Chief_Officer",
+                search_session_id="session-1",
+                actor_role="recruiter",
+                actor_username="demo",
+            )
+
+        self.assertEqual(captured["prompt_text"], "2nd engineer with valid passport")
+        self.assertNotIn("prompt", captured["payload"])
+
+    def test_prompt_audit_is_scheduled_in_background(self):
+        observed = {}
+
+        class _FakeThread:
+            def __init__(self, *, target, name, daemon):
+                observed["name"] = name
+                observed["daemon"] = daemon
+                observed["target"] = target
+
+            def start(self):
+                observed["started"] = True
+                observed["target"]()
+
+        with patch.object(backend_server.threading, "Thread", _FakeThread), patch.object(
+            backend_server, "_build_analyzer", return_value=object()
+        ), patch.object(backend_server, "_log_search_prompt_audit", return_value={"shadow_mode": "enabled"}
+        ) as mocked:
+            thread = backend_server._schedule_search_prompt_audit(
+                analyzer=object(),
+                prompt="2nd engineer with valid passport",
+                rank_folder="Chief_Officer",
+                search_session_id="session-1",
+                actor_role="recruiter",
+                actor_username="demo",
+            )
+
+        self.assertTrue(observed["daemon"])
+        self.assertTrue(observed["started"])
+        self.assertIsNotNone(thread)
+        mocked.assert_called_once()
 
     def test_candidate_facts_repository_rebuilds_when_supabase_runtime_changes(self):
         backend_server.candidate_facts_repo = None

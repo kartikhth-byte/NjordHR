@@ -3,6 +3,7 @@ import tempfile
 import time
 import types
 import unittest
+import json
 from pathlib import Path
 
 
@@ -47,6 +48,9 @@ class _FakeRegistry:
     def needs_processing(self, *_args, **_kwargs):
         return False
 
+    def upsert_file_record(self, *_args, **_kwargs):
+        return None
+
 
 class _FakeFeedbackStore:
     def get_recent_feedback(self, *_args, **_kwargs):
@@ -57,6 +61,53 @@ class _FakeConfig:
     def __init__(self, download_root):
         self.download_root = str(download_root)
         self.min_similarity_score = 0.0
+
+
+class _IngestRegistry(_FakeRegistry):
+    def needs_processing(self, *_args, **_kwargs):
+        return True
+
+
+class _FakePdfProcessor:
+    def __init__(self, text):
+        self.text = text
+
+    def extract_text(self, *_args, **_kwargs):
+        return self.text
+
+
+class _FakePrepper:
+    def __init__(self, embeddings=None):
+        self.embeddings = embeddings if embeddings is not None else [[0.1, 0.2, 0.3]]
+        self.last_error = ""
+
+    def chunk_text(self, text, resume_id, rank, filename=None, source_path=None):
+        return [
+            {
+                "text": text,
+                "metadata": {
+                    "resume_id": resume_id,
+                    "rank": rank,
+                    "filename": filename,
+                    "source_path": source_path,
+                    "raw_text": text,
+                },
+            }
+        ]
+
+    def get_embeddings(self, *_args, **_kwargs):
+        return self.embeddings
+
+
+class _FakeVectorDb:
+    def __init__(self):
+        self.upserts = []
+
+    def namespace_vector_count(self, *_args, **_kwargs):
+        return 0
+
+    def upsert_chunks(self, chunks, embeddings, rank):
+        self.upserts.append((chunks, embeddings, rank))
 
 
 class AIAnalyzerJobConstraintTests(unittest.TestCase):
@@ -75,6 +126,52 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_ingest_folder_captures_candidate_facts_for_review(self):
+        resume_path = self.rank_folder / "Jane_Doe.pdf"
+        resume_path.write_bytes(b"%PDF-1.4\n")
+        extracted_text = "Jane Doe\n" + ("2nd engineer resume " * 10)
+        captured = []
+
+        self.analyzer.registry = _IngestRegistry()
+        self.analyzer.pdf_processor = _FakePdfProcessor(extracted_text)
+        self.analyzer.prepper = _FakePrepper()
+        self.analyzer.vector_db = _FakeVectorDb()
+        delattr(self.analyzer, "_ingest_folder")
+
+        events = list(
+            self.analyzer._ingest_folder(
+                str(self.rank_folder),
+                self.rank,
+                review_capture_callback=lambda candidate_facts, context: captured.append((candidate_facts, context)),
+            )
+        )
+
+        self.assertEqual(events[-1]["type"], "indexing_complete")
+        self.assertEqual(len(captured), 1)
+        candidate_facts, context = captured[0]
+        self.assertEqual(candidate_facts["schema_version"], "candidate_facts.v1")
+        self.assertEqual(candidate_facts["source"]["file_name"], "Jane_Doe.pdf")
+        self.assertEqual(candidate_facts["source"]["resume_id"], "Jane_Doe.pdf")
+        self.assertEqual(candidate_facts["identity"]["candidate_name"]["value"], "Jane Doe")
+        self.assertEqual(context["candidate_resume_id"], "Jane_Doe")
+        self.assertEqual(context["resume_blob_id"], "Jane_Doe")
+        self.assertEqual(context["filename"], "Jane_Doe.pdf")
+        self.assertEqual(context["parser_version"], "generic_pdf.v1")
+        self.assertEqual(context["facts_revision"], "candidate_facts.v1")
+
+    def test_iter_pdf_files_skips_supporting_document_attachments(self):
+        resume_path = self.rank_folder / "Anubhav_Resume.pdf"
+        support_path = self.rank_folder / "All_Promotion_Letters_Appraisals.pdf"
+        resume_path.write_bytes(b"%PDF-1.4\n")
+        support_path.write_bytes(b"%PDF-1.4\n")
+        Path(str(support_path) + ".json").write_text(
+            json.dumps({"attachment_name": "2. All Promotion Letters & Appraisals.pdf"}),
+            encoding="utf-8",
+        )
+        delattr(self.analyzer, "_ingest_folder")
+
+        self.assertEqual(self.analyzer._iter_pdf_files(self.rank_folder), [resume_path])
 
     def test_age_and_rank_query_populates_applied_constraints(self):
         constraints = self.analyzer._extract_job_constraints("2nd engineer between 30 and 50 years old", rank=self.rank)
@@ -723,6 +820,22 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     {"coc_required": True, "coc_valid_required": True},
                 )
 
+    def test_coc_bare_shorthand_with_document_context_maps_to_document_gate(self):
+        prompts = [
+            "valid passport and COC",
+            "passport and COC required",
+            "need valid passport and COC",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("passport_validity", constraints["applied_constraints"])
+                self.assertIn("coc_document_gate", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["certifications"],
+                    {"coc_required": True, "coc_valid_required": True},
+                )
+
     def test_coc_grade_family_variants_map_to_same_requirement(self):
         prompts = {
             "chief officer coc": "chief_officer",
@@ -792,6 +905,134 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertEqual(
                     constraints["hard_constraints"]["passport_validity"]["minimum_months_remaining"],
                     18,
+                )
+
+    def test_passport_current_and_up_to_date_variants_map_to_same_constraint(self):
+        prompts = [
+            "passport current",
+            "passport up to date",
+            "passport current and valid",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("passport_validity", constraints["applied_constraints"])
+                self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["passport_validity"]["requested_label"],
+                    "valid passport",
+                )
+
+    def test_availability_family_variants_map_to_immediate_joining(self):
+        prompts = [
+            "ready to join",
+            "available now",
+            "join now",
+            "immediate join",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("availability", constraints["applied_constraints"])
+                self.assertEqual(constraints["hard_constraints"]["availability"]["status"], "immediately")
+
+    def test_availability_family_variants_map_to_notice_period_and_dates(self):
+        constraints = self.analyzer._extract_job_constraints("notice period 30 days", rank=self.rank)
+        self.assertIn("availability", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["availability"]["value_type"], "relative_phrase")
+        self.assertEqual(constraints["hard_constraints"]["availability"]["relative_days"], 30)
+
+        constraints = self.analyzer._extract_job_constraints("available next month", rank=self.rank)
+        self.assertIn("availability", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["availability"]["value_type"], "date")
+        self.assertTrue(constraints["hard_constraints"]["availability"]["available_from_date"].endswith("-28") or constraints["hard_constraints"]["availability"]["available_from_date"].endswith("-29") or constraints["hard_constraints"]["availability"]["available_from_date"].endswith("-30") or constraints["hard_constraints"]["availability"]["available_from_date"].endswith("-31"))
+
+        from datetime import date as _date
+        from calendar import monthrange as _monthrange
+
+        today = _date.today()
+        month = 1 if today.month == 12 else today.month + 1
+        year = today.year + (1 if today.month == 12 else 0)
+        expected = _date(year, month, _monthrange(year, month)[1]).isoformat()
+        self.assertEqual(constraints["hard_constraints"]["availability"]["available_from_date"], expected)
+
+        march_constraint = self.analyzer._extract_job_constraints("available by March", rank=self.rank)
+        self.assertIn("availability", march_constraint["applied_constraints"])
+        self.assertEqual(march_constraint["hard_constraints"]["availability"]["value_type"], "date")
+        self.assertTrue(march_constraint["hard_constraints"]["availability"]["available_from_date"].endswith("-31"))
+
+    def test_medical_shorthand_maps_to_medical_certificate_requirement(self):
+        prompts = [
+            "medical valid",
+            "valid medical",
+            "medical certificate required",
+            "fit to sail",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+                self.assertIn(
+                    "cert_medical_care",
+                    constraints["hard_constraints"]["certifications"]["endorsements_required"],
+                )
+
+    def test_compound_ready_to_join_with_passport_and_coc_keeps_all_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "ready to join with valid passport and COC",
+            rank=self.rank,
+        )
+        self.assertIn("availability", constraints["applied_constraints"])
+        self.assertIn("passport_validity", constraints["applied_constraints"])
+        self.assertIn("coc_document_gate", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["availability"]["status"], "immediately")
+        self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+        self.assertEqual(
+            constraints["hard_constraints"]["certifications"],
+            {"coc_required": True, "coc_valid_required": True},
+        )
+
+    def test_compound_passport_and_generic_visa_keeps_both_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "has valid passport and visa",
+            rank=self.rank,
+        )
+        self.assertIn("passport_validity", constraints["applied_constraints"])
+        self.assertIn("us_visa", constraints["applied_constraints"])
+        self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+        self.assertTrue(constraints["hard_constraints"]["us_visa"]["required"])
+        self.assertTrue(constraints["hard_constraints"]["us_visa"].get("accepted_types"))
+        self.assertEqual(constraints["hard_constraints"]["us_visa"]["requested_label"], "valid visa")
+
+    def test_compound_rank_medical_and_passport_keeps_all_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "2nd engineer with passport up to date, medical valid, and ready to join",
+            rank=self.rank,
+        )
+        self.assertIn("rank_match", constraints["applied_constraints"])
+        self.assertIn("passport_validity", constraints["applied_constraints"])
+        self.assertIn("availability", constraints["applied_constraints"])
+        self.assertIn("stcw_endorsement", constraints["applied_constraints"])
+        self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+        self.assertEqual(constraints["hard_constraints"]["availability"]["status"], "immediately")
+        self.assertIn(
+            "cert_medical_care",
+            constraints["hard_constraints"]["certifications"]["endorsements_required"],
+        )
+
+    def test_rank_duration_current_rank_variants_map_to_fallback_rank(self):
+        prompts = [
+            "minimum 12 months in current rank",
+            "12 months in rank",
+            "current rank experience 18 months",
+        ]
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("rank_duration_experience", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["rank_duration_experience"]["rank_normalized"],
+                    "2nd_engineer",
                 )
 
     def test_company_continuity_two_contracts_prompt_is_supported(self):

@@ -3,6 +3,7 @@ import base64
 import re
 import json
 import os
+import sys
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -34,6 +35,21 @@ DEFAULT_DASHBOARD_URL = "http://seajob.net/company/dashboard.php"
 DEFAULT_LOGIN_URL = "http://seajob.net/seajob_login.php"
 
 
+def _env_bool(name, default=False):
+    raw = os.getenv(name, "").strip().lower()
+    if raw in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if raw in {"0", "false", "no", "off", "disabled"}:
+        return False
+    return bool(default)
+
+
+def _should_run_chrome_headless():
+    if os.getenv("NJORDHR_SELENIUM_HEADLESS", "").strip():
+        return _env_bool("NJORDHR_SELENIUM_HEADLESS", default=True)
+    return sys.platform != "win32"
+
+
 class Scraper:
     def __init__(self, download_folder, otp_window_seconds=120, login_url=DEFAULT_LOGIN_URL, dashboard_url=DEFAULT_DASHBOARD_URL):
         self.driver = None
@@ -48,8 +64,10 @@ class Scraper:
     def _setup_driver(self):
         options = webdriver.ChromeOptions()
         options.add_argument("start-maximized")
+        options.add_argument("--window-size=1365,900")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_argument('--headless')
+        if _should_run_chrome_headless():
+            options.add_argument("--headless=new")
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
         self.wait = WebDriverWait(self.driver, 30)
@@ -60,8 +78,12 @@ class Scraper:
         self.wait.until(EC.element_to_be_clickable((By.XPATH, COMPANY_RADIO_BUTTON_XPATH))).click()
         self.driver.find_element(By.ID, USERNAME_INPUT_ID).send_keys(username)
         self.driver.find_element(By.XPATH, PASSWORD_INPUT_XPATH).send_keys(password)
-        self.driver.find_element(By.XPATH, MOBILE_NUMBER_INPUT_XPATH).send_keys(mobile_number)
-        self.driver.find_element(By.XPATH, SEND_OTP_BUTTON_XPATH).click()
+        mobile_input = self.wait.until(EC.element_to_be_clickable((By.XPATH, MOBILE_NUMBER_INPUT_XPATH)))
+        mobile_input.clear()
+        mobile_input.send_keys(str(mobile_number or "").strip())
+        send_otp_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, SEND_OTP_BUTTON_XPATH)))
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", send_otp_button)
+        self.driver.execute_script("arguments[0].click();", send_otp_button)
         try:
             WebDriverWait(self.driver, 10).until(EC.alert_is_present())
             alert = self.driver.switch_to.alert
@@ -70,6 +92,7 @@ class Scraper:
             if "Not Registered" in alert_text:
                 self.quit()
                 return {"success": False, "message": f"Login failed: {alert_text}"}
+            WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, OTP_INPUT_XPATH)))
             self.otp_sent_at = time.time()
             self.otp_pending = True
             return {

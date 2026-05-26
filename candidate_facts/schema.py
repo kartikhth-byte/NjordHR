@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Dict, List, Mapping
 
 from .versioning import CANDIDATE_FACTS_SCHEMA_VERSION as _CANDIDATE_FACTS_SCHEMA_VERSION, is_supported_schema_version
@@ -52,6 +53,20 @@ def _error(path: str, code: str, message: str) -> Dict[str, Any]:
 
 def _is_mapping(value: Any) -> bool:
     return isinstance(value, Mapping)
+
+
+def _json_safe_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.replace(microsecond=0).isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if _is_mapping(value):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe_value(item) for item in value]
+    return value
 
 
 def _require_mapping(payload: Any, path: str, errors: List[Dict[str, Any]]) -> Mapping[str, Any] | None:
@@ -294,7 +309,7 @@ def validate_candidate_facts_v1(payload: Mapping[str, Any] | Any) -> CandidateFa
 
 
 def normalize_candidate_facts_v1(payload: Mapping[str, Any] | Any) -> Dict[str, Any]:
-    normalized = deepcopy(payload) if _is_mapping(payload) else {"schema_version": CANDIDATE_FACTS_SCHEMA_VERSION}
+    normalized = _json_safe_value(deepcopy(payload)) if _is_mapping(payload) else {"schema_version": CANDIDATE_FACTS_SCHEMA_VERSION}
     result = validate_candidate_facts_v1(normalized)
     normalized["validation"] = {"status": result.status, "errors": result.errors}
     normalized["schema_version"] = CANDIDATE_FACTS_SCHEMA_VERSION

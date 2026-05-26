@@ -5,11 +5,13 @@ import sys
 import json
 import time
 import hashlib
+import calendar
 import sqlite3
 import configparser
 import re
 import io
 import threading
+from copy import deepcopy
 from pathlib import Path
 from datetime import UTC, datetime, date, timedelta
 from collections import Counter
@@ -28,6 +30,8 @@ from repositories.registry_repo import RegistryRepo
 from repositories.supabase_feedback_repo import SupabaseFeedbackStore
 from repositories.supabase_registry_repo import SupabaseFileRegistry
 from runtime_env import normalize_env_value, normalized_url
+from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candidate_facts_contract_v1
+from candidate_facts.review_summary import build_candidate_facts_review_summary
 
 # --- Optional/Specialized Dependencies ---
 try:
@@ -1496,6 +1500,14 @@ class AIResumeAnalyzer:
                 "coc_required": True,
                 "coc_valid_required": True,
             }
+        if re.search(r"\bcoc\b", prompt) and re.search(
+            r"\b(?:valid|required|mandatory|must|need|needed|document|documents|passport|certificate|certificates|docs|current|up\s+to\s+date)\b",
+            prompt,
+        ):
+            return {
+                "coc_required": True,
+                "coc_valid_required": True,
+            }
         return None
 
     def _extract_coc_grade_constraint(self, user_prompt):
@@ -1556,7 +1568,7 @@ class AIResumeAnalyzer:
             return {"min_total_months": months, "display_value": original_phrase, "operator": "gte"}
         return None
 
-    def _extract_rank_duration_experience_constraint(self, user_prompt):
+    def _extract_rank_duration_experience_constraint(self, user_prompt, rank=None):
         prompt = " ".join(str(user_prompt or "").split())
         if not prompt:
             return None
@@ -1584,6 +1596,33 @@ class AIResumeAnalyzer:
                     "requested_label": f"at least {months} months as {rank_entry['canonical_id'].replace('_', ' ')}",
                     "display_value": match.group(0).strip(),
                 }
+
+        fallback_rank_id, _department, _seniority_bucket, _confidence = self._normalize_rank(rank)
+        if not fallback_rank_id:
+            return None
+
+        if not re.search(r"\b(?:current\s+)?rank\b", prompt, flags=re.IGNORECASE):
+            return None
+
+        current_rank_patterns = [
+            rf"\b{duration_pattern}\s+(?:of\s+)?(?:current\s+)?rank\s+experience\b",
+            rf"\b{duration_pattern}\s+(?:in|of|for)\s+(?:current\s+)?rank\b",
+            rf"\b(?:current\s+)?rank\s+experience\s+(?:of\s+)?{duration_pattern}\b",
+            rf"\b(?:current\s+)?rank\s+months?\s+(?:of\s+)?{duration_pattern}\b",
+        ]
+        for pattern in current_rank_patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            value = int(match.group(1))
+            unit = match.group(2).lower()
+            months = value * 12 if unit.startswith("year") else value
+            return {
+                "rank_normalized": fallback_rank_id,
+                "min_months": months,
+                "requested_label": f"at least {months} months as {fallback_rank_id.replace('_', ' ')}",
+                "display_value": match.group(0).strip(),
+            }
         return None
 
     def _extract_recent_contract_vessel_experience_constraint(self, user_prompt):
@@ -2060,9 +2099,26 @@ class AIResumeAnalyzer:
 
     def _extract_availability_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
-        immediate_match = re.search(r"\b(available immediately|join immediately)\b", prompt, flags=re.IGNORECASE)
+        immediate_match = re.search(
+            r"\b(available immediately|join immediately|immediately available|available now|join now|immediate join|ready to join|ready for immediate joining|ready for joining|ready to join immediately|join asap)\b",
+            prompt,
+            flags=re.IGNORECASE,
+        )
         if immediate_match:
             return {"value_type": "status", "status": "immediately", "display_value": immediate_match.group(1).lower()}
+
+        notice_match = re.search(
+            r"\b(?:notice\s+period|notice)\s*(?:is\s*)?(\d+)\s+days?\b",
+            prompt,
+            flags=re.IGNORECASE,
+        )
+        if notice_match:
+            return {
+                "value_type": "relative_phrase",
+                "relative_days": int(notice_match.group(1)),
+                "relative_display_value": f"notice period {notice_match.group(1)} days",
+                "display_value": notice_match.group(0).strip().lower(),
+            }
 
         date_match = re.search(r"\bavailable\s+from\s+([A-Za-z]{3,9}\s+\d{1,2}(?:,\s*\d{4})?)\b", prompt, flags=re.IGNORECASE)
         if date_match:
@@ -2081,6 +2137,49 @@ class AIResumeAnalyzer:
                     "available_from_date": date_fact["date"].isoformat(),
                     "display_value": date_match.group(0).strip(),
                 }
+
+        available_by_month_match = re.search(
+            r"\bavailable\s+by\s+([A-Za-z]{3,9})(?:\s+(\d{4}))?\b",
+            prompt,
+            flags=re.IGNORECASE,
+        )
+        if available_by_month_match:
+            month_name = available_by_month_match.group(1).strip()
+            year_text = available_by_month_match.group(2)
+            month_number = None
+            for candidate_number in range(1, 13):
+                if month_name.lower() in {
+                    calendar.month_name[candidate_number].lower(),
+                    calendar.month_abbr[candidate_number].lower(),
+                }:
+                    month_number = candidate_number
+                    break
+            if month_number:
+                year = int(year_text) if year_text else date.today().year
+                if not year_text and month_number < date.today().month:
+                    year += 1
+                month_end = date(year, month_number, calendar.monthrange(year, month_number)[1])
+                return {
+                    "value_type": "date",
+                    "available_from_date": month_end.isoformat(),
+                    "display_value": available_by_month_match.group(0).strip(),
+                }
+
+        next_month_match = re.search(
+            r"\b(?:available\s+by|available|join\s+by|join)\s+next\s+month\b",
+            prompt,
+            flags=re.IGNORECASE,
+        )
+        if next_month_match:
+            today = date.today()
+            month = 1 if today.month == 12 else today.month + 1
+            year = today.year + (1 if today.month == 12 else 0)
+            month_end = date(year, month, calendar.monthrange(year, month)[1])
+            return {
+                "value_type": "date",
+                "available_from_date": month_end.isoformat(),
+                "display_value": next_month_match.group(0).strip(),
+            }
 
         relative_match = re.search(r"\bjoinable\s+in\s+(\d+)\s+days\b", prompt, flags=re.IGNORECASE)
         if relative_match:
@@ -2142,6 +2241,18 @@ class AIResumeAnalyzer:
             (r"\bpscrb\b|\bproficiency\s+in\s+survival\s+craft(?:\s+and\s+rescue\s+boats?)?\b|\bsurvival\s+craft\s+and\s+rescue\s+boats?\b", "cert_pscrb", "PSCRB"),
             (r"\baff\b|\badvanced?\s+fire\s+fighting\b", "cert_aff", "AFF"),
             (r"\bmfa\b|\bmedical\s+first\s+aid\b", "cert_mfa", "MFA"),
+            (
+                r"\bmedical\s+(?:valid|current|required|mandatory)\b"
+                r"|\bvalid\s+medical\b"
+                r"|\bmedical\s+certificate\b"
+                r"|\bmedical\s+certificate\s+required\b"
+                r"|\bmedical\s+fitness\b"
+                r"|\bfitness\s+certificate\b"
+                r"|\bfit\s+to\s+sail\b"
+                r"|\bmedically\s+fit\b",
+                "cert_medical_care",
+                "Medical Care",
+            ),
             (r"\bmedical\s+care\b", "cert_medical_care", "Medical Care"),
             (r"\bsso\b|\bship\s+security\s+officer\b", "cert_sso", "SSO"),
             (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
@@ -2316,7 +2427,7 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["engine_experience"] = engine_experience_constraint
             constraints["applied_constraints"].append("engine_experience")
 
-        rank_duration_experience_constraint = self._extract_rank_duration_experience_constraint(user_prompt)
+        rank_duration_experience_constraint = self._extract_rank_duration_experience_constraint(user_prompt, rank=rank)
         if rank_duration_experience_constraint:
             constraints["hard_constraints"]["rank_duration_experience"] = rank_duration_experience_constraint
             constraints["applied_constraints"].append("rank_duration_experience")
@@ -2408,6 +2519,18 @@ class AIResumeAnalyzer:
         seniority_bucket = alias_entry["seniority_bucket"]
         confidence = 1.0 if normalized_rank.replace(" ", "_") == canonical_id else 0.9
         return canonical_id, department, seniority_bucket, confidence
+
+    def _has_seajobs_training_context(self, text):
+        normalized_text = str(text or "").strip()
+        if not normalized_text:
+            return False
+        return bool(
+            re.search(
+                r"\b(?:trainee|apprentice|student|probation|pre\s*[-/]?\s*sea)\b",
+                normalized_text,
+                flags=re.IGNORECASE,
+            )
+        )
 
     def _extract_rank_fact_from_text(self, text):
         source_text = str(text or "")
@@ -2862,6 +2985,20 @@ class AIResumeAnalyzer:
                 "requested_label": specific["canonical"],
             }
 
+        if re.search(r"\bvisa\b", prompt) and re.search(
+            r"\b(?:required|mandatory|must|need|needed|valid|current|holder|passport|documents?|docs?|travel|authorization)\b",
+            prompt,
+        ):
+            accepted = [visa_def["canonical"] for visa_def in self._visa_type_definitions()]
+            return {
+                "required": True,
+                "must_be_valid": True,
+                "accepted_types": accepted,
+                "visa_group": "generic",
+                "requested_label": "valid visa",
+                "display_value": "valid visa",
+            }
+
         unsupported_patterns = [
             (r"\bvalid\s+uk\s+visa\b", "valid UK visa"),
             (r"\bcurrent\s+uk\s+visa\b", "valid UK visa"),
@@ -2907,6 +3044,7 @@ class AIResumeAnalyzer:
 
         patterns = [
             r"\bvalid\s+passport\b",
+            r"\bpassport\s+up\s+to\s+date\b",
             r"\bpassport\s+required\b",
             r"\bpassport\s+mandatory\b",
             r"\bmust\s+have\s+valid\s+passport\b",
@@ -2923,6 +3061,16 @@ class AIResumeAnalyzer:
                     "requested_label": "valid passport",
                     "display_value": match.group(0).strip(),
                 }
+        if re.search(r"\bpassport\b", prompt) and re.search(
+            r"\b(?:required|mandatory|must|need|needed|documents?|docs?|valid|current|holder)\b",
+            prompt,
+        ):
+            return {
+                "required": True,
+                "must_be_valid": True,
+                "requested_label": "valid passport",
+                "display_value": "valid passport",
+            }
         return None
 
     def _months_remaining_from_date(self, future_date, reference_date):
@@ -2990,6 +3138,7 @@ class AIResumeAnalyzer:
             r'valid\s+us\s+visa',
             r'current\s+us\s+visa',
             r'us\s+visa',
+            r'visa',
             r'usa\s+visa',
             r'c1/d\s+visa',
             r'c1\s+visa',
@@ -3105,8 +3254,46 @@ class AIResumeAnalyzer:
             return []
         return sorted(
             path for path in folder.iterdir()
-            if path.is_file() and path.suffix.lower() == ".pdf"
+            if path.is_file()
+            and path.suffix.lower() == ".pdf"
+            and not self._is_supporting_document_pdf(path)
         )
+
+    def _pdf_sidecar_metadata(self, pdf_path):
+        sidecar = Path(str(pdf_path) + ".json")
+        if not sidecar.exists():
+            return {}
+        try:
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _is_supporting_document_pdf(self, pdf_path):
+        metadata = self._pdf_sidecar_metadata(pdf_path)
+        attachment_name = str(metadata.get("attachment_name") or Path(pdf_path).name).strip().lower()
+        filename = Path(pdf_path).name.lower()
+        combined = f"{attachment_name} {filename}"
+        supporting_patterns = (
+            r"\bpromotion\s+letters?\b",
+            r"\bappraisals?\b",
+            r"\bperformance\s+appraisals?\b",
+            r"\bsea\s+service\s+letters?\b",
+            r"\breference\s+letters?\b",
+            r"\bcertificates?\b",
+            r"\bcoc\b",
+            r"\bdce\b",
+            r"\bwk\s+certificate\b",
+        )
+        resume_markers = (
+            r"\bcv\b",
+            r"\bresume\b",
+            r"\bcurriculum\s+vitae\b",
+            r"\bbio[-\s]?data\b",
+        )
+        if any(re.search(pattern, combined, flags=re.IGNORECASE) for pattern in resume_markers):
+            return False
+        return any(re.search(pattern, combined, flags=re.IGNORECASE) for pattern in supporting_patterns)
 
     def _enumerate_rank_candidates(self, target_folder, rank):
         candidates = {}
@@ -3355,6 +3542,37 @@ class AIResumeAnalyzer:
                 add_candidate(" ".join(tokens[:count]))
 
         for raw_rank in candidate_labels:
+            canonical_id, department, seniority_bucket, confidence = self._normalize_rank(raw_rank)
+            if canonical_id:
+                return {
+                    "raw_rank": raw_rank,
+                    "canonical_id": canonical_id,
+                    "department": department,
+                    "seniority_bucket": seniority_bucket,
+                    "confidence": confidence,
+                    "status": "PARSED",
+                    "extraction_method": "seajobs_service_history",
+                    "source_label": "seajobs_resume",
+                }
+
+        snippet = " ".join(lines)
+        snippet_rank_patterns = [
+            (r"\b(?:\d{1,2}\s+)?(2nd|second)\s+engineer\b", "2nd engineer"),
+            (r"\b(?:\d{1,2}\s+)?(3rd|third)\s+engineer\b", "3rd engineer"),
+            (r"\b(?:\d{1,2}\s+)?(4th|fourth)\s+engineer\b", "4th engineer"),
+            (r"\b(?:\d{1,2}\s+)?(chief)\s+engineer\b", "chief engineer"),
+            (r"\b(?:\d{1,2}\s+)?(2nd|second)\s+officer\b", "2nd officer"),
+            (r"\b(?:\d{1,2}\s+)?(3rd|third)\s+officer\b", "3rd officer"),
+            (r"\b(?:\d{1,2}\s+)?(chief)\s+officer\b", "chief officer"),
+            (r"\b(?:\d{1,2}\s+)?(electrical)\s+officer\b", "electrical officer"),
+            (r"\b(?:\d{1,2}\s+)?(junior)\s+engineer\b", "junior engineer"),
+        ]
+        for pattern, raw_rank in snippet_rank_patterns:
+            match = re.search(pattern, snippet, flags=re.IGNORECASE)
+            if not match:
+                continue
+            if self._has_seajobs_training_context(snippet[max(0, match.start() - 24):match.start()]):
+                continue
             canonical_id, department, seniority_bucket, confidence = self._normalize_rank(raw_rank)
             if canonical_id:
                 return {
@@ -4001,8 +4219,13 @@ class AIResumeAnalyzer:
             "NJORDSHIPS MANAGEMENT INDIA PVT LTD" in upper
             or "NJORSHIPS MANAGEMENT INDIA PVT LTD" in upper
         )
+        has_seajobs_context = (
+            "SEAMEN EXPERIENCE DETAILS" in upper
+            or "DANGEROUS CARGO ENDORSEMENT" in upper
+            or "CERTIFICATE DETAILS" in upper
+        )
         start = upper.find("TOTAL EXPERIENCE")
-        if start < 0 or not has_seajobs_banner:
+        if start < 0 or not (has_seajobs_banner or has_seajobs_context):
             return {
                 "rows": [],
                 "status": "SOURCE_EXCLUDED" if start >= 0 else "MISSING",
@@ -4011,35 +4234,43 @@ class AIResumeAnalyzer:
                 "source_label": "non_seajobs_resume_excluded" if start >= 0 else "seajobs_resume",
             }
 
-        lines = [" ".join(line.split()) for line in text[start:start + 1800].splitlines() if line.strip()]
+        lines = [" ".join(line.split()) for line in text[start:start + 2600].splitlines() if line.strip()]
         rows = []
+        experience_pattern = re.compile(
+            r"(?i)\bExperience\b\s*(?:(\d{1,2})\s+)?Year(?:s)?\s+(\d{1,2})\s+Month(?:s)?(?:\s+(\d{1,2})\s+Day(?:s)?)?\b"
+        )
         for rank_index, line in enumerate(lines):
             rank_match = re.match(r"^Rank\s+(.+?)\s*$", line, flags=re.IGNORECASE)
-            if not rank_match or rank_index + 1 >= len(lines):
+            if not rank_match:
                 continue
-            experience_match = re.match(
-                r"^Experience\s+(\d{1,2})\s+Year(?:s)?\s+(\d{1,2})\s+Month(?:s)?(?:\s+(\d{1,2})\s+Day(?:s)?)?\s*$",
-                lines[rank_index + 1],
-                flags=re.IGNORECASE,
-            )
+            row_context = [line]
+            for lookahead in lines[rank_index + 1:rank_index + 4]:
+                if re.match(r"^Rank\s+", lookahead, flags=re.IGNORECASE):
+                    break
+                row_context.append(lookahead)
+                if re.search(r"(?i)\bExperience\b", lookahead):
+                    break
+            experience_match = experience_pattern.search(" ".join(row_context))
             if not experience_match:
                 continue
             canonical_id, department, seniority_bucket, rank_confidence = self._normalize_rank(rank_match.group(1))
             if not canonical_id:
                 continue
+            excluded_training_context = self._has_seajobs_training_context(" ".join(row_context))
             years, months, days = experience_match.groups()
-            months_total = int(years) * 12 + int(months)
+            months_total = int(years or 0) * 12 + int(months)
             rows.append({
                 "rank_raw": rank_match.group(1),
                 "rank_normalized": canonical_id,
                 "department": department,
                 "seniority_bucket": seniority_bucket,
                 "rank_confidence": rank_confidence,
-                "years": int(years),
+                "years": int(years) if years is not None else 0,
                 "months": int(months),
                 "days": int(days) if days is not None else None,
                 "months_total": months_total,
-                "snippet": f"{line} {lines[rank_index + 1]}",
+                "snippet": " ".join(row_context[:3]),
+                "excluded_training_context": excluded_training_context,
             })
 
         return {
@@ -4139,18 +4370,10 @@ class AIResumeAnalyzer:
             "source_label": "seajobs_resume",
         }
 
-    def _extract_current_rank_months_fact_from_text(self, raw_text, original_path=None, experience_rows_fact=None):
+    def _extract_current_rank_months_fact_from_text(self, raw_text, original_path=None, experience_rows_fact=None, rank_duration_rows_fact=None):
         experience_rows_fact = experience_rows_fact or self._extract_seajobs_experience_rows(raw_text, original_path=original_path)
-        status = experience_rows_fact.get("status", "MISSING")
-        if status != "PARSED":
-            return {
-                "months_total": None,
-                "matched_rows": 0,
-                "status": status,
-                "confidence": None,
-                "extraction_method": "seajobs_service_history_rank_duration_sum",
-                "source_label": experience_rows_fact.get("source_label"),
-            }
+        rank_duration_rows_fact = rank_duration_rows_fact or self._extract_seajobs_total_experience_rows(raw_text, original_path=original_path)
+        service_rows_status = experience_rows_fact.get("status", "MISSING")
 
         current_rank_fact = self._extract_rank_fact_from_text(raw_text)
         current_rank_normalized = current_rank_fact.get("canonical_id")
@@ -4164,35 +4387,55 @@ class AIResumeAnalyzer:
                 "source_label": "seajobs_resume",
             }
 
-        total_months = 0
-        matched_rows = 0
-        for row in experience_rows_fact.get("rows") or []:
-            if row.get("rank_normalized") != current_rank_normalized:
+        for source_fact, source_name in (
+            (experience_rows_fact, "service_rows"),
+            (rank_duration_rows_fact, "rank_duration_rows"),
+        ):
+            source_status = str(source_fact.get("status") or "MISSING")
+            if source_status != "PARSED":
                 continue
-            months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
-            if months is None:
-                continue
-            total_months += months
-            matched_rows += 1
 
-        if matched_rows == 0:
-            return {
-                "months_total": None,
-                "matched_rows": 0,
-                "status": "MISSING",
-                "confidence": None,
-                "extraction_method": "seajobs_service_history_rank_duration_sum",
-                "source_label": "seajobs_resume",
-            }
+            total_months = 0
+            matched_rows = 0
+            for row in source_fact.get("rows") or []:
+                if row.get("rank_normalized") != current_rank_normalized:
+                    continue
+                if bool(row.get("excluded_training_context")):
+                    continue
+                if source_name == "service_rows" and self._has_seajobs_training_context(row.get("snippet")):
+                    continue
+                if source_name == "service_rows":
+                    months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+                else:
+                    months = row.get("months_total")
+                if months is None:
+                    continue
+                total_months += int(months)
+                matched_rows += 1
+
+            if matched_rows:
+                return {
+                    "months_total": total_months,
+                    "matched_rows": matched_rows,
+                    "status": "PARSED",
+                    "confidence": 0.9 if source_name == "service_rows" else 0.95,
+                    "extraction_method": (
+                        "seajobs_service_history_rank_duration_sum"
+                        if source_name == "service_rows"
+                        else "seajobs_total_experience_rank_duration_sum"
+                    ),
+                    "source_label": source_fact.get("source_label") or "seajobs_resume",
+                    "current_rank_normalized": current_rank_normalized,
+                    "source": source_name,
+                }
 
         return {
-            "months_total": total_months,
-            "matched_rows": matched_rows,
-            "status": "PARSED",
-            "confidence": 0.9,
+            "months_total": None,
+            "matched_rows": 0,
+            "status": "MISSING" if service_rows_status == "PARSED" or str(rank_duration_rows_fact.get("status") or "MISSING") == "PARSED" else service_rows_status,
+            "confidence": None,
             "extraction_method": "seajobs_service_history_rank_duration_sum",
-            "source_label": "seajobs_resume",
-            "current_rank_normalized": current_rank_normalized,
+            "source_label": experience_rows_fact.get("source_label") or rank_duration_rows_fact.get("source_label") or "seajobs_resume",
         }
 
     def _extract_contract_gap_fact_from_text(self, raw_text, original_path=None, reference_date=None, experience_rows_fact=None):
@@ -4789,6 +5032,7 @@ class AIResumeAnalyzer:
             r"second\s+engineer\s*\((?:fg|ncv)\)|2nd\s+engineer\s*\((?:fg|ncv)\)",
             r"third\s+engineer\s*\((?:fg|ncv)\)|3rd\s+engineer\s*\((?:fg|ncv)\)",
             r"fourth\s+engineer\s*\((?:fg|ncv)\)|4th\s+engineer\s*\((?:fg|ncv)\)",
+            r"first\s+engineer|1st\s+engineer",
             r"meo\s+cl(?:ass)?[-\s]*(?:i{1,3}|iv|1|2|3|4)\b",
             r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b",
             r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b",
@@ -4801,6 +5045,9 @@ class AIResumeAnalyzer:
         )
         for idx, line in enumerate(lines):
             if re.search(coc_label_pattern, line, flags=re.IGNORECASE):
+                snippets.append(" ".join(lines[idx:idx + 4]))
+                continue
+            if re.search(r"\bcertificate\s+details\b", line, flags=re.IGNORECASE):
                 snippets.append(" ".join(lines[idx:idx + 4]))
                 continue
             if (
@@ -4832,6 +5079,7 @@ class AIResumeAnalyzer:
             (r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b", "chief_engineer"),
             (r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b", "2nd_engineer"),
             (r"meo\s+class\s+iv\b", "4th_engineer"),
+            (r"first\s+engineer|1st\s+engineer", "chief_engineer"),
             (r"chief\s+engineer", "chief_engineer"),
             (r"second\s+engineer|2nd\s+engineer", "2nd_engineer"),
             (r"third\s+engineer|3rd\s+engineer", "3rd_engineer"),
@@ -5273,6 +5521,52 @@ class AIResumeAnalyzer:
             "context": context or {},
         }
 
+    def _extract_candidate_full_name_from_text(self, source_text):
+        text = str(source_text or "").strip()
+        if not text:
+            return None
+        try:
+            from resume_extractor import ResumeExtractor
+
+            extractor = ResumeExtractor()
+            candidate_name = extractor.extract_candidate_name_from_text(text)
+            candidate_name = str(candidate_name or "").strip()
+            return candidate_name or None
+        except Exception:
+            return None
+
+    def _candidate_name_excerpt_from_text(self, source_text, candidate_name):
+        text = str(source_text or "").strip()
+        name = str(candidate_name or "").strip()
+        if not text or not name:
+            return ""
+        name_lower = name.lower()
+        lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
+        for line in lines:
+            line_lower = line.lower()
+            if name_lower in line_lower:
+                for stop_label in (
+                    "email address",
+                    "date of birth",
+                    "present rank",
+                    "passport details",
+                    "passport no",
+                    "mobile no",
+                    "phone no",
+                    "nationality",
+                    "gender",
+                    "address",
+                    "city",
+                    "country",
+                    "zipcode",
+                ):
+                    stop_at = line_lower.find(stop_label)
+                    if stop_at != -1:
+                        line = line[:stop_at].strip()
+                        break
+                return line.strip(" ,;:|-")
+        return name
+
     def _extract_dob_fact_from_text(self, raw_text):
         text = str(raw_text or "")
         if not text:
@@ -5522,6 +5816,8 @@ class AIResumeAnalyzer:
                 str((chunk.get('metadata') or {}).get('raw_text', ''))
                 for chunk in (chunks or [])
             )
+        extracted_full_name = self._extract_candidate_full_name_from_text(source_text)
+        candidate_name_snippet = self._candidate_name_excerpt_from_text(source_text, extracted_full_name)
         experienced_ship_types = self._extract_experienced_ship_types_from_text(source_text)
         experienced_engine_types = self._extract_engine_types_from_text(source_text)
         logistics_fact = self._extract_logistics_from_text(source_text)
@@ -5536,7 +5832,12 @@ class AIResumeAnalyzer:
         total_experience_fact = self._extract_seajobs_total_experience_rows(source_text, original_path=original_path)
         same_company_fact = self._extract_same_company_contract_count_fact_from_text(source_text, original_path=original_path)
         last_sign_off_fact = self._extract_last_sign_off_fact_from_text(source_text, original_path=original_path)
-        current_rank_months_fact = self._extract_current_rank_months_fact_from_text(source_text, original_path=original_path, experience_rows_fact=experience_rows_fact)
+        current_rank_months_fact = self._extract_current_rank_months_fact_from_text(
+            source_text,
+            original_path=original_path,
+            experience_rows_fact=experience_rows_fact,
+            rank_duration_rows_fact=total_experience_fact,
+        )
         contract_gap_fact = self._extract_contract_gap_fact_from_text(source_text, original_path=original_path, experience_rows_fact=experience_rows_fact)
         coc_fact = self._extract_coc_fact_from_text(source_text)
         stcw_fact = self._extract_stcw_fact_from_text(source_text)
@@ -5548,7 +5849,8 @@ class AIResumeAnalyzer:
             "facts_version": self.FACTS_VERSION,
             "rank_folder": rank,
             "identity": {
-                "full_name": None,
+                "full_name": extracted_full_name,
+                "full_name_snippet": candidate_name_snippet,
                 "nationality": None,
             },
             "role": {
@@ -7064,7 +7366,9 @@ class AIResumeAnalyzer:
         rank_duration_rows = experience.get("rank_duration_rows") or []
         matching_rank_duration_rows = [
             row for row in rank_duration_rows
-            if row.get("rank_normalized") == requested_rank and row.get("months_total") is not None
+            if row.get("rank_normalized") == requested_rank
+            and row.get("months_total") is not None
+            and not bool(row.get("excluded_training_context"))
         ]
 
         if str(rank_duration_meta.get("status") or "MISSING") == "PARSED" and matching_rank_duration_rows:
@@ -7103,6 +7407,8 @@ class AIResumeAnalyzer:
             matched_rows = 0
             for row in experience.get("service_rows") or []:
                 if row.get("rank_normalized") != requested_rank:
+                    continue
+                if self._has_seajobs_training_context(row.get("snippet")):
                     continue
                 months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
                 if months is None:
@@ -7942,7 +8248,114 @@ class AIResumeAnalyzer:
             "facts_version": facts_version,
         }
 
-    def _ingest_folder(self, folder_path, rank):
+    def _capture_candidate_facts_for_review(self, review_capture_callback, candidate_facts, capture_context):
+        if not callable(review_capture_callback):
+            return None
+        try:
+            return review_capture_callback(deepcopy(candidate_facts), capture_context)
+        except Exception as review_exc:
+            candidate_id = str((capture_context or {}).get("candidate_resume_id") or (capture_context or {}).get("candidate_id") or "").strip()
+            filename = str((capture_context or {}).get("filename") or "").strip()
+            print(
+                f"[REVIEW CAPTURE WARN] Failed to capture candidate facts for review "
+                f"candidate_id={candidate_id or '-'} filename={filename or '-'}: {review_exc}"
+            )
+            return None
+
+    def _build_review_alignment_report(self, live_candidate_facts, review_candidate_facts):
+        live_summary = build_candidate_facts_review_summary(live_candidate_facts if isinstance(live_candidate_facts, dict) else {})
+        review_summary = build_candidate_facts_review_summary(review_candidate_facts if isinstance(review_candidate_facts, dict) else {})
+
+        def _canonical_value(value):
+            if isinstance(value, dict):
+                return {str(key): _canonical_value(item) for key, item in sorted(value.items())}
+            if isinstance(value, list):
+                canonical_items = [_canonical_value(item) for item in value]
+                if all(not isinstance(item, (dict, list)) for item in canonical_items):
+                    return sorted(canonical_items, key=lambda item: json.dumps(item, sort_keys=True, default=str))
+                return canonical_items
+            if isinstance(value, tuple):
+                return [_canonical_value(item) for item in value]
+            if isinstance(value, float) and float(value).is_integer():
+                return int(value)
+            if isinstance(value, (date, datetime)):
+                return value.isoformat()
+            return value
+
+        def _fact_alignment_signature(row):
+            if not isinstance(row, dict):
+                return None
+            return (
+                _canonical_value(row.get("value")),
+                str(row.get("status") or "").strip().upper(),
+                str(row.get("confidence_level") or "").strip().lower(),
+                str(row.get("warning_level") or "").strip().lower(),
+                bool(row.get("evidence_ids")),
+            )
+
+        live_key_facts = {
+            str(row.get("field_path") or ""): row
+            for row in (live_summary.get("key_facts") or [])
+            if isinstance(row, dict) and row.get("affects_match")
+        }
+        review_key_facts = {
+            str(row.get("field_path") or ""): row
+            for row in (review_summary.get("key_facts") or [])
+            if isinstance(row, dict) and row.get("affects_match")
+        }
+
+        mismatches = []
+        compared_field_paths = sorted(set(live_key_facts) | set(review_key_facts))
+        for field_path in compared_field_paths:
+            live_row = live_key_facts.get(field_path)
+            review_row = review_key_facts.get(field_path)
+            live_value = live_row.get("value") if isinstance(live_row, dict) else None
+            review_value = review_row.get("value") if isinstance(review_row, dict) else None
+            if live_row is None:
+                mismatches.append({
+                    "field_path": field_path,
+                    "reason": "missing_live_fact",
+                    "live_value": None,
+                    "review_value": _canonical_value(review_value),
+                })
+                continue
+            if review_row is None:
+                mismatches.append({
+                    "field_path": field_path,
+                    "reason": "missing_review_fact",
+                    "live_value": _canonical_value(live_value),
+                    "review_value": None,
+                })
+                continue
+            live_signature = _fact_alignment_signature(live_row)
+            review_signature = _fact_alignment_signature(review_row)
+            if _canonical_value(live_value) != _canonical_value(review_value):
+                mismatches.append({
+                    "field_path": field_path,
+                    "reason": "value_mismatch",
+                    "live_value": _canonical_value(live_value),
+                    "review_value": _canonical_value(review_value),
+                })
+            elif live_signature != review_signature:
+                mismatches.append({
+                    "field_path": field_path,
+                    "reason": "metadata_mismatch",
+                    "live_signature": list(live_signature or []),
+                    "review_signature": list(review_signature or []),
+                    "live_value": _canonical_value(live_value),
+                    "review_value": _canonical_value(review_value),
+                })
+
+        return {
+            "status": "match" if not mismatches else "mismatch",
+            "mismatch_count": len(mismatches),
+            "mismatches": mismatches,
+            "compared_field_count": len(compared_field_paths),
+            "live_key_fact_count": len(live_key_facts),
+            "review_key_fact_count": len(review_key_facts),
+        }
+
+    def _ingest_folder(self, folder_path, rank, review_capture_callback=None):
         print(f"[{rank}] Starting ingestion scan...")
         pdf_paths = self._iter_pdf_files(folder_path)
         files_to_process = [p for p in pdf_paths if self._ingest_needs_processing(str(p), p.stat().st_mtime)]
@@ -7974,6 +8387,7 @@ class AIResumeAnalyzer:
             "message": f"Indexing {total_files} file(s)..."
         }
         embedding_failures = 0
+        folder_metadata = self._rank_manifest_metadata(Path(folder_path))
         for path in files_to_process:
             print(f"  -> Processing: {path.name}")
             text = self.pdf_processor.extract_text(str(path))
@@ -7996,6 +8410,40 @@ class AIResumeAnalyzer:
                 filename=path.name,
                 source_path=str(path),
             )
+            if review_capture_callback is not None:
+                metadata_entry = folder_metadata.get(path.name) if isinstance(folder_metadata, dict) else {}
+                metadata_entry = metadata_entry if isinstance(metadata_entry, dict) else {}
+                candidate_facts = build_candidate_facts_contract_v1(
+                    self,
+                    path.name,
+                    rank,
+                    chunks,
+                    original_path=path,
+                    text_cache={str(path): text},
+                    folder_metadata=folder_metadata,
+                    source_origin=str(metadata_entry.get("source_origin") or "manual_upload"),
+                    detected_layout=str(metadata_entry.get("detected_layout") or "unknown"),
+                )
+                self._capture_candidate_facts_for_review(
+                    review_capture_callback,
+                    candidate_facts,
+                    {
+                        "candidate_id": resume_id,
+                        "candidate_resume_id": resume_id,
+                        "resume_blob_id": resume_id,
+                        "filename": path.name,
+                        "rank": rank,
+                        "original_path": str(path),
+                        "parser_version": str(
+                            ((candidate_facts.get("extraction") or {}).get("parser_version") or "live_pdf_extraction.v1")
+                        ),
+                        "facts_revision": str(
+                            candidate_facts.get("facts_version")
+                            or candidate_facts.get("schema_version")
+                            or "candidate_facts.v1"
+                        ),
+                    },
+                )
             embeddings = self.prepper.get_embeddings([c['text'] for c in chunks])
 
             if embeddings:
@@ -8371,7 +8819,14 @@ Examples of GOOD responses:
         
         return {"is_match": False, "reason": "Failed to get conclusive answer from AI.", "confidence": 0.0}
 
-    def run_analysis_stream(self, rank, user_prompt, applied_ship_type=None, experienced_ship_type=None):
+    def run_analysis_stream(
+        self,
+        rank,
+        user_prompt,
+        applied_ship_type=None,
+        experienced_ship_type=None,
+        review_capture_callback=None,
+    ):
         """Streaming analysis with multi-stage retrieval for compound queries"""
         yield {"type": "status", "message": "Initializing analysis..."}
         
@@ -8383,7 +8838,11 @@ Examples of GOOD responses:
                 return
 
             yield {"type": "status", "message": "Scanning for new files..."}
-            for ingest_event in self._ingest_folder(str(target_folder), rank):
+            for ingest_event in self._ingest_folder(
+                str(target_folder),
+                rank,
+                review_capture_callback=review_capture_callback,
+            ):
                 yield ingest_event
 
             job_constraints = self._extract_job_constraints(user_prompt, rank=rank)
@@ -8557,6 +9016,54 @@ Examples of GOOD responses:
                     search_state,
                     perf_state=perf_state,
                 )
+                if review_capture_callback is not None:
+                    review_candidate_facts = candidate_facts
+                    review_alignment_report = None
+                    try:
+                        metadata_entry = folder_metadata.get(filename) if isinstance(folder_metadata, dict) else {}
+                        metadata_entry = metadata_entry if isinstance(metadata_entry, dict) else {}
+                        review_candidate_facts = build_candidate_facts_contract_v1(
+                            self,
+                            filename,
+                            rank,
+                            chunks,
+                            original_path=original_path,
+                            text_cache=text_cache,
+                            folder_metadata=folder_metadata,
+                            source_origin=str(metadata_entry.get("source_origin") or "manual_upload"),
+                            detected_layout=str(metadata_entry.get("detected_layout") or "unknown"),
+                        )
+                        review_alignment_report = self._build_review_alignment_report(candidate_facts, review_candidate_facts)
+                    except Exception as review_build_exc:
+                        print(
+                            f"[REVIEW CAPTURE WARN] Falling back to analysis facts for review "
+                            f"candidate_id={resume_id} filename={filename}: {review_build_exc}"
+                        )
+                    capture_context = {
+                        "candidate_id": resume_id,
+                        "candidate_resume_id": resume_id,
+                        "resume_blob_id": resume_id,
+                        "filename": filename,
+                        "rank": rank,
+                        "parser_version": str(
+                            ((review_candidate_facts.get("extraction") or {}).get("parser_version") or "live_pdf_extraction.v1")
+                        ),
+                        "facts_revision": str(
+                            review_candidate_facts.get("facts_version")
+                            or review_candidate_facts.get("schema_version")
+                            or "candidate_facts.v1"
+                        ),
+                    }
+                    if review_alignment_report is not None:
+                        capture_context["review_alignment_report"] = review_alignment_report
+                        capture_context["review_alignment_status"] = review_alignment_report.get("status")
+                        capture_context["review_alignment_mismatch_count"] = review_alignment_report.get("mismatch_count")
+                        capture_context["review_alignment_mismatches"] = review_alignment_report.get("mismatches")
+                    self._capture_candidate_facts_for_review(
+                        review_capture_callback,
+                        review_candidate_facts,
+                        capture_context,
+                    )
                 hard_filter_started_at = time.perf_counter()
                 hard_filter_result = self._evaluate_hard_filters(candidate_facts, job_constraints)
                 self._record_perf_timing(perf_state, "hard_filter_evaluation", time.perf_counter() - hard_filter_started_at)
@@ -8774,7 +9281,14 @@ Examples of GOOD responses:
             traceback.print_exc()
             yield {"type": "error", "message": f"Analysis failed: {str(e)}"}
 
-    def run_analysis(self, rank, user_prompt, applied_ship_type=None, experienced_ship_type=None):
+    def run_analysis(
+        self,
+        rank,
+        user_prompt,
+        applied_ship_type=None,
+        experienced_ship_type=None,
+        review_capture_callback=None,
+    ):
         """Non-streaming version"""
         verified_matches = []
         uncertain_matches = []
@@ -8787,6 +9301,7 @@ Examples of GOOD responses:
             user_prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            review_capture_callback=review_capture_callback,
         ):
             if event['type'] == 'match_found':
                 verified_matches.append(event['match'])
@@ -8853,22 +9368,38 @@ class Analyzer:
                 setattr(config, "feature_flags", feature_flags)
             Analyzer._instance = AIResumeAnalyzer(config, store_bundle=store_bundle)
 
-    def run_analysis(self, target_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+    def run_analysis(
+        self,
+        target_folder,
+        prompt,
+        applied_ship_type=None,
+        experienced_ship_type=None,
+        review_capture_callback=None,
+    ):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
         return Analyzer._instance.run_analysis(
             rank_name,
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            review_capture_callback=review_capture_callback,
         )
     
-    def run_analysis_stream(self, target_folder, prompt, applied_ship_type=None, experienced_ship_type=None):
+    def run_analysis_stream(
+        self,
+        target_folder,
+        prompt,
+        applied_ship_type=None,
+        experienced_ship_type=None,
+        review_capture_callback=None,
+    ):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
         for progress_event in Analyzer._instance.run_analysis_stream(
             rank_name,
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            review_capture_callback=review_capture_callback,
         ):
             yield progress_event
     

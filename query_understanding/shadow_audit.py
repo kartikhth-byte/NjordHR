@@ -34,6 +34,7 @@ def build_shadow_audit_entry(
     llm_plan_provider: Any | None = None,
     candidate_resume_facts_row: Mapping[str, Any] | None = None,
     candidate_resume_facts_resolution: Mapping[str, Any] | None = None,
+    force_shadow: bool = False,
 ) -> Dict[str, Any]:
     """Build a shadow audit record without altering production flow."""
 
@@ -44,7 +45,7 @@ def build_shadow_audit_entry(
         candidate_resume_facts_row,
         resolution=candidate_resume_facts_resolution,
     )
-    shadow_enabled = is_enabled()
+    shadow_enabled = is_enabled() or force_shadow
     llm_plan_source = "disabled"
     shadow_llm_diagnostics: Dict[str, Any] = {}
 
@@ -56,6 +57,7 @@ def build_shadow_audit_entry(
             rank=rank,
             prompt_id=prompt_id,
             legacy_plan=legacy_plan,
+            force_enabled=force_shadow,
         )
         llm_plan, shadow_llm_diagnostics = _unwrap_shadow_llm_result(llm_plan_result)
 
@@ -126,6 +128,7 @@ def build_shadow_audit_rows(
     llm_plan_provider: Any | None = None,
     candidate_resume_facts_row: Mapping[str, Any] | None = None,
     candidate_resume_facts_resolution: Mapping[str, Any] | None = None,
+    force_shadow: bool = False,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for index, entry in enumerate(prompts, start=1):
@@ -142,6 +145,7 @@ def build_shadow_audit_rows(
                 llm_plan_provider=llm_plan_provider,
                 candidate_resume_facts_row=candidate_resume_facts_row,
                 candidate_resume_facts_resolution=candidate_resume_facts_resolution,
+                force_shadow=force_shadow,
             )
         )
     return rows

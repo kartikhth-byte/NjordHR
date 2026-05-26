@@ -100,6 +100,42 @@ class ShadowAuditTests(unittest.TestCase):
         self.assertIsInstance(entry["comparison_results"], list)
         self.assertEqual(entry["llm_plan"]["schema_version"], "query_plan.v1")
 
+    def test_shadow_audit_entry_can_force_shadow_mode_for_recruiter_sessions(self):
+        provider = mock.Mock(return_value={
+            "plan": {
+                "schema_version": "query_plan.v1",
+                "normalizer": {
+                    "name": "llm",
+                    "model": "gemini",
+                    "prompt_template_version": "query_understanding.shadow_llm.v1",
+                    "catalog_version": "query_understanding.catalog.v1",
+                    "created_at": "2026-05-25T00:00:00Z",
+                },
+                "input": {"raw_prompt": "2nd engineer", "rank_context": "2nd Engineer", "ui_filters": {"schema_version": "ui_filters.v1", "filters": []}},
+                "applied_constraints": [],
+                "unapplied_constraints": [],
+                "semantic_query": "2nd engineer",
+                "unrecognized_residual": [],
+                "warnings": [],
+                "validation": {"status": "valid", "errors": []},
+            },
+            "diagnostics": {"status": "success", "reason": "ok"},
+        })
+
+        entry = build_shadow_audit_entry(
+            self.analyzer,
+            "2nd engineer between 30 and 50 years old",
+            rank="2nd Engineer",
+            prompt_id="prompt-force",
+            llm_plan_provider=provider,
+            force_shadow=True,
+        )
+
+        provider.assert_called_once()
+        self.assertEqual(entry["shadow_mode"], "enabled")
+        self.assertTrue(entry["shadow_wiring"]["llm_plan_requested"])
+        self.assertEqual(entry["shadow_wiring"]["llm_plan_source"], "llm")
+
 
 if __name__ == "__main__":
     unittest.main()

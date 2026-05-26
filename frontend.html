@@ -312,6 +312,22 @@
             const [settingsSection, setSettingsSection] = useState('runtime');
             const [usageLogs, setUsageLogs] = useState([]);
             const [isUsageLogsLoading, setIsUsageLogsLoading] = useState(false);
+            const [telemetryLogs, setTelemetryLogs] = useState([]);
+            const [isTelemetryLogsLoading, setIsTelemetryLogsLoading] = useState(false);
+            const [telemetrySummary, setTelemetrySummary] = useState({
+                prompt_audit_count: 0,
+                prompt_audit_issue_count: 0,
+                prompt_audit_hash_count: 0,
+                prompt_audit_threshold: 10,
+                prompt_audit_over_threshold_count: 0,
+                prompt_audit_over_threshold_is_partial: false,
+                system_error_count: 0,
+            });
+            const [telemetryPromptAuditOverThreshold, setTelemetryPromptAuditOverThreshold] = useState([]);
+            const [isTelemetrySummaryLoading, setIsTelemetrySummaryLoading] = useState(false);
+            const [telemetryKindFilter, setTelemetryKindFilter] = useState('');
+            const [telemetryCategoryFilter, setTelemetryCategoryFilter] = useState('');
+            const [telemetryPromptAuditThreshold, setTelemetryPromptAuditThreshold] = useState('10');
             const [adminUsers, setAdminUsers] = useState([]);
             const [isAdminUsersLoading, setIsAdminUsersLoading] = useState(false);
             const [userForm, setUserForm] = useState({ username: '', role: 'recruiter', password: '' });
@@ -552,11 +568,11 @@
             })();
             const role = authUser?.role || '';
             const allowedTabs = role === 'admin'
-                ? ['download', 'search', 'dashboard', 'setup', 'facts_review', 'settings', 'logs']
+                ? ['download', 'search', 'dashboard', 'setup', 'facts_review', 'telemetry', 'settings', 'logs']
                 : role === 'manager'
-                    ? ['download', 'search', 'dashboard', 'setup', 'facts_review']
+                    ? ['download', 'search', 'dashboard', 'setup']
                     : role === 'recruiter'
-                    ? ['search', 'dashboard', 'setup', 'facts_review']
+                    ? ['search', 'dashboard', 'setup']
                     : [];
             const canAccessTab = (tab) => allowedTabs.includes(tab);
 
@@ -825,13 +841,17 @@
                     fetchRuntimeConfig();
                     fetchSetupManifest();
                 }
-                if (activeTab === 'facts_review') {
+                if (activeTab === 'facts_review' && role === 'admin') {
                     fetchCandidateFactsReviewItems();
+                }
+                if (activeTab === 'telemetry' && role === 'admin') {
+                    loadTelemetryLogs();
+                    loadTelemetrySummary();
                 }
                 if (activeTab === 'logs' && role === 'admin') {
                     loadUsageLogs();
                 }
-            }, [activeTab, authUser]);
+            }, [activeTab, authUser, role, telemetryKindFilter, telemetryCategoryFilter, telemetryPromptAuditThreshold]);
 
             useEffect(() => {
                 if (!authUser) return undefined;
@@ -871,9 +891,16 @@
 
             useEffect(() => {
                 if (!authUser) return;
-                if (activeTab !== 'facts_review') return;
+                if (activeTab !== 'facts_review' || role !== 'admin') return;
                 fetchCandidateFactsReviewItems();
             }, [candidateFactsReviewStatusFilter, authUser, activeTab]);
+
+            useEffect(() => {
+                if (!authUser) return;
+                if (activeTab !== 'telemetry' || role !== 'admin') return;
+                loadTelemetryLogs();
+                loadTelemetrySummary();
+            }, [telemetryKindFilter, telemetryCategoryFilter, telemetryPromptAuditThreshold, authUser, activeTab, role]);
             
             useEffect(() => {
                 filterAndSortData();
@@ -2060,6 +2087,80 @@
                 }
             };
 
+            const loadTelemetryLogs = async () => {
+                if (role !== 'admin') return;
+                if (!adminSessionPassword.trim()) {
+                    setTelemetryLogs([]);
+                    return;
+                }
+                setIsTelemetryLogsLoading(true);
+                try {
+                    const params = new URLSearchParams();
+                    params.set('limit', '300');
+                    if (telemetryKindFilter.trim()) {
+                        params.set('telemetry_kind', telemetryKindFilter.trim());
+                    }
+                    if (telemetryCategoryFilter.trim()) {
+                        params.set('category', telemetryCategoryFilter.trim());
+                    }
+                    const response = await fetch(`${API_BASE_URL}/admin/telemetry_logs?${params.toString()}`, {
+                        headers: { 'X-Admin-Token': adminSessionPassword.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load telemetry logs');
+                        setTelemetryLogs([]);
+                        return;
+                    }
+                    setTelemetryLogs(Array.isArray(data.rows) ? data.rows : []);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load telemetry logs');
+                    setTelemetryLogs([]);
+                } finally {
+                    setIsTelemetryLogsLoading(false);
+                }
+            };
+
+            const loadTelemetrySummary = async () => {
+                if (role !== 'admin') return;
+                if (!adminSessionPassword.trim()) {
+                    setTelemetrySummary({
+                        prompt_audit_count: 0,
+                        prompt_audit_issue_count: 0,
+                        prompt_audit_hash_count: 0,
+                        prompt_audit_threshold: Number.parseInt(telemetryPromptAuditThreshold, 10) || 10,
+                        prompt_audit_over_threshold_count: 0,
+                        prompt_audit_over_threshold_is_partial: false,
+                        system_error_count: 0,
+                    });
+                    setTelemetryPromptAuditOverThreshold([]);
+                    return;
+                }
+                setIsTelemetrySummaryLoading(true);
+                try {
+                    const params = new URLSearchParams();
+                    params.set('limit', '100');
+                    const threshold = Number.parseInt(telemetryPromptAuditThreshold, 10);
+                    if (Number.isFinite(threshold) && threshold > 0) {
+                        params.set('threshold', String(threshold));
+                    }
+                    const response = await fetch(`${API_BASE_URL}/admin/telemetry_summary?${params.toString()}`, {
+                        headers: { 'X-Admin-Token': adminSessionPassword.trim() }
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        handleSendMessage('error', data.message || 'Failed to load telemetry summary');
+                        return;
+                    }
+                    setTelemetrySummary(data.summary || {});
+                    setTelemetryPromptAuditOverThreshold(Array.isArray(data.prompt_audit_over_threshold) ? data.prompt_audit_over_threshold : []);
+                } catch (_error) {
+                    handleSendMessage('error', 'Failed to load telemetry summary');
+                } finally {
+                    setIsTelemetrySummaryLoading(false);
+                }
+            };
+
             const testSupabaseSettings = async () => {
                 if (!adminSessionPassword.trim()) {
                     handleSendMessage('error', 'Enter settings password first');
@@ -2932,6 +3033,14 @@
 
             const handleConnectMailbox = async (mode = 'connect') => {
                 setMailboxAuthAction(mode);
+                const authWindow = window.open('about:blank', '_blank');
+                if (!authWindow) {
+                    handleSendMessage('error', 'Allow pop-ups for this app, then use Connect Mailbox again.');
+                    setMailboxAuthAction('');
+                    return;
+                }
+                authWindow.document.title = 'NjordHR Mailbox Sign-in';
+                authWindow.document.body.innerHTML = '<p style="font-family: system-ui, sans-serif; margin: 24px;">Preparing Microsoft sign-in...</p>';
                 try {
                     const response = await fetch(`${API_BASE_URL}/email-intake/auth/start`, {
                         method: 'POST',
@@ -2944,19 +3053,20 @@
                             ? 'Outlook Client ID is missing. Add it in Settings > Operational Settings > Mailbox Intake, save settings, then connect the mailbox.'
                             : (data.message || 'Failed to start mailbox connection.');
                         handleSendMessage('error', message);
+                        authWindow.close();
                         return;
                     }
                     if (data.auth_url) {
-                        const popup = window.open(data.auth_url, '_blank', 'noopener,noreferrer');
-                        if (!popup) {
-                            handleSendMessage('info', 'Mailbox sign-in is ready. Allow pop-ups and use Connect Mailbox again if Microsoft sign-in did not open.');
-                        }
+                        authWindow.location.href = data.auth_url;
+                    } else {
+                        authWindow.close();
                     }
                     handleSendMessage('success', data.message || 'Mailbox sign-in started. Complete the Microsoft consent flow, then return here.');
                     setDownloadLog(prev => [...prev, 'Started Outlook mailbox sign-in flow.']);
                     setTimeout(() => fetchRuntimeConfig(true), 1500);
                 } catch (_error) {
                     handleSendMessage('error', 'Failed to start mailbox connection.');
+                    authWindow.close();
                 } finally {
                     setMailboxAuthAction('');
                 }
@@ -4387,6 +4497,7 @@
                 }
                 const setField = (key, value) => setSettingsForm(prev => ({ ...prev, [key]: value }));
                 const sectionButtonClass = (id) => `px-4 py-2 text-sm font-medium rounded-md border ${settingsSection === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`;
+                const lastResumeUpload = runtimeConfig?.local_agent?.last_resume_upload || runtimeConfig?.local_agent?.health?.sync?.last_resume_upload || null;
 
                 return (
                     <div>
@@ -4507,7 +4618,6 @@
                                                     {(() => {
                                                         const agent = runtimeConfig.local_agent || {};
                                                         const health = agent.health || {};
-                                                        const lastResumeUpload = agent.last_resume_upload || health.sync?.last_resume_upload || null;
                                                         const pending = Number(health.sync?.pending ?? 0);
                                                         const reachable = Boolean(agent.reachable);
                                                         let statusLabel = "Healthy";
@@ -5010,10 +5120,10 @@
             };
 
             const CandidateFactsReviewTabContent = () => {
-                if (!['admin', 'manager', 'recruiter'].includes(role)) {
+                if (role !== 'admin') {
                     return (
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                            Candidate facts review is available to admin, manager, and recruiter users only.
+                            Candidate facts review is available to admin users only.
                         </div>
                     );
                 }
@@ -5021,8 +5131,40 @@
                 const selectedItem = candidateFactsReviewDetail || candidateFactsReviewItems.find(item => String(item.id) === String(candidateFactsReviewSelectedId)) || null;
                 const selectedSummary = selectedItem ? mapCandidateFactsReviewItemSummary(selectedItem) : null;
                 const selectedCandidateFacts = selectedItem?.candidate_facts || {};
+                const selectedReviewSummary = selectedItem?.candidate_facts_review_summary || selectedItem?.candidate_facts_summary || {};
+                const keyFacts = Array.isArray(selectedReviewSummary?.key_facts) ? selectedReviewSummary.key_facts : [];
                 const reviewWarnings = Array.isArray(selectedCandidateFacts.extraction?.warnings) ? selectedCandidateFacts.extraction.warnings : [];
                 const reviewEvidence = Array.isArray(selectedCandidateFacts.evidence) ? selectedCandidateFacts.evidence : [];
+                const reviewAlignmentStatus = String(selectedItem?.review_alignment_status || selectedReviewSummary?.review_alignment_status || 'not_checked').toLowerCase();
+                const reviewAlignmentMismatchCount = Number(selectedItem?.review_alignment_mismatch_count || selectedReviewSummary?.review_alignment_mismatch_count || 0);
+
+                const formatReviewFactValue = (value) => {
+                    if (value === null || value === undefined || value === '') return '-';
+                    if (Array.isArray(value)) {
+                        return value.length > 0 ? value.map(item => (item === null || item === undefined || item === '' ? '-' : String(item))).join(', ') : '-';
+                    }
+                    if (typeof value === 'boolean') {
+                        return value ? 'Yes' : 'No';
+                    }
+                    if (typeof value === 'object') {
+                        return JSON.stringify(value);
+                    }
+                    return String(value);
+                };
+
+                const getReviewFactTone = (warningLevel) => {
+                    switch (warningLevel) {
+                        case 'conflict':
+                            return 'border-red-200 bg-red-50';
+                        case 'missing':
+                        case 'low_confidence':
+                            return 'border-amber-200 bg-amber-50';
+                        case 'warning':
+                            return 'border-yellow-200 bg-yellow-50';
+                        default:
+                            return 'border-emerald-200 bg-emerald-50';
+                    }
+                };
 
                 return (
                     <div>
@@ -5174,6 +5316,73 @@
                                             </div>
                                         )}
 
+                                        <div>
+                                            <div className="flex items-center justify-between gap-3 mb-2">
+                                                <p className="text-sm font-medium text-gray-900">Key Facts</p>
+                                                <p className="text-xs text-gray-500">{keyFacts.length} field(s)</p>
+                                            </div>
+                                            {keyFacts.length === 0 ? (
+                                                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
+                                                    No field-level summary is available for this review item yet.
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {keyFacts.map((fact, idx) => (
+                                                        <div key={`${fact.field_path || fact.label || idx}-${idx}`} className={`rounded-lg border p-3 ${getReviewFactTone(fact.warning_level)}`}>
+                                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs font-mono text-gray-500 break-all">{fact.field_path || '-'}</p>
+                                                                    <p className="font-medium text-gray-900">{fact.label || fact.field_path || '-'}</p>
+                                                                    <p className="text-sm text-gray-800 mt-1 break-words">{formatReviewFactValue(fact.display_value ?? fact.value)}</p>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-2 text-[11px]">
+                                                                    <span className="px-2 py-1 rounded-full bg-white border border-gray-200 text-gray-700">
+                                                                        {fact.status || 'UNKNOWN'}
+                                                                    </span>
+                                                                    <span className="px-2 py-1 rounded-full bg-white border border-gray-200 text-gray-700">
+                                                                        {fact.confidence_level || 'low'} confidence
+                                                                    </span>
+                                                                    <span className={`px-2 py-1 rounded-full border ${
+                                                                        fact.affects_match
+                                                                            ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                                                            : 'bg-gray-50 border-gray-200 text-gray-600'
+                                                                    }`}>
+                                                                        {fact.affects_match ? 'Affects AI match' : 'Does not affect AI match'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
+                                                                <p><span className="font-medium">Presence:</span> {fact.presence || '-'}</p>
+                                                                <p><span className="font-medium">Warning:</span> {fact.warning_level || '-'}</p>
+                                                                <p><span className="font-medium">Source:</span> {fact.source_label || fact.extraction_method || '-'}</p>
+                                                                <p><span className="font-medium">Evidence IDs:</span> {(Array.isArray(fact.evidence_ids) && fact.evidence_ids.length > 0) ? fact.evidence_ids.join(', ') : '-'}</p>
+                                                            </div>
+                                                            {fact.source_excerpt && (
+                                                                <div className="mt-2 rounded-md border border-white/70 bg-white/80 p-2 text-xs text-gray-700">
+                                                                    <p className="font-medium text-gray-900">Source Excerpt</p>
+                                                                    <p className="mt-1 whitespace-pre-wrap break-words text-gray-700">{fact.source_excerpt}</p>
+                                                                </div>
+                                                            )}
+                                                            {Array.isArray(fact.source_references) && fact.source_references.length > 0 && (
+                                                                <div className="mt-2 space-y-1 text-xs text-gray-700">
+                                                                    {fact.source_references.map((reference, referenceIdx) => (
+                                                                        <div key={`${reference.evidence_id || referenceIdx}-${referenceIdx}`} className="rounded-md border border-white/70 bg-white/80 p-2">
+                                                                            <p><span className="font-medium">Reference:</span> {reference.evidence_id || '-'}</p>
+                                                                            <p><span className="font-medium">Kind:</span> {reference.source_kind || '-'}</p>
+                                                                            <p><span className="font-medium">Source ID:</span> {reference.source_id || '-'}</p>
+                                                                            {reference.snippet && (
+                                                                                <p className="mt-1 text-gray-600"><span className="font-medium">Snippet:</span> {reference.snippet}</p>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <p className="text-sm font-medium text-gray-900 mb-2">Candidate Facts JSON</p>
@@ -5213,7 +5422,7 @@
                                                         <button
                                                             type="button"
                                                             onClick={() => updateCandidateFactsReviewItem('promote', 'Candidate facts promoted to persisted rows.', 'Failed to promote candidate facts review item.')}
-                                                            disabled={candidateFactsReviewActionLoading || String(selectedItem.review_status || '') !== 'approved'}
+                                                            disabled={candidateFactsReviewActionLoading || String(selectedItem.review_status || '') !== 'approved' || reviewAlignmentStatus !== 'match'}
                                                             className="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
                                                         >
                                                             Promote
@@ -5221,6 +5430,11 @@
                                                     </div>
                                                     {String(selectedItem.review_status || '') !== 'approved' && (
                                                         <p className="text-xs text-gray-500 mt-2">Promotion is enabled after approval.</p>
+                                                    )}
+                                                    {reviewAlignmentStatus !== 'match' && (
+                                                        <p className="text-xs text-red-600 mt-2">
+                                                            Promotion is blocked until an explicit alignment report confirms the review artifact matches the live search facts.
+                                                        </p>
                                                     )}
                                                 </div>
                                                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-xs text-gray-700">
@@ -5238,12 +5452,217 @@
                                                     {selectedItem.supabase_error && (
                                                         <p className="text-red-700"><span className="font-medium">Supabase Error:</span> {selectedItem.supabase_error}</p>
                                                     )}
+                                                    <p><span className="font-medium">Review Alignment:</span> {reviewAlignmentStatus}</p>
+                                                    <p><span className="font-medium">Alignment Mismatches:</span> {reviewAlignmentMismatchCount}</p>
+                                                    {reviewAlignmentStatus === 'mismatch' && Array.isArray(selectedItem.review_alignment_mismatches) && selectedItem.review_alignment_mismatches.length > 0 && (
+                                                        <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-red-900">
+                                                            <p className="font-medium">Promotion blocked: review facts differ from live search facts.</p>
+                                                            <ul className="mt-1 list-disc pl-5 space-y-1">
+                                                                {selectedItem.review_alignment_mismatches.map((mismatch, idx) => (
+                                                                    <li key={`${mismatch.field_path || idx}-${idx}`}>
+                                                                        {mismatch.field_path || '-'} · {mismatch.reason || 'value_mismatch'}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const TelemetryTabContent = () => {
+                if (role !== 'admin') {
+                    return (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                            Telemetry is available to admin users only.
+                        </div>
+                    );
+                }
+
+                const formatTelemetryPayload = (payload) => {
+                    if (!payload || typeof payload !== 'object') return '-';
+                    return JSON.stringify(payload, null, 2);
+                };
+
+                return (
+                    <div className="space-y-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-2xl font-semibold">Prompt Telemetry</h2>
+                                <p className="text-sm text-gray-600">
+                                    Review shadow prompt audits and system logs from recruiter installs.
+                                </p>
+                            </div>
+                            <button
+                                onClick={loadTelemetryLogs}
+                                disabled={isTelemetryLogsLoading || !adminSessionPassword.trim()}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
+                            >
+                                {isTelemetryLogsLoading ? 'Refreshing...' : 'Refresh Telemetry'}
+                            </button>
+                        </div>
+
+                        {!adminSessionPassword.trim() && (
+                            <p className="text-sm text-gray-600">
+                                Load admin settings once in the Settings tab to unlock telemetry viewing.
+                            </p>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            {[
+                                ['Prompt Audits', telemetrySummary.prompt_audit_count || 0],
+                                ['Prompt Hashes', telemetrySummary.prompt_audit_hash_count || 0],
+                                ['Needs Audit', telemetrySummary.prompt_audit_over_threshold_count || 0],
+                                ['Prompt Issues', telemetrySummary.prompt_audit_issue_count || 0],
+                                ['System Errors', telemetrySummary.system_error_count || 0],
+                            ].map(([label, value]) => (
+                                <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
+                                    <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+                                    <p className="mt-1 text-2xl font-semibold text-gray-900">{value}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <input
+                                value={telemetryKindFilter}
+                                onChange={(e) => setTelemetryKindFilter(e.target.value)}
+                                placeholder="Filter by telemetry kind (e.g. prompt_audit)"
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            />
+                            <input
+                                value={telemetryCategoryFilter}
+                                onChange={(e) => setTelemetryCategoryFilter(e.target.value)}
+                                placeholder="Filter by category (e.g. query_understanding)"
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            />
+                            <input
+                                value={telemetryPromptAuditThreshold}
+                                onChange={(e) => setTelemetryPromptAuditThreshold(e.target.value)}
+                                placeholder="Audit threshold (e.g. 10)"
+                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            />
+                            <button
+                                onClick={() => {
+                                    setTelemetryKindFilter('');
+                                    setTelemetryCategoryFilter('');
+                                    setTelemetryPromptAuditThreshold('10');
+                                }}
+                                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                            >
+                                Clear Filters
+                            </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs text-gray-500">
+                                Prompt hashes reaching the audit threshold are highlighted below.
+                                {telemetrySummary.prompt_audit_over_threshold_is_partial && (
+                                    <span className="ml-1 text-amber-700">
+                                        Displayed list is partial because only the most recent hashes are loaded.
+                                    </span>
+                                )}
+                            </p>
+                            <button
+                                onClick={() => {
+                                    loadTelemetrySummary();
+                                    loadTelemetryLogs();
+                                }}
+                                disabled={isTelemetrySummaryLoading || isTelemetryLogsLoading}
+                                className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-60"
+                            >
+                                {isTelemetrySummaryLoading || isTelemetryLogsLoading ? 'Refreshing...' : 'Refresh Both'}
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            {telemetryLogs.length === 0 ? (
+                                <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+                                    No telemetry rows available.
+                                </div>
+                            ) : telemetryLogs.map((row, idx) => (
+                                <details key={`${row.id || row.created_at || idx}-${idx}`} className="rounded-lg border border-gray-200 bg-white p-4">
+                                    <summary className="cursor-pointer list-none">
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-gray-900">
+                                                    {row.telemetry_kind || 'telemetry'} · {row.category || '-'} · {row.status || '-'}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {row.created_at ? new Date(row.created_at).toLocaleString() : '-'}
+                                                    {' '}· {row.actor_username || '-'} ({row.actor_role || '-'})
+                                                </p>
+                                                <p className="text-sm text-gray-700 mt-2 break-words">{row.summary || '-'}</p>
+                                            </div>
+                                            <div className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
+                                                {row.prompt_hash ? row.prompt_hash.slice(0, 12) : 'no hash'}
+                                            </div>
+                                        </div>
+                                    </summary>
+                                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-700">
+                                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                                            <p><span className="font-medium">Session:</span> {row.session_id || '-'}</p>
+                                            <p><span className="font-medium">Source:</span> {row.source || '-'}</p>
+                                            <p><span className="font-medium">Prompt Hash:</span> {row.prompt_hash || '-'}</p>
+                                        </div>
+                                        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                                            <p className="font-medium text-gray-900">Prompt Text</p>
+                                            <p className="mt-1 whitespace-pre-wrap break-words text-gray-700">{row.prompt_text || '-'}</p>
+                                        </div>
+                                    </div>
+                                    {row.payload && (
+                                        <div className="mt-3">
+                                            <p className="text-xs font-medium text-gray-900 mb-1">Payload</p>
+                                            <pre className="max-h-64 overflow-auto rounded-md border border-gray-200 bg-slate-50 p-3 text-[11px] leading-5 text-slate-800">
+                                                {formatTelemetryPayload(row.payload)}
+                                            </pre>
+                                        </div>
+                                    )}
+                                </details>
+                            ))}
+                        </div>
+
+                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900">Prompt Audit Summary</h3>
+                                    <p className="text-sm text-gray-600">
+                                        Prompt hashes with stored counts and issue counts. Use this to decide when to audit a prompt family.
+                                    </p>
+                                </div>
+                                <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                    Threshold: {telemetrySummary.prompt_audit_threshold || telemetryPromptAuditThreshold || '10'}
+                                </span>
+                            </div>
+                            {telemetryPromptAuditOverThreshold.length > 0 ? (
+                                <div className="space-y-2">
+                                    {telemetryPromptAuditOverThreshold.map((row, idx) => (
+                                        <div key={`${row.prompt_hash || idx}-${idx}`} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-medium text-amber-900 break-all">{row.prompt_hash || '-'}</p>
+                                                    <p className="text-xs text-amber-800 mt-1">
+                                                        {row.total_count || 0} stored · {row.issue_count || 0} issues ·
+                                                        last seen {row.last_seen_at ? new Date(row.last_seen_at).toLocaleString() : '-'}
+                                                    </p>
+                                                </div>
+                                                <span className="text-[11px] px-2 py-1 rounded-full bg-white border border-amber-200 text-amber-800 whitespace-nowrap">
+                                                    Audit now
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-gray-500">No prompt hashes have reached the audit threshold yet.</p>
+                            )}
                         </div>
                     </div>
                 );
@@ -5696,6 +6115,7 @@
                             {canAccessTab('dashboard') && <button onClick={() => setActiveTab('dashboard')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'dashboard' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Dashboard</button>}
                             {canAccessTab('setup') && <button onClick={() => setActiveTab('setup')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'setup' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Setup</button>}
                             {canAccessTab('facts_review') && <button onClick={() => setActiveTab('facts_review')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'facts_review' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Facts Review</button>}
+                            {canAccessTab('telemetry') && <button onClick={() => setActiveTab('telemetry')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'telemetry' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Telemetry</button>}
                             {canAccessTab('settings') && <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>}
                             {canAccessTab('logs') && <button onClick={() => setActiveTab('logs')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'logs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Logs</button>}
                         </div>
@@ -6189,6 +6609,7 @@
                              {activeTab === 'dashboard' && DashboardTabContent()}
                              {activeTab === 'setup' && SetupTabContent()}
                              {activeTab === 'facts_review' && CandidateFactsReviewTabContent()}
+                             {activeTab === 'telemetry' && TelemetryTabContent()}
                              {activeTab === 'settings' && SettingsTabContent()}
                              {activeTab === 'logs' && LogsTabContent()}
                         </main>

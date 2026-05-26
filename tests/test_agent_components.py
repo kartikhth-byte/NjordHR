@@ -121,6 +121,20 @@ class AgentComponentsTests(unittest.TestCase):
         store.delete("cache")
         self.assertIsNone(store.get("cache"))
 
+    def test_secret_store_available_requires_round_trip(self):
+        class BrokenBackend:
+            def set_password(self, *_args):
+                raise RuntimeError("credential manager unavailable")
+
+            def get_password(self, *_args):
+                return None
+
+            def delete_password(self, *_args):
+                return None
+
+        store = SecretStore(service_name="NjordHR.Test", backend=BrokenBackend())
+        self.assertFalse(store.available())
+
     def test_job_queue_runs_worker(self):
         def worker(job_id, payload, emit):
             emit(job_id, "log", "hello", {})

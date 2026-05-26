@@ -38,10 +38,11 @@ def normalize_prompt_to_query_plan_v1(*_args: Any, **_kwargs: Any) -> Mapping[st
 def maybe_build_shadow_query_plan(
     llm_plan_provider: Any | None,
     *args: Any,
+    force_enabled: bool = False,
     **kwargs: Any,
 ) -> Mapping[str, Any] | None:
     """Call a supplied shadow provider only when the feature flag is enabled."""
 
-    if not is_enabled() or llm_plan_provider is None:
+    if not (is_enabled() or force_enabled) or llm_plan_provider is None:
         return None
     return llm_plan_provider(*args, **kwargs)

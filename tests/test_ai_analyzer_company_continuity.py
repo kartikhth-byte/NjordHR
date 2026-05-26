@@ -34,6 +34,7 @@ def _stub_ai_dependencies():
 
 _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer  # noqa: E402
+from candidate_facts.review_summary import _longest_same_company_run  # noqa: E402
 
 
 class _FakeConfig:
@@ -150,6 +151,76 @@ SCORPIO MARINE STI SOLACE TANKER OS 63915 32079 31/03/2022 28/07/2022
             candidate_facts["fact_meta"]["derived.same_company_contract_count_max"]["status"],
             "SOURCE_EXCLUDED",
         )
+
+    def test_unknown_company_breaks_same_company_run(self):
+        contracts = [
+            {"company": "ABC Shipping"},
+            {"company": ""},
+            {"company": "ABC Shipping"},
+        ]
+        self.assertEqual(
+            _longest_same_company_run(contracts),
+            1,
+        )
+
+    def test_review_alignment_ignores_list_order_noise(self):
+        analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
+        live_candidate_facts = {
+            "schema_version": "candidate_facts.v1",
+            "identity": {"candidate_name": {"value": "Jane Doe", "confidence": "high", "evidence_ids": ["ev-1"]}},
+            "rank": {"value": "2nd_engineer", "confidence": "high", "evidence_ids": ["ev-1"]},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": ["tanker", "bulk carrier"]},
+            "certifications": {"coc": {"grade": None, "expiry_date": None, "status": None}},
+            "logistics": {"passport_expiry_date": None, "passport_valid": None},
+            "derived": {},
+            "evidence": [{"evidence_id": "ev-1", "source_kind": "raw_text_chunk", "source_id": "chunk-1"}],
+        }
+        review_candidate_facts = {
+            "schema_version": "candidate_facts.v1",
+            "identity": {"candidate_name": {"value": "Jane Doe", "confidence": "high", "evidence_ids": ["ev-1"]}},
+            "rank": {"value": "2nd_engineer", "confidence": "high", "evidence_ids": ["ev-1"]},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": ["bulk carrier", "tanker"]},
+            "certifications": {"coc": {"grade": None, "expiry_date": None, "status": None}},
+            "logistics": {"passport_expiry_date": None, "passport_valid": None},
+            "derived": {},
+            "evidence": [{"evidence_id": "ev-1", "source_kind": "raw_text_chunk", "source_id": "chunk-1"}],
+        }
+
+        alignment = analyzer._build_review_alignment_report(live_candidate_facts, review_candidate_facts)
+        self.assertEqual(alignment["status"], "match")
+        self.assertEqual(alignment["mismatch_count"], 0)
+
+    def test_review_alignment_flags_metadata_mismatch_for_same_value(self):
+        analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
+        live_candidate_facts = {
+            "schema_version": "candidate_facts.v1",
+            "identity": {"candidate_name": {"value": "Jane Doe", "confidence": "high", "evidence_ids": ["ev-1"]}},
+            "rank": {"value": "2nd_engineer", "confidence": "high", "evidence_ids": ["ev-1"]},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": ["tanker"]},
+            "certifications": {"coc": {"grade": None, "expiry_date": None, "status": None}},
+            "logistics": {"passport_expiry_date": None, "passport_valid": None},
+            "derived": {},
+            "evidence": [{"evidence_id": "ev-1", "source_kind": "raw_text_chunk", "source_id": "chunk-1"}],
+        }
+        review_candidate_facts = {
+            "schema_version": "candidate_facts.v1",
+            "identity": {"candidate_name": {"value": "Jane Doe", "confidence": "low", "evidence_ids": []}},
+            "rank": {"value": "2nd_engineer", "confidence": "high", "evidence_ids": ["ev-1"]},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": ["tanker"]},
+            "certifications": {"coc": {"grade": None, "expiry_date": None, "status": None}},
+            "logistics": {"passport_expiry_date": None, "passport_valid": None},
+            "derived": {},
+            "evidence": [{"evidence_id": "ev-1", "source_kind": "raw_text_chunk", "source_id": "chunk-1"}],
+        }
+
+        alignment = analyzer._build_review_alignment_report(live_candidate_facts, review_candidate_facts)
+        self.assertEqual(alignment["status"], "mismatch")
+        self.assertEqual(alignment["mismatch_count"], 1)
+        self.assertEqual(alignment["mismatches"][0]["reason"], "metadata_mismatch")
 
 
 if __name__ == "__main__":

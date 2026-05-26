@@ -194,6 +194,10 @@ class CandidateFactsRepository:
         candidate_facts: Mapping[str, Any],
         parser_version: str,
         facts_revision: str,
+        review_alignment_report: Mapping[str, Any] | None = None,
+        review_alignment_status: str | None = None,
+        review_alignment_mismatch_count: int | None = None,
+        review_alignment_mismatches: Sequence[Mapping[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         if self.validation_cache is None:
             raise RuntimeError("validation cache is not configured")
@@ -203,6 +207,10 @@ class CandidateFactsRepository:
             candidate_facts=candidate_facts,
             parser_version=parser_version,
             facts_revision=facts_revision,
+            review_alignment_report=review_alignment_report,
+            review_alignment_status=review_alignment_status,
+            review_alignment_mismatch_count=review_alignment_mismatch_count,
+            review_alignment_mismatches=review_alignment_mismatches,
         )
         return {
             "candidate_facts": candidate_facts,
@@ -263,6 +271,17 @@ class CandidateFactsRepository:
                 raise KeyError(record_id)
             if str(record.get("review_status") or "") != "approved":
                 raise ValueError("candidate facts must be approved before persistence")
+            alignment_status = str(record.get("review_alignment_status") or "").strip().lower()
+            alignment_checked = bool(record.get("review_alignment_checked"))
+            if not alignment_checked:
+                raise ValueError("candidate facts review must include an explicit alignment report before persistence")
+            if alignment_status != "match":
+                mismatch_count = int(record.get("review_alignment_mismatch_count") or 0)
+                if alignment_status == "mismatch":
+                    raise ValueError(
+                        f"candidate facts review diverges from live search facts for {mismatch_count} match-affecting field(s)"
+                    )
+                raise ValueError("candidate facts review must be explicitly marked as a matching alignment before persistence")
 
             existing_row = select_candidate_resume_facts_row_by_identity(
                 self.rows,

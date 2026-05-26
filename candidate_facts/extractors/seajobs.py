@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -34,6 +35,77 @@ def _presence_for_value(value: Any) -> str:
     return "observed_true" if value not in (None, "", [], {}) else "unobserved_unknown"
 
 
+def _compact_excerpt(value: str, *, max_chars: int = 120) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    shortened = text[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:|-")
+    return shortened or text[:max_chars]
+
+
+_STOP_LABEL_PATTERNS = (
+    r"\bapplied for rank\b",
+    r"\bpresent rank\b",
+    r"\bname\b",
+    r"\bemail address\b",
+    r"\bpassport details\b",
+    r"\bpassport expiry date\b",
+    r"\bdate of birth\b",
+    r"\bdob\b",
+    r"\bcoc grade\b",
+    r"\bcoc expiry date\b",
+    r"\bstcw\b",
+    r"\bmobile no\b",
+    r"\bphone no\b",
+    r"\bvessel name\b",
+    r"\bvessel type\b",
+    r"\bcompany\b",
+    r"\bfrom date\b",
+    r"\btill date\b",
+    r"\bnationality\b",
+    r"\bgender\b",
+    r"\baddress\b",
+    r"\bcity\b",
+    r"\bcountry\b",
+    r"\bzipcode\b",
+)
+
+
+def _source_excerpt_from_text(source_text: str, needle: str | None = None, *, max_chars: int = 120) -> str | None:
+    text = str(source_text or "").strip()
+    if not text:
+        return None
+
+    lines = [" ".join(str(line or "").split()) for line in text.splitlines() if str(line or "").strip()]
+    if needle:
+        normalized_needle = " ".join(str(needle or "").split()).strip()
+        if normalized_needle:
+            needle_lower = normalized_needle.lower()
+            needle_folded = re.sub(r"\s+", "", normalized_needle).lower()
+            for line in lines:
+                line_lower = line.lower()
+                if needle_lower in line_lower or needle_folded in re.sub(r"\s+", "", line_lower):
+                    fragment = line
+                    if normalized_needle:
+                        match = re.search(re.escape(normalized_needle), line, flags=re.IGNORECASE)
+                        if match:
+                            stop_match = None
+                            for pattern in _STOP_LABEL_PATTERNS:
+                                candidate = re.search(pattern, line[match.end():], flags=re.IGNORECASE)
+                                if candidate and (stop_match is None or candidate.start() < stop_match.start()):
+                                    stop_match = candidate
+                            if stop_match:
+                                fragment = line[: match.end() + stop_match.start()].strip()
+                    return _compact_excerpt(fragment, max_chars=max_chars)
+            return None
+
+    if lines:
+        return _compact_excerpt(lines[0], max_chars=max_chars)
+    return None
+
+
 def _common_fact(
     *,
     fact_id: str,
@@ -44,6 +116,7 @@ def _common_fact(
     confidence: str = "medium",
     extraction_method: str = "fallback",
     source_label: str = "seajobs_legacy_bridge",
+    snippet: str | None = None,
     **extra: Any,
 ) -> Dict[str, Any]:
     fact: Dict[str, Any] = {
@@ -63,6 +136,8 @@ def _common_fact(
         },
         "source_label": source_label,
     }
+    if snippet:
+        fact["snippet"] = snippet
     fact.update(extra)
     return fact
 
@@ -80,7 +155,7 @@ def _build_source_identity(legacy_facts: Mapping[str, Any], filename: str, sourc
     }
 
 
-def _build_documents(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -> List[Dict[str, Any]]:
+def _build_documents(legacy_facts: Mapping[str, Any], evidence_ids: List[str], source_text: str = "") -> List[Dict[str, Any]]:
     documents: List[Dict[str, Any]] = []
     logistics = legacy_facts.get("logistics") or {}
 
@@ -96,10 +171,16 @@ def _build_documents(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -
                 confidence="high" if passport_expiry else "medium",
                 passport_expiry_date=passport_expiry,
                 document_type="passport",
-                document_number_present=True if passport_expiry else None,
+                document_number_present=None,
                 issue_date=None,
                 expiry_date=passport_expiry,
                 country=None,
+                snippet=(
+                    _source_excerpt_from_text(source_text, "passport expiry date")
+                    or _source_excerpt_from_text(source_text, "passport no")
+                    or _source_excerpt_from_text(source_text, "passport details")
+                    or _source_excerpt_from_text(source_text, "passport")
+                ),
             )
         )
 
@@ -120,13 +201,18 @@ def _build_documents(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -
                 expiry_date=visa_expiry,
                 country="US",
                 status=visa_status or None,
+                snippet=(
+                    _source_excerpt_from_text(source_text, "visa expiry date")
+                    or _source_excerpt_from_text(source_text, "visa status")
+                    or _source_excerpt_from_text(source_text, "visa")
+                ),
             )
         )
 
     return documents
 
 
-def _build_certificates(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -> List[Dict[str, Any]]:
+def _build_certificates(legacy_facts: Mapping[str, Any], evidence_ids: List[str], source_text: str = "") -> List[Dict[str, Any]]:
     certificates: List[Dict[str, Any]] = []
     certs = legacy_facts.get("certifications") or {}
     coc = certs.get("coc") or {}
@@ -145,6 +231,11 @@ def _build_certificates(legacy_facts: Mapping[str, Any], evidence_ids: List[str]
                 expiry_date=coc.get("expiry_date"),
                 grade=coc.get("grade"),
                 status=coc.get("status"),
+                snippet=(
+                    _source_excerpt_from_text(source_text, "coc grade")
+                    or _source_excerpt_from_text(source_text, "coc expiry date")
+                    or _source_excerpt_from_text(source_text, "coc")
+                ),
             )
         )
 
@@ -163,12 +254,13 @@ def _build_certificates(legacy_facts: Mapping[str, Any], evidence_ids: List[str]
                 issue_date=None,
                 expiry_date=None,
                 all_valid=stcw_basic,
+                snippet=_source_excerpt_from_text(source_text, "stcw"),
             )
         )
     return certificates
 
 
-def _build_endorsements(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -> List[Dict[str, Any]]:
+def _build_endorsements(legacy_facts: Mapping[str, Any], evidence_ids: List[str], source_text: str = "") -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     endorsements = legacy_facts.get("certifications", {}).get("endorsements") or {}
     for name, value in endorsements.items():
@@ -186,12 +278,13 @@ def _build_endorsements(legacy_facts: Mapping[str, Any], evidence_ids: List[str]
                 level=value if value in {"basic", "advanced"} else "unknown",
                 issue_date=None,
                 expiry_date=None,
+                    snippet=_source_excerpt_from_text(source_text, name),
+                )
             )
-        )
     return items
 
 
-def _build_contracts(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -> List[Dict[str, Any]]:
+def _build_contracts(legacy_facts: Mapping[str, Any], evidence_ids: List[str], source_text: str = "") -> List[Dict[str, Any]]:
     rows = (legacy_facts.get("experience") or {}).get("service_rows") or []
     contracts: List[Dict[str, Any]] = []
     for index, row in enumerate(rows, start=1):
@@ -217,12 +310,16 @@ def _build_contracts(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -
                 end_date=row.get("end_date"),
                 duration_months=row.get("months_total"),
                 is_current_contract=row.get("is_current_contract"),
+                snippet=row.get("snippet") or _source_excerpt_from_text(
+                    source_text,
+                    row.get("vessel_name") or row.get("company") or row.get("rank_raw") or row.get("rank_normalized") or row.get("vessel_type"),
+                ),
             )
         )
     return contracts
 
 
-def _build_rank_experience(legacy_facts: Mapping[str, Any], evidence_ids: List[str]) -> List[Dict[str, Any]]:
+def _build_rank_experience(legacy_facts: Mapping[str, Any], evidence_ids: List[str], source_text: str = "") -> List[Dict[str, Any]]:
     rows = (legacy_facts.get("experience") or {}).get("rank_duration_rows") or []
     experience: List[Dict[str, Any]] = []
     for row in rows:
@@ -249,6 +346,10 @@ def _build_rank_experience(legacy_facts: Mapping[str, Any], evidence_ids: List[s
                 "rank": row.get("rank_normalized"),
                 "duration_months": row.get("months_total"),
                 "source": "contracts",
+                "snippet": row.get("snippet") or _source_excerpt_from_text(
+                    source_text,
+                    row.get("rank_raw") or row.get("rank_normalized"),
+                ),
             }
         )
     return experience
@@ -317,6 +418,10 @@ def build_candidate_facts_v1(
                 "presence": _presence_for_value((legacy_facts.get("identity") or {}).get("full_name")),
                 "confidence": "low",
                 "evidence_ids": evidence_ids,
+                "snippet": (
+                    (legacy_facts.get("identity") or {}).get("full_name_snippet")
+                    or _source_excerpt_from_text(source_text, (legacy_facts.get("identity") or {}).get("full_name"))
+                ),
             },
             "dob": {
                 "value": (legacy_facts.get("personal") or {}).get("dob"),
@@ -330,18 +435,26 @@ def build_candidate_facts_v1(
                 },
             },
         },
+        "experience": {
+            "vessel_types": (legacy_facts.get("experience") or {}).get("vessel_types") or [],
+            "engine_types": (legacy_facts.get("experience") or {}).get("engine_types") or [],
+            "last_sign_off_date": (legacy_facts.get("experience") or {}).get("last_sign_off_date"),
+            "last_sign_off_months_ago": (legacy_facts.get("experience") or {}).get("last_sign_off_months_ago"),
+            "service_rows": (legacy_facts.get("experience") or {}).get("service_rows") or _build_contracts(legacy_facts, evidence_ids, source_text=source_text),
+            "rank_duration_rows": (legacy_facts.get("experience") or {}).get("rank_duration_rows") or _build_rank_experience(legacy_facts, evidence_ids, source_text=source_text),
+        },
         "rank": {
             "value": (legacy_facts.get("role") or {}).get("applied_rank_normalized"),
             "presence": _presence_for_value((legacy_facts.get("role") or {}).get("applied_rank_normalized")),
             "confidence": "high" if (legacy_facts.get("role") or {}).get("applied_rank_normalized") else "low",
             "evidence_ids": evidence_ids,
         },
-        "documents": _build_documents(legacy_facts, evidence_ids),
-        "certificates": _build_certificates(legacy_facts, evidence_ids),
-        "endorsements": _build_endorsements(legacy_facts, evidence_ids),
+        "documents": _build_documents(legacy_facts, evidence_ids, source_text=source_text),
+        "certificates": _build_certificates(legacy_facts, evidence_ids, source_text=source_text),
+        "endorsements": _build_endorsements(legacy_facts, evidence_ids, source_text=source_text),
         "courses": [],
-        "contracts": _build_contracts(legacy_facts, evidence_ids),
-        "rank_experience": _build_rank_experience(legacy_facts, evidence_ids),
+        "contracts": _build_contracts(legacy_facts, evidence_ids, source_text=source_text),
+        "rank_experience": _build_rank_experience(legacy_facts, evidence_ids, source_text=source_text),
         "engine_experience": [],
         "vessel_experience": [],
         "application": {

@@ -303,6 +303,16 @@ def _strip_phrase(text: str, phrase: str) -> str:
 
 def _cleanup_semantic_residual(text: str) -> str:
     cleaned = " ".join(str(text or "").split())
+    while True:
+        updated = re.sub(r"^(?:and|or|with)\b\s*", "", cleaned, flags=re.IGNORECASE)
+        if updated == cleaned:
+            break
+        cleaned = updated
+    while True:
+        updated = re.sub(r"\s+(?:and|or|with)\b\s*$", "", cleaned, flags=re.IGNORECASE)
+        if updated == cleaned:
+            break
+        cleaned = updated
     return cleaned.strip(" ,.-")
 
 
@@ -527,7 +537,7 @@ def _family_to_canonical_items(
                 source_text=source_text,
                 confidence=confidence,
             )
-        ], [], ["valid coc", "coc required", "certificate of competency required", "certificate of competency"]
+        ], [], ["valid coc", "coc required", "certificate of competency required", "certificate of competency", "coc"]
 
     if family == "coc_grade_match":
         grade = _first_string(parameters.get("grade"), parameters.get("coc_grade"), parameters.get("required_grade"))
@@ -704,7 +714,21 @@ def _family_to_canonical_items(
                     source_text=source_text,
                     confidence=confidence,
                 )
-            ], [], ["valid coc", "coc required", "certificate of competency required", "certificate of competency"]
+            ], [], ["valid coc", "coc required", "certificate of competency required", "certificate of competency", "coc"]
+        if not certificates and (
+            re.search(r"\bmedical\s+(?:valid|current|required|mandatory)\b", prompt_lower)
+            or re.search(r"\bvalid\s+medical\b", prompt_lower)
+            or re.search(r"\bmedical\s+(?:valid|current|required|mandatory)\b", source_lower)
+            or re.search(r"\bvalid\s+medical\b", source_lower)
+        ):
+            return [
+                _make_applied_constraint(
+                    "certificate_requirement",
+                    {"type": "certificate_requirement", "certificates_required": ["cert_medical_care"]},
+                    source_text=source_text,
+                    confidence=confidence,
+                )
+            ], [], ["medical care", "medical certificate", "valid medical", "medical valid"]
         if not certificates:
             return [], [], []
         return [
@@ -1087,7 +1111,7 @@ def _translate_model_payload(
                         )
                     )
                     semantic_fragments.extend(
-                        ["valid us visa", "us visa", "visa required", "valid visa"]
+                        ["valid us visa", "us visa", "visa required", "valid visa", "visa"]
                         + [str(visa_type).lower() for visa_type in accepted_types if isinstance(visa_type, str)]
                     )
 
@@ -1253,10 +1277,11 @@ def build_shadow_llm_query_plan(
     rank: str | None = None,
     prompt_id: str | None = None,
     legacy_plan: Mapping[str, Any] | None = None,
+    force_enabled: bool = False,
 ) -> Mapping[str, Any] | None:
     """Call Gemini in shadow mode and normalize the returned JSON plan."""
 
-    if not is_enabled():
+    if not (is_enabled() or force_enabled):
         return _result(None, {"status": "disabled", "reason": "feature_flag_disabled"})
 
     prompt_text = str(prompt or "").strip()

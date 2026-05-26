@@ -224,6 +224,89 @@ class ShadowLLMProviderTests(unittest.TestCase):
         )
         self.assertEqual(plan["validation"]["status"], "degraded")
 
+    def test_build_shadow_llm_query_plan_keeps_compound_passport_coc_and_availability(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "ready to join with valid passport and COC",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "passport_validity", "parameters": {"validity": "valid"}},
+                {"filter_family": "coc_document_gate", "constraint": {"type": "coc_document_gate", "required": True}},
+                {"filter_family": "availability", "parameters": {"status": "available"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(
+            "ready to join with valid passport and COC",
+            plan_payload,
+        )
+
+        self.assertIsNotNone(result)
+        plan = result["plan"]
+        applied_families = [item["id"] for item in plan["applied_constraints"]]
+        self.assertIn("availability", applied_families)
+        self.assertIn("passport_validity", applied_families)
+        self.assertIn("coc_document_gate", applied_families)
+        self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "passport_validity")["constraint"]["must_be_valid"])
+        self.assertEqual(
+            next(item for item in plan["applied_constraints"] if item["id"] == "availability")["constraint"]["status"],
+            "available",
+        )
+        self.assertEqual(
+            next(item for item in plan["applied_constraints"] if item["id"] == "coc_document_gate")["constraint"]["required"],
+            True,
+        )
+
+    def test_build_shadow_llm_query_plan_keeps_generic_passport_and_visa(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "has valid passport and visa",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "passport_validity", "parameters": {"validity": "valid"}},
+                {"filter_family": "us_visa", "parameters": {"required": True}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("has valid passport and visa", plan_payload)
+
+        self.assertIsNotNone(result)
+        plan = result["plan"]
+        self.assertIn("passport_validity", [item["id"] for item in plan["applied_constraints"]])
+        self.assertIn("us_visa", [item["id"] for item in plan["applied_constraints"]])
+        self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "passport_validity")["constraint"]["must_be_valid"])
+        self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "us_visa")["constraint"]["required"])
+
     def _run_shadow_plan(self, prompt: str, plan_payload: dict, *, rank: str | None = "2nd Engineer"):
         with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
             with mock.patch(
@@ -446,6 +529,35 @@ class ShadowLLMProviderTests(unittest.TestCase):
                     "validation": {"status": "valid", "errors": []},
                 },
                 {"applied": ["coc_document_gate", "coc_grade_match"], "unapplied": [], "semantic": ""},
+            ),
+            (
+                "coc_document_gate:bare_shorthand",
+                "valid passport and COC",
+                {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": "valid passport and COC",
+                        "rank_context": None,
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [
+                        {"filter_family": "passport_validity", "parameters": {"validity": "valid"}},
+                        {"filter_family": "certificate_requirement", "values": []},
+                    ],
+                    "unapplied_constraints": [],
+                    "semantic_query": "valid passport and COC",
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                },
+                {"applied": ["passport_validity", "coc_document_gate"], "unapplied": [], "semantic": ""},
             ),
             (
                 "coc_document_gate:17",
@@ -715,7 +827,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in plan["applied_constraints"]], ["rank_match"])
         self.assertEqual([item["id"] for item in plan["unapplied_constraints"]], ["certificate_requirement"])
         self.assertEqual(plan["unapplied_constraints"][0]["reason"], "validation_failed")
-        self.assertEqual(plan["semantic_query"], "need with")
+        self.assertEqual(plan["semantic_query"], "need")
         self.assertEqual(plan["validation"]["status"], "degraded")
 
     def test_build_shadow_llm_query_plan_preserves_unrelated_certificate_requirement_when_visa_repairs(self):
@@ -761,7 +873,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in plan["unapplied_constraints"]], ["certificate_requirement"])
         self.assertEqual(plan["unapplied_constraints"][0]["source_text"], "yellow fever certificate")
         self.assertEqual(plan["validation"]["status"], "degraded")
-        self.assertEqual(plan["semantic_query"], "need with valid C1/D and")
+        self.assertEqual(plan["semantic_query"], "need with valid C1/D")
 
     def test_build_shadow_llm_query_plan_preserves_unrelated_certificate_requirement_with_broad_source_text(self):
         plan_payload = {

@@ -224,8 +224,17 @@ class OutlookAuthManager:
     def _callback_html(self, result):
         title = "NjordHR Outlook Intake Connected" if result.get("success") else "NjordHR Outlook Intake Failed"
         message = result.get("message") or ("You can return to NjordHR." if result.get("success") else "Authentication failed.")
+        detail = ""
+        if not result.get("success"):
+            detail = (
+                "Return to NjordHR, open Download > Mailbox Intake, and use Connect Mailbox again. "
+                "If this repeats, check that Microsoft Entra allows the redirect URI "
+                f"{OUTLOOK_REDIRECT_URI} and that local secure token storage is available."
+            )
         safe_title = html.escape(title)
         safe_message = html.escape(message)
+        safe_detail = html.escape(detail)
+        detail_html = f"<p>{safe_detail}</p>" if safe_detail else ""
         return f"""<!doctype html>
 <html>
   <head>
@@ -241,6 +250,7 @@ class OutlookAuthManager:
     <div class="card">
       <h1>{safe_title}</h1>
       <p>{safe_message}</p>
+      {detail_html}
     </div>
   </body>
 </html>""".encode("utf-8")

@@ -3,6 +3,7 @@ import types
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def _stub_ai_dependencies():
@@ -35,6 +36,7 @@ def _stub_ai_dependencies():
 _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer
 from csv_manager import CSVManager
+from scraper_engine import _should_run_chrome_headless
 
 
 class WindowsCompatibilityTests(unittest.TestCase):
@@ -65,6 +67,21 @@ class WindowsCompatibilityTests(unittest.TestCase):
 
             self.assertIn(b"\n", content)
             self.assertNotIn(b"\r\n", content)
+
+    def test_seajobs_chrome_runs_headed_by_default_on_windows(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with mock.patch("scraper_engine.sys.platform", "win32"):
+                self.assertFalse(_should_run_chrome_headless())
+
+    def test_seajobs_chrome_stays_headless_by_default_off_windows(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            with mock.patch("scraper_engine.sys.platform", "darwin"):
+                self.assertTrue(_should_run_chrome_headless())
+
+    def test_seajobs_chrome_headless_env_override_wins_on_windows(self):
+        with mock.patch.dict("os.environ", {"NJORDHR_SELENIUM_HEADLESS": "true"}, clear=True):
+            with mock.patch("scraper_engine.sys.platform", "win32"):
+                self.assertTrue(_should_run_chrome_headless())
 
 
 if __name__ == "__main__":

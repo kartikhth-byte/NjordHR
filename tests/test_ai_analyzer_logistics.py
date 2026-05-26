@@ -33,6 +33,7 @@ def _stub_ai_dependencies():
 
 _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer  # noqa: E402
+from candidate_facts.extractors import seajobs  # noqa: E402
 
 
 class AIAnalyzerLogisticsTests(unittest.TestCase):
@@ -219,6 +220,42 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
             ["bulk carrier"],
         )
 
+    def test_build_candidate_facts_extracts_seajobs_candidate_name(self):
+        source_text = (
+            "https://www .seajob.net\n"
+            "Download by Njorships Management India Pvt Ltd\n"
+            "Availability Details\n"
+            "Applied For Rank Electrical Of ficer\n"
+            "Present Rank Electrical Engineer\n"
+            "Personal & Contact Details\n"
+            "Name Ashish Kumar\n"
+            "Email Address aditi.ashish30@gmail.com\n"
+            "Date Of Birth 26-Oct-1983\n"
+        )
+        facts = self.analyzer._build_candidate_facts(
+            "resume-test",
+            "Electrical Officer",
+            [{"metadata": {"raw_text": source_text}}],
+            original_path="/tmp/resume-test.pdf",
+            text_cache={"/tmp/resume-test.pdf": source_text},
+            folder_metadata={},
+        )
+        self.assertEqual(facts["identity"]["full_name"], "Ashish Kumar")
+        self.assertEqual(facts["identity"]["full_name_snippet"], "Name Ashish Kumar")
+
+        payload = seajobs.build_candidate_facts_v1(
+            self.analyzer,
+            "resume-test",
+            "Electrical Officer",
+            [{"metadata": {"raw_text": source_text}}],
+            original_path="/tmp/resume-test.pdf",
+            text_cache={"/tmp/resume-test.pdf": source_text},
+            folder_metadata={},
+        )
+        self.assertEqual(payload["identity"]["candidate_name"]["value"], "Ashish Kumar")
+        self.assertEqual(payload["identity"]["candidate_name"]["snippet"], "Name Ashish Kumar")
+        self.assertIn("vessel_types", payload["experience"])
+
     def test_extract_seajobs_experience_rows_includes_engine_types(self):
         raw_text = (
             "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
@@ -403,6 +440,37 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["canonical_id"], "2nd_officer")
 
+    def test_extract_rank_from_seajobs_row_window_handles_ocr_split_engine_rank(self):
+        row_lines = [
+            "1 2nd",
+            "Engineer",
+            "FLEET MANAGEMENT LTD /",
+            "Oil/Chem Tanker 29256 Electronic Eng",
+            "B&W",
+            "27-Oct-",
+            "2024",
+            "21-Apr-",
+            "2025",
+        ]
+        fact = self.analyzer._extract_rank_from_seajobs_row_window(row_lines)
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["canonical_id"], "2nd_engineer")
+
+    def test_extract_rank_from_seajobs_row_window_rejects_trainee_context(self):
+        row_lines = [
+            "4 Trainee Electrical Officer",
+            "FLEET MANAGEMENT LTD /",
+            "Oil/Chem Tanker 29256 Electronic Eng",
+            "B&W",
+            "27-Oct-",
+            "2024",
+            "21-Apr-",
+            "2025",
+        ]
+        fact = self.analyzer._extract_rank_from_seajobs_row_window(row_lines)
+        self.assertEqual(fact["status"], "MISSING")
+        self.assertIsNone(fact["canonical_id"])
+
     def test_extract_current_rank_months_fact_sums_matching_seajobs_rows(self):
         raw_text = (
             "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
@@ -428,6 +496,46 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["matched_rows"], 2)
         self.assertEqual(fact["months_total"], 4)
+
+    def test_extract_current_rank_months_fact_ignores_trainee_rows(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "4 Trainee Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 27-Oct- 2024 21-Apr- 2025\n"
+            "5 Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 22-Apr- 2025 21-Oct- 2025\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 1)
+        self.assertEqual(fact["months_total"], 6)
+        self.assertEqual(fact["source"], "service_rows")
+
+    def test_extract_current_rank_months_fact_ignores_pre_sea_training_context(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "4 Pre Sea Training Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 27-Oct- 2024 21-Apr- 2025\n"
+            "5 Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 22-Apr- 2025 21-Oct- 2025\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 1)
+        self.assertEqual(fact["months_total"], 6)
+        self.assertEqual(fact["source"], "service_rows")
 
     def test_extract_seajobs_total_experience_rows_skips_placeholder_rank_durations(self):
         raw_text = (
@@ -470,6 +578,65 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["months_total"], 1)
         self.assertEqual(fact["extraction_method"], "seajobs_service_history_rank_duration_sum")
+
+    def test_extract_seajobs_total_experience_rows_and_current_rank_months_from_rank_history(self):
+        raw_text = (
+            "Download by : R Aditya (NJORSHIPS MANAGEMENT INDIA PVT LTD)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Total Experience\n"
+            "Rank Electrical Engineer\n"
+            "Experience 15 Year 1 Month Days\n"
+            "Rank Electrical Officer\n"
+            "Experience Year 6 Month Days\n"
+            "Rank Electrical Officer\n"
+            "Experience Year 12 Month Days\n"
+        )
+        total_fact = self.analyzer._extract_seajobs_total_experience_rows(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(total_fact["status"], "PARSED")
+        self.assertEqual(len(total_fact["rows"]), 2)
+        self.assertEqual(total_fact["rows"][0]["rank_normalized"], "electrical_officer")
+        self.assertEqual(total_fact["rows"][0]["months_total"], 6)
+        self.assertEqual(total_fact["rows"][1]["months_total"], 12)
+
+        months_fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+            experience_rows_fact={
+                "rows": [],
+                "status": "MISSING",
+                "source_label": "seajobs_resume",
+            },
+            rank_duration_rows_fact=total_fact,
+        )
+        self.assertEqual(months_fact["status"], "PARSED")
+        self.assertEqual(months_fact["months_total"], 18)
+        self.assertEqual(months_fact["matched_rows"], 2)
+        self.assertEqual(months_fact["source"], "rank_duration_rows")
+        self.assertEqual(months_fact["extraction_method"], "seajobs_total_experience_rank_duration_sum")
+
+    def test_extract_current_rank_months_fact_ignores_pre_sea_total_experience_rows(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Total Experience\n"
+            "Rank Pre Sea Training Electrical Officer\n"
+            "Experience 04 Year 6 Month 20 Days\n"
+            "Rank Electrical Officer\n"
+            "Experience 01 Year 0 Month 00 Days\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 1)
+        self.assertEqual(fact["months_total"], 12)
+        self.assertEqual(fact["source"], "rank_duration_rows")
 
     def test_extract_contract_gap_fact_flags_gap_over_six_months(self):
         raw_text = (
