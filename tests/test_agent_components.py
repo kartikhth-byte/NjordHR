@@ -135,6 +135,35 @@ class AgentComponentsTests(unittest.TestCase):
         store = SecretStore(service_name="NjordHR.Test", backend=BrokenBackend())
         self.assertFalse(store.available())
 
+    def test_secret_store_chunks_large_values_for_windows_credential_limits(self):
+        class SizeLimitedBackend:
+            def __init__(self):
+                self.rows = {}
+
+            def get_password(self, service, key):
+                return self.rows.get((service, key))
+
+            def set_password(self, service, key, value):
+                if len(value) > 30:
+                    raise RuntimeError("CredWrite bad data")
+                self.rows[(service, key)] = value
+
+            def delete_password(self, service, key):
+                self.rows.pop((service, key), None)
+
+        backend = SizeLimitedBackend()
+        store = SecretStore(service_name="NjordHR.Test", backend=backend)
+        store.CHUNK_SIZE = 8
+        value = "abcdefghijklmnopqrstuvwxyz"
+
+        store.set("cache", value)
+
+        self.assertEqual(store.get("cache"), value)
+        self.assertIsNone(backend.get_password("NjordHR.Test", "cache"))
+        self.assertIsNotNone(backend.get_password("NjordHR.Test", "cache.__chunks__"))
+        store.delete("cache")
+        self.assertIsNone(store.get("cache"))
+
     def test_job_queue_runs_worker(self):
         def worker(job_id, payload, emit):
             emit(job_id, "log", "hello", {})
