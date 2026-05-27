@@ -56,6 +56,39 @@ test("persistRuntimeEnvironment writes clean compatibility keys and ports", () =
   assert.doesNotMatch(content, /^export /m);
 });
 
+test("buildEnvironment exposes packaged bundled converter when present", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-converter-"));
+  const paths = createPaths(tempRoot);
+  const converterDir = path.join(paths.repoRoot, "converter");
+  fs.mkdirSync(converterDir, { recursive: true });
+  const ports = {
+    backendPort: 5050,
+    agentPort: 5051,
+    backendUrl: "http://127.0.0.1:5050",
+    agentUrl: "http://127.0.0.1:5051"
+  };
+
+  const env = buildEnvironment(paths, ports, { packaged: true });
+
+  assert.equal(env.NJORDHR_BUNDLED_CONVERTER_DIR, converterDir);
+});
+
+test("buildEnvironment omits bundled converter env when payload is absent", () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-no-converter-"));
+  const paths = createPaths(tempRoot);
+  const ports = {
+    backendPort: 5050,
+    agentPort: 5051,
+    backendUrl: "http://127.0.0.1:5050",
+    agentUrl: "http://127.0.0.1:5051"
+  };
+
+  const env = buildEnvironment(paths, ports, { packaged: true });
+
+  assert.equal(env.NJORDHR_BUNDLED_CONVERTER_DIR, undefined);
+});
+
+
 test("bootstrapConfigFile creates first-run config.ini from the template with runtime paths", () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-electron-config-"));
   const paths = createPaths(tempRoot);

@@ -10,6 +10,7 @@ const stageRoot = path.join(projectRoot, "build", "electron-stage");
 const stageAppRoot = path.join(stageRoot, "app");
 const stagePythonRoot = path.join(stageRoot, "python");
 const sourceVenvRoot = path.join(projectRoot, ".venv");
+const stageConverterRoot = path.join(stageAppRoot, "converter");
 
 const APP_FILES = [
   "backend_server.py",
@@ -264,8 +265,32 @@ function stageAppPayload() {
   }
 
   copyRecursive(resolveDefaultConfigSource(), path.join(stageAppRoot, "default_config.ini"));
+  stageConverterPayload();
 
   writeDefaultRuntimeEnv();
+}
+
+function stageConverterPayload() {
+  const converterSource = String(
+    process.env.NJORDHR_BUNDLED_CONVERTER_SOURCE || process.env.NJORDHR_CONVERTER_SOURCE || ""
+  ).trim();
+  const requireBundled = String(process.env.NJORDHR_REQUIRE_BUNDLED_CONVERTER || "")
+    .trim()
+    .toLowerCase();
+  const mustBundle = ["1", "true", "yes", "on", "required"].includes(requireBundled);
+
+  if (!converterSource) {
+    if (mustBundle) {
+      throw new Error("NJORDHR_REQUIRE_BUNDLED_CONVERTER=true but NJORDHR_BUNDLED_CONVERTER_SOURCE is not set.");
+    }
+    return;
+  }
+
+  const sourcePath = path.resolve(projectRoot, converterSource);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Bundled converter source not found: ${sourcePath}`);
+  }
+  copyRecursive(sourcePath, stageConverterRoot);
 }
 
 function stagePythonRuntime() {

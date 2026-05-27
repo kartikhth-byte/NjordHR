@@ -424,6 +424,11 @@ function buildEnvironment(paths, ports, options = {}) {
     env.PYTHONHOME = path.dirname(options.python.command);
   }
 
+  const bundledConverterDir = path.join(paths.repoRoot, "converter");
+  if (fs.existsSync(bundledConverterDir)) {
+    env.NJORDHR_BUNDLED_CONVERTER_DIR = bundledConverterDir;
+  }
+
   return env;
 }
 
