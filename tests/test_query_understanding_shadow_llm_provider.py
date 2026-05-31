@@ -36,7 +36,11 @@ _stub_ai_dependencies()
 
 from ai_analyzer import AIResumeAnalyzer  # noqa: E402
 from query_understanding.llm_normalizer import SHADOW_LLM_NORMALIZER_ENV  # noqa: E402
-from query_understanding.shadow_llm_provider import build_shadow_llm_prompt, build_shadow_llm_query_plan  # noqa: E402
+from query_understanding.shadow_llm_provider import (  # noqa: E402
+    _age_bounds_from_text,
+    build_shadow_llm_prompt,
+    build_shadow_llm_query_plan,
+)
 
 
 class _DummyResponse:
@@ -85,6 +89,42 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertIn("query_plan.v1", prompt)
         self.assertIn("unsupported_filter_family", prompt)
         self.assertIn("2nd engineer with valid passport", prompt)
+
+    def test_build_shadow_llm_prompt_includes_age_family_rules(self):
+        prompt = build_shadow_llm_prompt("2nd engineer with valid passport", rank="2nd Engineer")
+        self.assertIn("Age family rules:", prompt)
+        self.assertIn("not below N", prompt)
+        self.assertIn("nlt N", prompt)
+        self.assertIn("mid-30s", prompt)
+        self.assertIn("nlt 30 and nmt 50", prompt)
+
+    def test_age_bounds_from_text_handles_inversion_and_shorthand(self):
+        cases = {
+            "not below 30": (30, None),
+            "no younger than 25": (25, None),
+            "not younger than 25": (25, None),
+            "cannot exceed 50": (None, 50),
+            "can't be older than 50": (None, 50),
+            "nlt 30 and nmt 50": (30, 50),
+            "mid-30s": (33, 36),
+            "in his 40s": (40, 49),
+            "in her 30s": (30, 39),
+            "in their 30s": (30, 39),
+            "40s": (40, 49),
+            "thirties": (30, 39),
+            "in the forties": (40, 49),
+            "candidates in their forties": (40, 49),
+            "around 35 years old": (33, 37),
+            "30 and above": (30, None),
+            "50 and below": (None, 50),
+            "25 yrs and above": (25, None),
+            "min 30": (30, None),
+            "max 45 yo": (None, 45),
+            "fifty plus": (50, None),
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(_age_bounds_from_text(text), expected)
 
     def test_build_shadow_llm_query_plan_posts_to_gemini_and_returns_valid_plan(self):
         plan_payload = {

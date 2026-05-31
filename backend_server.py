@@ -3687,7 +3687,7 @@ def get_rank_folders():
     base_folder = _active_download_root()
     if not os.path.isdir(base_folder):
         return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
-    
+
     try:
         subfolders = _list_assignable_rank_folders(base_folder)
         return jsonify({"success": True, "folders": subfolders})
@@ -3738,7 +3738,6 @@ def get_download_results_summary():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
-
     base_folder = _active_download_root()
     if not os.path.isdir(base_folder):
         return jsonify({"success": False, "message": "Download folder not found."})
@@ -3833,7 +3832,6 @@ def get_rank_folder_files():
         return jsonify({"success": False, "message": "Rank folder is required.", "files": []}), 400
     if not _is_safe_name(rank_folder):
         return jsonify({"success": False, "message": "Invalid rank folder.", "files": []}), 400
-
     base_folder = _active_download_root()
     try:
         folder_path = _resolve_within_base(base_folder, rank_folder)

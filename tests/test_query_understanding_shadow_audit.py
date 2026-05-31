@@ -3,6 +3,7 @@ import types
 import unittest
 import os
 from unittest import mock
+from pathlib import Path
 
 
 def _stub_ai_dependencies():
@@ -37,6 +38,7 @@ from ai_analyzer import AIResumeAnalyzer  # noqa: E402
 
 from query_understanding.llm_normalizer import SHADOW_LLM_NORMALIZER_ENV, is_enabled, normalize_prompt_to_query_plan_v1
 from query_understanding.shadow_audit import build_shadow_audit_entry
+from scripts.query_understanding_shadow_audit import _merge_corpora
 
 
 class ShadowAuditTests(unittest.TestCase):
@@ -135,6 +137,70 @@ class ShadowAuditTests(unittest.TestCase):
         self.assertEqual(entry["shadow_mode"], "enabled")
         self.assertTrue(entry["shadow_wiring"]["llm_plan_requested"])
         self.assertEqual(entry["shadow_wiring"]["llm_plan_source"], "llm")
+
+    def test_merge_corpora_concatenates_family_entries(self):
+        bootstrap = {
+            "status": "bootstrap",
+            "date": "2026-04-08",
+            "purpose": ["bootstrap corpus"],
+            "families": {
+                "age_range": [{"prompt": "between 30 and 50", "expected_primary_family": "age_range"}],
+                "us_visa": [{"prompt": "valid visa", "expected_primary_family": "us_visa"}],
+            },
+        }
+        tail = {
+            "status": "gold",
+            "date": "2026-05-26",
+            "purpose": ["tail corpus"],
+            "families": {
+                "age_range": [{"prompt": "not below 30", "expected_primary_family": "age_range"}],
+            },
+        }
+
+        merged = _merge_corpora([
+            (Path("/tmp/bootstrap.json"), bootstrap),
+            (Path("/tmp/tail.json"), tail),
+        ])
+
+        self.assertEqual(merged["status"], "combined_shadow_audit_corpus")
+        self.assertEqual(merged["prompt_count"], 3)
+        self.assertEqual(merged["family_counts"]["age_range"], 2)
+        self.assertEqual(len(merged["families"]["age_range"]), 2)
+        self.assertEqual(merged["families"]["age_range"][0]["prompt"], "between 30 and 50")
+        self.assertEqual(merged["source_corpora"][0]["path"], "/tmp/bootstrap.json")
+        self.assertIsInstance(merged["purpose"], list)
+        self.assertGreater(len(merged["purpose"]), 0)
+        self.assertEqual(merged["duplicate_prompt_warnings"], [])
+
+    def test_merge_corpora_flags_duplicate_prompt_pairs(self):
+        first = {
+            "status": "bootstrap",
+            "date": "2026-04-08",
+            "purpose": ["bootstrap corpus"],
+            "families": {
+                "age_range": [{"prompt": "between 30 and 50", "expected_primary_family": "age_range"}],
+            },
+        }
+        second = {
+            "status": "tail",
+            "date": "2026-05-26",
+            "purpose": ["tail corpus"],
+            "families": {
+                "age_range": [{"prompt": "between 30 and 50", "expected_primary_family": "age_range"}],
+            },
+        }
+
+        merged = _merge_corpora([
+            (Path("/tmp/first.json"), first),
+            (Path("/tmp/second.json"), second),
+        ])
+
+        self.assertEqual(len(merged["duplicate_prompt_warnings"]), 1)
+        warning = merged["duplicate_prompt_warnings"][0]
+        self.assertEqual(warning["family"], "age_range")
+        self.assertEqual(warning["prompt"], "between 30 and 50")
+        self.assertEqual(warning["first_seen_in"], "/tmp/first.json")
+        self.assertEqual(warning["duplicate_in"], "/tmp/second.json")
 
 
 if __name__ == "__main__":

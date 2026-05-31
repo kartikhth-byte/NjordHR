@@ -72,7 +72,7 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
   fi
 fi
 export NJORDHR_CONFIG_PATH="$CONFIG_PATH"
-"$PYTHON_BIN" - "$CONFIG_PATH" "$HOME/Documents/NjordHR/Downloads" "$PROJECT_DIR/Verified_Resumes" "$PROJECT_DIR/logs" <<'PY'
+"$PYTHON_BIN" - "$CONFIG_PATH" "$HOME/Library/Application Support/NjordHR/Resumes" "$PROJECT_DIR/Verified_Resumes" "$PROJECT_DIR/logs" <<'PY'
 import configparser
 import os
 import sys
@@ -93,6 +93,9 @@ def is_placeholder(raw):
     if not v:
         return True
     if "change_me" in v or "your_" in v or "/absolute/path/" in v:
+        return True
+    legacy_temp12 = os.path.abspath(os.path.join(os.path.expanduser("~"), "temp12"))
+    if os.path.abspath(os.path.expanduser(raw)) == legacy_temp12:
         return True
     return False
 

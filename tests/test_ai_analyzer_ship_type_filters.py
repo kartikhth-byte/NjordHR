@@ -282,7 +282,10 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             folder_metadata={},
         )
         self.assertEqual(facts["facts_version"], AIResumeAnalyzer.FACTS_VERSION)
-        self.assertEqual(facts["identity"], {"full_name": None, "nationality": None})
+        self.assertEqual(
+            facts["identity"],
+            {"full_name": None, "full_name_snippet": "", "nationality": None},
+        )
         self.assertEqual(
             facts["role"],
             {

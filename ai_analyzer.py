@@ -11,6 +11,7 @@ import configparser
 import re
 import io
 import threading
+from dataclasses import dataclass, asdict
 from copy import deepcopy
 from pathlib import Path
 from datetime import UTC, datetime, date, timedelta
@@ -32,6 +33,24 @@ from repositories.supabase_registry_repo import SupabaseFileRegistry
 from runtime_env import normalize_env_value, normalized_url
 from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candidate_facts_contract_v1
 from candidate_facts.review_summary import build_candidate_facts_review_summary
+from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS, SUPPORTED_FAMILY_IDS
+
+
+@dataclass(frozen=True)
+class ValueMatch:
+    family: str
+    value: str
+    raw: str
+    span: tuple[int, int] | None = None
+    disposition: str = "applied"
+    consumes_span: bool = True
+
+
+@dataclass(frozen=True)
+class PromptFamily:
+    family_id: str
+    priority: int
+    consumes_span: bool = True
 
 # --- Optional/Specialized Dependencies ---
 try:
@@ -1226,6 +1245,402 @@ class AIResumeAnalyzer:
             "detail": str(detail or ""),
         }
 
+    def _age_range_patterns(self, age_token, capture_groups=False):
+        token = f"({age_token})" if capture_groups else age_token
+        return [
+            rf'between\s+the\s+ages?\s+of\s+{token}\s+(?:and|to)\s+{token}(?:\s+years?\s+old)?',
+            rf'within\s+the\s+ages?\s+of\s+{token}\s+(?:and|to)\s+{token}(?:\s+years?\s+old)?',
+            rf'within\s+the\s+age\s+of\s+{token}\s+(?:and|to)\s+{token}(?:\s+years?\s+old)?',
+            rf'with\s*in\s+the\s+age\s+of\s+{token}\s+(?:and|to)\s+{token}',
+            rf'between\s+ages?\s+{token}\s+(?:and|to)\s+{token}(?:\s+years?\s+old)?',
+            rf'between\s+{token}\s+(?:and|to)\s+{token}\s+years?\s+old',
+            rf'between\s+{token}\s+(?:and|to)\s+{token}',
+            rf'age\s+between\s+{token}\s+(?:and|to)\s+{token}',
+            rf'age\s+range\s+of\s+{token}\s+(?:and|to)\s+{token}',
+            rf'age\s+range\s+of\s+{token}\s*-\s*{token}',
+            rf'age\s+of\s+{token}\s+(?:and|to)\s+{token}\s+years?\s+old',
+            rf'ages?\s+{token}\s+(?:and|to)\s+{token}',
+            rf'aged?\s+{token}\s*(?:-|to|and)\s*{token}',
+            rf'{token}\s*(?:-|to)\s*{token}\s+years?\s+old',
+        ]
+
+    def _prompt_parsing_registry(self):
+        age_token = r"(?:\d{1,2}|[a-z]+(?:[\s-][a-z]+)?)"
+        return {
+            "age_range": {
+                "age_token": age_token,
+                "range_patterns": self._age_range_patterns(age_token, capture_groups=True),
+                "min_patterns": [
+                    rf'at\s+least\s+({age_token})\s+years?\s+old',
+                    rf'(?<!\bno\s)(?<!\bnot\s)older\s+than\s+({age_token})',
+                    rf'over\s+the\s+age\s+of\s+({age_token})(?:\s+years?)?',
+                    rf'over\s+({age_token})',
+                    rf'above\s+the\s+age\s+of\s+({age_token})',
+                    rf'above\s+({age_token})',
+                    rf'minimum\s+age\s+(?:of\s+)?({age_token})',
+                    rf'minimum\s+age\s+should\s+be\s+({age_token})',
+                ],
+                "max_patterns": [
+                    rf'up\s+to\s+({age_token})\s+years?\s+old',
+                    rf'younger\s+than\s+({age_token})',
+                    rf'below\s+the\s+age\s+of\s+({age_token})',
+                    rf'below\s+age\s+({age_token})',
+                    rf'less\s+than\s+({age_token})\s+years?\s+old',
+                    rf'not\s+more\s+than\s+({age_token})\s+years?\s+old',
+                    rf'(?:(?:no|not)\s+older\s+than)\s+({age_token})',
+                    rf'under\s+({age_token})',
+                    rf'below\s+({age_token})',
+                    rf'maximum\s+age\s+(?:of\s+)?({age_token})',
+                    rf'maximum\s+age\s+should\s+be\s+({age_token})',
+                    rf'({age_token})\s+or\s+younger',
+                ],
+            },
+            "coc_grade_match": {
+                "rank_aliases": sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True),
+                "patterns": [
+                    r"\b{alias}(?:'s)?\s+coc\b",
+                    r"\b{alias}(?:'s)?\s+certificate\s+of\s+competency\b",
+                    r"\bcoc\b(?:\s+grade)?\s+(?:for\s+)?{alias}\b",
+                    r"\bcertificate\s+of\s+competency\b(?:\s+grade)?\s+(?:for\s+)?{alias}\b",
+                ],
+            },
+            "rank_duration_experience": {
+                "duration_pattern": r"(?:minimum\s+|at\s+least\s+)?(\d+)\s*\+?\s*(years?|months?)",
+                "rank_aliases": sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True),
+                "patterns": [
+                    r"\b{duration_pattern}\s+(?:of\s+)?(?:experience\s+)?(?:as\s+)?{alias}\b",
+                    r"\b{duration_pattern}\s+{alias}\s+(?:rank\s+)?experience\b",
+                    r"\b(?:worked|served|sailed)\s+{duration_pattern}\s+(?:as\s+)?{alias}\b",
+                    r"\b{alias}\s+(?:rank\s+)?experience\s+(?:of\s+)?{duration_pattern}\b",
+                ],
+                "current_rank_patterns": [
+                    r"\b{duration_pattern}\s+(?:of\s+)?(?:current\s+)?rank\s+experience\b",
+                    r"\b{duration_pattern}\s+(?:in|of|for)\s+(?:current\s+)?rank\b",
+                    r"\b(?:current\s+)?rank\s+experience\s+(?:of\s+)?{duration_pattern}\b",
+                    r"\b(?:current\s+)?rank\s+months?\s+(?:of\s+)?{duration_pattern}\b",
+                ],
+            },
+            "passport_validity": {
+                "window_patterns": [
+                    r"\bpassport\s+valid(?:ity)?\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
+                    r"\b(?:at\s+least|minimum)\s+(\d+)\s+months?\s+(?:of\s+)?passport\s+valid(?:ity)?\b",
+                    r"\b(\d+)\s+months?\s+(?:of\s+)?passport\s+valid(?:ity)?\b",
+                    r"\bpassport\s+should\s+be\s+valid\s+for\s+(?:at\s+least\s+)?(\d+)\s+months?\b",
+                ],
+                "patterns": [
+                    r"\bvalid\s+passport\b",
+                    r"\bpassport\s+up\s+to\s+date\b",
+                    r"\bpassport\s+required\b",
+                    r"\bpassport\s+mandatory\b",
+                    r"\bmust\s+have\s+valid\s+passport\b",
+                    r"\bmust\s+hold\s+valid\s+passport\b",
+                    r"\bpassport\s+holder\b",
+                    r"\bvalid\s+passport\s+holder\b",
+                ],
+                "fallback_pattern": r"\bpassport\b",
+                "fallback_context": r"\b(?:required|mandatory|must|need|needed|documents?|docs?|valid|current|holder)\b",
+            },
+            "min_sea_service": {
+                "patterns": [
+                    r"\b(?:minimum|at\s+least)?\s*(\d+)\s*\+?\s*(years?|months?)\s*(?:of\s+)?(sea\s+service|sea\s+time|sailing\s+experience)\b",
+                    r"\b(?:minimum|at\s+least)?\s*(\d+)\s*\+?\s*(years?|months?)\s*(?:of\s+)?experience\b",
+                ],
+            },
+            "company_continuity": {
+                "patterns": [
+                    (r"\b(?:same|one)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
+                    (r"\bmore\s+than\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gt"),
+                    (r"\b(?:at\s+least|minimum)\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gte"),
+                    (r"\bserved\s+(?:at\s+least|minimum)\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gte"),
+                    (r"\b(?:same|one)\s+(?:company|employer)\s+(?:for|with|at\s+least|minimum)\s+(\d+)\s+contracts?\b", "gte"),
+                    (r"\bhas\s+worked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
+                    (r"\bhas\s+worked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+(\d+)\s+contracts?\b", "gte"),
+                    (r"\bworked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
+                    (r"\bworked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+(\d+)\s+contracts?\b", "gte"),
+                ],
+            },
+            "recency": {
+                "patterns": [
+                    r"\bsigned\s+off\s+in\s+last\s+(\d+)\s+months?\b",
+                    r"\bsigned\s+off\s+within\s+(\d+)\s+months?\b",
+                    r"\blast\s+sign(?:ed)?\s+off\s+within\s+(\d+)\s+months?\b",
+                    r"\blast\s+sign(?:ed)?\s+off\s+in\s+last\s+(\d+)\s+months?\b",
+                ],
+            },
+            "experience_ship_type": {
+                "experience_cues": [
+                    r"\bexperience\b",
+                    r"\bexperienced\b",
+                    r"\bsailed\b",
+                    r"\bworked\b",
+                    r"\bvessel\b",
+                    r"\bship\b",
+                    r"\bbackground\b",
+                    r"\broute\b",
+                    r"\broutes\b",
+                    r"\bvoyage\b",
+                    r"\bvoyages\b",
+                    r"\bpiracy\b",
+                    r"\bpiracy[-\s]?prone\b",
+                    r"\bhigh[-\s]?risk\b",
+                    r"\bsecurity\b",
+                    r"\btrading\b",
+                    r"\barea\b",
+                    r"\bareas\b",
+                ],
+                "configured_patterns": [
+                    r'\b{alias}\s+experience\b',
+                    r'\bexperience\s+(?:on|in|with)?\s*{alias}\b',
+                    r'\bexperienced\s+(?:on|with)?\s*{alias}\b',
+                    r'\bhas\s+{alias}\s+experience\b',
+                    r'\bwith\s+{alias}\s+experience\b',
+                    r'\bworked\s+(?:on|with)?\s*{alias}\b',
+                    r'\bsailed\s+(?:on|with)?\s*{alias}\b',
+                    r'\b{alias}\s+background\b',
+                    r'\bbackground\s+(?:on|in|with)?\s*{alias}\b',
+                ],
+                "fallback_patterns": [
+                    r'\b{alias}\s+experience\b',
+                    r'\bexperience\s+(?:on|in|with)?\s*{alias}\b',
+                    r'\bexperienced\s+on\s+{alias}\b',
+                    r'\bsailed on\s+{alias}\b',
+                    r'\bworked on\s+{alias}\b',
+                    r'\b{alias}\s+background\b',
+                    r'\bbackground\s+(?:on|in|with)?\s*{alias}\b',
+                ],
+            },
+            "route_oriented_experience": {
+                "route_cues": [
+                    r"\broute\b",
+                    r"\broutes\b",
+                    r"\bvoyage\b",
+                    r"\bvoyages\b",
+                    r"\bpiracy\b",
+                    r"\bpiracy[-\s]?prone\b",
+                    r"\bhigh[-\s]?risk\b",
+                    r"\bsecurity\b",
+                    r"\btrading\b",
+                    r"\barea\b",
+                    r"\bareas\b",
+                ],
+                "fallback_patterns": [
+                    r'\b{alias}\s+routes?\b',
+                    r'\b{alias}\s+voyages?\b',
+                    r'\b{alias}\s+high[-\s]?risk\b',
+                    r'\b{alias}\s+piracy[-\s]?prone\b',
+                    r'\b{alias}\s+security\b',
+                    r'\b{alias}\s+trading\s+areas?\b',
+                    r'\b{alias}\s+area(s)?\b',
+                ],
+            },
+            "stcw_endorsement": {
+                "mappings": [
+                    (
+                        r"\badvanced\s+igf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bigf\s+advanced\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\badvanced\s+training\b.{0,80}\bigf\s+code\b",
+                        "igf_advanced_cop",
+                        "advanced IGF CoP",
+                    ),
+                    (
+                        r"\bbasic\s+igf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bigf\s+basic\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bbasic\s+training\b.{0,80}\bigf\s+code\b",
+                        "igf_basic_cop",
+                        "basic IGF CoP",
+                    ),
+                    (
+                        r"\badvanced\s+oil\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\boil\s+tanker\s+(?:advanced|management)\b|\boil\s+(?:tanker\s+)?dce?\s+management\b|\boil\s+tanker\s+dc\s+management\b",
+                        "tanker_oil_advanced_cop",
+                        "advanced oil tanker CoP",
+                    ),
+                    (
+                        r"\bbasic\s+oil\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\boil\s+tanker\s+(?:basic|support)\b|\boil\s+(?:tanker\s+)?dce?\s+support\b|\boil\s+tanker\s+dc\s+support\b",
+                        "tanker_oil_basic_cop",
+                        "basic oil tanker CoP",
+                    ),
+                    (
+                        r"\badvanced\s+chemical\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\bchemical\s+tanker\s+(?:advanced|management)\b|\bchemical\s+(?:tanker\s+)?dce?\s+management\b|\bchemical\s+tanker\s+dc\s+management\b",
+                        "tanker_chemical_advanced_cop",
+                        "advanced chemical tanker CoP",
+                    ),
+                    (
+                        r"\bbasic\s+chemical\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\bchemical\s+tanker\s+(?:basic|support)\b|\bchemical\s+(?:tanker\s+)?dce?\s+support\b|\bchemical\s+tanker\s+dc\s+support\b",
+                        "tanker_chemical_basic_cop",
+                        "basic chemical tanker CoP",
+                    ),
+                    (
+                        r"\badvanced\s+(?:gas|liquefied\s+gas)\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\b(?:gas|liquefied\s+gas)\s+tanker\s+(?:advanced|management)\b|\bgas\s+(?:tanker\s+)?dce?\s+management\b|\bgas\s+tanker\s+dc\s+management\b",
+                        "tanker_gas_advanced_cop",
+                        "advanced gas tanker CoP",
+                    ),
+                    (
+                        r"\bbasic\s+(?:gas|liquefied\s+gas)\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\b(?:gas|liquefied\s+gas)\s+tanker\s+(?:basic|support)\b|\bgas\s+(?:tanker\s+)?dce?\s+support\b|\bgas\s+tanker\s+dc\s+support\b",
+                        "tanker_gas_basic_cop",
+                        "basic gas tanker CoP",
+                    ),
+                    (r"\becdis\b|\belectronic\s+chart\s+display(?:\s+and\s+information\s+system)?\b", "cert_ecdis", "ECDIS"),
+                    (r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b", "cert_arpa", "ARPA"),
+                    (r"\bbrm\b|\bbtm\b|\bbridge\s+resource\s+management\b|\bbridge\s+team\s+management\b", "cert_brm_btm", "BRM/BTM"),
+                    (r"\berm\b|\bengine(?:\s+room)?\s+resource\s+management\b", "cert_erm", "ERM"),
+                    (r"\bpscrb\b|\bproficiency\s+in\s+survival\s+craft(?:\s+and\s+rescue\s+boats?)?\b|\bsurvival\s+craft\s+and\s+rescue\s+boats?\b", "cert_pscrb", "PSCRB"),
+                    (r"\baff\b|\badvanced?\s+fire\s+fighting\b", "cert_aff", "AFF"),
+                    (r"\bmfa\b|\bmedical\s+first\s+aid\b", "cert_mfa", "MFA"),
+                    (
+                        r"\bmedical\s+(?:valid|current|required|mandatory)\b"
+                        r"|\bvalid\s+medical\b"
+                        r"|\bmedical\s+certificate\b"
+                        r"|\bmedical\s+certificate\s+required\b"
+                        r"|\bmedical\s+fitness\b"
+                        r"|\bfitness\s+certificate\b"
+                        r"|\bfit\s+to\s+sail\b"
+                        r"|\bmedically\s+fit\b",
+                        "cert_medical_care",
+                        "Medical Care",
+                    ),
+                    (r"\bmedical\s+care\b", "cert_medical_care", "Medical Care"),
+                    (r"\bsso\b|\bship\s+security\s+officer\b", "cert_sso", "SSO"),
+                    (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
+                    (r"\bgmdss\b", "gmdss", "GMDSS"),
+                    (r"\boil tanker endorsement\b|\boil tanker dce?\b|\boil tanker dc\b|\boil dc\b", "tanker_oil", "oil tanker endorsement"),
+                    (r"\bchemical tanker endorsement\b|\bchemical tanker dce?\b|\bchemical tanker dc\b|\bchemical dc\b", "tanker_chemical", "chemical tanker endorsement"),
+                    (r"\bgas tanker endorsement\b|\bgas tanker dce?\b|\bgas tanker dc\b|\bgas dc\b", "tanker_gas", "gas tanker endorsement"),
+                ],
+                "specific_to_generic": {
+                    "tanker_oil_basic_cop": "tanker_oil",
+                    "tanker_oil_advanced_cop": "tanker_oil",
+                    "tanker_chemical_basic_cop": "tanker_chemical",
+                    "tanker_chemical_advanced_cop": "tanker_chemical",
+                    "tanker_gas_basic_cop": "tanker_gas",
+                    "tanker_gas_advanced_cop": "tanker_gas",
+                },
+                "ambiguous_patterns": [
+                    (r"\btanker endorsement\b", "tanker endorsement"),
+                    (r"\bigf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b", "IGF CoP"),
+                    (r"\bDP2\b|\bDP3\b|\bDP\b", "DP"),
+                ],
+            },
+            "rank_certificate_expectation": {
+                "deck_common": [
+                    "gmdss",
+                    "cert_arpa",
+                    "cert_pscrb",
+                    "cert_mfa",
+                    "cert_sso",
+                ],
+                "engine_common": [
+                    "cert_erm",
+                    "cert_pscrb",
+                    "cert_mfa",
+                    "cert_aff",
+                ],
+                "rank_map": {
+                    "master": "deck",
+                    "chief_officer": "deck",
+                    "2nd_officer": "deck",
+                    "3rd_officer": "deck",
+                    "chief_engineer": "engine",
+                    "2nd_engineer": "engine",
+                },
+                "intent_patterns": [
+                    r"\b(?:rank\s+)?(?:required|mandatory|standard|expected)\s+(?:course\s+)?cert(?:ificate)?s\b",
+                    r"\brequired\s+cert(?:ificate)?s\s+for\s+(?:the\s+)?rank\b",
+                    r"\bcert(?:ificate)?s\s+for\s+(?:the\s+)?(?:rank|role)\b",
+                    r"\brank\s+cert(?:ificate)?\s+check\b",
+                ],
+                "ambiguous_fragment": "rank certificates",
+            },
+            "coc_requirement": {
+                "patterns": [
+                    r"\bvalid\s+coc\b",
+                    r"\bcoc\s+required\b",
+                    r"\bcoc\s+mandatory\b",
+                    r"\bcoc\s+holder\b",
+                    r"\bvalid\s+certificate\s+of\s+competency\b",
+                    r"\bcertificate\s+of\s+competency\s+required\b",
+                    r"\bvalid\s+certificate\s+of\s+competency\s+required\b",
+                    r"\bmust\s+hold\s+valid\s+coc\b",
+                    r"\bmust\s+hold\s+coc\b",
+                ],
+                "fallback_context_pattern": r"\b(?:valid|required|mandatory|must|need|needed|document|documents|passport|certificate|certificates|docs|current|up\s+to\s+date)\b",
+            },
+            "stcw_basic": {
+                "patterns": [
+                    r"\bvalid\s+stcw\s+basic\b",
+                    r"\bstcw\s+basic\s+required\b",
+                    r"\bbasic\s+stcw\s+required\b",
+                    r"\ball\s+basic\s+stcw\s+required\b",
+                    r"\bmust\s+hold\s+all\s+basic\s+stcw\s+certificates\b",
+                    r"\bvalid\s+stcw\s+basic\s+required\b",
+                    r"\bmust\s+hold\s+valid\s+basic\s+stcw\b",
+                    r"\bbasic\s+certification\b",
+                    r"\bbasic\s+certifications\b",
+                    r"\bbasic\s+certificate\b",
+                    r"\bbasic\s+cert\b",
+                ],
+            },
+            "us_visa": {
+                "window_patterns": [
+                    (
+                        "usa",
+                        [
+                            r"\bus\s+visa\s+is\s+valid\s+(?:at\s+least\s+for\s+|for\s+at\s+least\s+|for\s+minimum\s+|for\s+)?(\d+)\s+months?\b",
+                            r"\bvalid\s+us\s+visa\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
+                            r"\bminimum\s+(\d+)\s+months?\s+(?:of\s+)?(?:validity\s+on\s+)?us\s+visa\b",
+                            r"\bus\s+visa\s+should\s+be\s+valid\s+for\s+(?:at\s+least\s+)?(\d+)\s+months?\b",
+                        ],
+                        "valid US visa",
+                    ),
+                ],
+                "group_patterns": [
+                    (
+                        "usa",
+                        [
+                            r"\bvalid\s+us\s+visa\b",
+                            r"\bcurrent\s+us\s+visa\b",
+                            r"\bhas\s+a\s+valid\s+us\s+visa\b",
+                            r"\bholding\s+valid\s+us\s+visa\b",
+                            r"\bwith\s+valid\s+us\s+visa\b",
+                            r"\bmust\s+have\s+valid\s+us\s+visa\b",
+                            r"\bus\s+visa\s+holder\b",
+                            r"\bus\s+visa\b",
+                            r"\bamerican\s+visa\b",
+                            r"\bus\s+work\s+authorization\b",
+                        ],
+                        "valid US visa",
+                    ),
+                    (
+                        "australia",
+                        [
+                            r"\bvalid\s+australia(?:n)?\s+visa\b",
+                            r"\bcurrent\s+australia(?:n)?\s+visa\b",
+                            r"\bholding\s+valid\s+australia(?:n)?\s+visa\b",
+                            r"\bwith\s+valid\s+australia(?:n)?\s+visa\b",
+                            r"\baustralia(?:n)?\s+visa\s+holder\b",
+                            r"\baustralia(?:n)?\s+visa\b",
+                        ],
+                        "valid Australia visa",
+                    ),
+                    (
+                        "schengen",
+                        [
+                            r"\bvalid\s+schengen\s+visa\b",
+                            r"\bcurrent\s+schengen\s+visa\b",
+                            r"\bholding\s+valid\s+schengen\s+visa\b",
+                            r"\bwith\s+valid\s+schengen\s+visa\b",
+                            r"\bschengen\s+visa\s+holder\b",
+                            r"\bschengen\s+visa\b",
+                        ],
+                        "valid Schengen visa",
+                    ),
+                ],
+                "unsupported_patterns": [
+                    (r"\bvalid\s+uk\s+visa\b", "valid UK visa"),
+                    (r"\bcurrent\s+uk\s+visa\b", "valid UK visa"),
+                    (r"\bhaving\s+valid\s+uk\s+visa\b", "valid UK visa"),
+                    (r"\buk\s+visa\b", "valid UK visa"),
+                    (r"\bvalid\s+united\s+kingdom\s+visa\b", "valid UK visa"),
+                    (r"\bunited\s+kingdom\s+visa\b", "valid UK visa"),
+                ],
+            },
+        }
+
     def _record_perf_timing(self, perf_state, key, elapsed_seconds):
         if not isinstance(perf_state, dict):
             return
@@ -1387,26 +1802,15 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
-        range_patterns = [
-            r'between\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old',
-            r'between\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'between\s+ages?\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'within\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'within\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'with\s*in\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'age\s+between\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'age\s+range\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'age\s+range\s+of\s+(\d{1,2})\s*-\s*(\d{1,2})',
-            r'age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old',
-            r'ages?\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})',
-            r'aged?\s+(\d{1,2})\s*(?:-|to|and)\s*(\d{1,2})',
-            r'(\d{1,2})\s*(?:-|to)\s*(\d{1,2})\s+years?\s+old',
-        ]
-        for pattern in range_patterns:
+        age_registry = self._prompt_parsing_registry()["age_range"]
+
+        for pattern in age_registry["range_patterns"]:
             match = re.search(pattern, prompt)
             if match:
-                lower = int(match.group(1))
-                upper = int(match.group(2))
+                lower = self._age_text_to_int(match.group(1))
+                upper = self._age_text_to_int(match.group(2))
+                if lower is None or upper is None:
+                    continue
                 if lower > upper:
                     lower, upper = upper, lower
                 return {"min_age": lower, "max_age": upper}
@@ -1422,46 +1826,87 @@ class AIResumeAnalyzer:
                     lower, upper = upper, lower
                 return {"min_age": lower, "max_age": upper}
 
-        min_patterns = [
-            r'at\s+least\s+(\d{1,2})\s+years?\s+old',
-            r'older\s+than\s+(\d{1,2})',
-            r'over\s+the\s+age\s+of\s+(\d{1,2})(?:\s+years?)?',
-            r'over\s+(\d{1,2})',
-            r'above\s+the\s+age\s+of\s+(\d{1,2})',
-            r'above\s+(\d{1,2})',
-            r'minimum\s+age\s+(?:of\s+)?(\d{1,2})',
-            r'minimum\s+age\s+should\s+be\s+(\d{1,2})',
-        ]
-        for pattern in min_patterns:
+        bare_between_match = re.search(r"\bbetween\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\b", prompt, flags=re.IGNORECASE)
+        if bare_between_match:
+            lower = self._age_text_to_int(bare_between_match.group(1))
+            upper = self._age_text_to_int(bare_between_match.group(2))
+            if lower is not None and upper is not None:
+                if lower > upper:
+                    lower, upper = upper, lower
+                if 18 <= lower <= 80 and 18 <= upper <= 80:
+                    return {"min_age": lower, "max_age": upper}
+
+        for pattern in age_registry["min_patterns"]:
             match = re.search(pattern, prompt)
             if match:
-                value = int(match.group(1))
+                value = self._age_text_to_int(match.group(1))
+                if value is None:
+                    continue
                 matched_phrase = match.group(0).lower()
                 if any(term in matched_phrase for term in ("older than", "over", "above")):
                     value += 1
                 return {"min_age": value, "max_age": None}
 
-        max_patterns = [
-            r'up\s+to\s+(\d{1,2})\s+years?\s+old',
-            r'younger\s+than\s+(\d{1,2})',
-            r'below\s+the\s+age\s+of\s+(\d{1,2})',
-            r'below\s+age\s+(\d{1,2})',
-            r'less\s+than\s+(\d{1,2})\s+years?\s+old',
-            r'not\s+more\s+than\s+(\d{1,2})\s+years?\s+old',
-            r'under\s+(\d{1,2})',
-            r'below\s+(\d{1,2})',
-            r'maximum\s+age\s+(?:of\s+)?(\d{1,2})',
-            r'maximum\s+age\s+should\s+be\s+(\d{1,2})',
-        ]
-        for pattern in max_patterns:
+        for pattern in age_registry["max_patterns"]:
             match = re.search(pattern, prompt)
             if match:
-                value = int(match.group(1))
+                value = self._age_text_to_int(match.group(1))
+                if value is None:
+                    continue
                 matched_phrase = match.group(0).lower()
                 if any(term in matched_phrase for term in ("younger than", "under", "below", "less than")):
                     value -= 1
                 return {"min_age": None, "max_age": value}
 
+        return None
+
+    def _age_text_to_int(self, token):
+        normalized = re.sub(r"[\s-]+", " ", str(token or "").strip().lower())
+        if not normalized:
+            return None
+        if normalized.isdigit():
+            return int(normalized)
+
+        ones = {
+            "zero": 0,
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+        }
+        tens = {
+            "twenty": 20,
+            "thirty": 30,
+            "forty": 40,
+            "fifty": 50,
+            "sixty": 60,
+            "seventy": 70,
+            "eighty": 80,
+            "ninety": 90,
+        }
+        if normalized in ones:
+            return ones[normalized]
+        if normalized in tens:
+            return tens[normalized]
+
+        parts = normalized.split()
+        if len(parts) == 2 and parts[0] in tens and parts[1] in ones and ones[parts[1]] < 10:
+            return tens[parts[0]] + ones[parts[1]]
         return None
 
     def _extract_rank_constraint(self, user_prompt):
@@ -1470,11 +1915,14 @@ class AIResumeAnalyzer:
             return None
 
         seen = []
+        matched_phrases = []
         for alias, entry in self.RANK_ALIAS_TABLE.items():
-            if re.search(rf"\b{re.escape(alias)}\b", prompt, flags=re.IGNORECASE):
+            match = re.search(rf"\b{re.escape(alias)}\b", prompt, flags=re.IGNORECASE)
+            if match:
                 canonical_id = entry["canonical_id"]
                 if canonical_id not in seen:
                     seen.append(canonical_id)
+                matched_phrases.append(match.group(0).strip())
         if not seen:
             return None
         return {
@@ -1483,26 +1931,18 @@ class AIResumeAnalyzer:
         }
 
     def _extract_coc_requirement_constraint(self, user_prompt):
-        prompt = str(user_prompt or "").lower()
-        patterns = [
-            r"\bvalid\s+coc\b",
-            r"\bcoc\s+required\b",
-            r"\bcoc\s+mandatory\b",
-            r"\bcoc\s+holder\b",
-            r"\bvalid\s+certificate\s+of\s+competency\b",
-            r"\bcertificate\s+of\s+competency\s+required\b",
-            r"\bvalid\s+certificate\s+of\s+competency\s+required\b",
-            r"\bmust\s+hold\s+valid\s+coc\b",
-            r"\bmust\s+hold\s+coc\b",
-        ]
+        prompt = str(user_prompt or "")
+        registry = self._prompt_parsing_registry()["coc_requirement"]
+        patterns = registry["patterns"]
         if any(re.search(pattern, prompt) for pattern in patterns):
             return {
                 "coc_required": True,
                 "coc_valid_required": True,
             }
-        if re.search(r"\bcoc\b", prompt) and re.search(
-            r"\b(?:valid|required|mandatory|must|need|needed|document|documents|passport|certificate|certificates|docs|current|up\s+to\s+date)\b",
+        if re.search(r"\bcoc\b", prompt, flags=re.IGNORECASE) and re.search(
+            registry["fallback_context_pattern"],
             prompt,
+            flags=re.IGNORECASE,
         ):
             return {
                 "coc_required": True,
@@ -1515,16 +1955,11 @@ class AIResumeAnalyzer:
         if not prompt.strip():
             return None
 
-        rank_aliases = sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True)
-        for alias, entry in rank_aliases:
+        registry = self._prompt_parsing_registry()["coc_grade_match"]
+        for alias, entry in registry["rank_aliases"]:
             alias_pattern = re.escape(alias)
-            patterns = [
-                rf"\b{alias_pattern}(?:'s)?\s+coc\b",
-                rf"\b{alias_pattern}(?:'s)?\s+certificate\s+of\s+competency\b",
-                rf"\bcoc\b(?:\s+grade)?\s+(?:for\s+)?{alias_pattern}\b",
-                rf"\bcertificate\s+of\s+competency\b(?:\s+grade)?\s+(?:for\s+)?{alias_pattern}\b",
-            ]
-            for pattern in patterns:
+            for pattern_template in registry["patterns"]:
+                pattern = pattern_template.format(alias=alias_pattern)
                 match = re.search(pattern, prompt, flags=re.IGNORECASE)
                 if match:
                     return {
@@ -1536,16 +1971,8 @@ class AIResumeAnalyzer:
         return None
 
     def _extract_stcw_basic_constraint(self, user_prompt):
-        prompt = str(user_prompt or "").lower()
-        patterns = [
-            r"\bvalid\s+stcw\s+basic\b",
-            r"\bstcw\s+basic\s+required\b",
-            r"\bbasic\s+stcw\s+required\b",
-            r"\ball\s+basic\s+stcw\s+required\b",
-            r"\bmust\s+hold\s+all\s+basic\s+stcw\s+certificates\b",
-            r"\bvalid\s+stcw\s+basic\s+required\b",
-            r"\bmust\s+hold\s+valid\s+basic\s+stcw\b",
-        ]
+        prompt = str(user_prompt or "")
+        patterns = self._prompt_parsing_registry()["stcw_basic"]["patterns"]
         if any(re.search(pattern, prompt) for pattern in patterns):
             return {"required": True}
         return None
@@ -1553,10 +1980,7 @@ class AIResumeAnalyzer:
     def _extract_min_sea_service_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         cleaned_prompt = self._strip_age_constraint_phrases(prompt)
-        patterns = [
-            r"\b(?:minimum|at\s+least)?\s*(\d+)\s*\+?\s*(years?|months?)\s*(?:of\s+)?(sea\s+service|sea\s+time|sailing\s+experience)\b",
-            r"\b(?:minimum|at\s+least)?\s*(\d+)\s*\+?\s*(years?|months?)\s*(?:of\s+)?experience\b",
-        ]
+        patterns = self._prompt_parsing_registry()["min_sea_service"]["patterns"]
         for pattern in patterns:
             match = re.search(pattern, cleaned_prompt, flags=re.IGNORECASE)
             if not match:
@@ -1573,17 +1997,12 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
-        duration_pattern = r"(?:minimum\s+|at\s+least\s+)?(\d+)\s*\+?\s*(years?|months?)"
-        rank_aliases = sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True)
-        for alias, rank_entry in rank_aliases:
+        registry = self._prompt_parsing_registry()["rank_duration_experience"]
+        duration_pattern = registry["duration_pattern"]
+        for alias, rank_entry in registry["rank_aliases"]:
             alias_pattern = re.escape(alias)
-            patterns = [
-                rf"\b{duration_pattern}\s+(?:of\s+)?(?:experience\s+)?(?:as\s+)?{alias_pattern}\b",
-                rf"\b{duration_pattern}\s+{alias_pattern}\s+(?:rank\s+)?experience\b",
-                rf"\b(?:worked|served|sailed)\s+{duration_pattern}\s+(?:as\s+)?{alias_pattern}\b",
-                rf"\b{alias_pattern}\s+(?:rank\s+)?experience\s+(?:of\s+)?{duration_pattern}\b",
-            ]
-            for pattern in patterns:
+            for pattern_template in registry["patterns"]:
+                pattern = pattern_template.format(alias=alias_pattern, duration_pattern=duration_pattern)
                 match = re.search(pattern, prompt, flags=re.IGNORECASE)
                 if not match:
                     continue
@@ -1604,13 +2023,8 @@ class AIResumeAnalyzer:
         if not re.search(r"\b(?:current\s+)?rank\b", prompt, flags=re.IGNORECASE):
             return None
 
-        current_rank_patterns = [
-            rf"\b{duration_pattern}\s+(?:of\s+)?(?:current\s+)?rank\s+experience\b",
-            rf"\b{duration_pattern}\s+(?:in|of|for)\s+(?:current\s+)?rank\b",
-            rf"\b(?:current\s+)?rank\s+experience\s+(?:of\s+)?{duration_pattern}\b",
-            rf"\b(?:current\s+)?rank\s+months?\s+(?:of\s+)?{duration_pattern}\b",
-        ]
-        for pattern in current_rank_patterns:
+        for pattern_template in registry["current_rank_patterns"]:
+            pattern = pattern_template.format(duration_pattern=duration_pattern)
             match = re.search(pattern, prompt, flags=re.IGNORECASE)
             if not match:
                 continue
@@ -2024,17 +2438,7 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
-        patterns = [
-            (r"\b(?:same|one)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
-            (r"\bmore\s+than\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gt"),
-            (r"\b(?:at\s+least|minimum)\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gte"),
-            (r"\bserved\s+(?:at\s+least|minimum)\s+(\d+)\s+contracts?\s+(?:in|with|under|for)\s+(?:one|same)\s+(?:company|employer)\b", "gte"),
-            (r"\b(?:same|one)\s+(?:company|employer)\s+(?:for|with|at\s+least|minimum)\s+(\d+)\s+contracts?\b", "gte"),
-            (r"\bhas\s+worked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
-            (r"\bhas\s+worked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+(\d+)\s+contracts?\b", "gte"),
-            (r"\bworked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+more\s+than\s+(\d+)\s+contracts?\b", "gt"),
-            (r"\bworked\s+(?:for|with|under|in)\s+(?:a|one|same)\s+(?:company|employer)\s+for\s+(\d+)\s+contracts?\b", "gte"),
-        ]
+        patterns = self._prompt_parsing_registry()["company_continuity"]["patterns"]
         for pattern, mode in patterns:
             match = re.search(pattern, prompt, flags=re.IGNORECASE)
             if not match:
@@ -2053,12 +2457,7 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
-        patterns = [
-            r"\bsigned\s+off\s+in\s+last\s+(\d+)\s+months?\b",
-            r"\bsigned\s+off\s+within\s+(\d+)\s+months?\b",
-            r"\blast\s+sign(?:ed)?\s+off\s+within\s+(\d+)\s+months?\b",
-            r"\blast\s+sign(?:ed)?\s+off\s+in\s+last\s+(\d+)\s+months?\b",
-        ]
+        patterns = self._prompt_parsing_registry()["recency"]["patterns"]
         for pattern in patterns:
             match = re.search(pattern, prompt, flags=re.IGNORECASE)
             if match:
@@ -2074,7 +2473,11 @@ class AIResumeAnalyzer:
         prompt = str(user_prompt or "")
         configured_matches = self._extract_configured_ship_types(prompt)
         if configured_matches:
-            return {"required": configured_matches, "display_value": ", ".join(configured_matches), "operator": "contains_any"}
+            return {
+                "required": configured_matches,
+                "display_value": ", ".join(configured_matches),
+                "operator": "contains_any",
+            }
 
         # Configured labels returned nothing; fall back to hardcoded alias table.
         if not self._configured_ship_type_labels():
@@ -2095,7 +2498,11 @@ class AIResumeAnalyzer:
                     break
         if not seen:
             return None
-        return {"required": seen, "display_value": ", ".join(seen), "operator": "contains_any"}
+        return {
+            "required": seen,
+            "display_value": ", ".join(seen),
+            "operator": "contains_any",
+        }
 
     def _extract_availability_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
@@ -2193,88 +2600,15 @@ class AIResumeAnalyzer:
 
     def _extract_endorsement_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
-        mappings = [
-            (
-                r"\badvanced\s+igf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bigf\s+advanced\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\badvanced\s+training\b.{0,80}\bigf\s+code\b",
-                "igf_advanced_cop",
-                "advanced IGF CoP",
-            ),
-            (
-                r"\bbasic\s+igf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bigf\s+basic\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b|\bbasic\s+training\b.{0,80}\bigf\s+code\b",
-                "igf_basic_cop",
-                "basic IGF CoP",
-            ),
-            (
-                r"\badvanced\s+oil\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\boil\s+tanker\s+(?:advanced|management)\b|\boil\s+(?:tanker\s+)?dce?\s+management\b|\boil\s+tanker\s+dc\s+management\b",
-                "tanker_oil_advanced_cop",
-                "advanced oil tanker CoP",
-            ),
-            (
-                r"\bbasic\s+oil\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\boil\s+tanker\s+(?:basic|support)\b|\boil\s+(?:tanker\s+)?dce?\s+support\b|\boil\s+tanker\s+dc\s+support\b",
-                "tanker_oil_basic_cop",
-                "basic oil tanker CoP",
-            ),
-            (
-                r"\badvanced\s+chemical\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\bchemical\s+tanker\s+(?:advanced|management)\b|\bchemical\s+(?:tanker\s+)?dce?\s+management\b|\bchemical\s+tanker\s+dc\s+management\b",
-                "tanker_chemical_advanced_cop",
-                "advanced chemical tanker CoP",
-            ),
-            (
-                r"\bbasic\s+chemical\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\bchemical\s+tanker\s+(?:basic|support)\b|\bchemical\s+(?:tanker\s+)?dce?\s+support\b|\bchemical\s+tanker\s+dc\s+support\b",
-                "tanker_chemical_basic_cop",
-                "basic chemical tanker CoP",
-            ),
-            (
-                r"\badvanced\s+(?:gas|liquefied\s+gas)\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\b(?:gas|liquefied\s+gas)\s+tanker\s+(?:advanced|management)\b|\bgas\s+(?:tanker\s+)?dce?\s+management\b|\bgas\s+tanker\s+dc\s+management\b",
-                "tanker_gas_advanced_cop",
-                "advanced gas tanker CoP",
-            ),
-            (
-                r"\bbasic\s+(?:gas|liquefied\s+gas)\s+tanker\s+(?:cop|certificate(?:\s+of\s+proficiency)?|endorsement)\b|\b(?:gas|liquefied\s+gas)\s+tanker\s+(?:basic|support)\b|\bgas\s+(?:tanker\s+)?dce?\s+support\b|\bgas\s+tanker\s+dc\s+support\b",
-                "tanker_gas_basic_cop",
-                "basic gas tanker CoP",
-            ),
-            (r"\becdis\b|\belectronic\s+chart\s+display(?:\s+and\s+information\s+system)?\b", "cert_ecdis", "ECDIS"),
-            (r"\barpa\b|\bautomatic\s+radar\s+plotting\s+aid\b", "cert_arpa", "ARPA"),
-            (r"\bbrm\b|\bbtm\b|\bbridge\s+resource\s+management\b|\bbridge\s+team\s+management\b", "cert_brm_btm", "BRM/BTM"),
-            (r"\berm\b|\bengine(?:\s+room)?\s+resource\s+management\b", "cert_erm", "ERM"),
-            (r"\bpscrb\b|\bproficiency\s+in\s+survival\s+craft(?:\s+and\s+rescue\s+boats?)?\b|\bsurvival\s+craft\s+and\s+rescue\s+boats?\b", "cert_pscrb", "PSCRB"),
-            (r"\baff\b|\badvanced?\s+fire\s+fighting\b", "cert_aff", "AFF"),
-            (r"\bmfa\b|\bmedical\s+first\s+aid\b", "cert_mfa", "MFA"),
-            (
-                r"\bmedical\s+(?:valid|current|required|mandatory)\b"
-                r"|\bvalid\s+medical\b"
-                r"|\bmedical\s+certificate\b"
-                r"|\bmedical\s+certificate\s+required\b"
-                r"|\bmedical\s+fitness\b"
-                r"|\bfitness\s+certificate\b"
-                r"|\bfit\s+to\s+sail\b"
-                r"|\bmedically\s+fit\b",
-                "cert_medical_care",
-                "Medical Care",
-            ),
-            (r"\bmedical\s+care\b", "cert_medical_care", "Medical Care"),
-            (r"\bsso\b|\bship\s+security\s+officer\b", "cert_sso", "SSO"),
-            (r"\bdpo\b|\bdp operator\b", "dp_operational", "DPO"),
-            (r"\bgmdss\b", "gmdss", "GMDSS"),
-            (r"\boil tanker endorsement\b|\boil tanker dce?\b|\boil tanker dc\b|\boil dc\b", "tanker_oil", "oil tanker endorsement"),
-            (r"\bchemical tanker endorsement\b|\bchemical tanker dce?\b|\bchemical tanker dc\b|\bchemical dc\b", "tanker_chemical", "chemical tanker endorsement"),
-            (r"\bgas tanker endorsement\b|\bgas tanker dce?\b|\bgas tanker dc\b|\bgas dc\b", "tanker_gas", "gas tanker endorsement"),
-        ]
+        registry = self._prompt_parsing_registry()["stcw_endorsement"]
+        mappings = registry["mappings"]
         matches = []
         for pattern, canonical_id, display_value in mappings:
             if re.search(pattern, prompt, flags=re.IGNORECASE):
                 matches.append((canonical_id, display_value))
         if matches:
             ordered = list(dict.fromkeys(matches))
-            specific_to_generic = {
-                "tanker_oil_basic_cop": "tanker_oil",
-                "tanker_oil_advanced_cop": "tanker_oil",
-                "tanker_chemical_basic_cop": "tanker_chemical",
-                "tanker_chemical_advanced_cop": "tanker_chemical",
-                "tanker_gas_basic_cop": "tanker_gas",
-                "tanker_gas_advanced_cop": "tanker_gas",
-            }
+            specific_to_generic = registry.get("specific_to_generic", {})
             specific_ids = {canonical_id for canonical_id, _display in ordered if canonical_id in specific_to_generic}
             generic_ids_to_drop = {specific_to_generic[canonical_id] for canonical_id in specific_ids}
             ordered = [
@@ -2285,38 +2619,27 @@ class AIResumeAnalyzer:
             return {
                 "endorsements_required": [canonical_id for canonical_id, _display in ordered],
                 "display_value": " and ".join(display for _canonical_id, display in ordered),
+                "matched_phrases": [display for _canonical_id, display in ordered],
             }
 
-        if re.search(r"\btanker endorsement\b", prompt, flags=re.IGNORECASE):
-            return {"ambiguous": True, "fragment": "tanker endorsement"}
-        if re.search(r"\bigf\s+(?:cop|certificate(?:\s+of\s+proficiency)?)\b", prompt, flags=re.IGNORECASE):
-            return {"ambiguous": True, "fragment": "IGF CoP"}
-        if re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt):
-            return {"ambiguous": True, "fragment": re.search(r"\bDP2\b|\bDP3\b|\bDP\b", prompt).group(0)}
+        for ambiguous_pattern, fragment in registry.get("ambiguous_patterns", []):
+            ambiguous_match = re.search(ambiguous_pattern, prompt, flags=re.IGNORECASE)
+            if ambiguous_match:
+                return {"ambiguous": True, "fragment": fragment if fragment != "DP" else ambiguous_match.group(0)}
         return None
 
     def _rank_certificate_expectations(self):
-        deck_common = [
-            "gmdss",
-            "cert_arpa",
-            "cert_pscrb",
-            "cert_mfa",
-            "cert_sso",
-        ]
-        engine_common = [
-            "cert_erm",
-            "cert_pscrb",
-            "cert_mfa",
-            "cert_aff",
-        ]
-        return {
-            "master": deck_common + ["cert_medical_care"],
-            "chief_officer": deck_common + ["cert_medical_care"],
-            "2nd_officer": deck_common,
-            "3rd_officer": deck_common,
-            "chief_engineer": engine_common,
-            "2nd_engineer": engine_common,
-        }
+        registry = self._prompt_parsing_registry()["rank_certificate_expectation"]
+        deck_common = list(registry.get("deck_common") or [])
+        engine_common = list(registry.get("engine_common") or [])
+        rank_map = registry.get("rank_map") or {}
+        rank_expectations = {}
+        for rank_id, family in rank_map.items():
+            if family == "deck":
+                rank_expectations[rank_id] = deck_common + ["cert_medical_care"] if rank_id in {"master", "chief_officer"} else deck_common
+            elif family == "engine":
+                rank_expectations[rank_id] = engine_common
+        return rank_expectations
 
     def _extract_rank_certificate_expectation_constraint(self, user_prompt, rank=None):
         prompt = str(user_prompt or "")
@@ -2324,12 +2647,8 @@ class AIResumeAnalyzer:
         if not normalized_prompt:
             return None
 
-        intent_patterns = [
-            r"\b(?:rank\s+)?(?:required|mandatory|standard|expected)\s+(?:course\s+)?cert(?:ificate)?s\b",
-            r"\brequired\s+cert(?:ificate)?s\s+for\s+(?:the\s+)?rank\b",
-            r"\bcert(?:ificate)?s\s+for\s+(?:the\s+)?(?:rank|role)\b",
-            r"\brank\s+cert(?:ificate)?\s+check\b",
-        ]
+        registry = self._prompt_parsing_registry()["rank_certificate_expectation"]
+        intent_patterns = list(registry.get("intent_patterns") or [])
         if not any(re.search(pattern, normalized_prompt, flags=re.IGNORECASE) for pattern in intent_patterns):
             return None
 
@@ -2348,11 +2667,17 @@ class AIResumeAnalyzer:
         expectations = self._rank_certificate_expectations()
         required = expectations.get(rank_id)
         if not rank_id or not required:
-            return {"ambiguous": True, "fragment": "rank certificates"}
+            return {"ambiguous": True, "fragment": registry.get("ambiguous_fragment", "rank certificates")}
 
+        intent_match = re.search(r"\brank\s+certificate(?:s| expectation(?:s)?)\b", prompt, flags=re.IGNORECASE)
+        matched_phrases = []
+        if intent_match:
+            matched_phrases.append(intent_match.group(0))
+        matched_phrases.append(rank_id.replace("_", " "))
         return {
             "endorsements_required": list(required),
             "display_value": f"standard {rank_id.replace('_', ' ')} certificates",
+            "matched_phrases": list(dict.fromkeys(matched_phrases)),
         }
 
     def _extract_job_constraints(self, user_prompt, rank=None):
@@ -2470,6 +2795,11 @@ class AIResumeAnalyzer:
                 certs = constraints["hard_constraints"].setdefault("certifications", {})
                 certs["endorsements_required"] = endorsement_constraint["endorsements_required"]
                 certs["endorsement_display_value"] = endorsement_constraint["display_value"]
+                if endorsement_constraint.get("matched_phrases"):
+                    certs["matched_phrases"] = list(dict.fromkeys([
+                        *certs.get("matched_phrases", []),
+                        *endorsement_constraint["matched_phrases"],
+                    ]))
                 constraints["applied_constraints"].append("stcw_endorsement")
 
         rank_certificate_constraint = self._extract_rank_certificate_expectation_constraint(user_prompt, rank=rank)
@@ -2487,6 +2817,11 @@ class AIResumeAnalyzer:
                     if existing_display
                     else rank_certificate_constraint["display_value"]
                 )
+                if rank_certificate_constraint.get("matched_phrases"):
+                    certs["matched_phrases"] = list(dict.fromkeys([
+                        *certs.get("matched_phrases", []),
+                        *rank_certificate_constraint["matched_phrases"],
+                    ]))
                 constraints["applied_constraints"].append("stcw_endorsement")
 
         if not constraints["applied_constraints"] and not constraints["unapplied_constraints"] and str(user_prompt or "").strip():
@@ -2496,6 +2831,490 @@ class AIResumeAnalyzer:
         constraints["unapplied_constraints"] = list(dict.fromkeys(constraints["unapplied_constraints"]))
         constraints["parsing_notes"] = list(dict.fromkeys(note for note in constraints["parsing_notes"] if note))
         return constraints
+
+    def _prompt_observability_normalize(self, text):
+        return re.sub(r"\s+", " ", str(text or "")).strip()
+
+    def _prompt_observability_first_match(self, prompt, patterns):
+        prompt_text = str(prompt or "")
+        for pattern in patterns:
+            match = re.search(pattern, prompt_text, flags=re.IGNORECASE)
+            if match:
+                return match.group(0).strip()
+        return ""
+
+    def _prompt_observability_age_phrase(self, prompt, constraint):
+        prompt_text = str(prompt or "")
+        age_token = r"(?:\d{1,2}|[a-z]+(?:[\s-][a-z]+)?)"
+        for pattern in self._age_range_patterns(age_token):
+            pattern = rf"\b(?:should\s+be\s+)?{pattern}\b"
+            match = re.search(pattern, prompt_text, flags=re.IGNORECASE)
+            if match:
+                return match.group(0).strip()
+
+        max_patterns = [
+            rf"\bup\s+to\s+{age_token}\s+years?\s+old\b",
+            rf"\byounger\s+than\s+{age_token}\b",
+            rf"\bis\s+below\s+the\s+age\s+of\s+{age_token}\b",
+            rf"\bbelow\s+the\s+age\s+of\s+{age_token}\b",
+            rf"\bbelow\s+age\s+{age_token}\b",
+            rf"\bless\s+than\s+{age_token}\s+years?\s+old\b",
+            rf"\bnot\s+more\s+than\s+{age_token}\s+years?\s+old\b",
+            rf"\b(?:no|not)\s+older\s+than\s+{age_token}\b",
+            rf"\bunder\s+{age_token}\b",
+            rf"\bbelow\s+{age_token}\b",
+            rf"\bmaximum\s+age\s+(?:of\s+)?{age_token}\b",
+            rf"\bmaximum\s+age\s+should\s+be\s+{age_token}\b",
+            rf"\b{age_token}\s+or\s+younger\b",
+        ]
+        for pattern in max_patterns:
+            match = re.search(pattern, prompt_text, flags=re.IGNORECASE)
+            if match:
+                return match.group(0).strip()
+
+        min_patterns = [
+            rf"\bat\s+least\s+{age_token}\s+years?\s+old\b",
+            rf"\bolder\s+than\s+{age_token}\b",
+            rf"\bover\s+the\s+age\s+of\s+{age_token}(?:\s+years?)?\b",
+            rf"\bover\s+{age_token}\b",
+            rf"\babove\s+the\s+age\s+of\s+{age_token}\b",
+            rf"\babove\s+{age_token}\b",
+            rf"\bminimum\s+age\s+(?:of\s+)?{age_token}\b",
+            rf"\bminimum\s+age\s+should\s+be\s+{age_token}\b",
+        ]
+        for pattern in min_patterns:
+            match = re.search(pattern, prompt_text, flags=re.IGNORECASE)
+            if match:
+                return match.group(0).strip()
+
+        return self._age_constraint_reason(constraint or {})
+
+    def _prompt_observability_visa_phrase(self, prompt):
+        patterns = [
+            r"\bhas\s+a\s+valid\s+schengen\s+visa\b",
+            r"\bhas\s+valid\s+schengen\s+visa\b",
+            r"\bvalid\s+schengen\s+visa\b",
+            r"\bhas\s+a\s+valid\s+us\s+visa\b",
+            r"\bhas\s+valid\s+us\s+visa\b",
+            r"\bvalid\s+us\s+visa\b",
+            r"\bus\s+visa\b",
+            r"\bus\s+c1/?d\s+visa\b",
+            r"\bc1/?d\s+visa\b",
+            r"\bc1\s+visa\b",
+            r"\bd\s+visa\b",
+            r"\bb1/?b2\s+visa\b",
+            r"\baustralia\s+entry\s+visa\b",
+            r"\bmcv\s*\(australia\)\b",
+            r"\bschengen\b",
+        ]
+        return self._prompt_observability_first_match(prompt, patterns)
+
+    def _prompt_observability_rank_phrase(self, prompt):
+        prompt_text = str(prompt or "")
+        matches = []
+        rank_aliases = sorted(self.RANK_ALIAS_TABLE.items(), key=lambda item: len(item[0]), reverse=True)
+        for alias, _entry in rank_aliases:
+            alias_pattern = rf"\b{re.escape(alias)}\b"
+            for match in re.finditer(alias_pattern, prompt_text, flags=re.IGNORECASE):
+                matches.append((match.start(), match.group(0).strip()))
+        if not matches:
+            return ""
+        matches.sort(key=lambda item: (item[0], -len(item[1])))
+        return matches[0][1]
+
+    def _prompt_observability_coc_phrase(self, prompt):
+        patterns = [
+            r"\bvalid\s+coc\b",
+            r"\bcoc\s+required\b",
+            r"\bcoc\s+mandatory\b",
+            r"\bcoc\s+holder\b",
+            r"\bvalid\s+certificate\s+of\s+competency\b",
+            r"\bcertificate\s+of\s+competency\s+required\b",
+            r"\bvalid\s+certificate\s+of\s+competency\s+required\b",
+            r"\bmust\s+hold\s+valid\s+coc\b",
+            r"\bmust\s+hold\s+coc\b",
+            r"\bcoc\b",
+        ]
+        return self._prompt_observability_first_match(prompt, patterns)
+
+    def _prompt_observability_stcw_basic_phrase(self, prompt):
+        patterns = [
+            r"\bvalid\s+stcw\s+basic\b",
+            r"\bstcw\s+basic\s+required\b",
+            r"\bbasic\s+stcw\s+required\b",
+            r"\ball\s+basic\s+stcw\s+required\b",
+            r"\bmust\s+hold\s+all\s+basic\s+stcw\s+certificates\b",
+            r"\bvalid\s+stcw\s+basic\s+required\b",
+            r"\bmust\s+hold\s+valid\s+basic\s+stcw\b",
+            r"\bbasic\s+certification\b",
+            r"\bbasic\s+certifications\b",
+            r"\bbasic\s+certificate\b",
+            r"\bbasic\s+cert\b",
+        ]
+        return self._prompt_observability_first_match(prompt, patterns)
+
+    def _observability_phrase_for_constraint(self, constraint_id, hard_constraints, prompt):
+        hard_constraints = hard_constraints or {}
+        certs = hard_constraints.get("certifications") or {}
+
+        if constraint_id == "age_range":
+            return self._prompt_observability_age_phrase(prompt, hard_constraints.get("age_years") or {})
+        if constraint_id == "rank_match":
+            rank_constraint = hard_constraints.get("rank") or {}
+            rank_candidates = list(self.RANK_ALIAS_TABLE.keys())
+            matched_phrases = self._prompt_observability_find_phrases(prompt, rank_candidates)
+            if matched_phrases:
+                return matched_phrases
+            return self._prompt_observability_rank_phrase(prompt)
+        if constraint_id == "us_visa":
+            return self._prompt_observability_visa_phrase(prompt)
+        if constraint_id == "passport_validity":
+            return self._prompt_observability_normalize((hard_constraints.get("passport_validity") or {}).get("display_value"))
+        if constraint_id == "coc_document_gate":
+            return self._prompt_observability_coc_phrase(prompt)
+        if constraint_id == "coc_grade_match":
+            return self._prompt_observability_normalize((hard_constraints.get("coc_grade") or {}).get("display_value"))
+        if constraint_id == "stcw_basic":
+            return self._prompt_observability_stcw_basic_phrase(prompt)
+        if constraint_id == "company_continuity":
+            return self._prompt_observability_normalize((hard_constraints.get("company_continuity") or {}).get("display_value"))
+        if constraint_id == "engine_vessel_experience":
+            return self._prompt_observability_normalize((hard_constraints.get("engine_vessel_experience") or {}).get("display_value"))
+        if constraint_id == "recent_contract_vessel_experience":
+            return self._prompt_observability_normalize((hard_constraints.get("recent_contract_vessel_experience") or {}).get("display_value"))
+        if constraint_id == "engine_experience":
+            return self._prompt_observability_normalize((hard_constraints.get("engine_experience") or {}).get("display_value"))
+        if constraint_id == "rank_duration_experience":
+            return self._prompt_observability_normalize((hard_constraints.get("rank_duration_experience") or {}).get("display_value"))
+        if constraint_id == "experience_ship_type":
+            experience_ship_type = hard_constraints.get("experience_ship_type")
+            if isinstance(experience_ship_type, dict):
+                matched_phrases = self._prompt_observability_find_phrases(
+                    prompt,
+                    list(self._ship_type_aliases().get(experience_ship_type.get("engine_type")) or []) + [experience_ship_type.get("vessel_type")],
+                )
+                if matched_phrases:
+                    return matched_phrases
+                return self._prompt_observability_normalize(experience_ship_type.get("display_value"))
+            normalized_ship_type = self._normalize_ship_type(experience_ship_type)
+            if normalized_ship_type:
+                registry = self._prompt_parsing_registry()["experience_ship_type"]
+                ship_aliases = sorted(
+                    set([normalized_ship_type] + list((self._ship_type_aliases().get(normalized_ship_type) or []))),
+                    key=len,
+                    reverse=True,
+                )
+                for alias in ship_aliases:
+                    escaped_alias = re.escape(self._normalize_ship_type(alias))
+                    if not escaped_alias:
+                        continue
+                    for pattern_template in registry["configured_patterns"] + registry["fallback_patterns"]:
+                        pattern = pattern_template.format(alias=escaped_alias)
+                        match = re.search(pattern, prompt, flags=re.IGNORECASE)
+                        if match:
+                            return self._prompt_observability_normalize(match.group(0))
+            return self._prompt_observability_normalize(experience_ship_type)
+        if constraint_id == "recency":
+            return self._prompt_observability_normalize((hard_constraints.get("recency") or {}).get("display_value"))
+        if constraint_id == "min_sea_service":
+            return self._prompt_observability_normalize((hard_constraints.get("sea_service") or {}).get("display_value"))
+        if constraint_id == "sea_service":
+            return self._prompt_observability_normalize((hard_constraints.get("sea_service") or {}).get("display_value"))
+        if constraint_id == "vessel_type":
+            vessel_type = hard_constraints.get("vessel_type") or {}
+            vessel_candidates = list(vessel_type.get("required") or [])
+            for candidate in list(vessel_candidates):
+                vessel_candidates.extend(self._ship_type_aliases().get(candidate) or [])
+            matched_phrases = self._prompt_observability_find_phrases(prompt, vessel_candidates)
+            if matched_phrases:
+                return matched_phrases
+            return self._prompt_observability_normalize(vessel_type.get("display_value"))
+        if constraint_id == "availability":
+            return self._prompt_observability_normalize((hard_constraints.get("availability") or {}).get("display_value"))
+        if constraint_id == "stcw_endorsement":
+            matched_phrases = certs.get("matched_phrases")
+            if isinstance(matched_phrases, list) and matched_phrases:
+                return [self._prompt_observability_normalize(phrase) for phrase in matched_phrases if str(phrase or "").strip()]
+            return self._prompt_observability_normalize(certs.get("endorsement_display_value"))
+        return ""
+
+    def _prompt_observability_span_overlaps(self, span, occupied_spans):
+        if not span or len(span) != 2:
+            return False
+        start, end = span
+        if start is None or end is None or start >= end:
+            return False
+        for occupied_start, occupied_end in occupied_spans or []:
+            if occupied_start is None or occupied_end is None:
+                continue
+            if start < occupied_end and occupied_start < end:
+                return True
+        return False
+
+    def _prompt_observability_find_span(self, prompt, phrase, occupied_spans=None):
+        prompt_text = str(prompt or "")
+        normalized_phrase = self._prompt_observability_normalize(phrase)
+        if not prompt_text or not normalized_phrase:
+            return None
+
+        escaped_phrase = re.escape(normalized_phrase).replace(r"\ ", r"\s+")
+        if not escaped_phrase:
+            return None
+
+        pattern = rf"(?<!\w){escaped_phrase}(?!\w)"
+        for match in re.finditer(pattern, prompt_text, flags=re.IGNORECASE):
+            span = match.span()
+            if not self._prompt_observability_span_overlaps(span, occupied_spans):
+                return span
+        return None
+
+    def _prompt_observability_find_phrases(self, prompt, candidates, occupied_spans=None):
+        prompt_text = str(prompt or "")
+        if not prompt_text:
+            return []
+
+        matches = []
+        seen_spans = list(occupied_spans or [])
+        for candidate in candidates or []:
+            normalized_candidate = self._prompt_observability_normalize(candidate)
+            if not normalized_candidate:
+                continue
+            span = self._prompt_observability_find_span(prompt_text, normalized_candidate, seen_spans)
+            if span is None:
+                continue
+            seen_spans.append(span)
+            matches.append((span[0], normalized_candidate))
+        matches.sort(key=lambda item: (item[0], len(item[1])), reverse=False)
+        ordered = []
+        seen_text = set()
+        for _start, text in matches:
+            if text in seen_text:
+                continue
+            seen_text.add(text)
+            ordered.append(text)
+        return ordered
+
+    def _blank_span(self, text, span):
+        prompt_text = str(text or "")
+        if not prompt_text or not span or len(span) != 2:
+            return prompt_text
+        start, end = span
+        if start is None or end is None:
+            return prompt_text
+        if start < 0 or end > len(prompt_text) or start >= end:
+            return prompt_text
+        return f"{prompt_text[:start]}{' ' * (end - start)}{prompt_text[end:]}"
+
+    def _parse_prompt_observability(self, user_prompt, job_constraints, has_semantic_intent=None):
+        prompt = self._prompt_observability_normalize(user_prompt)
+        hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
+        applied_constraints = list(dict.fromkeys((job_constraints or {}).get("applied_constraints") or []))
+        unapplied_constraints = list(dict.fromkeys((job_constraints or {}).get("unapplied_constraints") or []))
+        parsing_notes = list(dict.fromkeys(note for note in ((job_constraints or {}).get("parsing_notes") or []) if note))
+
+        ledger = []
+        value_matches = []
+        consumed_phrases = []
+        consumed_spans = []
+
+        family_priority_overrides = {
+            "age_range": 0,
+            "coc_grade_match": 5,
+            "coc_document_gate": 10,
+            "stcw_basic": 15,
+            "us_visa": 20,
+            "passport_validity": 25,
+            "rank_match": 30,
+            "rank_duration_experience": 35,
+            "stcw_endorsement": 40,
+            "rank_certificate_expectation": 45,
+            "certificate_requirement": 50,
+            "company_continuity": 55,
+            "recent_contract_vessel_experience": 60,
+            "engine_vessel_experience": 65,
+            "engine_experience": 70,
+            "experience_ship_type": 75,
+            "recency": 80,
+            "availability": 85,
+            "min_sea_service": 90,
+            "vessel_type": 95,
+        }
+        prompt_families = [
+            PromptFamily(
+                family_id=family_id,
+                priority=family_priority_overrides.get(family_id, 100 + index),
+            )
+            for index, family_id in enumerate(SUPPORTED_FAMILY_IDS)
+        ]
+
+        def _record_match(family_id, disposition, raw_phrase, source_phrase, family_consumes_span):
+            normalized_phrase = self._prompt_observability_normalize(source_phrase)
+            if not normalized_phrase:
+                return
+            span = self._prompt_observability_find_span(prompt, normalized_phrase, consumed_spans)
+            if span is not None and family_consumes_span:
+                consumed_spans.append(span)
+            elif family_consumes_span:
+                consumed_phrases.append(normalized_phrase)
+            value_matches.append(
+                ValueMatch(
+                    family=family_id,
+                    value=normalized_phrase,
+                    raw=self._prompt_observability_normalize(raw_phrase),
+                    span=span,
+                    disposition=disposition,
+                    consumes_span=family_consumes_span,
+                )
+            )
+            return normalized_phrase
+
+        for family in sorted(prompt_families, key=lambda item: item.priority):
+            constraint_id = family.family_id
+            if constraint_id not in applied_constraints:
+                continue
+            phrase = self._observability_phrase_for_constraint(constraint_id, hard_constraints, prompt)
+            if not phrase:
+                continue
+            phrases = phrase if isinstance(phrase, (list, tuple, set)) else [phrase]
+            normalized_phrases = []
+            for raw_phrase in phrases:
+                recorded = _record_match(constraint_id, "applied", raw_phrase, raw_phrase, family.consumes_span)
+                if recorded:
+                    normalized_phrases.append(recorded)
+            if normalized_phrases:
+                ledger.append({
+                    "family": constraint_id,
+                    "disposition": "applied",
+                    "text": " and ".join(normalized_phrases),
+                })
+
+        unsupported_labels = {
+            "min_sea_service": "minimum sea service",
+            "vessel_type": "vessel type",
+            "availability": "availability",
+            "stcw_endorsement": "STCW endorsement",
+            "company_continuity": "same-company contract continuity",
+        }
+        for constraint_id in unapplied_constraints:
+            phrase = self._observability_phrase_for_constraint(constraint_id, hard_constraints, prompt)
+            phrases = phrase if isinstance(phrase, (list, tuple, set)) else [phrase]
+            if not phrases or phrases == [None]:
+                phrases = [unsupported_labels.get(constraint_id, constraint_id)]
+            ledger_disposition = "soft" if constraint_id in UNAPPLIED_FAMILY_IDS else "unsupported"
+            for raw_phrase in phrases:
+                normalized_phrase = self._prompt_observability_normalize(raw_phrase or unsupported_labels.get(constraint_id, constraint_id))
+                if not normalized_phrase:
+                    continue
+                span = self._prompt_observability_find_span(prompt, normalized_phrase, consumed_spans)
+                if span is not None:
+                    consumed_spans.append(span)
+                else:
+                    consumed_phrases.append(normalized_phrase)
+                value_matches.append(
+                    ValueMatch(
+                        family=constraint_id,
+                        value=normalized_phrase,
+                        raw=self._prompt_observability_normalize(raw_phrase or normalized_phrase),
+                        span=span,
+                        disposition=ledger_disposition,
+                        consumes_span=True,
+                    )
+                )
+                ledger.append({
+                    "family": constraint_id,
+                    "disposition": ledger_disposition,
+                    "text": normalized_phrase,
+                })
+
+        for note in parsing_notes:
+            normalized_note = self._prompt_observability_normalize(note)
+            if not normalized_note:
+                continue
+            note_span = self._prompt_observability_find_span(prompt, normalized_note, consumed_spans)
+            if note_span is not None:
+                consumed_spans.append(note_span)
+            else:
+                consumed_phrases.append(normalized_note)
+            ledger.append({
+                "family": "parsing_note",
+                "disposition": "unsupported",
+                "text": normalized_note,
+            })
+
+        for generic_phrase in (
+            "must hold",
+            "must have",
+            "must be",
+            "need to have",
+            "need to be",
+            "required to have",
+            "required to be",
+            "should have",
+            "should be",
+        ):
+            if generic_phrase in prompt.lower():
+                consumed_phrases.append(generic_phrase)
+
+        residual_text = prompt
+        for span in sorted(
+            [span for span in consumed_spans if span and len(span) == 2],
+            key=lambda item: item[0],
+            reverse=True,
+        ):
+            residual_text = self._blank_span(residual_text, span)
+        for match in sorted(
+            [match for match in value_matches if match.span and match.consumes_span],
+            key=lambda item: item.span[0],
+            reverse=True,
+        ):
+            residual_text = self._blank_span(residual_text, match.span)
+        for phrase in sorted(set(consumed_phrases), key=len, reverse=True):
+            residual_text = self._strip_observability_phrase(residual_text, phrase)
+        residual_text = self._prompt_observability_normalize(residual_text)
+        residual_text = re.sub(r"^(?:and|or|with|,|&|/|\s)+", "", residual_text, flags=re.IGNORECASE)
+        residual_text = re.sub(r"(?:and|or|,|&|/|\s)+$", "", residual_text, flags=re.IGNORECASE)
+        residual_text = self._prompt_observability_normalize(residual_text)
+        if residual_text and re.fullmatch(r"(?:and|or|,|&|/|\s)+", residual_text, flags=re.IGNORECASE):
+            residual_text = ""
+        if residual_text:
+            ledger.append({
+                "family": "residual_fragment",
+                "disposition": "soft" if has_semantic_intent else "unsupported",
+                "text": residual_text,
+            })
+
+        clause_accounting = {
+            "applied": sum(1 for item in ledger if item.get("disposition") == "applied"),
+            "soft": sum(1 for item in ledger if item.get("disposition") == "soft"),
+            "unsupported": sum(1 for item in ledger if item.get("disposition") == "unsupported"),
+        }
+
+        return {
+            "residual_text": residual_text,
+            "clause_ledger": ledger,
+            "clause_accounting": clause_accounting,
+            "value_matches": [asdict(match) for match in value_matches],
+        }
+
+    def parse_prompt(self, user_prompt, job_constraints, has_semantic_intent=None):
+        return self._parse_prompt_observability(
+            user_prompt,
+            job_constraints,
+            has_semantic_intent=has_semantic_intent,
+        )
+
+    def _strip_observability_phrase(self, text, phrase):
+        if not phrase:
+            return text
+        stripped_phrase = re.escape(self._prompt_observability_normalize(phrase)).replace(r"\ ", r"\s+")
+        if not stripped_phrase:
+            return text
+        return re.sub(rf"(?i)(?<!\w){stripped_phrase}(?!\w)", " ", text)
+
+    def _build_prompt_observability(self, user_prompt, job_constraints, has_semantic_intent=None):
+        observability = self._parse_prompt_observability(user_prompt, job_constraints, has_semantic_intent=has_semantic_intent)
+        observability.pop("value_matches", None)
+        return observability
 
     def _normalize_ship_type(self, ship_type):
         normalized = str(ship_type or "").strip().lower()
@@ -2739,7 +3558,8 @@ class AIResumeAnalyzer:
         prompt = self._normalize_ship_type(user_prompt)
         if not prompt:
             return None
-        if not any(token in prompt for token in ("experience", "experienced", "sailed", "worked on", "vessel", "ship", "background")):
+        registry = self._prompt_parsing_registry()["experience_ship_type"]
+        if not any(re.search(pattern, prompt, flags=re.IGNORECASE) for pattern in registry["experience_cues"]):
             return None
         configured_matches = self._extract_configured_ship_types(prompt)
         if configured_matches:
@@ -2748,17 +3568,7 @@ class AIResumeAnalyzer:
             for alias in aliases:
                 normalized_alias = self._normalize_ship_type(alias)
                 escaped = re.escape(normalized_alias)
-                patterns = [
-                    rf'\b{escaped}\s+experience\b',
-                    rf'\bexperience\s+(?:on|in|with)?\s*{escaped}\b',
-                    rf'\bexperienced\s+(?:on|with)?\s*{escaped}\b',
-                    rf'\bhas\s+{escaped}\s+experience\b',
-                    rf'\bwith\s+{escaped}\s+experience\b',
-                    rf'\bworked\s+(?:on|with)?\s*{escaped}\b',
-                    rf'\bsailed\s+(?:on|with)?\s*{escaped}\b',
-                    rf'\b{escaped}\s+background\b',
-                    rf'\bbackground\s+(?:on|in|with)?\s*{escaped}\b',
-                ]
+                patterns = [template.format(alias=escaped) for template in registry["configured_patterns"]]
                 if any(re.search(pattern, prompt) for pattern in patterns):
                     return canonical
         # Configured labels returned nothing; fall back to hardcoded alias table.
@@ -2769,15 +3579,7 @@ class AIResumeAnalyzer:
             for alias in aliases:
                 normalized_alias = self._normalize_ship_type(alias)
                 escaped = re.escape(normalized_alias)
-                patterns = [
-                    rf'\b{escaped}\s+experience\b',
-                    rf'\bexperience\s+(?:on|in|with)?\s*{escaped}\b',
-                    rf'\bexperienced\s+on\s+{escaped}\b',
-                    rf'\bsailed on\s+{escaped}\b',
-                    rf'\bworked on\s+{escaped}\b',
-                    rf'\b{escaped}\s+background\b',
-                    rf'\bbackground\s+(?:on|in|with)?\s*{escaped}\b',
-                ]
+                patterns = [template.format(alias=escaped) for template in registry["fallback_patterns"]]
                 if any(re.search(pattern, prompt) for pattern in patterns):
                     return canonical
         return None
@@ -2885,19 +3687,9 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
-        window_patterns = [
-            (
-                "usa",
-                [
-                    r"\bus\s+visa\s+is\s+valid\s+(?:at\s+least\s+for\s+|for\s+at\s+least\s+|for\s+minimum\s+|for\s+)?(\d+)\s+months?\b",
-                    r"\bvalid\s+us\s+visa\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
-                    r"\bminimum\s+(\d+)\s+months?\s+(?:of\s+)?(?:validity\s+on\s+)?us\s+visa\b",
-                    r"\bus\s+visa\s+should\s+be\s+valid\s+for\s+(?:at\s+least\s+)?(\d+)\s+months?\b",
-                ],
-                "valid US visa",
-            ),
-        ]
-        for group, patterns, base_label in window_patterns:
+        visa_registry = self._prompt_parsing_registry()["us_visa"]
+
+        for group, patterns, base_label in visa_registry["window_patterns"]:
             for pattern in patterns:
                 match = re.search(pattern, prompt)
                 if not match:
@@ -2918,49 +3710,7 @@ class AIResumeAnalyzer:
                     "display_value": match.group(0).strip(),
                 }
 
-        group_patterns = [
-            (
-                "usa",
-                [
-                    r"\bvalid\s+us\s+visa\b",
-                    r"\bcurrent\s+us\s+visa\b",
-                    r"\bhas\s+a\s+valid\s+us\s+visa\b",
-                    r"\bholding\s+valid\s+us\s+visa\b",
-                    r"\bwith\s+valid\s+us\s+visa\b",
-                    r"\bmust\s+have\s+valid\s+us\s+visa\b",
-                    r"\bus\s+visa\s+holder\b",
-                    r"\bus\s+visa\b",
-                    r"\bamerican\s+visa\b",
-                    r"\bus\s+work\s+authorization\b",
-                ],
-                "valid US visa",
-            ),
-            (
-                "australia",
-                [
-                    r"\bvalid\s+australia(?:n)?\s+visa\b",
-                    r"\bcurrent\s+australia(?:n)?\s+visa\b",
-                    r"\bholding\s+valid\s+australia(?:n)?\s+visa\b",
-                    r"\bwith\s+valid\s+australia(?:n)?\s+visa\b",
-                    r"\baustralia(?:n)?\s+visa\s+holder\b",
-                    r"\baustralia(?:n)?\s+visa\b",
-                ],
-                "valid Australia visa",
-            ),
-            (
-                "schengen",
-                [
-                    r"\bvalid\s+schengen\s+visa\b",
-                    r"\bcurrent\s+schengen\s+visa\b",
-                    r"\bholding\s+valid\s+schengen\s+visa\b",
-                    r"\bwith\s+valid\s+schengen\s+visa\b",
-                    r"\bschengen\s+visa\s+holder\b",
-                    r"\bschengen\s+visa\b",
-                ],
-                "valid Schengen visa",
-            ),
-        ]
-        for group, patterns, label in group_patterns:
+        for group, patterns, label in visa_registry["group_patterns"]:
             if any(re.search(pattern, prompt) for pattern in patterns):
                 accepted = [
                     visa_def["canonical"]
@@ -2985,29 +3735,7 @@ class AIResumeAnalyzer:
                 "requested_label": specific["canonical"],
             }
 
-        if re.search(r"\bvisa\b", prompt) and re.search(
-            r"\b(?:required|mandatory|must|need|needed|valid|current|holder|passport|documents?|docs?|travel|authorization)\b",
-            prompt,
-        ):
-            accepted = [visa_def["canonical"] for visa_def in self._visa_type_definitions()]
-            return {
-                "required": True,
-                "must_be_valid": True,
-                "accepted_types": accepted,
-                "visa_group": "generic",
-                "requested_label": "valid visa",
-                "display_value": "valid visa",
-            }
-
-        unsupported_patterns = [
-            (r"\bvalid\s+uk\s+visa\b", "valid UK visa"),
-            (r"\bcurrent\s+uk\s+visa\b", "valid UK visa"),
-            (r"\bhaving\s+valid\s+uk\s+visa\b", "valid UK visa"),
-            (r"\buk\s+visa\b", "valid UK visa"),
-            (r"\bvalid\s+united\s+kingdom\s+visa\b", "valid UK visa"),
-            (r"\bunited\s+kingdom\s+visa\b", "valid UK visa"),
-        ]
-        for pattern, label in unsupported_patterns:
+        for pattern, label in visa_registry["unsupported_patterns"]:
             if re.search(pattern, prompt):
                 return {
                     "required": True,
@@ -3024,12 +3752,9 @@ class AIResumeAnalyzer:
         if not prompt:
             return None
 
-        window_patterns = [
-            r"\bpassport\s+valid(?:ity)?\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
-            r"\b(?:at\s+least|minimum)\s+(\d+)\s+months?\s+(?:of\s+)?passport\s+valid(?:ity)?\b",
-            r"\b(\d+)\s+months?\s+(?:of\s+)?passport\s+valid(?:ity)?\b",
-            r"\bpassport\s+should\s+be\s+valid\s+for\s+(?:at\s+least\s+)?(\d+)\s+months?\b",
-        ]
+        registry = self._prompt_parsing_registry()["passport_validity"]
+
+        window_patterns = registry["window_patterns"]
         for pattern in window_patterns:
             match = re.search(pattern, prompt)
             if match:
@@ -3042,16 +3767,7 @@ class AIResumeAnalyzer:
                     "display_value": match.group(0).strip(),
                 }
 
-        patterns = [
-            r"\bvalid\s+passport\b",
-            r"\bpassport\s+up\s+to\s+date\b",
-            r"\bpassport\s+required\b",
-            r"\bpassport\s+mandatory\b",
-            r"\bmust\s+have\s+valid\s+passport\b",
-            r"\bmust\s+hold\s+valid\s+passport\b",
-            r"\bpassport\s+holder\b",
-            r"\bvalid\s+passport\s+holder\b",
-        ]
+        patterns = registry["patterns"]
         for pattern in patterns:
             match = re.search(pattern, prompt)
             if match:
@@ -3061,10 +3777,7 @@ class AIResumeAnalyzer:
                     "requested_label": "valid passport",
                     "display_value": match.group(0).strip(),
                 }
-        if re.search(r"\bpassport\b", prompt) and re.search(
-            r"\b(?:required|mandatory|must|need|needed|documents?|docs?|valid|current|holder)\b",
-            prompt,
-        ):
+        if re.search(registry["fallback_pattern"], prompt) and re.search(registry["fallback_context"], prompt):
             return {
                 "required": True,
                 "must_be_valid": True,
@@ -3191,7 +3904,8 @@ class AIResumeAnalyzer:
         return len(meaningful) == 0
 
     def _has_semantic_intent(self, user_prompt, job_constraints):
-        prompt = str(user_prompt or "").strip().lower()
+        residual_text = str((job_constraints or {}).get("residual_text") or "").strip().lower()
+        prompt = residual_text or str(user_prompt or "").strip().lower()
         if not prompt:
             return False
 
@@ -3247,6 +3961,69 @@ class AIResumeAnalyzer:
         residual = self._strip_visa_constraint_phrases(residual)
         residual = re.sub(r"\s+", " ", residual).strip(" ,.-")
         return bool(residual)
+
+    def _is_recruiter_like_semantic_fallback_prompt(self, user_prompt, job_constraints):
+        prompt = str(user_prompt or "").strip().lower()
+        if not prompt:
+            return False
+
+        # If the prompt already has supported actionable constraints, keep the
+        # existing hard-filter-first path instead of widening semantic fallback.
+        if bool((job_constraints or {}).get("applied_constraints")):
+            return False
+
+        intent_cues = [
+            r"\bexperience\b",
+            r"\bexperiencee\b",
+            r"\bexperienced\b",
+            r"\bbackground\b",
+            r"\bexposure\b",
+            r"\bworked\b",
+            r"\bworking\b",
+            r"\bsailed\b",
+            r"\bsailing\b",
+            r"\bserved\b",
+            r"\bserving\b",
+            r"\bneed\b",
+            r"\bneeds\b",
+            r"\blooking\b",
+            r"\bseek(?:ing)?\b",
+            r"\brequire(?:s|d)?\b",
+            r"\bmust\b",
+            r"\bshould\b",
+            r"\bhas\b",
+            r"\bhave\b",
+        ]
+        registry = self._prompt_parsing_registry()
+        route_cues = list((registry.get("route_oriented_experience") or {}).get("route_cues") or [])
+        domain_cues = route_cues + [
+            r"\bship\b",
+            r"\bships\b",
+            r"\bvessel\b",
+            r"\bvessels\b",
+            r"\bfleet\b",
+            r"\bcompany\b",
+            r"\bemployer\b",
+            r"\bcontract\b",
+            r"\bcontracts\b",
+            r"\btanker\b",
+            r"\bcontainer\b",
+            r"\bbulk\b",
+            r"\boffshore\b",
+            r"\blng\b",
+            r"\blpg\b",
+            r"\bpassport\b",
+            r"\bvisa\b",
+            r"\bcoc\b",
+            r"\bstcw\b",
+            r"\bmedical\b",
+            r"\brank\b",
+            r"\bmonths?\b",
+            r"\byears?\b",
+        ]
+        has_intent = any(re.search(pattern, prompt, flags=re.IGNORECASE) for pattern in intent_cues)
+        has_domain = any(re.search(pattern, prompt, flags=re.IGNORECASE) for pattern in domain_cues)
+        return has_intent and has_domain
 
     def _iter_pdf_files(self, folder_path):
         folder = Path(folder_path)
@@ -8490,18 +9267,7 @@ class AIResumeAnalyzer:
         protected_prompt = prompt_text
         protected_lower = prompt_lower
 
-        age_range_patterns = [
-            r'between\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
-            r'between\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
-            r'within\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
-            r'within\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
-            r'with\s*in\s+the\s+age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
-            r'age\s+range\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
-            r'age\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
-            r'ages?\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
-            r'aged?\s+\d{1,2}\s*(?:-|to|and)\s*\d{1,2}',
-        ]
-        for pattern in age_range_patterns:
+        for pattern in self._age_range_patterns(r"\d{1,2}"):
             protected_prompt = re.sub(pattern, lambda m: m.group(0).replace(" and ", " __RANGE_AND__ "), protected_prompt, flags=re.IGNORECASE)
             protected_lower = protected_prompt.lower()
         
@@ -8854,7 +9620,18 @@ Examples of GOOD responses:
                 job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = str(experienced_ship_type).strip()
                 if "experience_ship_type" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("experience_ship_type")
+            prompt_observability_probe = self._build_prompt_observability(
+                user_prompt,
+                job_constraints,
+                has_semantic_intent=False,
+            )
+            job_constraints["residual_text"] = prompt_observability_probe.get("residual_text", "")
             has_semantic_intent = self._has_semantic_intent(user_prompt, job_constraints)
+            recruiter_like_semantic_fallback = self._is_recruiter_like_semantic_fallback_prompt(
+                user_prompt,
+                job_constraints,
+            )
+            allow_semantic_fallback = has_semantic_intent or recruiter_like_semantic_fallback
             has_actionable_constraints = bool(
                 job_constraints.get("applied_constraints")
                 or str(applied_ship_type or "").strip()
@@ -8865,9 +9642,22 @@ Examples of GOOD responses:
                 job_constraints=job_constraints,
                 has_semantic_intent=has_semantic_intent,
             )
+            prompt_observability = self._build_prompt_observability(
+                user_prompt,
+                job_constraints,
+                has_semantic_intent=has_semantic_intent,
+            )
+            job_constraints["clause_ledger"] = prompt_observability.get("clause_ledger", [])
+            job_constraints["clause_accounting"] = prompt_observability.get("clause_accounting", {})
             folder_metadata = self._rank_manifest_metadata(target_folder)
+            search_warning = ""
+            if not has_actionable_constraints and allow_semantic_fallback:
+                search_warning = (
+                    "No supported hard constraints were found. Running semantic search instead. "
+                    "Results may be broad or approximate."
+                )
 
-            if not has_actionable_constraints and not has_semantic_intent:
+            if not has_actionable_constraints and not allow_semantic_fallback:
                 graceful_message = (
                     "Search could not run because the prompt did not contain supported hard constraints or recognizable semantic intent."
                 )
@@ -8894,11 +9684,16 @@ Examples of GOOD responses:
                     "applied_constraints": job_constraints.get("applied_constraints", []),
                     "unapplied_constraints": job_constraints.get("unapplied_constraints", []),
                     "parsing_notes": job_constraints.get("parsing_notes", []),
+                    "residual_text": job_constraints.get("residual_text", ""),
+                    "clause_ledger": job_constraints.get("clause_ledger", []),
+                    "clause_accounting": job_constraints.get("clause_accounting", {}),
+                    "search_warning": "",
                 }
                 return
             
             # Parse query to detect compound logic
-            is_compound, operator, sub_queries = self._parse_compound_query(user_prompt)
+            compound_source = prompt_observability.get("residual_text") or user_prompt
+            is_compound, operator, sub_queries = self._parse_compound_query(compound_source)
             
             if has_actionable_constraints:
                 status_message = "Supported hard constraints detected. Evaluating all resumes in selected rank folder..."
@@ -8948,6 +9743,8 @@ Examples of GOOD responses:
                             if resume_id not in candidates:
                                 candidates[resume_id] = []
                             candidates[resume_id].append(match)
+                if search_warning:
+                    yield {"type": "warning", "message": search_warning}
             
             total_candidates = len(candidates)
             yield {"type": "progress", "current": 0, "total": total_candidates, 
@@ -9163,7 +9960,20 @@ Examples of GOOD responses:
                         f"This candidate already passed the deterministic age gate."
                     )
 
-                if structured_only_prompt and not has_semantic_intent:
+                external_actionable_constraints = bool(
+                    str(applied_ship_type or "").strip()
+                    or str(experienced_ship_type or "").strip()
+                )
+                has_unconsumed_text = bool(str(job_constraints.get("residual_text") or "").strip())
+                should_skip_llm = (
+                    not has_semantic_intent
+                    and (
+                        (structured_only_prompt and not has_unconsumed_text)
+                        or (external_actionable_constraints and not has_unconsumed_text)
+                    )
+                )
+
+                if should_skip_llm:
                     evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
                     match_data = {
                         "filename": filename,
@@ -9260,6 +10070,10 @@ Examples of GOOD responses:
                    "applied_constraints": job_constraints.get("applied_constraints", []),
                    "unapplied_constraints": job_constraints.get("unapplied_constraints", []),
                    "parsing_notes": job_constraints.get("parsing_notes", []),
+                   "residual_text": job_constraints.get("residual_text", ""),
+                   "clause_ledger": job_constraints.get("clause_ledger", []),
+                   "clause_accounting": job_constraints.get("clause_accounting", {}),
+                   "search_warning": search_warning,
                    "hard_filter_audit": hard_filter_audit,
                    "hard_filter_summary": hard_filter_summary,
                    "partial_evaluation": partial_evaluation,
@@ -9295,6 +10109,10 @@ Examples of GOOD responses:
         unknown_matches = []
         hard_filter_summary = {}
         message = ""
+        residual_text = ""
+        clause_ledger = []
+        clause_accounting = {}
+        search_warning = ""
         
         for event in self.run_analysis_stream(
             rank,
@@ -9312,6 +10130,10 @@ Examples of GOOD responses:
             elif event['type'] == 'complete':
                 message = event['message']
                 hard_filter_summary = event.get("hard_filter_summary", {})
+                residual_text = event.get("residual_text", "")
+                clause_ledger = event.get("clause_ledger", [])
+                clause_accounting = event.get("clause_accounting", {})
+                search_warning = event.get("search_warning", "")
             elif event['type'] == 'graceful_failure':
                 return {
                     "success": False,
@@ -9324,10 +10146,23 @@ Examples of GOOD responses:
                     "applied_constraints": event.get("applied_constraints", []),
                     "unapplied_constraints": event.get("unapplied_constraints", []),
                     "parsing_notes": event.get("parsing_notes", []),
+                    "residual_text": event.get("residual_text", ""),
+                    "clause_ledger": event.get("clause_ledger", []),
+                    "clause_accounting": event.get("clause_accounting", {}),
+                    "search_warning": event.get("search_warning", ""),
                 }
             elif event['type'] == 'error':
-                return {"success": False, "verified_matches": [], "uncertain_matches": [], "unknown_matches": [],
-                        "message": event['message']}
+                return {
+                    "success": False,
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "message": event['message'],
+                    "residual_text": "",
+                    "clause_ledger": [],
+                    "clause_accounting": {},
+                    "search_warning": "",
+                }
         
         return {
             "success": True, 
@@ -9335,7 +10170,11 @@ Examples of GOOD responses:
             "uncertain_matches": uncertain_matches,
             "unknown_matches": unknown_matches,
             "hard_filter_summary": hard_filter_summary,
-            "message": message
+            "message": message,
+            "residual_text": residual_text,
+            "clause_ledger": clause_ledger,
+            "clause_accounting": clause_accounting,
+            "search_warning": search_warning,
         }
     
     def store_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence, 

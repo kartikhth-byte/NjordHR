@@ -172,6 +172,8 @@ def compare_query_plans(
             or (llm_record and isinstance(llm_record.normalized_payload, Mapping) and llm_record.normalized_payload.get("reason") == "unsupported_filter_family")
         ):
             outcome = "unsupported_family_delta"
+        elif legacy_record is None and llm_record and llm_record.status == "applied":
+            outcome = "legacy_missed"
         else:
             outcome = "regression"
 

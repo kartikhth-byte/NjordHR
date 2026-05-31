@@ -450,7 +450,7 @@ PROJECT_DIR="$APP_RES_DIR/app"
 APP_SUPPORT_DIR="${HOME}/Library/Application Support/NjordHR"
 RUNTIME_DIR="${APP_SUPPORT_DIR}/runtime"
 CONFIG_PATH="${APP_SUPPORT_DIR}/config.ini"
-DEFAULT_DOWNLOAD_DIR="${HOME}/Documents/NjordHR/Downloads"
+DEFAULT_DOWNLOAD_DIR="${APP_SUPPORT_DIR}/Resumes"
 DEFAULT_VERIFIED_DIR="${APP_SUPPORT_DIR}/Verified_Resumes"
 DEFAULT_LOG_DIR="${APP_SUPPORT_DIR}/logs"
 
@@ -554,6 +554,9 @@ def _is_bundle_or_relative_path(raw):
     if not os.path.isabs(expanded):
         return True
     abs_path = os.path.abspath(expanded)
+    legacy_temp12 = os.path.abspath(os.path.join(os.path.expanduser("~"), "temp12"))
+    if abs_path == legacy_temp12:
+        return True
     if abs_path.startswith(project_dir):
         return True
     if "/Applications/NjordHR.app/" in abs_path:

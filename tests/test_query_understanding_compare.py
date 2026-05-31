@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone
+from unittest import mock
 
 from query_understanding.normalizer_compare import compare_query_plans
 
@@ -130,10 +131,10 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
             status="valid",
         )
 
-        with unittest.mock.patch(
+        with mock.patch(
             "query_understanding.normalizer_compare.normalize_query_plan_v1",
             side_effect=[legacy_normalized, llm_normalized],
-        ), unittest.mock.patch(
+        ), mock.patch(
             "query_understanding.normalizer_compare.canonical_comparison_records",
             side_effect=[[legacy_record, rank_legacy], [llm_record, rank_llm]],
         ):
@@ -166,6 +167,78 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
         ]
         results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-3")
         self.assertEqual(results[0].comparison_outcome, "schema_error")
+
+    def test_compare_query_plans_classifies_legacy_missed_as_legacy_missed(self):
+        legacy_plan = _base_plan()
+        llm_plan = _base_plan()
+
+        legacy_normalized = _base_plan()
+        llm_normalized = _base_plan()
+        llm_normalized["applied_constraints"] = [
+            {
+                "id": "stcw_basic",
+                "mode": "required",
+                "constraint": {"type": "stcw_basic", "required": True},
+                "source_text": "valid STCW basic safety",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "stcw_basic",
+                    "legacy_applied_constraint_id": None,
+                },
+            },
+            {
+                "id": "rank_match",
+                "mode": "required",
+                "constraint": {"type": "rank_match", "rank": "2nd_engineer"},
+                "source_text": "2nd engineer",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "rank",
+                    "legacy_applied_constraint_id": "rank_match",
+                },
+            },
+        ]
+
+        legacy_rank = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-3a",
+            family="rank_match",
+            mode="required",
+            normalized_payload={"type": "rank_match", "rank": "2nd_engineer"},
+            source_text="2nd engineer",
+            status="valid",
+        )
+        llm_rank = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-3a",
+            family="rank_match",
+            mode="required",
+            normalized_payload={"type": "rank_match", "rank": "2nd_engineer"},
+            source_text="2nd engineer",
+            status="valid",
+        )
+        llm_stcw = compare_query_plans.__globals__["CanonicalComparisonRecord"](
+            catalog_snapshot_id="query_understanding.catalog.v1",
+            prompt_id="prompt-3a",
+            family="stcw_basic",
+            mode="required",
+            normalized_payload={"type": "stcw_basic", "required": True},
+            source_text="valid STCW basic safety",
+            status="applied",
+        )
+
+        with mock.patch(
+            "query_understanding.normalizer_compare.normalize_query_plan_v1",
+            side_effect=[legacy_normalized, llm_normalized],
+        ), mock.patch(
+            "query_understanding.normalizer_compare.canonical_comparison_records",
+            side_effect=[[legacy_rank], [llm_stcw, llm_rank]],
+        ):
+            results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-3a")
+
+        outcomes = {result.family: result.comparison_outcome for result in results}
+        self.assertEqual(outcomes["rank_match"], "equivalent")
+        self.assertEqual(outcomes["stcw_basic"], "legacy_missed")
 
     def test_compare_query_plans_treats_legacy_invalid_but_llm_valid_equivalent_rows_as_expected_delta(self):
         legacy_plan = _base_plan()
@@ -226,10 +299,10 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
             status="invalid",
         )
 
-        with unittest.mock.patch(
+        with mock.patch(
             "query_understanding.normalizer_compare.normalize_query_plan_v1",
             side_effect=[legacy_normalized, llm_normalized],
-        ), unittest.mock.patch(
+        ), mock.patch(
             "query_understanding.normalizer_compare.canonical_comparison_records",
             side_effect=[[legacy_record], [llm_record]],
         ):

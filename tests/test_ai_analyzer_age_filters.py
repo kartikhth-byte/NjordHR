@@ -203,13 +203,9 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         self.assertEqual(audit_by_filename["2nd_Engineer_120969.pdf"]["hard_filter_decision"], "FAIL")
         self.assertEqual(audit_by_filename["2nd_Engineer_unknown.pdf"]["hard_filter_decision"], "UNKNOWN")
         self.assertEqual(audit_by_filename["2nd_Engineer_315781.pdf"]["result_bucket"], "verified_match")
-        self.assertTrue(audit_by_filename["2nd_Engineer_315781.pdf"]["llm_reached"])
+        self.assertFalse(audit_by_filename["2nd_Engineer_315781.pdf"]["llm_reached"])
 
-        self.assertEqual(len(llm_calls), 2)
-        llm_prompts = [call["prompt"] for call in llm_calls]
-        self.assertTrue(all("deterministic age gate" in prompt for prompt in llm_prompts))
-        self.assertTrue(all("2nd_Engineer_120969.pdf" not in prompt for prompt in llm_prompts))
-        self.assertTrue(all("2nd_Engineer_unknown.pdf" not in prompt for prompt in llm_prompts))
+        self.assertEqual(len(llm_calls), 0)
 
     def test_visa_only_prompt_does_not_inject_age_gate_language(self):
         resume_specs = [
@@ -301,9 +297,9 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
 
         complete_event = next(event for event in events if event["type"] == "complete")
         self.assertEqual(len(complete_event["verified_matches"]), 1)
-        self.assertEqual(len(llm_calls), 1)
-        self.assertNotIn("Computed candidate age from DOB", llm_calls[0])
-        self.assertNotIn("deterministic age gate", llm_calls[0])
+        self.assertEqual(len(llm_calls), 0)
+        audit_by_filename = {entry["filename"]: entry for entry in complete_event["hard_filter_audit"]}
+        self.assertFalse(audit_by_filename["2nd_Engineer_349740.pdf"]["llm_reached"])
 
     def test_age_rule_marks_implausibly_low_or_high_age_as_unknown(self):
         low_result = self.analyzer._evaluate_age_rule(

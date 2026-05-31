@@ -243,7 +243,7 @@ Agent OS-specific config/state:
 - Windows state queue: `%APPDATA%\NjordHR\state\pending_sync_queue.json`
 
 Resume/download folders:
-- Default agent download folder: `~/Downloads/NjordHR` (macOS/Linux), `%USERPROFILE%\Downloads\NjordHR` (Windows)
+- Default agent download folder: `~/Library/Application Support/NjordHR/Resumes` (macOS), `%APPDATA%\NjordHR\Resumes` (Windows), `~/.config/njordhr/Resumes` (Linux)
 - Admin can override download folder in Settings.
 - Verified resumes folder is configurable in Admin Settings (`verified_resumes_folder`).
 

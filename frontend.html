@@ -844,10 +844,6 @@
                 if (activeTab === 'facts_review' && role === 'admin') {
                     fetchCandidateFactsReviewItems();
                 }
-                if (activeTab === 'telemetry' && role === 'admin') {
-                    loadTelemetryLogs();
-                    loadTelemetrySummary();
-                }
                 if (activeTab === 'logs' && role === 'admin') {
                     loadUsageLogs();
                 }
@@ -3225,8 +3221,12 @@
                                 applied_constraints: data.applied_constraints || [],
                                 unapplied_constraints: data.unapplied_constraints || [],
                                 parsing_notes: data.parsing_notes || [],
+                                residual_text: data.residual_text || '',
+                                clause_ledger: data.clause_ledger || [],
+                                clause_accounting: data.clause_accounting || {},
                                 partial_evaluation: data.partial_evaluation || { occurred: false, reasons: [], candidates: [] },
                                 partial_evaluation_notice: data.partial_evaluation_notice || '',
+                                search_warning: data.search_warning || '',
                                 graceful_failure: false
                             });
                             setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
@@ -3244,8 +3244,12 @@
                                 applied_constraints: data.applied_constraints || [],
                                 unapplied_constraints: data.unapplied_constraints || [],
                                 parsing_notes: data.parsing_notes || [],
+                                residual_text: data.residual_text || '',
+                                clause_ledger: data.clause_ledger || [],
+                                clause_accounting: data.clause_accounting || {},
                                 partial_evaluation: data.partial_evaluation || { occurred: false, reasons: [], candidates: [] },
                                 partial_evaluation_notice: data.partial_evaluation_notice || '',
+                                search_warning: data.search_warning || '',
                                 graceful_failure: true
                             });
                             setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
@@ -4725,7 +4729,7 @@
                                     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
                                         <h3 className="font-semibold text-gray-900">Operational Settings</h3>
                                         <p className="text-xs text-gray-600">
-                                            Cloud mode is active. Local folder paths are hidden from this UI.
+                                            Cloud mode is active. Most local folder paths are hidden from this UI, but the active download folder is shown because it controls where resumes are stored.
                                         </p>
                                         <p className="text-xs text-gray-500">
                                             Mailbox fields sync to the local agent separately. Download folder changes are applied after Save & Apply, and any follow-up warning is shown inline above.
@@ -4734,6 +4738,27 @@
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Supabase URL</label>
                                                 <input value={settingsForm.supabase_url} onChange={e => setField('supabase_url', e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Download Folder</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        value={settingsForm.default_download_folder}
+                                                        onChange={e => setField('default_download_folder', e.target.value)}
+                                                        className="w-full p-2 border border-gray-300 rounded-md"
+                                                        placeholder={runtimeConfig.local_agent?.health?.download_folder || '/Users/you/Library/Application Support/NjordHR/Resumes'}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openFolderPicker('default_download_folder')}
+                                                        className="shrink-0 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                                    >
+                                                        Browse
+                                                    </button>
+                                                </div>
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                    This is the folder where the local agent stores downloaded resumes and rank folders.
+                                                </p>
                                             </div>
                                             <div className="md:col-span-2 border-t border-gray-100 pt-4">
                                                 <div className="flex items-center justify-between gap-3">
@@ -6348,6 +6373,12 @@
                                                     )}
                                                 </div>
                                             )}
+                                            {!analysisResults.graceful_failure && analysisResults.search_warning && (
+                                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                                    <p className="text-sm font-semibold text-amber-900">Search warning</p>
+                                                    <p className="mt-1 text-sm text-amber-800">{analysisResults.search_warning}</p>
+                                                </div>
+                                            )}
                                             {analysisResults.partial_evaluation?.occurred && analysisResults.partial_evaluation_notice && (
                                                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
                                                     <p className="text-sm font-semibold text-blue-900">Partial evaluation notice</p>
@@ -6361,6 +6392,56 @@
                                                         <p className="mt-1 text-xs text-blue-700">
                                                             Affected candidates: {analysisResults.partial_evaluation.candidates.join(', ')}
                                                         </p>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {role === 'admin' && (analysisResults.residual_text || (analysisResults.clause_ledger && analysisResults.clause_ledger.length > 0)) && (
+                                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-slate-900">Prompt Clause Ledger</p>
+                                                            <p className="mt-1 text-xs text-slate-600">
+                                                                Visibility only for now. This shows which prompt fragments were recognized, which remain soft, and what stayed unsupported.
+                                                            </p>
+                                                        </div>
+                                                        {analysisResults.clause_accounting && (
+                                                            <p className="text-xs font-medium text-slate-500 text-right">
+                                                                Applied {analysisResults.clause_accounting.applied ?? 0}
+                                                                {' '}· Soft {analysisResults.clause_accounting.soft ?? 0}
+                                                                {' '}· Unsupported {analysisResults.clause_accounting.unsupported ?? 0}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                                                        <p className="text-[11px] uppercase tracking-wide text-slate-500">Residual text</p>
+                                                        <p className="mt-1 text-sm text-slate-800 whitespace-pre-wrap">
+                                                            {analysisResults.residual_text ? analysisResults.residual_text : 'None'}
+                                                        </p>
+                                                    </div>
+                                                    {analysisResults.clause_ledger && analysisResults.clause_ledger.length > 0 && (
+                                                        <div className="mt-3 space-y-2">
+                                                            {analysisResults.clause_ledger.map((clause, index) => {
+                                                                const disposition = clause.disposition || 'unsupported';
+                                                                const dispositionClasses = {
+                                                                    applied: 'border-green-200 bg-green-50 text-green-800',
+                                                                    soft: 'border-amber-200 bg-amber-50 text-amber-800',
+                                                                    unsupported: 'border-slate-200 bg-slate-100 text-slate-700',
+                                                                };
+                                                                return (
+                                                                    <div key={index} className="rounded-md border border-slate-200 bg-white p-3">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${dispositionClasses[disposition] || dispositionClasses.unsupported}`}>
+                                                                                {disposition}
+                                                                            </span>
+                                                                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                                                                                {clause.family || 'fragment'}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="mt-1 text-sm text-slate-800 whitespace-pre-wrap">{clause.text || ''}</p>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}
@@ -6608,10 +6689,10 @@
                             )}
                              {activeTab === 'dashboard' && DashboardTabContent()}
                              {activeTab === 'setup' && SetupTabContent()}
-                             {activeTab === 'facts_review' && CandidateFactsReviewTabContent()}
-                             {activeTab === 'telemetry' && TelemetryTabContent()}
-                             {activeTab === 'settings' && SettingsTabContent()}
-                             {activeTab === 'logs' && LogsTabContent()}
+                            {activeTab === 'facts_review' && canAccessTab('facts_review') && CandidateFactsReviewTabContent()}
+                            {activeTab === 'telemetry' && canAccessTab('telemetry') && TelemetryTabContent()}
+                            {activeTab === 'settings' && canAccessTab('settings') && SettingsTabContent()}
+                            {activeTab === 'logs' && canAccessTab('logs') && LogsTabContent()}
                         </main>
                         </>
                         )}

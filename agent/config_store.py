@@ -41,14 +41,18 @@ def _agent_data_dir(home=None, system=None):
     return os.path.join(home_dir, ".config", "njordhr")
 
 
+def _default_download_folder(home=None, system=None):
+    return os.path.join(_agent_data_dir(home=home, system=system), "Resumes")
+
+
 def _legacy_download_folder(home=None):
     home_dir = os.path.abspath(os.path.expanduser(home or "~"))
     return os.path.join(home_dir, "Downloads", "NjordHR")
 
 
-def _default_download_folder(base_dir=None):
-    target_base = os.path.abspath(os.path.expanduser(base_dir)) if base_dir else _agent_data_dir()
-    return os.path.join(target_base, "Resumes")
+def _legacy_temp_download_folder(home=None):
+    home_dir = os.path.abspath(os.path.expanduser(home or "~"))
+    return os.path.join(home_dir, "temp12")
 
 
 def _coerce_bool(value, default=False):
@@ -97,7 +101,7 @@ class AgentConfigStore:
         if not str(cfg.get("device_id", "")).strip():
             cfg["device_id"] = str(uuid.uuid4())
         if not str(cfg.get("download_folder", "")).strip():
-            cfg["download_folder"] = _default_download_folder(self.base_dir)
+            cfg["download_folder"] = _default_download_folder()
         cfg["download_folder"] = os.path.abspath(os.path.expanduser(cfg["download_folder"]))
         cfg["api_base_url"] = str(cfg.get("api_base_url", "")).strip().rstrip("/")
         cfg["device_token"] = str(cfg.get("device_token", "")).strip()
@@ -138,16 +142,20 @@ class AgentConfigStore:
     def _apply_download_folder_migration(self, cfg, raw):
         migrated = deepcopy(cfg)
         current_folder = os.path.abspath(os.path.expanduser(str(migrated.get("download_folder", "")).strip()))
-        target_folder = os.path.abspath(os.path.expanduser(_default_download_folder(self.base_dir)))
+        target_folder = os.path.abspath(os.path.expanduser(_default_download_folder()))
         legacy_folder = os.path.abspath(os.path.expanduser(_legacy_download_folder()))
+        legacy_temp_folder = os.path.abspath(os.path.expanduser(_legacy_temp_download_folder()))
         raw_download_folder = os.path.abspath(os.path.expanduser(str((raw or {}).get("download_folder", "")).strip()))
 
-        should_migrate = current_folder == legacy_folder or raw_download_folder == legacy_folder
+        should_migrate = (
+            current_folder in {legacy_folder, legacy_temp_folder}
+            or raw_download_folder in {legacy_folder, legacy_temp_folder}
+        )
         if not should_migrate:
             return migrated
 
         try:
-            migrated["download_folder"] = self._migrate_download_folder(legacy_folder, target_folder)
+            migrated["download_folder"] = self._migrate_download_folder(current_folder, target_folder)
         except Exception:
             migrated["download_folder"] = current_folder
         return migrated

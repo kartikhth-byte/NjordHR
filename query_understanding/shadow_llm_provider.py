@@ -29,6 +29,22 @@ SHADOW_LLM_PROMPT_TEMPLATE_VERSION = "query_understanding.shadow_llm.v1"
 SHADOW_LLM_DEFAULT_MODEL = "gemini-2.0-flash-lite"
 SHADOW_LLM_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 SHADOW_LLM_RESPONSE_SEED = 0
+_AGE_TEXT_TO_VALUE = {
+    "twenty": 20,
+    "twenties": 20,
+    "thirty": 30,
+    "thirties": 30,
+    "forty": 40,
+    "forties": 40,
+    "fifty": 50,
+    "fifties": 50,
+    "sixty": 60,
+    "sixties": 60,
+    "seventy": 70,
+    "seventies": 70,
+    "eighty": 80,
+    "eighties": 80,
+}
 
 
 def _utc_now_iso() -> str:
@@ -69,6 +85,21 @@ def build_shadow_llm_prompt(
     catalog_version: str = CATALOG_VERSION,
 ) -> str:
     supported_families = ", ".join(sorted(SUPPORTED_FAMILY_IDS))
+    age_rule_block = (
+        "Age family rules:\n"
+        "- age_range captures explicit bounds in years.\n"
+        "- Use minimum_years for lower bounds and maximum_years for upper bounds.\n"
+        "- no younger than N, not below N, no less than N, nlt N, N and above, N+, and age N minimum -> minimum_years = N.\n"
+        "- no older than N, not above N, cannot exceed N, can't be older than N, nmt N, N and below, and N or younger -> maximum_years = N.\n"
+        "- under N means maximum_years = N - 1 unless the prompt clearly states an inclusive bound.\n"
+        "- around N, approximately N, and about N mean an approximate band around N.\n"
+        "- in their 30s / in his 40s / in her 40s / forties / thirties map to the decade span.\n"
+        "- mid-30s -> about 33-36; early 40s -> about 40-43; late 20s -> about 27-29.\n"
+        "- thirty-something / forty-something / fifty-something -> the matching decade span.\n"
+        "- Example: not below 30 -> {\"minimum_years\": 30, \"maximum_years\": null}.\n"
+        "- Example: cannot exceed 50 -> {\"minimum_years\": null, \"maximum_years\": 50}.\n"
+        "- Example: nlt 30 and nmt 50 -> {\"minimum_years\": 30, \"maximum_years\": 50}.\n"
+    )
     return (
         "You are NjordHR's shadow query normalizer.\n"
         "Return only valid JSON for a single query_plan.v1 object. No markdown, no commentary.\n"
@@ -79,6 +110,7 @@ def build_shadow_llm_prompt(
         "If the prompt is ambiguous, prefer degraded over invalid unless the schema truly cannot be satisfied.\n"
         f"The catalog_version is {catalog_version}.\n"
         f"Supported families: {supported_families}.\n"
+        f"{age_rule_block}"
         f"Required schema_version: query_plan.v1.\n"
         "Output shape:\n"
         "{\n"
@@ -208,69 +240,167 @@ def _as_positive_int(value: Any) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _age_token_to_int(value: Any) -> int | None:
+    token = _normalize_text(value).lower().replace("-", " ")
+    if not token:
+        return None
+    if token.isdigit():
+        return int(token)
+    if token in _AGE_TEXT_TO_VALUE:
+        return _AGE_TEXT_TO_VALUE[token]
+    token = token.rstrip("s")
+    if token in _AGE_TEXT_TO_VALUE:
+        return _AGE_TEXT_TO_VALUE[token]
+    return None
+
+
+def _age_decade_bounds(token: Any, modifier: str | None = None) -> tuple[int | None, int | None]:
+    decade = _age_token_to_int(token)
+    if decade is None:
+        return None, None
+    if decade < 10:
+        decade *= 10
+    if modifier == "early":
+        return decade, decade + 3
+    if modifier == "mid":
+        return decade + 3, decade + 6
+    if modifier == "late":
+        return decade + 7, decade + 9
+    return decade, decade + 9
+
+
 def _age_bounds_from_text(text: Any) -> tuple[int | None, int | None]:
     prompt = str(text or "").strip().lower()
     if not prompt:
         return None, None
 
+    age_token = r"(?:\d{1,2}|twenty|thirty|forty|fifty|sixty|seventy|eighty)"
+    decade_token = r"(?:twenties|thirties|forties|fifties|sixties|seventies|eighties|twenty|thirty|forty|fifty|sixty|seventy|eighty)"
+    approx_patterns = [
+        rf"(?:around|approximately|about|roughly)\s+({age_token})\s*(?:years?\s+old|yo|yrs?)?",
+    ]
+    for pattern in approx_patterns:
+        match = re.search(pattern, prompt)
+        if match:
+            value = _age_token_to_int(match.group(1))
+            if value is not None:
+                return max(0, value - 2), value + 2
+
+    open_min_patterns = [
+        rf"\b({age_token})\s+plus\b",
+        rf"\b({age_token})\s*\+",
+        rf"({age_token})\s*(?:yrs?|years?)?\s+(?:and\s+above|plus|or\s+older)\b",
+    ]
+    for pattern in open_min_patterns:
+        match = re.search(pattern, prompt)
+        if match:
+            value = _age_token_to_int(match.group(1))
+            if value is not None:
+                return value, None
+
+    decade_patterns = [
+        rf"(?:in\s+(?:his|her|their|the)\s+)?(?:mid|early|late)[-\s]+(\d{{1,2}})s\b",
+        rf"\b(?:mid|early|late)[-\s]+(\d{{1,2}})s\b",
+        rf"(?:in\s+(?:his|her|their|the)\s+)?(\d{{1,2}})s\b",
+        rf"(?:in\s+(?:his|her|their|the)\s+)?({decade_token})\b",
+        rf"\b({decade_token})-something\b",
+    ]
+    for pattern in decade_patterns:
+        match = re.search(pattern, prompt)
+        if match:
+            modifier = None
+            phrase = match.group(0)
+            if "early" in phrase:
+                modifier = "early"
+            elif "mid" in phrase:
+                modifier = "mid"
+            elif "late" in phrase:
+                modifier = "late"
+            decade_value = match.group(1)
+            bounds = _age_decade_bounds(decade_value, modifier=modifier)
+            if bounds != (None, None):
+                return bounds
+
     range_patterns = [
-        r"between\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old",
-        r"between\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})",
-        r"within\s+the\s+ages?\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})",
-        r"within\s+the\s+age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})",
-        r"age\s+range\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})",
-        r"age\s+of\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})\s+years?\s+old",
-        r"ages?\s+(\d{1,2})\s+(?:and|to)\s+(\d{1,2})",
-        r"aged?\s+(\d{1,2})\s*(?:-|to|and)\s*(\d{1,2})",
+        rf"between\s+({age_token})\s+(?:and|to)\s+({age_token})\s+years?\s+old",
+        rf"between\s+the\s+ages?\s+of\s+({age_token})\s+(?:and|to)\s+({age_token})",
+        rf"within\s+the\s+ages?\s+of\s+({age_token})\s+(?:and|to)\s+({age_token})",
+        rf"within\s+the\s+age\s+of\s+({age_token})\s+(?:and|to)\s+({age_token})",
+        rf"age\s+range\s+of\s+({age_token})\s+(?:and|to)\s+({age_token})",
+        rf"age\s+of\s+({age_token})\s+(?:and|to)\s+({age_token})\s+years?\s+old",
+        rf"ages?\s+({age_token})\s+(?:and|to)\s+({age_token})",
+        rf"aged?\s+({age_token})\s*(?:-|to|and)\s*({age_token})",
+        rf"between\s+({age_token})\s+(?:and|to)\s+({age_token})",
+        rf"min\s+({age_token})\s+max\s+({age_token})",
+        rf"\bnlt\s+({age_token})\s+and\s+nmt\s+({age_token})\b",
     ]
     for pattern in range_patterns:
         match = re.search(pattern, prompt)
         if match:
-            lower = int(match.group(1))
-            upper = int(match.group(2))
+            lower = _age_token_to_int(match.group(1))
+            upper = _age_token_to_int(match.group(2))
+            if lower is None or upper is None:
+                continue
             if lower > upper:
                 lower, upper = upper, lower
             return lower, upper
 
-    min_patterns = [
-        r"at\s+least\s+(\d{1,2})\s+years?\s+old",
-        r"older\s+than\s+(\d{1,2})",
-        r"over\s+the\s+age\s+of\s+(\d{1,2})(?:\s+years?)?",
-        r"over\s+(\d{1,2})",
-        r"above\s+the\s+age\s+of\s+(\d{1,2})",
-        r"above\s+(\d{1,2})",
-        r"minimum\s+age\s+(?:of\s+)?(\d{1,2})",
-        r"minimum\s+age\s+should\s+be\s+(\d{1,2})",
-    ]
-    for pattern in min_patterns:
-        match = re.search(pattern, prompt)
-        if match:
-            value = int(match.group(1))
-            matched_phrase = match.group(0).lower()
-            if any(term in matched_phrase for term in ("older than", "over", "above")):
-                value += 1
-            return value, None
-
     max_patterns = [
-        r"up\s+to\s+(\d{1,2})\s+years?\s+old",
-        r"younger\s+than\s+(\d{1,2})",
-        r"below\s+the\s+age\s+of\s+(\d{1,2})",
-        r"below\s+age\s+(\d{1,2})",
-        r"less\s+than\s+(\d{1,2})\s+years?\s+old",
-        r"not\s+more\s+than\s+(\d{1,2})\s+years?\s+old",
-        r"under\s+(\d{1,2})",
-        r"below\s+(\d{1,2})",
-        r"maximum\s+age\s+(?:of\s+)?(\d{1,2})",
-        r"maximum\s+age\s+should\s+be\s+(\d{1,2})",
+        (rf"up\s+to\s+({age_token})\s+years?\s+old", "inclusive"),
+        (rf"\bmax(?:imum)?\s+({age_token})(?:\s*(?:yo|yrs?|years?))?\b", "inclusive"),
+        (rf"no\s+older\s+than\s+({age_token})", "inclusive"),
+        (rf"not\s+above\s+({age_token})", "inclusive"),
+        (rf"cannot\s+exceed\s+({age_token})", "inclusive"),
+        (rf"can'?t\s+be\s+older\s+than\s+({age_token})", "inclusive"),
+        (rf"(?<!no\s)(?<!not\s)younger\s+than\s+({age_token})", "exclusive"),
+        (rf"below\s+the\s+age\s+of\s+({age_token})", "exclusive"),
+        (rf"below\s+age\s+({age_token})", "exclusive"),
+        (rf"(?<!no\s)(?<!not\s)less\s+than\s+({age_token})\s+years?\s+old", "exclusive"),
+        (rf"not\s+more\s+than\s+({age_token})\s+years?\s+old", "inclusive"),
+        (rf"under\s+({age_token})", "exclusive"),
+        (rf"({age_token})\s+and\s+below", "inclusive"),
+        (rf"(?<!no\s)(?<!not\s)below\s+({age_token})", "exclusive"),
+        (rf"maximum\s+age\s+(?:of\s+)?({age_token})", "inclusive"),
+        (rf"maximum\s+age\s+should\s+be\s+({age_token})", "inclusive"),
+        (rf"({age_token})\s*(?:yrs?|years?)?\s+(?:and\s+below|or\s+younger)\b", "inclusive"),
+        (rf"\bnmt\s+({age_token})\b", "inclusive"),
     ]
-    for pattern in max_patterns:
+    for pattern, mode in max_patterns:
         match = re.search(pattern, prompt)
         if match:
-            value = int(match.group(1))
-            matched_phrase = match.group(0).lower()
-            if any(term in matched_phrase for term in ("younger than", "under", "below", "less than")):
+            value = _age_token_to_int(match.group(1))
+            if value is None:
+                continue
+            if mode == "exclusive":
                 value -= 1
             return None, value
+
+    min_patterns = [
+        (rf"at\s+least\s+({age_token})\s+years?\s+old", "inclusive"),
+        (rf"(?:no|not)\s+younger\s+than\s+({age_token})", "inclusive"),
+        (rf"(?:no|not)\s+below\s+({age_token})", "inclusive"),
+        (rf"(?:no|not)\s+less\s+than\s+({age_token})", "inclusive"),
+        (rf"older\s+than\s+({age_token})", "exclusive"),
+        (rf"over\s+the\s+age\s+of\s+({age_token})(?:\s+years?)?", "exclusive"),
+        (rf"over\s+({age_token})", "exclusive"),
+        (rf"above\s+the\s+age\s+of\s+({age_token})", "exclusive"),
+        (rf"above\s+({age_token})", "exclusive"),
+        (rf"minimum\s+age\s+(?:of\s+)?({age_token})", "inclusive"),
+        (rf"minimum\s+age\s+should\s+be\s+({age_token})", "inclusive"),
+        (rf"age\s+({age_token})\s+minimum", "inclusive"),
+        (rf"min(?:imum)?(?:\s+age)?\s+(?:of\s+)?({age_token})", "inclusive"),
+        (rf"\b({age_token})\s*\+", "inclusive"),
+        (rf"\bnlt\s+({age_token})\b", "inclusive"),
+    ]
+    for pattern, mode in min_patterns:
+        match = re.search(pattern, prompt)
+        if match:
+            value = _age_token_to_int(match.group(1))
+            if value is None:
+                continue
+            if mode == "exclusive":
+                value += 1
+            return value, None
 
     return None, None
 

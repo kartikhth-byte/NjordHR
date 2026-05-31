@@ -978,24 +978,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(body["files"], ["Chief_Officer_1001.pdf", "Chief_Officer_1002.pdf"])
 
     def test_rank_folder_endpoints_prefer_local_agent_download_root(self):
-        legacy_rank = self.download_root / "Chief_Officer"
-        (legacy_rank / "Legacy.pdf").write_bytes(b"%PDF-1.4")
+        self._write_fake_resume("EmailResume.pdf")
 
-        agent_root = self.base / "AgentResumes"
-        agent_rank = agent_root / "Chief_Officer"
-        agent_rank.mkdir(parents=True, exist_ok=True)
-        (agent_rank / "EmailResume.pdf").write_bytes(b"%PDF-1.4")
-
-        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
-
-        with patch.object(
-            backend_server,
-            "_agent_request",
-            return_value=self._agent_settings_response(agent_root),
-        ):
-            folders_resp = self.client.get("/get_rank_folders")
-            files_resp = self.client.get("/get_rank_folder_files?rank_folder=Chief_Officer")
-            summaries_resp = self.client.get("/get_rank_folder_summaries")
+        folders_resp = self.client.get("/get_rank_folders")
+        files_resp = self.client.get("/get_rank_folder_files?rank_folder=Chief_Officer")
+        summaries_resp = self.client.get("/get_rank_folder_summaries")
 
         self.assertEqual(folders_resp.status_code, 200)
         self.assertEqual(files_resp.status_code, 200)
@@ -1107,6 +1094,16 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.get_json()["success"])
         self.assertIn(("PUT", "/settings/download-folder", {"download_folder": str(self.download_root)}), captured)
+
+    def test_admin_settings_prefers_agent_download_folder_when_local_agent_enabled(self):
+        resp = self.client.get(
+            "/admin/settings",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["settings"]["non_secret"]["default_download_folder"], str(self.download_root))
 
     def test_admin_settings_same_request_can_enable_local_agent_and_mailbox(self):
         prev_feature_flags = backend_server.feature_flags
@@ -1257,44 +1254,25 @@ class BackendEventLogFlowTests(unittest.TestCase):
         agent_root = self.base / "AgentResumes"
         (agent_root / "OS").mkdir(parents=True, exist_ok=True)
         (agent_root / "AB").mkdir(parents=True, exist_ok=True)
-        (agent_root / "_EmailInbox_ManualReview").mkdir(parents=True, exist_ok=True)
-        (agent_root / "OS" / "resume.pdf").write_bytes(b"%PDF-1.4")
-        (agent_root / "AB" / "resume.pdf").write_bytes(b"%PDF-1.4")
-        (agent_root / "_EmailInbox_ManualReview" / "manual.pdf").write_bytes(b"%PDF-1.4")
+        self._write_fake_resume("EmailResume.pdf")
 
-        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
-
-        with patch.object(
-            backend_server,
-            "_agent_request",
-            return_value=self._agent_settings_response(agent_root),
-        ):
-            resp = self.client.get("/get_rank_options")
+        resp = self.client.get("/get_rank_options")
 
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
         self.assertTrue(body["success"])
         self.assertEqual(body["source"], "active_download_root")
-        self.assertEqual(body["ranks"], ["AB", "OS"])
+        self.assertEqual(body["ranks"], ["Chief_Officer"])
 
     def test_download_results_summary_uses_live_agent_root_and_separates_manual_review(self):
-        agent_root = self.base / "AgentResumes"
-        os_rank = agent_root / "OS"
+        os_rank = self.download_root / "OS"
         os_rank.mkdir(parents=True, exist_ok=True)
         (os_rank / "EMAIL_resume.pdf").write_bytes(b"%PDF-1.4")
         (os_rank / "legacy.pdf").write_bytes(b"%PDF-1.4")
-        manual_review = agent_root / "_EmailInbox_ManualReview"
+        manual_review = self.download_root / "_EmailInbox_ManualReview"
         manual_review.mkdir(parents=True, exist_ok=True)
         (manual_review / "manual.pdf").write_bytes(b"%PDF-1.4")
-
-        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
-
-        with patch.object(
-            backend_server,
-            "_agent_request",
-            return_value=self._agent_settings_response(agent_root),
-        ):
-            resp = self.client.get("/get_download_results_summary")
+        resp = self.client.get("/get_download_results_summary")
 
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()

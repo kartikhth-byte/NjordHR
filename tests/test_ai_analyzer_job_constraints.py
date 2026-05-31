@@ -183,6 +183,28 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(constraints["hard_constraints"]["age_years"], {"min_age": None, "max_age": 49})
         self.assertEqual(constraints["parsing_notes"], [])
 
+    def test_bare_between_age_range_is_consumed_and_not_split(self):
+        constraints = self.analyzer._extract_job_constraints("between 30 and 50", rank=self.rank)
+        self.assertEqual(constraints["applied_constraints"], ["age_range"])
+        observability = self.analyzer._build_prompt_observability(
+            "between 30 and 50",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        self.assertEqual(observability["clause_accounting"], {"applied": 1, "soft": 0, "unsupported": 0})
+
+    def test_between_age_range_with_years_old_is_fully_consumed(self):
+        constraints = self.analyzer._extract_job_constraints("between 30 and 50 years old", rank=self.rank)
+        self.assertEqual(constraints["applied_constraints"], ["age_range"])
+        observability = self.analyzer._build_prompt_observability(
+            "between 30 and 50 years old",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        self.assertEqual(observability["clause_accounting"], {"applied": 1, "soft": 0, "unsupported": 0})
+
     def test_age_family_exclusive_max_variants_map_to_same_constraint(self):
         prompts = [
             "is below the age of 50",
@@ -572,6 +594,32 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ["dp_operational", "gmdss"],
         )
 
+    def test_stcw_endorsement_registry_slice_consumes_compound_prompt_cleanly(self):
+        constraints = self.analyzer._extract_job_constraints("DPO and GMDSS", rank=self.rank)
+        observability = self.analyzer._build_prompt_observability(
+            "DPO and GMDSS",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        self.assertEqual(
+            observability["clause_accounting"]["applied"],
+            1,
+        )
+
+    def test_parse_prompt_exposes_span_backed_matches_for_compound_endorsements(self):
+        constraints = self.analyzer._extract_job_constraints("DPO and GMDSS", rank=self.rank)
+        parsed = self.analyzer.parse_prompt(
+            "DPO and GMDSS",
+            constraints,
+            has_semantic_intent=False,
+        )
+
+        applied_matches = [match for match in parsed["value_matches"] if match["disposition"] == "applied"]
+        self.assertEqual(len(applied_matches), 2)
+        self.assertTrue(all(match["span"] is not None for match in applied_matches))
+        self.assertEqual(parsed["residual_text"], "")
+
     def test_advanced_igf_cop_query_maps_to_endorsement(self):
         prompts = [
             "holding advanced igf cop",
@@ -923,6 +971,64 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     "valid passport",
                 )
 
+    def test_passport_and_company_continuity_registry_slice_parses_supported_variants_with_empty_residual(self):
+        cases = [
+            {
+                "prompt": "passport up to date",
+                "expected_constraints": ["passport_validity"],
+                "expected_hard_constraints": {
+                    "passport_validity": {
+                        "required": True,
+                        "must_be_valid": True,
+                        "requested_label": "valid passport",
+                        "display_value": "passport up to date",
+                    }
+                },
+                "expected_ledger_families": ["passport_validity"],
+            },
+            {
+                "prompt": "passport valid for 18 months and same company for 2 contracts",
+                "expected_constraints": ["passport_validity", "company_continuity"],
+                "expected_hard_constraints": {
+                    "passport_validity": {
+                        "required": True,
+                        "must_be_valid": True,
+                        "minimum_months_remaining": 18,
+                        "requested_label": "passport valid for at least 18 months",
+                        "display_value": "passport valid for 18 months",
+                    },
+                    "company_continuity": {
+                        "min_same_company_contract_count": 2,
+                        "display_value": "same company for 2 contracts",
+                        "operator": "gte",
+                    },
+                },
+                "expected_ledger_families": ["passport_validity", "company_continuity"],
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(prompt=case["prompt"]):
+                constraints = self.analyzer._extract_job_constraints(case["prompt"], rank=self.rank)
+                self.assertEqual(constraints["applied_constraints"], case["expected_constraints"])
+                self.assertEqual(constraints["hard_constraints"], case["expected_hard_constraints"])
+
+                observability = self.analyzer._build_prompt_observability(
+                    case["prompt"],
+                    constraints,
+                    has_semantic_intent=False,
+                )
+
+                self.assertEqual(observability["residual_text"], "")
+                self.assertEqual(
+                    observability["clause_accounting"],
+                    {"applied": len(case["expected_constraints"]), "soft": 0, "unsupported": 0},
+                )
+                self.assertEqual(
+                    [item["family"] for item in observability["clause_ledger"]],
+                    case["expected_ledger_families"],
+                )
+
     def test_availability_family_variants_map_to_immediate_joining(self):
         prompts = [
             "ready to join",
@@ -992,17 +1098,27 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             {"coc_required": True, "coc_valid_required": True},
         )
 
-    def test_compound_passport_and_generic_visa_keeps_both_constraints(self):
+    def test_compound_passport_and_generic_visa_keeps_passport_only(self):
         constraints = self.analyzer._extract_job_constraints(
             "has valid passport and visa",
             rank=self.rank,
         )
         self.assertIn("passport_validity", constraints["applied_constraints"])
-        self.assertIn("us_visa", constraints["applied_constraints"])
         self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
-        self.assertTrue(constraints["hard_constraints"]["us_visa"]["required"])
-        self.assertTrue(constraints["hard_constraints"]["us_visa"].get("accepted_types"))
-        self.assertEqual(constraints["hard_constraints"]["us_visa"]["requested_label"], "valid visa")
+        self.assertNotIn("us_visa", constraints["applied_constraints"])
+        self.assertNotIn("us_visa", constraints["hard_constraints"])
+
+    def test_compound_passport_tanker_experience_and_basic_certification_keeps_all_constraints(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "has valid passport and has relevant experience in tanker and has basic certification",
+            rank=self.rank,
+        )
+        self.assertIn("passport_validity", constraints["applied_constraints"])
+        self.assertIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertIn("stcw_basic", constraints["applied_constraints"])
+        self.assertTrue(constraints["hard_constraints"]["passport_validity"]["must_be_valid"])
+        self.assertEqual(constraints["hard_constraints"]["experience_ship_type"], "tanker")
+        self.assertEqual(constraints["hard_constraints"]["stcw_basic"], {"required": True})
 
     def test_compound_rank_medical_and_passport_keeps_all_constraints(self):
         constraints = self.analyzer._extract_job_constraints(
@@ -1156,6 +1272,89 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("min_sea_service", constraints["unapplied_constraints"])
         self.assertIn("vessel_type", constraints["unapplied_constraints"])
 
+    def test_recency_and_vessel_experience_registry_slice_parses_supported_variants_with_empty_residual(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "signed off within 6 months and tanker background",
+            rank=self.rank,
+        )
+        self.assertIn("recency", constraints["applied_constraints"])
+        self.assertIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["recency"]["max_months_since_sign_off"], 6)
+        self.assertEqual(constraints["hard_constraints"]["experience_ship_type"], "tanker")
+
+        observability = self.analyzer._build_prompt_observability(
+            "signed off within 6 months and tanker background",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        self.assertEqual(
+            observability["clause_accounting"],
+            {"applied": 2, "soft": 1, "unsupported": observability["clause_accounting"]["unsupported"]},
+        )
+        ledger_families = [item["family"] for item in observability["clause_ledger"]]
+        self.assertIn("experience_ship_type", ledger_families)
+        self.assertIn("recency", ledger_families)
+
+    def test_min_sea_service_remains_unapplied_and_visible_in_observability(self):
+        constraints = self.analyzer._extract_job_constraints("minimum 24 months sea service", rank=self.rank)
+        self.assertNotIn("sea_service", constraints["applied_constraints"])
+        self.assertIn("min_sea_service", constraints["unapplied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["sea_service"]["min_total_months"], 24)
+
+        observability = self.analyzer._build_prompt_observability(
+            "minimum 24 months sea service",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        self.assertEqual(
+            [item["family"] for item in observability["clause_ledger"] if item["disposition"] == "unsupported"],
+            [],
+        )
+        self.assertEqual(
+            [item["family"] for item in observability["clause_ledger"] if item["disposition"] == "soft"],
+            ["min_sea_service"],
+        )
+
+    def test_parsing_notes_are_consumed_once_and_do_not_duplicate_residual(self):
+        constraints = self.analyzer._extract_job_constraints("chief engineer with C1/D visa and DP experience", rank=self.rank)
+        observability = self.analyzer._build_prompt_observability(
+            "chief engineer with C1/D visa and DP experience",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "experience")
+        self.assertEqual(
+            [item["family"] for item in observability["clause_ledger"] if item["family"] == "parsing_note"],
+            ["parsing_note"],
+        )
+
+    def test_multi_rank_prompt_records_all_rank_phrases(self):
+        constraints = self.analyzer._extract_job_constraints("master and chief officer", rank=self.rank)
+        observability = self.analyzer._build_prompt_observability(
+            "master and chief officer",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        rank_entries = [item for item in observability["clause_ledger"] if item["family"] == "rank_match"]
+        self.assertEqual(len(rank_entries), 1)
+        self.assertIn("master", rank_entries[0]["text"].lower())
+        self.assertIn("chief officer", rank_entries[0]["text"].lower())
+
+    def test_vessel_type_values_are_consumed_as_individual_phrases(self):
+        constraints = self.analyzer._extract_job_constraints("tanker experience and offshore exposure", rank=self.rank)
+        observability = self.analyzer._build_prompt_observability(
+            "tanker experience and offshore exposure",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "exposure")
+        families = [item["family"] for item in observability["clause_ledger"]]
+        self.assertIn("experience_ship_type", families)
+        self.assertIn("vessel_type", families)
+
     def test_complete_event_includes_constraint_summary_fields(self):
         filename = "2nd_Engineer_1001.pdf"
         (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
@@ -1192,6 +1391,310 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(complete_event["applied_constraints"], ["rank_match", "availability"])
         self.assertEqual(complete_event["unapplied_constraints"], [])
         self.assertEqual(complete_event["parsing_notes"], [])
+        self.assertEqual(complete_event["residual_text"], "")
+        self.assertEqual(complete_event["clause_accounting"], {"applied": 2, "soft": 0, "unsupported": 0})
+        self.assertEqual(
+            [item["disposition"] for item in complete_event["clause_ledger"]],
+            ["applied", "applied"],
+        )
+
+    def test_complete_event_reports_mixed_prompt_residual_text(self):
+        filename = "2nd_Engineer_1002.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Present Rank: 2nd Engineer",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "role": {"applied_rank_normalized": "2nd_engineer"},
+            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": []},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "PASS",
+            "results": [],
+            "evaluation_date_used": "2026-04-06",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+        self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
+
+        events = list(
+            self.analyzer.run_analysis_stream(
+                self.rank,
+                "2nd engineer with valid passport and has relevant experience in tanker and has basic certification",
+            )
+        )
+        complete_event = next(event for event in events if event["type"] == "complete")
+
+        self.assertIn("passport_validity", complete_event["applied_constraints"])
+        self.assertIn("experience_ship_type", complete_event["applied_constraints"])
+        self.assertIn("stcw_basic", complete_event["applied_constraints"])
+        self.assertTrue(complete_event["residual_text"])
+        self.assertTrue(any(item["disposition"] in {"soft", "unsupported"} for item in complete_event["clause_ledger"]))
+
+    def test_run_analysis_result_includes_prompt_observability_fields(self):
+        filename = "2nd_Engineer_1003.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Present Rank: 2nd Engineer",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "role": {"applied_rank_normalized": "2nd_engineer"},
+            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": []},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "PASS",
+            "results": [],
+            "evaluation_date_used": "2026-04-06",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+        self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
+
+        result = self.analyzer.run_analysis(self.rank, "2nd engineer available immediately")
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["residual_text"], "")
+        self.assertEqual(result["clause_accounting"], {"applied": 2, "soft": 0, "unsupported": 0})
+        self.assertEqual([item["disposition"] for item in result["clause_ledger"]], ["applied", "applied"])
+
+    def test_prompt_observability_consumes_structured_only_age_and_rank_variants(self):
+        filename = "2nd_Engineer_1004.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Present Rank: 2nd Engineer",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "role": {"applied_rank_normalized": "2nd_engineer"},
+            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
+            "personal": {"dob": None},
+            "derived": {"age_years": 35},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": []},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "PASS",
+            "results": [],
+            "evaluation_date_used": "2026-04-06",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+        llm_calls = []
+
+        def fake_reason_with_llm(prompt, retrieved_chunks, past_feedback):
+            llm_calls.append(prompt)
+            return {"is_match": True, "reason": "ok", "confidence": 0.9}
+
+        self.analyzer._reason_with_llm = fake_reason_with_llm
+
+        cases = [
+            {
+                "prompt": "aged 30-50",
+                "expected_constraints": ["age_range"],
+                "expected_hard_constraints": {"age_years": {"min_age": 30, "max_age": 50}},
+            },
+            {
+                "prompt": "under 40",
+                "expected_constraints": ["age_range"],
+                "expected_hard_constraints": {"age_years": {"min_age": None, "max_age": 39}},
+            },
+            {
+                "prompt": "no older than fifty",
+                "expected_constraints": ["age_range"],
+                "expected_hard_constraints": {"age_years": {"min_age": None, "max_age": 50}},
+            },
+            {
+                "prompt": "45 or younger",
+                "expected_constraints": ["age_range"],
+                "expected_hard_constraints": {"age_years": {"min_age": None, "max_age": 45}},
+            },
+            {
+                "prompt": "chief officer",
+                "expected_constraints": ["rank_match"],
+                "expected_hard_constraints": {
+                    "rank": {
+                        "applied_rank_normalized": ["chief_officer"],
+                        "operator": "contains_any",
+                    }
+                },
+            },
+            {
+                "prompt": "2nd eng",
+                "expected_constraints": ["rank_match"],
+                "expected_hard_constraints": {
+                    "rank": {
+                        "applied_rank_normalized": ["2nd_engineer"],
+                        "operator": "contains_any",
+                    }
+                },
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(prompt=case["prompt"]):
+                constraints = self.analyzer._extract_job_constraints(case["prompt"], rank=self.rank)
+                self.assertEqual(constraints["applied_constraints"], case["expected_constraints"])
+                self.assertEqual(constraints["hard_constraints"], case["expected_hard_constraints"])
+
+                observability = self.analyzer._build_prompt_observability(
+                    case["prompt"],
+                    constraints,
+                    has_semantic_intent=False,
+                )
+
+                self.assertEqual(observability["residual_text"], "")
+                self.assertEqual(
+                    observability["clause_accounting"],
+                    {"applied": len(case["expected_constraints"]), "soft": 0, "unsupported": 0},
+                )
+                self.assertEqual(
+                    [item["disposition"] for item in observability["clause_ledger"]],
+                    ["applied"] * len(case["expected_constraints"]),
+                )
+
+                events = list(self.analyzer.run_analysis_stream(self.rank, case["prompt"]))
+                complete_event = next(event for event in events if event["type"] == "complete")
+                self.assertEqual(complete_event["residual_text"], "")
+                self.assertEqual(complete_event["clause_accounting"]["unsupported"], 0)
+
+        self.assertEqual(len(llm_calls), 0)
+
+    def test_age_and_visa_registry_slice_parses_supported_visa_variants_with_empty_residual(self):
+        cases = [
+            {
+                "prompt": "has a valid US visa",
+                "expected_constraints": ["us_visa"],
+                "expected_hard_constraints": {
+                    "us_visa": {
+                        "required": True,
+                        "must_be_valid": True,
+                        "accepted_types": ["C1/D (USA)", "B1/B2 (USA)", "C1 (USA)", "D (USA)", "US Visa (USA)"],
+                        "visa_group": "usa",
+                        "requested_label": "valid US visa",
+                    }
+                },
+            },
+            {
+                "prompt": "has a valid Schengen visa",
+                "expected_constraints": ["us_visa"],
+                "expected_hard_constraints": {
+                    "us_visa": {
+                        "required": True,
+                        "must_be_valid": True,
+                        "accepted_types": ["Schengen"],
+                        "visa_group": "schengen",
+                        "requested_label": "valid Schengen visa",
+                    }
+                },
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(prompt=case["prompt"]):
+                constraints = self.analyzer._extract_job_constraints(case["prompt"], rank=self.rank)
+                self.assertEqual(constraints["applied_constraints"], case["expected_constraints"])
+                self.assertEqual(constraints["hard_constraints"], case["expected_hard_constraints"])
+
+                observability = self.analyzer._build_prompt_observability(
+                    case["prompt"],
+                    constraints,
+                    has_semantic_intent=False,
+                )
+
+                self.assertEqual(observability["residual_text"], "")
+                self.assertEqual(
+                    observability["clause_accounting"],
+                    {"applied": 1, "soft": 0, "unsupported": 0},
+                )
+                self.assertEqual([item["family"] for item in observability["clause_ledger"]], ["us_visa"])
+
+    def test_coc_grade_and_rank_duration_registry_slice_parses_supported_variants_with_empty_residual(self):
+        cases = [
+            {
+                "prompt": "chief engineer coc",
+                "expected_constraints": ["coc_grade_match"],
+                "expected_hard_constraints": {
+                    "coc_grade": {
+                        "required_grades": ["chief_engineer"],
+                        "operator": "contains_any",
+                        "display_value": "chief engineer coc",
+                    },
+                },
+                "expected_ledger_families": ["coc_grade_match"],
+            },
+            {
+                "prompt": "minimum 12 months in current rank",
+                "expected_constraints": ["rank_duration_experience"],
+                "expected_hard_constraints": {
+                    "rank_duration_experience": {
+                        "rank_normalized": "2nd_engineer",
+                        "min_months": 12,
+                        "requested_label": "at least 12 months as 2nd engineer",
+                        "display_value": "minimum 12 months in current rank",
+                    }
+                },
+                "expected_ledger_families": ["rank_duration_experience"],
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(prompt=case["prompt"]):
+                constraints = self.analyzer._extract_job_constraints(case["prompt"], rank=self.rank)
+                self.assertEqual(constraints["applied_constraints"], case["expected_constraints"])
+                self.assertEqual(constraints["hard_constraints"], case["expected_hard_constraints"])
+
+                observability = self.analyzer._build_prompt_observability(
+                    case["prompt"],
+                    constraints,
+                    has_semantic_intent=False,
+                )
+
+                self.assertEqual(observability["residual_text"], "")
+                self.assertEqual(
+                    observability["clause_accounting"],
+                    {"applied": len(case["expected_constraints"]), "soft": 0, "unsupported": 0},
+                )
+                self.assertEqual(
+                    [item["family"] for item in observability["clause_ledger"]],
+                    case["expected_ledger_families"],
+                )
 
     def test_all_parsing_notes_query_gracefully_fails(self):
         events = list(self.analyzer.run_analysis_stream(self.rank, "VLCC-ish but not exactly"))
@@ -1210,6 +1713,68 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("vessel type", failure_event["message"])
         self.assertEqual(failure_event["applied_constraints"], [])
         self.assertEqual(failure_event["unapplied_constraints"], ["min_sea_service", "vessel_type"])
+
+    def test_recruiter_like_unsupported_prompt_uses_semantic_fallback_with_warning(self):
+        llm_called = {"value": False}
+
+        self.analyzer.prepper = _FakePrepper(embeddings=[])
+        self.analyzer._retrieve_candidates_keyword_fallback = lambda *_args, **_kwargs: {
+            "piracy-route-candidate": [
+                {
+                    "id": "chunk-1",
+                    "score": 0.99,
+                    "metadata": {
+                        "resume_id": "piracy-route-candidate",
+                        "rank": self.rank,
+                        "raw_text": "Experience in piracy-prone routes",
+                        "source_path": str(self.rank_folder / "piracy_route_resume.pdf"),
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {"applied_rank_normalized": "2nd_engineer"},
+            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": []},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "PASS",
+            "results": [],
+            "evaluation_date_used": "2026-04-06",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+
+        def fake_reason_with_llm(*_args, **_kwargs):
+            llm_called["value"] = True
+            return {"is_match": True, "reason": "semantic match", "confidence": 0.7}
+
+        self.analyzer._reason_with_llm = fake_reason_with_llm
+
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has experiencee in piracy routes"))
+        complete_event = next(event for event in events if event["type"] == "complete")
+
+        self.assertFalse(any(event["type"] == "graceful_failure" for event in events))
+        self.assertTrue(llm_called["value"])
+        self.assertIn("semantic search instead", complete_event["search_warning"])
+        self.assertEqual(complete_event["hard_filter_summary"]["matched"], 1)
+
+    def test_route_oriented_prompt_is_recruiter_like_for_semantic_fallback(self):
+        self.assertTrue(
+            self.analyzer._is_recruiter_like_semantic_fallback_prompt(
+                "has experiencee in piracy routes",
+                {"applied_constraints": [], "hard_constraints": {}, "unapplied_constraints": []},
+            )
+        )
+        self.assertFalse(
+            self.analyzer._is_recruiter_like_semantic_fallback_prompt(
+                "good candidate",
+                {"applied_constraints": [], "hard_constraints": {}, "unapplied_constraints": []},
+            )
+        )
 
     def test_semantic_only_ship_experience_prompt_proceeds(self):
         class _FakePrepper:

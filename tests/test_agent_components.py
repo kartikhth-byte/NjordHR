@@ -4,7 +4,7 @@ import time
 import unittest
 from unittest import mock
 
-from agent.config_store import AgentConfigStore
+from agent.config_store import AgentConfigStore, _default_download_folder
 from agent.filesystem import ensure_writable_folder
 from agent.job_queue import AgentJobQueue
 from agent.secret_store import SecretStore
@@ -15,11 +15,13 @@ class AgentComponentsTests(unittest.TestCase):
     def test_config_store_defaults_and_update(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "agent.json")
-            store = AgentConfigStore(path=path)
+            expected_download_folder = os.path.join(tmp, "Library", "Application Support", "NjordHR", "Resumes")
+            with mock.patch("agent.config_store._default_download_folder", return_value=expected_download_folder):
+                store = AgentConfigStore(path=path)
             cfg = store.get()
             self.assertTrue(cfg["device_id"])
             self.assertTrue(os.path.isabs(cfg["download_folder"]))
-            self.assertEqual(cfg["download_folder"], os.path.join(tmp, "Resumes"))
+            self.assertEqual(cfg["download_folder"], expected_download_folder)
             self.assertEqual(cfg["api_base_url"], "")
             self.assertEqual(cfg["device_token"], "")
             self.assertTrue(cfg["cloud_sync_enabled"])
@@ -55,6 +57,28 @@ class AgentComponentsTests(unittest.TestCase):
             self.assertEqual(updated["update_manifest_url"], "https://updates.example.com/manifest.json")
             self.assertEqual(updated["log_level"], "debug")
 
+    def test_default_download_folder_tracks_platform_base_dir(self):
+        with mock.patch("agent.config_store.platform.system", return_value="darwin"):
+            self.assertEqual(
+                _default_download_folder(home="/Users/tester"),
+                "/Users/tester/Library/Application Support/NjordHR/Resumes",
+            )
+        with mock.patch("agent.config_store.platform.system", return_value="windows"), mock.patch.dict(
+            os.environ,
+            {"APPDATA": r"C:\\Users\\tester\\AppData\\Roaming"},
+            clear=False,
+        ):
+            expected_windows = os.path.join(r"C:\\Users\\tester\\AppData\\Roaming", "NjordHR", "Resumes")
+            self.assertEqual(
+                _default_download_folder(home="/Users/tester"),
+                expected_windows,
+            )
+        with mock.patch("agent.config_store.platform.system", return_value="linux"):
+            self.assertEqual(
+                _default_download_folder(home="/home/tester"),
+                "/home/tester/.config/njordhr/Resumes",
+            )
+
     def test_config_store_migrates_legacy_download_folder_into_app_managed_storage(self):
         with tempfile.TemporaryDirectory() as tmp:
             app_dir = os.path.join(tmp, "app")
@@ -68,11 +92,39 @@ class AgentComponentsTests(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write('{"download_folder": "%s"}' % legacy_downloads.replace("\\", "\\\\"))
 
-            with mock.patch("agent.config_store._legacy_download_folder", return_value=legacy_downloads):
+            with mock.patch("agent.config_store._legacy_download_folder", return_value=legacy_downloads), mock.patch(
+                "agent.config_store._default_download_folder",
+                return_value=os.path.join(tmp, "Library", "Application Support", "NjordHR", "Resumes"),
+            ):
                 store = AgentConfigStore(path=path)
 
             cfg = store.get()
-            expected_download_folder = os.path.join(app_dir, "Resumes")
+            expected_download_folder = os.path.join(tmp, "Library", "Application Support", "NjordHR", "Resumes")
+            self.assertEqual(cfg["download_folder"], expected_download_folder)
+            self.assertTrue(os.path.exists(os.path.join(expected_download_folder, "resume.pdf")))
+            self.assertFalse(os.path.exists(legacy_file))
+
+    def test_config_store_migrates_legacy_temp12_download_folder_into_app_managed_storage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app_dir = os.path.join(tmp, "app")
+            os.makedirs(app_dir, exist_ok=True)
+            path = os.path.join(app_dir, "agent.json")
+            legacy_downloads = os.path.join(tmp, "temp12")
+            os.makedirs(legacy_downloads, exist_ok=True)
+            legacy_file = os.path.join(legacy_downloads, "resume.pdf")
+            with open(legacy_file, "wb") as fh:
+                fh.write(b"%PDF-1.4 legacy")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write('{"download_folder": "%s"}' % legacy_downloads.replace("\\", "\\\\"))
+
+            with mock.patch("agent.config_store._legacy_temp_download_folder", return_value=legacy_downloads), mock.patch(
+                "agent.config_store._default_download_folder",
+                return_value=os.path.join(tmp, "Library", "Application Support", "NjordHR", "Resumes"),
+            ):
+                store = AgentConfigStore(path=path)
+
+            cfg = store.get()
+            expected_download_folder = os.path.join(tmp, "Library", "Application Support", "NjordHR", "Resumes")
             self.assertEqual(cfg["download_folder"], expected_download_folder)
             self.assertTrue(os.path.exists(os.path.join(expected_download_folder, "resume.pdf")))
             self.assertFalse(os.path.exists(legacy_file))
