@@ -2,6 +2,7 @@ import time
 import base64
 import re
 import json
+import logging
 import os
 import sys
 from selenium import webdriver
@@ -33,6 +34,7 @@ DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH = "//*[self::th or self::td][contains(t
 NEXT_PAGE_BUTTON_XPATH = "//a[contains(., 'Next')]"
 DEFAULT_DASHBOARD_URL = "http://seajob.net/company/dashboard.php"
 DEFAULT_LOGIN_URL = "http://seajob.net/seajob_login.php"
+LOGGER = logging.getLogger(__name__)
 
 
 def _env_bool(name, default=False):
@@ -72,23 +74,61 @@ class Scraper:
         self.driver = webdriver.Chrome(service=service, options=options)
         self.wait = WebDriverWait(self.driver, 30)
 
+    def _set_input_value(self, element, value):
+        element.click()
+        element.send_keys(Keys.CONTROL, "a")
+        element.send_keys(Keys.BACKSPACE)
+        element.send_keys(value)
+        self.driver.execute_script(
+            """
+            const input = arguments[0];
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.blur();
+            """,
+            element,
+        )
+
+    def _click_send_otp(self, button):
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+        try:
+            button.click()
+            return "native"
+        except WebDriverException as exc:
+            LOGGER.warning("Native SeaJobs send OTP click failed; falling back to JS click: %s", exc)
+            self.driver.execute_script("arguments[0].click();", button)
+            return "javascript"
+
     def start_session(self, username, password, mobile_number):
         self._setup_driver()
         self.driver.get(self.login_url)
         self.wait.until(EC.element_to_be_clickable((By.XPATH, COMPANY_RADIO_BUTTON_XPATH))).click()
-        self.driver.find_element(By.ID, USERNAME_INPUT_ID).send_keys(username)
-        self.driver.find_element(By.XPATH, PASSWORD_INPUT_XPATH).send_keys(password)
+        self._set_input_value(self.driver.find_element(By.ID, USERNAME_INPUT_ID), username)
+        self._set_input_value(self.driver.find_element(By.XPATH, PASSWORD_INPUT_XPATH), password)
         mobile_input = self.wait.until(EC.element_to_be_clickable((By.XPATH, MOBILE_NUMBER_INPUT_XPATH)))
-        mobile_input.clear()
-        mobile_input.send_keys(str(mobile_number or "").strip())
+        mobile_value = str(mobile_number or "").strip()
+        self._set_input_value(mobile_input, mobile_value)
+        observed_mobile = mobile_input.get_attribute("value") or ""
         send_otp_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, SEND_OTP_BUTTON_XPATH)))
-        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", send_otp_button)
-        self.driver.execute_script("arguments[0].click();", send_otp_button)
+        click_mode = self._click_send_otp(send_otp_button)
+        LOGGER.info(
+            "SeaJobs OTP requested via %s click; mobile length=%s observed_length=%s",
+            click_mode,
+            len(mobile_value),
+            len(observed_mobile),
+        )
+        print(
+            f"[SeaJobs] OTP requested via {click_mode} click; "
+            f"mobile length={len(mobile_value)} observed_length={len(observed_mobile)}",
+            flush=True,
+        )
         try:
             WebDriverWait(self.driver, 10).until(EC.alert_is_present())
             alert = self.driver.switch_to.alert
             alert_text = alert.text
             alert.accept()
+            LOGGER.info("SeaJobs OTP alert: %s", alert_text)
+            print(f"[SeaJobs] OTP alert: {alert_text}", flush=True)
             if "Not Registered" in alert_text:
                 self.quit()
                 return {"success": False, "message": f"Login failed: {alert_text}"}

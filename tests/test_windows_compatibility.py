@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest import mock
+from selenium.common.exceptions import WebDriverException
 
 
 def _stub_ai_dependencies():
@@ -36,7 +37,7 @@ def _stub_ai_dependencies():
 _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer
 from csv_manager import CSVManager
-from scraper_engine import _should_run_chrome_headless
+from scraper_engine import Scraper, _should_run_chrome_headless
 
 
 class WindowsCompatibilityTests(unittest.TestCase):
@@ -82,6 +83,42 @@ class WindowsCompatibilityTests(unittest.TestCase):
         with mock.patch.dict("os.environ", {"NJORDHR_SELENIUM_HEADLESS": "true"}, clear=True):
             with mock.patch("scraper_engine.sys.platform", "win32"):
                 self.assertTrue(_should_run_chrome_headless())
+
+    def test_seajobs_input_helper_dispatches_browser_events(self):
+        class FakeElement:
+            def __init__(self):
+                self.clicked = False
+                self.keys = []
+
+            def click(self):
+                self.clicked = True
+
+            def send_keys(self, *args):
+                self.keys.append(args)
+
+        driver = mock.Mock()
+        element = FakeElement()
+        scraper = Scraper(download_folder="")
+        scraper.driver = driver
+
+        scraper._set_input_value(element, "9999999999")
+
+        self.assertTrue(element.clicked)
+        self.assertEqual(element.keys[-1], ("9999999999",))
+        driver.execute_script.assert_called_once()
+        self.assertIn("dispatchEvent", driver.execute_script.call_args.args[0])
+
+    def test_seajobs_send_otp_click_falls_back_to_javascript(self):
+        button = mock.Mock()
+        button.click.side_effect = WebDriverException("not clickable")
+        driver = mock.Mock()
+        scraper = Scraper(download_folder="")
+        scraper.driver = driver
+
+        mode = scraper._click_send_otp(button)
+
+        self.assertEqual(mode, "javascript")
+        self.assertEqual(driver.execute_script.call_count, 2)
 
 
 if __name__ == "__main__":
