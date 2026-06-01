@@ -108,6 +108,30 @@ def _merge_corpora(corpora: list[tuple[Path, dict]]) -> dict:
     }
 
 
+def _build_prompts_from_corpora(
+    loaded_corpora: list[tuple[Path, dict]],
+    family_filter: set[str] | None = None,
+) -> list[dict]:
+    family_filter = set(family_filter or [])
+    prompts = []
+    for corpus_path, corpus_data in loaded_corpora:
+        corpus_label = corpus_path.stem
+        for family, entries in (corpus_data.get("families") or {}).items():
+            for index, entry in enumerate(entries, start=1):
+                expected = str(entry.get("expected_primary_family") or "")
+                if family_filter and expected not in family_filter and family not in family_filter:
+                    continue
+                prompts.append(
+                    {
+                        "prompt_id": f"{corpus_label}:{family}:{index}",
+                        "prompt": entry.get("prompt"),
+                        "family": family,
+                        "expected_primary_family": expected,
+                    }
+                )
+    return prompts
+
+
 def main():
     parser = argparse.ArgumentParser(description="Emit disabled shadow-audit rows for one or more prompt corpora.")
     parser.add_argument(
@@ -126,6 +150,14 @@ def main():
         "--combined-corpus-output",
         default="",
         help="Optional path to write the merged corpus JSON used for the audit.",
+    )
+    parser.add_argument(
+        "--family-filter",
+        action="append",
+        default=[],
+        help="Restrict the audit to one or more expected_primary_family values. "
+        "Repeatable. Empty = all families. Examples: --family-filter age_range "
+        "--family-filter us_visa.",
     )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Path to write the JSON report")
     args = parser.parse_args()
@@ -152,20 +184,12 @@ def main():
         )
 
     analyzer = _build_analyzer()
-
-    prompts = []
-    for corpus_path, corpus_data in loaded_corpora:
-        corpus_label = corpus_path.stem
-        for family, entries in (corpus_data.get("families") or {}).items():
-            for index, entry in enumerate(entries, start=1):
-                prompts.append(
-                    {
-                        "prompt_id": f"{corpus_label}:{family}:{index}",
-                        "prompt": entry.get("prompt"),
-                        "family": family,
-                        "expected_primary_family": entry.get("expected_primary_family"),
-                    }
-                )
+    family_filter = set(args.family_filter or [])
+    prompts = _build_prompts_from_corpora(loaded_corpora, family_filter=family_filter)
+    print(
+        f"[shadow-audit] prompts to evaluate: {len(prompts)}"
+        + (f" (filtered to: {sorted(family_filter)})" if family_filter else "")
+    )
 
     rows = build_shadow_audit_rows(
         analyzer,

@@ -38,7 +38,7 @@ from ai_analyzer import AIResumeAnalyzer  # noqa: E402
 
 from query_understanding.llm_normalizer import SHADOW_LLM_NORMALIZER_ENV, is_enabled, normalize_prompt_to_query_plan_v1
 from query_understanding.shadow_audit import build_shadow_audit_entry
-from scripts.query_understanding_shadow_audit import _merge_corpora
+from scripts.query_understanding_shadow_audit import _build_prompts_from_corpora, _merge_corpora
 
 
 class ShadowAuditTests(unittest.TestCase):
@@ -201,6 +201,26 @@ class ShadowAuditTests(unittest.TestCase):
         self.assertEqual(warning["prompt"], "between 30 and 50")
         self.assertEqual(warning["first_seen_in"], "/tmp/first.json")
         self.assertEqual(warning["duplicate_in"], "/tmp/second.json")
+
+    def test_corpus_loader_respects_family_filter(self):
+        corpus = {
+            "families": {
+                "age_range": [{"prompt": "no older than fifty", "expected_primary_family": "age_range"}],
+                "us_visa": [{"prompt": "valid US visa", "expected_primary_family": "us_visa"}],
+                "unsupported_or_diagnostic": [
+                    {"prompt": "shadow probe", "expected_primary_family": "age_range"},
+                ],
+            },
+        }
+
+        prompts = _build_prompts_from_corpora(
+            [(Path("/tmp/corpus.json"), corpus)],
+            family_filter={"age_range"},
+        )
+
+        self.assertEqual(len(prompts), 2)
+        self.assertTrue(all(prompt["expected_primary_family"] == "age_range" for prompt in prompts))
+        self.assertEqual({prompt["prompt"] for prompt in prompts}, {"no older than fifty", "shadow probe"})
 
 
 if __name__ == "__main__":

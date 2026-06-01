@@ -18,6 +18,7 @@ class CanonicalComparisonRecord:
     normalized_payload: Any
     source_text: str
     status: str
+    confidence: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ def canonical_comparison_records(
                 normalized_payload=item.get("constraint"),
                 source_text=str(item.get("source_text") or ""),
                 status="applied" if normalized.get("validation", {}).get("status") != "invalid" else "invalid",
+                confidence=item.get("confidence") if item.get("confidence") in {"high", "medium", "low"} else None,
             )
         )
 
@@ -84,6 +86,7 @@ def canonical_comparison_records(
                 },
                 source_text=str(item.get("source_text") or ""),
                 status="unapplied" if normalized.get("validation", {}).get("status") != "invalid" else "invalid",
+                confidence=item.get("confidence") if item.get("confidence") in {"high", "medium", "low"} else None,
             )
         )
 
@@ -117,8 +120,8 @@ def compare_query_plans(
 
     if _normalizer_catalog_version(legacy_normalized) != _normalizer_catalog_version(llm_normalized):
         family = "catalogue"
-        legacy_record = CanonicalComparisonRecord(snapshot_id, prompt_id, family, "required", {}, "", "invalid")
-        llm_record = CanonicalComparisonRecord(snapshot_id, prompt_id, family, "required", {}, "", "invalid")
+        legacy_record = CanonicalComparisonRecord(snapshot_id, prompt_id, family, "required", {}, "", "invalid", None)
+        llm_record = CanonicalComparisonRecord(snapshot_id, prompt_id, family, "required", {}, "", "invalid", None)
         return [
             ComparisonResult(
                 catalog_snapshot_id=snapshot_id,

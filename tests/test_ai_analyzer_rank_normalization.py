@@ -81,6 +81,27 @@ class AIAnalyzerRankNormalizationTests(unittest.TestCase):
         self.assertEqual(seniority_bucket, "senior_officer")
         self.assertEqual(confidence, 0.9)
 
+    def test_normalize_rank_new_aliases(self):
+        cases = {
+            "first mate": "chief_officer",
+            "second mate": "2nd_officer",
+            "third mate": "3rd_officer",
+            "Mstr": "master",
+            "Capt": "master",
+            "skipper": "master",
+            "old man": "master",
+            "E T O": "electro_technical_officer",
+            "chief eng": "chief_engineer",
+            "engineer in charge": "chief_engineer",
+        }
+        for label, expected in cases.items():
+            with self.subTest(label=label):
+                canonical_id, department, seniority_bucket, confidence = self.analyzer._normalize_rank(label)
+                self.assertEqual(canonical_id, expected)
+                self.assertIsNotNone(department)
+                self.assertIsNotNone(seniority_bucket)
+                self.assertIn(confidence, (0.9, 1.0))
+
     def test_normalize_rank_ordinary_seaman_alias(self):
         canonical_id, department, seniority_bucket, confidence = self.analyzer._normalize_rank("Ordinary Seaman")
         self.assertEqual(canonical_id, "os")

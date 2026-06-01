@@ -921,6 +921,26 @@ class AIResumeAnalyzer:
             "department": "deck",
             "seniority_bucket": "command",
         },
+        "mstr": {
+            "canonical_id": "master",
+            "department": "deck",
+            "seniority_bucket": "command",
+        },
+        "capt": {
+            "canonical_id": "master",
+            "department": "deck",
+            "seniority_bucket": "command",
+        },
+        "skipper": {
+            "canonical_id": "master",
+            "department": "deck",
+            "seniority_bucket": "command",
+        },
+        "old man": {
+            "canonical_id": "master",
+            "department": "deck",
+            "seniority_bucket": "command",
+        },
         "chief officer": {
             "canonical_id": "chief_officer",
             "department": "deck",
@@ -931,7 +951,22 @@ class AIResumeAnalyzer:
             "department": "deck",
             "seniority_bucket": "senior_officer",
         },
+        "first mate": {
+            "canonical_id": "chief_officer",
+            "department": "deck",
+            "seniority_bucket": "senior_officer",
+        },
+        "1st mate": {
+            "canonical_id": "chief_officer",
+            "department": "deck",
+            "seniority_bucket": "senior_officer",
+        },
         "c o": {
+            "canonical_id": "chief_officer",
+            "department": "deck",
+            "seniority_bucket": "senior_officer",
+        },
+        "1 o": {
             "canonical_id": "chief_officer",
             "department": "deck",
             "seniority_bucket": "senior_officer",
@@ -942,6 +977,16 @@ class AIResumeAnalyzer:
             "seniority_bucket": "junior_officer",
         },
         "second officer": {
+            "canonical_id": "2nd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "second mate": {
+            "canonical_id": "2nd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "2nd mate": {
             "canonical_id": "2nd_officer",
             "department": "deck",
             "seniority_bucket": "junior_officer",
@@ -961,6 +1006,16 @@ class AIResumeAnalyzer:
             "department": "deck",
             "seniority_bucket": "junior_officer",
         },
+        "third mate": {
+            "canonical_id": "3rd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
+        "3rd mate": {
+            "canonical_id": "3rd_officer",
+            "department": "deck",
+            "seniority_bucket": "junior_officer",
+        },
         "3 o": {
             "canonical_id": "3rd_officer",
             "department": "deck",
@@ -972,6 +1027,16 @@ class AIResumeAnalyzer:
             "seniority_bucket": "command",
         },
         "c e": {
+            "canonical_id": "chief_engineer",
+            "department": "engine",
+            "seniority_bucket": "command",
+        },
+        "1 e": {
+            "canonical_id": "chief_engineer",
+            "department": "engine",
+            "seniority_bucket": "command",
+        },
+        "chief eng": {
             "canonical_id": "chief_engineer",
             "department": "engine",
             "seniority_bucket": "command",
@@ -1091,10 +1156,20 @@ class AIResumeAnalyzer:
             "department": "engine",
             "seniority_bucket": "specialist_officer",
         },
+        "e t o": {
+            "canonical_id": "electro_technical_officer",
+            "department": "engine",
+            "seniority_bucket": "specialist_officer",
+        },
         "electro technical officer": {
             "canonical_id": "electro_technical_officer",
             "department": "engine",
             "seniority_bucket": "specialist_officer",
+        },
+        "engineer in charge": {
+            "canonical_id": "chief_engineer",
+            "department": "engine",
+            "seniority_bucket": "command",
         },
         "bosun": {
             "canonical_id": "bosun",
@@ -1930,10 +2005,12 @@ class AIResumeAnalyzer:
         if not prompt.strip():
             return None
 
+        normalized_prompt = re.sub(r"[/._\-]+", " ", prompt)
+        normalized_prompt = re.sub(r"\s+", " ", normalized_prompt).strip()
         seen = []
         matched_phrases = []
         for alias, entry in self.RANK_ALIAS_TABLE.items():
-            match = re.search(rf"\b{re.escape(alias)}\b", prompt, flags=re.IGNORECASE)
+            match = re.search(rf"\b{re.escape(alias)}\b", normalized_prompt, flags=re.IGNORECASE)
             if match:
                 canonical_id = entry["canonical_id"]
                 if canonical_id not in seen:

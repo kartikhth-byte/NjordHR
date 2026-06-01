@@ -293,6 +293,38 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertEqual(constraints["applied_constraints"], ["rank_match"])
                 self.assertEqual(constraints["hard_constraints"]["rank"]["applied_rank_normalized"], [expected_rank])
 
+    def test_rank_family_separator_and_alias_variants_map_to_expected_rank(self):
+        prompts = {
+            "need a C/E": ["chief_engineer"],
+            "looking for C/O": ["chief_officer"],
+            "2/E available": ["2nd_engineer"],
+            "3/O wanted": ["3rd_officer"],
+            "skipper for coastal run": ["master"],
+            "Capt needed urgently": ["master"],
+            "second mate": ["2nd_officer"],
+            "first mate": ["chief_officer"],
+            "1st mate": ["chief_officer"],
+            "2nd mate": ["2nd_officer"],
+            "third mate": ["3rd_officer"],
+            "3rd mate": ["3rd_officer"],
+            "1/O": ["chief_officer"],
+            "1/E": ["chief_engineer"],
+            "Mstr": ["master"],
+            "old man": ["master"],
+            "electro-technical officer": ["electro_technical_officer"],
+            "E.T.O.": ["electro_technical_officer"],
+            "2nd-officer": ["2nd_officer"],
+            "Chief.Officer": ["chief_officer"],
+            "chief-eng": ["chief_engineer"],
+            "engineer in charge": ["chief_engineer"],
+            "C/E or 2/E": ["chief_engineer", "2nd_engineer"],
+        }
+        for prompt, expected_ranks in prompts.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertEqual(constraints["applied_constraints"], ["rank_match"])
+                self.assertEqual(constraints["hard_constraints"]["rank"]["applied_rank_normalized"], expected_ranks)
+
     def test_age_and_sea_service_query_populates_unapplied(self):
         constraints = self.analyzer._extract_job_constraints("between 30 and 50 with 7+ years sea service", rank=self.rank)
         self.assertIn("min_sea_service", constraints["unapplied_constraints"])

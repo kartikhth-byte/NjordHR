@@ -52,6 +52,8 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].comparison_outcome, "equivalent")
         self.assertEqual(results[0].family, "rank_match")
+        self.assertEqual(results[0].legacy_record.confidence, "high")
+        self.assertEqual(results[0].llm_record.confidence, "high")
 
     def test_compare_query_plans_classifies_unsupported_family_delta(self):
         legacy_plan = _base_plan()
