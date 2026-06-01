@@ -1,4 +1,5 @@
 import os
+import configparser
 import sys
 import tempfile
 import types
@@ -51,18 +52,12 @@ class _FakeFeedbackStore:
         return []
 
 
-class _FakeConfig:
-    def __init__(self, download_root):
-        self.download_root = str(download_root)
-        self.min_similarity_score = 0.0
-
-
 class LlmPromotionTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.download_root = Path(self.temp_dir.name)
         self.analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
-        self.analyzer.config = _FakeConfig(self.download_root)
+        self.analyzer.config = self._make_config(stage=0)
         self.analyzer.registry = _FakeRegistry()
         self.analyzer.feedback = _FakeFeedbackStore()
         self.analyzer._configured_ship_type_labels_cache = None
@@ -73,6 +68,16 @@ class LlmPromotionTests(unittest.TestCase):
 
     def _legacy_aff_prompt(self):
         return "AFF required"
+
+    def _make_config(self, stage=None):
+        config = configparser.ConfigParser()
+        config.add_section("Settings")
+        config.set("Settings", "Default_Download_Folder", str(self.download_root))
+        if stage is not None:
+            config.set("Settings", "LLM_Promotion_Stage", str(stage))
+        config.add_section("Advanced")
+        config.set("Advanced", "min_similarity_score", "0.0")
+        return config
 
     def _high_conf_plan(self, family_id="certificate_requirement", certificates=None):
         return {
@@ -104,19 +109,41 @@ class LlmPromotionTests(unittest.TestCase):
         self.assertNotIn("llm_promoted", constraints)
         self.assertNotIn("certificate_requirement", constraints["applied_constraints"])
 
-    def test_promotion_enabled_via_env_for_certificate_requirement(self):
-        with mock.patch.dict(os.environ, {"NJORDHR_LLM_PROMOTED_FAMILIES": "certificate_requirement"}, clear=False), mock.patch(
-            "query_understanding.shadow_llm_provider.build_shadow_llm_query_plan",
-            return_value=self._high_conf_plan(),
-        ) as provider:
-            self.assertEqual(self.analyzer._llm_promoted_families(), {"certificate_requirement"})
-            constraints = self.analyzer._extract_job_constraints(self._legacy_aff_prompt(), rank=self.rank)
+    def test_promotion_stage_counter_from_config(self):
+        cases = [
+            (0, set()),
+            (1, {"certificate_requirement"}),
+            (3, {"certificate_requirement", "rank_match", "age_range"}),
+            (5, {"certificate_requirement", "rank_match", "age_range", "stcw_basic", "us_visa"}),
+            (-1, set()),
+            (7, {"certificate_requirement", "rank_match", "age_range", "stcw_basic", "us_visa"}),
+        ]
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for stage, expected in cases:
+                with self.subTest(stage=stage):
+                    self.analyzer.config = self._make_config(stage=stage)
+                    self.assertEqual(self.analyzer._llm_promoted_families(), expected)
+
+    def test_promotion_enabled_via_stage_for_certificate_requirement(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            self.analyzer.config = self._make_config(stage=1)
+            with mock.patch(
+                "query_understanding.shadow_llm_provider.build_shadow_llm_query_plan",
+                return_value=self._high_conf_plan(),
+            ) as provider:
+                self.assertEqual(self.analyzer._llm_promoted_families(), {"certificate_requirement"})
+                constraints = self.analyzer._extract_job_constraints(self._legacy_aff_prompt(), rank=self.rank)
 
         provider.assert_called_once()
         self.assertIn("stcw_endorsement", constraints["applied_constraints"])
         self.assertIn("certificate_requirement", constraints["applied_constraints"])
         self.assertIn("cert_aff", constraints["hard_constraints"]["certifications"]["certificates_required"])
         self.assertIn("certificate_requirement", constraints["llm_promoted"])
+
+    def test_promotion_env_var_overrides_stage_config(self):
+        self.analyzer.config = self._make_config(stage=5)
+        with mock.patch.dict(os.environ, {"NJORDHR_LLM_PROMOTED_FAMILIES": "us_visa"}, clear=False):
+            self.assertEqual(self.analyzer._llm_promoted_families(), {"us_visa"})
 
     def test_promotion_skips_when_legacy_already_applied(self):
         constraints = {
@@ -163,6 +190,11 @@ class LlmPromotionTests(unittest.TestCase):
         self.assertEqual(constraints["applied_constraints"], ["stcw_endorsement"])
         self.assertNotIn("certificate_requirement", constraints["applied_constraints"])
         self.assertNotIn("llm_promoted", constraints)
+
+    def test_promotion_missing_config_setting_falls_back_to_default_stage(self):
+        self.analyzer.config = self._make_config(stage=None)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            self.assertEqual(self.analyzer._llm_promoted_families(), set())
 
     def test_promotion_handles_llm_error_gracefully(self):
         with mock.patch.dict(os.environ, {"NJORDHR_LLM_PROMOTED_FAMILIES": "certificate_requirement"}, clear=False), mock.patch(

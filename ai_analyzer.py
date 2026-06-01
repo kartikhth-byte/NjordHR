@@ -35,6 +35,16 @@ from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candi
 from candidate_facts.review_summary import build_candidate_facts_review_summary
 from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS, SUPPORTED_FAMILY_IDS
 
+_PROMOTION_STAGE_FAMILIES = [
+    "certificate_requirement",
+    "rank_match",
+    "age_range",
+    "stcw_basic",
+    "us_visa",
+]
+_MAX_PROMOTION_STAGE = 5
+_DEFAULT_PROMOTION_STAGE = 0  # opt-in only — existing installs unchanged on upgrade
+
 
 @dataclass(frozen=True)
 class ValueMatch:
@@ -2944,11 +2954,33 @@ class AIResumeAnalyzer:
         return constraints
 
     def _llm_promoted_families(self) -> set[str]:
-        """Set of family ids currently enabled for LLM rescue via env var."""
+        """Set of family ids currently enabled for LLM rescue."""
         raw = os.getenv("NJORDHR_LLM_PROMOTED_FAMILIES", "").strip()
         if not raw:
-            return set()
+            stage = self._llm_promotion_stage()
+            if stage <= 0:
+                return set()
+            return set(_PROMOTION_STAGE_FAMILIES[:stage])
         return {family.strip() for family in raw.split(",") if family.strip()}
+
+    def _llm_promotion_stage(self) -> int:
+        """Configured LLM promotion stage from settings, clamped to the supported range."""
+        raw_stage = None
+        config = getattr(self, "config", None)
+        getter = getattr(config, "get", None)
+        if callable(getter):
+            try:
+                raw_stage = getter("Settings", "LLM_Promotion_Stage", fallback=str(_DEFAULT_PROMOTION_STAGE))
+            except Exception:
+                try:
+                    raw_stage = getter("Settings", "LLM_Promotion_Stage")
+                except Exception:
+                    raw_stage = None
+        try:
+            stage = int(str(raw_stage).strip())
+        except Exception:
+            stage = _DEFAULT_PROMOTION_STAGE
+        return max(0, min(_MAX_PROMOTION_STAGE, stage))
 
     def _llm_rescue_constraints(
         self,

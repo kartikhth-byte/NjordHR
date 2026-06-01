@@ -1419,6 +1419,7 @@ def _settings_payload(include_plain_secrets=False):
             "embedding_model_name": config.get("Advanced", "embedding_model_name", fallback=""),
             "reasoning_model_name": config.get("Advanced", "reasoning_model_name", fallback=""),
             "min_similarity_score": config.get("Advanced", "min_similarity_score", fallback="0.25"),
+            "LLM_Promotion_Stage": config.get("Settings", "LLM_Promotion_Stage", fallback="0"),
             "supabase_url": _supabase_url(),
             "use_supabase_db": bool(feature_flags.use_supabase_db),
             "use_dual_write": bool(getattr(feature_flags, "use_dual_write", False)),
@@ -3251,6 +3252,15 @@ def save_admin_settings():
         except Exception:
             return jsonify({"success": False, "message": "min_similarity_score must be a valid number"}), 400
         _config_set_literal(config, "Advanced", "min_similarity_score", str(score))
+
+    if "LLM_Promotion_Stage" in payload:
+        try:
+            llm_stage = int(str(payload.get("LLM_Promotion_Stage", "")).strip())
+        except Exception:
+            return jsonify({"success": False, "message": "LLM_Promotion_Stage must be an integer between 0 and 5"}), 400
+        if llm_stage < 0 or llm_stage > 5:
+            return jsonify({"success": False, "message": "LLM_Promotion_Stage must be an integer between 0 and 5"}), 400
+        _config_set_literal(config, "Settings", "LLM_Promotion_Stage", str(llm_stage))
 
     if "otp_window_seconds" in payload:
         try:
