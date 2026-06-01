@@ -39,6 +39,14 @@ const APP_DIRS = [
   "web_vendor"
 ];
 
+const APP_PYTHON_DIRS = [
+  "agent",
+  "candidate_facts",
+  "cloud_api",
+  "query_understanding",
+  "repositories"
+];
+
 function resolveDefaultConfigSource() {
   const override = (process.env.NJORDHR_DEFAULT_CONFIG_PATH || "").trim();
   if (override) {
@@ -252,6 +260,14 @@ function precompilePythonArtifacts(pythonBin, targets) {
   }
 }
 
+function appPythonPrecompileTargets() {
+  const fileTargets = APP_FILES
+    .filter((relativePath) => relativePath.endsWith(".py"))
+    .map((relativePath) => path.join(stageAppRoot, relativePath));
+  const dirTargets = APP_PYTHON_DIRS.map((relativePath) => path.join(stageAppRoot, relativePath));
+  return [...fileTargets, ...dirTargets];
+}
+
 function stageAppPayload() {
   removeDir(stageAppRoot);
   ensureDir(stageAppRoot);
@@ -308,7 +324,7 @@ function stagePythonRuntime() {
     );
     precompilePythonArtifacts(pythonBin, [
       path.join(stagePythonRoot, "Lib", "site-packages"),
-      stageAppRoot
+      ...appPythonPrecompileTargets()
     ]);
     return;
   }
@@ -333,7 +349,7 @@ function stagePythonRuntime() {
   );
   precompilePythonArtifacts(pythonBin, [
     path.join(stagePythonRoot, "lib"),
-    stageAppRoot
+    ...appPythonPrecompileTargets()
   ]);
 }
 
@@ -361,5 +377,6 @@ if (require.main === module) {
 
 module.exports = {
   APP_FILES,
-  APP_DIRS
+  APP_DIRS,
+  APP_PYTHON_DIRS
 };
