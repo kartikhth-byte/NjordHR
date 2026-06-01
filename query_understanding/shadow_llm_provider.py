@@ -45,6 +45,43 @@ _AGE_TEXT_TO_VALUE = {
     "eighty": 80,
     "eighties": 80,
 }
+_VISA_POLARITY_INVERSION = re.compile(
+    r"\b(?:"
+    r"visa[-\s]?free|"
+    r"no\s+visa\s+(?:required|needed)|"
+    r"(?:don'?t|doesn'?t)\s+need\s+(?:a\s+)?visa|"
+    r"without\s+(?:a\s+)?visa|"
+    r"visa\s+exempt"
+    r")\b",
+    re.IGNORECASE,
+)
+_SUPPORTED_VISA_CONTEXT_CUES = re.compile(
+    r"\b(?:"
+    r"us|usa|u\.s\.|america|american|yankee|states|stateside|"
+    r"australia|australian|mcv|maritime\s+crew|"
+    r"schengen|european|eu|"
+    r"c1/?d|d\s+visa|b1/?b2|c1|b1|b2|h-?1b|l-?1|f-?1|o-?1"
+    r")\b",
+    re.IGNORECASE,
+)
+_STCW_BASIC_CONTEXT_CUES = re.compile(
+    r"\b(?:"
+    r"stcw|bst|basic\s+safety\s+training|basic\s+stcw|basic\s+training|"
+    r"basic\s+cert(?:ificate|ificates|ification)?|"
+    r"a-?vi/1|pssr|pst|fpff|efa|"
+    r"basic\s+courses?|basic\s+modules?"
+    r")\b",
+    re.IGNORECASE,
+)
+_AGE_FIGURATIVE_PATTERNS = re.compile(
+    r"\bmiddle[-\s]?aged\b|"
+    r"\byoung at heart\b|"
+    r"\bsenior officer\b|"
+    r"\bsenior captain\b|"
+    r"\byouthful\b|"
+    r"\baged wisdom\b",
+    re.IGNORECASE,
+)
 
 
 def _utc_now_iso() -> str:
@@ -86,31 +123,47 @@ def build_shadow_llm_prompt(
 ) -> str:
     supported_families = ", ".join(sorted(SUPPORTED_FAMILY_IDS))
     age_rule_block = (
-        "Age family rules:\n"
-        "- age_range captures explicit bounds in years.\n"
-        "- Use minimum_years for lower bounds and maximum_years for upper bounds.\n"
-        "- no younger than N, not below N, no less than N, nlt N, N and above, N+, and age N minimum -> minimum_years = N.\n"
-        "- no older than N, not above N, cannot exceed N, can't be older than N, nmt N, N and below, and N or younger -> maximum_years = N.\n"
-        "- under N means maximum_years = N - 1 unless the prompt clearly states an inclusive bound.\n"
-        "- around N, approximately N, and about N mean an approximate band around N.\n"
-        "- in their 30s / in his 40s / in her 40s / forties / thirties map to the decade span.\n"
-        "- mid-30s -> about 33-36; early 40s -> about 40-43; late 20s -> about 27-29.\n"
-        "- thirty-something / forty-something / fifty-something -> the matching decade span.\n"
-        "- Example: not below 30 -> {\"minimum_years\": 30, \"maximum_years\": null}.\n"
-        "- Example: cannot exceed 50 -> {\"minimum_years\": null, \"maximum_years\": 50}.\n"
-        "- Example: nlt 30 and nmt 50 -> {\"minimum_years\": 30, \"maximum_years\": 50}.\n"
+        "age_range:\n"
+        "- Numeric or spelled bounds in years.\n"
+        "- 'between N and M (years old)', 'aged N to M', 'N-M years old' -> minimum_years=N, maximum_years=M.\n"
+        "- 'N+', 'N and above', 'minimum age N', 'nlt N', 'no younger than N', 'not below N' -> minimum_years=N.\n"
+        "- 'no older than N', 'not above N', 'cannot exceed N', 'N and below', 'nmt N' -> maximum_years=N.\n"
+        "- 'under N', 'below N', 'younger than N' -> maximum_years=N-1 (strict).\n"
+        "- 'in their 30s' / 'forties' / 'mid-30s' / 'early 40s' / 'late 20s' -> decade span.\n"
+        "- 'around N' / 'approximately N' -> approximate band around N.\n"
+    )
+    visa_rule_block = (
+        "us_visa (family id for USA, Australia, and Schengen visas):\n"
+        "- Apply only when the prompt names a supported visa country/class. Otherwise unsupported.\n"
+        "- Supported groups: usa (US/USA/American/Yankee/states/H-1B/L-1/F-1/O-1/C1-D/B1-B2), australia (Australia/MCV/Maritime Crew Visa), schengen (Schengen/European/EU).\n"
+        "- Always emit visa_group; include accepted_types when a specific class is named.\n"
+        "- 'visa-free X', 'no visa required', 'doesn't need visa' -> unsupported (opposite intent).\n"
+        "- Visas for other countries (Canada, UK, Japan, etc.) -> unsupported.\n"
+        "- Vague 'visas' / 'proper visas' without a country -> unsupported.\n"
+        "- 'MV visa' near Australia -> australia; 'MV' as vessel prefix -> not us_visa.\n"
+        "- Example: valid US visa -> {\"type\": \"us_visa\", \"required\": true, \"visa_group\": \"usa\"}.\n"
+    )
+    stcw_rule_block = (
+        "stcw_basic:\n"
+        "- 'STCW basic', 'basic STCW', 'basic safety training', 'BST' (bare or qualified), 'STCW A-VI/1' -> stcw_basic.\n"
+        "- All four basic components together (PSSR, PST, FPFF, EFA) -> stcw_basic.\n"
+        "- Quantifier phrasings ('all four basic certificates', '4 basic certificates') -> stcw_basic.\n"
+        "- Advanced certificates (AFF, MFA, AFA) belong to certificate_requirement, NOT stcw_basic.\n"
+        "- Example: PSSR, PST, FPFF, EFA -> stcw_basic.\n"
+        "- Generic 'safety training' without STCW/BST/basic cues is unsupported.\n"
     )
     return (
         "You are NjordHR's shadow query normalizer.\n"
-        "Return only valid JSON for a single query_plan.v1 object. No markdown, no commentary.\n"
-        "Preserve mandatory recruiter requirements as hard filters when supported.\n"
-        "Put unsupported mandatory requirements into unapplied_constraints with reason "
-        '"unsupported_filter_family" instead of smuggling them into semantic_query.\n'
-        "Remove supported hard constraints from semantic_query. Keep only fuzzy suitability language there.\n"
-        "If the prompt is ambiguous, prefer degraded over invalid unless the schema truly cannot be satisfied.\n"
+        "Return valid JSON for query_plan.v1 only. No markdown/commentary.\n"
+        "Preserve supported hard constraints; send unsupported mandatory requirements to unapplied_constraints with reason "
+        '"unsupported_filter_family".\n'
+        "Keep only fuzzy suitability language in semantic_query.\n"
+        "Prefer degraded over invalid when possible.\n"
         f"The catalog_version is {catalog_version}.\n"
         f"Supported families: {supported_families}.\n"
         f"{age_rule_block}"
+        f"{visa_rule_block}"
+        f"{stcw_rule_block}"
         f"Required schema_version: query_plan.v1.\n"
         "Output shape:\n"
         "{\n"
@@ -269,12 +322,126 @@ def _age_decade_bounds(token: Any, modifier: str | None = None) -> tuple[int | N
     return decade, decade + 9
 
 
+def _us_visa_is_anchored(prompt_text: Any) -> bool:
+    text = str(prompt_text or "")
+    if not text.strip():
+        return False
+    if _VISA_POLARITY_INVERSION.search(text):
+        return False
+    return bool(_SUPPORTED_VISA_CONTEXT_CUES.search(text))
+
+
+def _stcw_basic_is_anchored(prompt_text: Any) -> bool:
+    text = str(prompt_text or "")
+    if not text.strip():
+        return False
+    return bool(_STCW_BASIC_CONTEXT_CUES.search(text))
+
+
+def _age_range_is_anchored(prompt_text: Any) -> bool:
+    text = str(prompt_text or "")
+    if not text.strip():
+        return False
+    if _AGE_FIGURATIVE_PATTERNS.search(text):
+        return False
+    minimum_years, maximum_years = _age_bounds_from_text(text)
+    return minimum_years is not None or maximum_years is not None
+
+
+def _visa_accepted_types_for_group(analyzer: Any, visa_group: str | None) -> list[str]:
+    if not visa_group:
+        return []
+    accepted_types: list[str] = []
+    visa_defs = getattr(analyzer, "_visa_type_definitions", None)
+    if callable(visa_defs):
+        try:
+            defs = visa_defs()
+        except Exception:
+            defs = []
+        if isinstance(defs, list):
+            accepted_types = [
+                str(visa_def.get("canonical")).strip()
+                for visa_def in defs
+                if isinstance(visa_def, Mapping)
+                and visa_def.get("group") == visa_group
+                and isinstance(visa_def.get("canonical"), str)
+                and str(visa_def.get("canonical")).strip()
+            ]
+    if visa_group == "usa" and not accepted_types:
+        return ["US Visa (USA)"]
+    return accepted_types
+
+
+def _extract_shadow_us_visa_constraint(analyzer: Any, prompt_text: Any) -> dict[str, Any] | None:
+    text = str(prompt_text or "").strip().lower()
+    if not text:
+        return None
+    if _VISA_POLARITY_INVERSION.search(text):
+        return None
+
+    if not _SUPPORTED_VISA_CONTEXT_CUES.search(text):
+        return None
+
+    visa_group = None
+    if re.search(r"\b(?:australia|australian|mcv|maritime\s+crew)\b", text, flags=re.IGNORECASE):
+        visa_group = "australia"
+    elif re.search(r"\b(?:schengen|european|eu)\b", text, flags=re.IGNORECASE):
+        visa_group = "schengen"
+    elif re.search(r"\b(?:us|usa|u\.s\.|america|american|yankee|states|stateside|h-?1b|l-?1|f-?1|o-?1|c1/?d|c1d|b1/?b2|b1b2|c1\s+visa|d\s+visa)\b", text, flags=re.IGNORECASE):
+        visa_group = "usa"
+    else:
+        return None
+
+    accepted_types = _visa_accepted_types_for_group(analyzer, visa_group)
+
+    months = None
+    for pattern in (
+        r"\b(?:valid|current|hold(?:ing)?|with)\s+(?:us\s+)?visa(?:\s+is\s+valid|\s+valid)?\s+(?:for\s+)?(?:at\s+least\s+|minimum\s+)?(\d+)\s+months?\b",
+        r"\b(\d+)\s+months?\s+(?:us\s+)?visa\b",
+        r"\b(\d+)\s+month\s+(?:us\s+)?visa\b",
+        r"\b(\d+)\s+years?\s+(?:us\s+)?visa\b",
+        r"\b(\d+)\s+year\s+(?:us\s+)?visa\b",
+        r"\bvisa\s+valid\s+for\s+(\d+)\s+months?\b",
+        r"\bvisa\s+valid\s+for\s+(\d+)\s+years?\b",
+    ):
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            value = _as_positive_int(match.group(1))
+            if value is None:
+                continue
+            months = value * 12 if "year" in pattern else value
+            break
+
+    if visa_group is None:
+        return None
+
+    payload = {
+        "type": "us_visa",
+        "required": True,
+        "minimum_months_remaining": months,
+        "visa_group": visa_group,
+        "accepted_types": accepted_types or None,
+    }
+    return payload
+
+
+_AGE_PLAUSIBLE_MIN = 14
+_AGE_PLAUSIBLE_MAX = 80
+
+
+def _is_plausible_age(value: int | None) -> bool:
+    if value is None:
+        return True
+    return _AGE_PLAUSIBLE_MIN <= value <= _AGE_PLAUSIBLE_MAX
+
+
 def _age_bounds_from_text(text: Any) -> tuple[int | None, int | None]:
     prompt = str(text or "").strip().lower()
     if not prompt:
         return None, None
 
     age_token = r"(?:\d{1,2}|twenty|thirty|forty|fifty|sixty|seventy|eighty)"
+    decade_plural_token = r"(?:twenties|thirties|forties|fifties|sixties|seventies|eighties)"
     decade_token = r"(?:twenties|thirties|forties|fifties|sixties|seventies|eighties|twenty|thirty|forty|fifty|sixty|seventy|eighty)"
     approx_patterns = [
         rf"(?:around|approximately|about|roughly)\s+({age_token})\s*(?:years?\s+old|yo|yrs?)?",
@@ -302,7 +469,7 @@ def _age_bounds_from_text(text: Any) -> tuple[int | None, int | None]:
         rf"(?:in\s+(?:his|her|their|the)\s+)?(?:mid|early|late)[-\s]+(\d{{1,2}})s\b",
         rf"\b(?:mid|early|late)[-\s]+(\d{{1,2}})s\b",
         rf"(?:in\s+(?:his|her|their|the)\s+)?(\d{{1,2}})s\b",
-        rf"(?:in\s+(?:his|her|their|the)\s+)?({decade_token})\b",
+        rf"(?:in\s+(?:his|her|their|the)\s+)?({decade_plural_token})\b",
         rf"\b({decade_token})-something\b",
     ]
     for pattern in decade_patterns:
@@ -343,6 +510,8 @@ def _age_bounds_from_text(text: Any) -> tuple[int | None, int | None]:
                 continue
             if lower > upper:
                 lower, upper = upper, lower
+            if not (_is_plausible_age(lower) and _is_plausible_age(upper)):
+                continue
             return lower, upper
 
     max_patterns = [
@@ -373,6 +542,8 @@ def _age_bounds_from_text(text: Any) -> tuple[int | None, int | None]:
                 continue
             if mode == "exclusive":
                 value -= 1
+            if not _is_plausible_age(value):
+                continue
             return None, value
 
     min_patterns = [
@@ -400,6 +571,8 @@ def _age_bounds_from_text(text: Any) -> tuple[int | None, int | None]:
                 continue
             if mode == "exclusive":
                 value += 1
+            if not _is_plausible_age(value):
+                continue
             return value, None
 
     return None, None
@@ -555,6 +728,18 @@ def _family_to_canonical_items(
         return [], [], []
 
     if family in {"age_range"}:
+        if not _age_range_is_anchored(prompt_text or source_text or raw_prompt):
+            source = _first_string(source_text, prompt_text, raw_prompt) or raw_prompt
+            return [], [
+                {
+                    "id": "age_range",
+                    "mode": "required",
+                    "reason": "unsupported_filter_family",
+                    "source_text": source,
+                    "suggested_handling": "block_search",
+                    "confidence": "low",
+                }
+            ], []
         text_minimum_years, text_maximum_years = _age_bounds_from_text(
             _first_string(
                 item.get("source_text"),
@@ -696,6 +881,18 @@ def _family_to_canonical_items(
         required_value = _first_present(parameters.get("required"), parameters.get("validity"), parameters.get("must_have"))
         if _is_false_value(required_value):
             raise ShadowLLMTranslationError("stcw_basic explicitly marked false")
+        if not _stcw_basic_is_anchored(prompt_text or source_text or raw_prompt):
+            source = _first_string(source_text, prompt_text, raw_prompt) or raw_prompt
+            return [], [
+                {
+                    "id": "stcw_basic",
+                    "mode": "required",
+                    "reason": "unsupported_filter_family",
+                    "source_text": source,
+                    "suggested_handling": "block_search",
+                    "confidence": "low",
+                }
+            ], []
         return [
             _make_applied_constraint(
                 "stcw_basic",
@@ -703,12 +900,43 @@ def _family_to_canonical_items(
                 source_text=source_text,
                 confidence=confidence,
             )
-        ], [], ["stcw basic", "valid stcw basic", "stcw basic required", "basic stcw required", "valid stcw basic safety"]
+        ], [], [
+            "stcw basic",
+            "basic stcw",
+            "basic safety training",
+            "bst",
+            "basic training package",
+            "stcw a-vi/1",
+            "all four basic stcw",
+            "all four basic courses",
+            "all four basic certificates",
+            "four basic certificates",
+            "pssr",
+            "pst",
+            "fpff",
+            "efa",
+            "valid stcw basic",
+            "stcw basic required",
+            "basic stcw required",
+            "valid stcw basic safety",
+        ]
 
     if family == "us_visa":
         required_value = _first_present(parameters.get("required"), parameters.get("validity"), parameters.get("must_have"))
         if _is_false_value(required_value):
             raise ShadowLLMTranslationError("us_visa explicitly marked false")
+        if not _us_visa_is_anchored(prompt_text or source_text or raw_prompt):
+            source = _first_string(source_text, prompt_text, raw_prompt) or raw_prompt
+            return [], [
+                {
+                    "id": "us_visa",
+                    "mode": "required",
+                    "reason": "unsupported_filter_family",
+                    "source_text": source,
+                    "suggested_handling": "block_search",
+                    "confidence": "low",
+                }
+            ], []
         months = _as_positive_int(
             parameters.get("minimum_months_remaining")
             if parameters.get("minimum_months_remaining") is not None
@@ -716,14 +944,26 @@ def _family_to_canonical_items(
             if parameters.get("months_remaining") is not None
             else parameters.get("minimum_months")
         )
+        visa_group = _first_string(parameters.get("visa_group"), item.get("visa_group"))
+        if isinstance(visa_group, str):
+            visa_group = visa_group.strip().lower() or None
+        accepted_types = _canonical_list(parameters.get("accepted_types") or item.get("accepted_types") or [])
+        if not accepted_types and visa_group:
+            accepted_types = _visa_accepted_types_for_group(analyzer, visa_group)
         return [
             _make_applied_constraint(
                 "us_visa",
-                {"type": "us_visa", "required": True, "minimum_months_remaining": months},
+                {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": months,
+                    "visa_group": visa_group,
+                    "accepted_types": accepted_types or None,
+                },
                 source_text=source_text,
                 confidence=confidence,
             )
-        ], [], ["valid us visa", "us visa", "visa required", "valid visa"]
+        ], [], ["valid us visa", "us visa", "visa required", "valid visa"] + accepted_types
 
     if family == "passport_validity":
         validity_value = parameters.get("validity") or parameters.get("is_valid") or parameters.get("required")
@@ -1219,6 +1459,90 @@ def _translate_model_payload(
                         )
                         semantic_fragments.extend([rank_value.replace("_", " "), rank_value])
 
+    if not any(constraint.get("id") == "age_range" for constraint in applied_constraints):
+        minimum_years = maximum_years = None
+        extract_age_constraint = getattr(analyzer, "_extract_age_constraint", None)
+        if callable(extract_age_constraint):
+            try:
+                age_constraint = extract_age_constraint(prompt_text)
+            except Exception:
+                age_constraint = None
+            if isinstance(age_constraint, Mapping):
+                minimum_years = _first_present(age_constraint.get("min_age"), age_constraint.get("minimum_years"))
+                maximum_years = _first_present(age_constraint.get("max_age"), age_constraint.get("maximum_years"))
+        if minimum_years is None and maximum_years is None:
+            age_cue_pattern = re.compile(
+                r"\b(?:age|aged|ages|years?\s+old|yo|yrs?\s+old|under|older|younger|below|above|between|range|minimum\s+age|maximum\s+age|at\s+least|no\s+older|not\s+above|no\s+younger|not\s+below|nlt|nmt|plus|thirty-something|forty-something|fifty-something|twenties|thirties|forties|fifties|sixties|seventies|eighties)\b|"
+                r"\b(?:in\s+(?:his|her|their|the)\s+)?(?:mid|early|late)[-\s]+\d{1,2}s\b|"
+                r"\b\d{1,2}s\b",
+                flags=re.IGNORECASE,
+            )
+            bare_plus_prompt = bool(re.fullmatch(r"\d{1,2}\s*\+", prompt_text.strip()))
+            if (
+                bare_plus_prompt
+                or (
+                    age_cue_pattern.search(prompt_text)
+                    and not re.search(r"\bmiddle[-\s]?aged\b|\byoung at heart\b|\bsenior officer\b", prompt_text, flags=re.IGNORECASE)
+                )
+            ):
+                minimum_years, maximum_years = _age_bounds_from_text(prompt_text)
+        if minimum_years is not None or maximum_years is not None:
+            applied_constraints.append(
+                _make_applied_constraint(
+                    "age_range",
+                    {
+                        "type": "age_range",
+                        "minimum_years": minimum_years,
+                        "maximum_years": maximum_years,
+                    },
+                    source_text=prompt_text or raw_prompt,
+                    confidence="high",
+                )
+            )
+            if minimum_years is not None:
+                semantic_fragments.extend(
+                    [
+                        f"at least {minimum_years} years old",
+                        f"minimum age {minimum_years}",
+                        f"older than {minimum_years}",
+                        f"over {minimum_years}",
+                    ]
+                )
+            if maximum_years is not None:
+                semantic_fragments.extend(
+                    [
+                        f"up to {maximum_years} years old",
+                        f"maximum age {maximum_years}",
+                        f"younger than {maximum_years}",
+                        f"below {maximum_years}",
+                    ]
+                )
+
+    if not any(constraint.get("id") == "us_visa" for constraint in applied_constraints):
+        shadow_visa = _extract_shadow_us_visa_constraint(analyzer, prompt_text)
+        if isinstance(shadow_visa, Mapping):
+            required = _first_present(shadow_visa.get("required"), shadow_visa.get("must_be_valid"))
+            if not _is_false_value(required):
+                applied_constraints.append(
+                    _make_applied_constraint(
+                        "us_visa",
+                        {
+                            "type": "us_visa",
+                            "required": True,
+                            "minimum_months_remaining": _as_positive_int(shadow_visa.get("minimum_months_remaining")),
+                            "visa_group": _first_string(shadow_visa.get("visa_group")),
+                            "accepted_types": _canonical_list(shadow_visa.get("accepted_types") or []),
+                        },
+                        source_text=_first_string(shadow_visa.get("display_value"), prompt_text) or prompt_text,
+                        confidence="high",
+                    )
+                )
+                semantic_fragments.extend(
+                    ["valid us visa", "us visa", "visa required", "valid visa"]
+                    + [str(visa_type).lower() for visa_type in (shadow_visa.get("accepted_types") or []) if isinstance(visa_type, str)]
+                )
+                shadow_visa = None
+
     if not any(constraint.get("id") == "us_visa" for constraint in applied_constraints):
         extract_us_visa_constraint = getattr(analyzer, "_extract_us_visa_constraint", None)
         if callable(extract_us_visa_constraint):
@@ -1232,10 +1556,19 @@ def _translate_model_payload(
                     accepted_types = visa.get("accepted_types") or []
                     display_value = _first_string(visa.get("requested_label"), visa.get("display_value"), prompt_text)
                     months_remaining = _as_positive_int(visa.get("minimum_months_remaining") or visa.get("months_remaining"))
+                    visa_group = _first_string(visa.get("visa_group"))
+                    if not accepted_types and visa_group:
+                        accepted_types = _visa_accepted_types_for_group(analyzer, visa_group)
                     applied_constraints.append(
                         _make_applied_constraint(
                             "us_visa",
-                            {"type": "us_visa", "required": True, "minimum_months_remaining": months_remaining},
+                            {
+                                "type": "us_visa",
+                                "required": True,
+                                "minimum_months_remaining": months_remaining,
+                                "visa_group": visa_group.lower() if isinstance(visa_group, str) else visa_group,
+                                "accepted_types": accepted_types or None,
+                            },
                             source_text=display_value or prompt_text,
                             confidence="high",
                         )
@@ -1243,6 +1576,43 @@ def _translate_model_payload(
                     semantic_fragments.extend(
                         ["valid us visa", "us visa", "visa required", "valid visa", "visa"]
                         + [str(visa_type).lower() for visa_type in accepted_types if isinstance(visa_type, str)]
+                    )
+
+    if not any(constraint.get("id") == "stcw_basic" for constraint in applied_constraints):
+        extract_stcw_basic_constraint = getattr(analyzer, "_extract_stcw_basic_constraint", None)
+        if callable(extract_stcw_basic_constraint):
+            try:
+                stcw_basic = extract_stcw_basic_constraint(prompt_text)
+            except Exception:
+                stcw_basic = None
+            if isinstance(stcw_basic, Mapping):
+                required = _first_present(stcw_basic.get("required"), stcw_basic.get("must_have"), stcw_basic.get("validity"))
+                if not _is_false_value(required) and _stcw_basic_is_anchored(prompt_text or raw_prompt):
+                    applied_constraints.append(
+                        _make_applied_constraint(
+                            "stcw_basic",
+                            {"type": "stcw_basic", "required": True},
+                            source_text=_first_string(stcw_basic.get("display_value"), prompt_text) or prompt_text,
+                            confidence="high",
+                        )
+                    )
+                    semantic_fragments.extend(
+                        [
+                            "stcw basic",
+                            "basic stcw",
+                            "basic safety training",
+                            "bst",
+                            "basic training package",
+                            "stcw a-vi/1",
+                            "all four basic stcw",
+                            "all four basic courses",
+                            "all four basic certificates",
+                            "four basic certificates",
+                            "pssr",
+                            "pst",
+                            "fpff",
+                            "efa",
+                        ]
                     )
 
     if not any(constraint.get("id") == "availability" for constraint in applied_constraints):

@@ -116,6 +116,60 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
         self.assertEqual(validated["validation"]["status"], "valid")
         self.assertTrue(validated["applied_constraints"][0]["constraint"]["must_be_valid"])
 
+    def test_us_visa_payload_preserves_visa_group_and_accepted_types(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": 6,
+                    "visa_group": "usa",
+                    "accepted_types": ["C1/D (USA)"],
+                },
+                "source_text": "valid US visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        ]
+        validated = normalize_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "valid")
+        constraint = validated["applied_constraints"][0]["constraint"]
+        self.assertEqual(constraint["visa_group"], "usa")
+        self.assertEqual(constraint["accepted_types"], ["C1/D (USA)"])
+
+    def test_us_visa_rejects_unsupported_visa_group(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "uk",
+                    "accepted_types": None,
+                },
+                "source_text": "valid UK visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        ]
+        validated = normalize_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertTrue(
+            any(error["code"] == "invalid_visa_group" for error in validated["validation"]["errors"])
+        )
+
     def test_negated_requirement_phrase_is_not_mandatory(self):
         cases = [
             "passport not required for leadership",

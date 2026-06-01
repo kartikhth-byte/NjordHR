@@ -90,19 +90,41 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertIn("unsupported_filter_family", prompt)
         self.assertIn("2nd engineer with valid passport", prompt)
 
+    def test_shadow_llm_prompt_is_compact(self):
+        prompt = build_shadow_llm_prompt("between 30 and 50 years old")
+        self.assertLess(len(prompt), 3500, f"prompt is {len(prompt)} chars; trim further")
+        self.assertIn("age_range:", prompt)
+        self.assertIn("us_visa", prompt)
+        self.assertIn("stcw_basic:", prompt)
+
     def test_build_shadow_llm_prompt_includes_age_family_rules(self):
         prompt = build_shadow_llm_prompt("2nd engineer with valid passport", rank="2nd Engineer")
-        self.assertIn("Age family rules:", prompt)
+        self.assertIn("age_range:", prompt)
         self.assertIn("not below N", prompt)
         self.assertIn("nlt N", prompt)
         self.assertIn("mid-30s", prompt)
-        self.assertIn("nlt 30 and nmt 50", prompt)
+        self.assertIn("around N", prompt)
+
+    def test_build_shadow_llm_prompt_includes_visa_family_rules(self):
+        prompt = build_shadow_llm_prompt("2nd engineer with valid passport", rank="2nd Engineer")
+        self.assertIn("us_visa (family id for USA, Australia, and Schengen visas)", prompt)
+        self.assertIn("visa-free X", prompt)
+        self.assertIn("Vague 'visas' / 'proper visas' without a country -> unsupported", prompt)
+        self.assertIn("Supported groups: usa", prompt)
+
+    def test_build_shadow_llm_prompt_includes_stcw_basic_family_rules(self):
+        prompt = build_shadow_llm_prompt("2nd engineer with valid passport", rank="2nd Engineer")
+        self.assertIn("stcw_basic:", prompt)
+        self.assertIn("BST", prompt)
+        self.assertIn("PSSR, PST, FPFF, EFA", prompt)
+        self.assertIn("Advanced certificates (AFF, MFA, AFA)", prompt)
 
     def test_age_bounds_from_text_handles_inversion_and_shorthand(self):
         cases = {
             "not below 30": (30, None),
             "no younger than 25": (25, None),
             "not younger than 25": (25, None),
+            "no older than fifty": (None, 50),
             "cannot exceed 50": (None, 50),
             "can't be older than 50": (None, 50),
             "nlt 30 and nmt 50": (30, 50),
@@ -117,6 +139,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
             "around 35 years old": (33, 37),
             "30 and above": (30, None),
             "50 and below": (None, 50),
+            "30+": (30, None),
             "25 yrs and above": (25, None),
             "min 30": (30, None),
             "max 45 yo": (None, 45),
@@ -125,6 +148,17 @@ class ShadowLLMProviderTests(unittest.TestCase):
         for text, expected in cases.items():
             with self.subTest(text=text):
                 self.assertEqual(_age_bounds_from_text(text), expected)
+
+    def test_age_bounds_skips_implausible_numbers(self):
+        self.assertEqual(_age_bounds_from_text("between 3 and 5 ports"), (None, None))
+        self.assertEqual(_age_bounds_from_text("below 5 contracts"), (None, None))
+        self.assertEqual(_age_bounds_from_text("minimum 5 years sea service"), (None, None))
+        self.assertEqual(_age_bounds_from_text("at least 100 years old"), (None, None))
+        self.assertEqual(_age_bounds_from_text("older than 79"), (80, None))
+        self.assertEqual(_age_bounds_from_text("older than 80"), (None, None))
+        self.assertEqual(_age_bounds_from_text("between 30 and 50 years old"), (30, 50))
+        self.assertEqual(_age_bounds_from_text("at least 25 years old"), (25, None))
+        self.assertEqual(_age_bounds_from_text("under 50"), (None, 49))
 
     def test_build_shadow_llm_query_plan_posts_to_gemini_and_returns_valid_plan(self):
         plan_payload = {
@@ -209,7 +243,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
                 "created_at": "2026-01-01T00:00:00+00:00",
             },
             "input": {
-                "raw_prompt": "2nd engineer older than 32 with valid COC, STCW basic, and tanker gas endorsement",
+                "raw_prompt": "2nd engineer older than 32 with valid COC, STCW basic, valid US visa, and tanker gas endorsement",
                 "rank_context": "2nd Engineer",
                 "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
             },
@@ -217,7 +251,15 @@ class ShadowLLMProviderTests(unittest.TestCase):
                 {"filter_family": "age_range", "parameters": {"minimum_years": 32}},
                 {"family": "coc_document_gate", "constraint": {"type": "coc_document_gate", "required": True}},
                 {"filter_family": "stcw_basic", "parameters": {"required": True}},
-                {"filter_family": "us_visa", "parameters": {"validity": "valid", "minimum_months_remaining": 6}},
+                {
+                    "filter_family": "us_visa",
+                    "parameters": {
+                        "validity": "valid",
+                        "minimum_months_remaining": 6,
+                        "visa_group": "usa",
+                        "accepted_types": ["C1/D (USA)"],
+                    },
+                },
                 {"filter_family": "stcw_endorsement", "parameters": {"endorsements_required": ["tanker_gas"]}},
                 {"filter_family": "vessel_type", "parameters": {"display_value": "tanker"}},
             ],
@@ -234,7 +276,7 @@ class ShadowLLMProviderTests(unittest.TestCase):
             )):
                 result = build_shadow_llm_query_plan(
                     self.analyzer,
-                    prompt="2nd engineer older than 32 with valid COC, STCW basic, and tanker gas endorsement",
+                    prompt="2nd engineer older than 32 with valid COC, STCW basic, valid US visa, and tanker gas endorsement",
                     rank="2nd Engineer",
                     prompt_id="prompt-3",
                     legacy_plan=self.legacy_plan,
@@ -248,21 +290,249 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertIn("age_range", applied_families)
         self.assertIn("coc_document_gate", applied_families)
         self.assertIn("stcw_basic", applied_families)
-        self.assertIn("us_visa", applied_families)
         self.assertIn("stcw_endorsement", applied_families)
-        self.assertIn("vessel_type", [item["id"] for item in plan["unapplied_constraints"]])
-        self.assertEqual(
-            next(item for item in plan["applied_constraints"] if item["id"] == "age_range")["constraint"],
-            {"type": "age_range", "minimum_years": 33, "maximum_years": None},
-        )
-        self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "coc_document_gate")["constraint"]["required"])
+        us_visa_constraint = next(item["constraint"] for item in plan["applied_constraints"] if item["id"] == "us_visa")
+        self.assertEqual(us_visa_constraint["visa_group"], "usa")
+        self.assertEqual(us_visa_constraint["accepted_types"], ["C1/D (USA)"])
+
+    def test_build_shadow_llm_query_plan_repairs_stcw_basic_from_legacy_extractor(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "BST mandatory and strong leadership",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "strong leadership",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
+            with mock.patch("query_understanding.shadow_llm_provider.requests.post", return_value=_DummyResponse(
+                {"candidates": [{"content": {"parts": [{"text": json.dumps(plan_payload)}]}}]}
+            )):
+                result = build_shadow_llm_query_plan(
+                    self.analyzer,
+                    prompt="BST mandatory and strong leadership",
+                    rank="2nd Engineer",
+                    prompt_id="prompt-4",
+                    legacy_plan=self.legacy_plan,
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        applied_families = [item["id"] for item in plan["applied_constraints"]]
+        self.assertIn("stcw_basic", applied_families)
+        self.assertTrue(any(item["constraint"]["type"] == "stcw_basic" for item in plan["applied_constraints"]))
         self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "stcw_basic")["constraint"]["required"])
-        self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "us_visa")["constraint"]["required"])
-        self.assertEqual(
-            next(item for item in plan["applied_constraints"] if item["id"] == "stcw_endorsement")["constraint"]["endorsements_required"],
-            ["tanker_gas"],
-        )
-        self.assertEqual(plan["validation"]["status"], "degraded")
+        self.assertEqual(plan["validation"]["status"], "valid")
+
+    def test_build_shadow_llm_query_plan_vetoes_unanchored_stcw_basic_controls(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "any safety training",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "stcw_basic", "parameters": {"required": True}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("any safety training", plan_payload)
+
+        self.assertIsNotNone(result)
+        plan = result["plan"]
+        self.assertNotIn("stcw_basic", [item["id"] for item in plan["applied_constraints"]])
+        unapplied_items = [item for item in plan["unapplied_constraints"] if item["id"] == "stcw_basic"]
+        self.assertEqual(len(unapplied_items), 1)
+        self.assertEqual(unapplied_items[0]["reason"], "unsupported_filter_family")
+
+    def test_build_shadow_llm_query_plan_vetoes_unanchored_age_range_controls(self):
+        for prompt in ("middle-aged officer", "young at heart", "senior officer"):
+            with self.subTest(prompt=prompt):
+                plan_payload = {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": prompt,
+                        "rank_context": "2nd Engineer",
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [
+                        {"filter_family": "age_range", "parameters": {"minimum_years": 30}},
+                    ],
+                    "unapplied_constraints": [],
+                    "semantic_query": "",
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                }
+
+                result = self._run_shadow_plan(prompt, plan_payload)
+
+                self.assertIsNotNone(result)
+                plan = result["plan"]
+                self.assertNotIn("age_range", [item["id"] for item in plan["applied_constraints"]])
+                unapplied_items = [item for item in plan["unapplied_constraints"] if item["id"] == "age_range"]
+                self.assertEqual(len(unapplied_items), 1)
+                self.assertEqual(unapplied_items[0]["reason"], "unsupported_filter_family")
+
+    def test_build_shadow_llm_query_plan_backfills_us_visa_accepted_types_from_catalog(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "valid US visa",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "us_visa", "parameters": {"required": True, "visa_group": "usa"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("valid US visa", plan_payload)
+
+        self.assertIsNotNone(result)
+        plan = result["plan"]
+        us_visa_constraint = next(item["constraint"] for item in plan["applied_constraints"] if item["id"] == "us_visa")
+        expected_types = [
+            str(visa_def.get("canonical")).strip()
+            for visa_def in self.analyzer._visa_type_definitions()
+            if isinstance(visa_def, dict) and visa_def.get("group") == "usa" and str(visa_def.get("canonical") or "").strip()
+        ]
+        self.assertEqual(us_visa_constraint["visa_group"], "usa")
+        self.assertEqual(us_visa_constraint["accepted_types"], expected_types)
+
+    def test_build_shadow_llm_query_plan_repairs_age_and_visa_when_model_returns_empty_plan(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "no older than fifty with valid US visa",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "strong leadership",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
+            with mock.patch("query_understanding.shadow_llm_provider.requests.post", return_value=_DummyResponse(
+                {"candidates": [{"content": {"parts": [{"text": json.dumps(plan_payload)}]}}]}
+            )):
+                result = build_shadow_llm_query_plan(
+                    self.analyzer,
+                    prompt="no older than fifty with valid US visa",
+                    rank="2nd Engineer",
+                    prompt_id="prompt-5",
+                    legacy_plan=self.legacy_plan,
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        applied = {item["id"]: item["constraint"] for item in plan["applied_constraints"]}
+        self.assertIn("age_range", applied)
+        self.assertIn("us_visa", applied)
+        self.assertEqual(applied["age_range"], {"type": "age_range", "minimum_years": None, "maximum_years": 50})
+        self.assertEqual(applied["us_visa"]["type"], "us_visa")
+        self.assertEqual(applied["us_visa"]["visa_group"], "usa")
+
+    def test_build_shadow_llm_query_plan_does_not_infer_age_from_sea_service_numeric_prompt(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "minimum 5 years sea service",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [
+                {"filter_family": "sea_service", "reason": "unsupported_filter_family", "details": "minimum 5 years sea service"}
+            ],
+            "semantic_query": "minimum 5 years sea service",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):
+            with mock.patch("query_understanding.shadow_llm_provider.requests.post", return_value=_DummyResponse(
+                {"candidates": [{"content": {"parts": [{"text": json.dumps(plan_payload)}]}}]}
+            )):
+                result = build_shadow_llm_query_plan(
+                    self.analyzer,
+                    prompt="minimum 5 years sea service",
+                    rank=None,
+                    prompt_id="prompt-6",
+                    legacy_plan=self.legacy_plan,
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertNotIn("age_range", [item["id"] for item in plan["applied_constraints"]])
 
     def test_build_shadow_llm_query_plan_keeps_compound_passport_coc_and_availability(self):
         plan_payload = {
@@ -343,9 +613,46 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertIsNotNone(result)
         plan = result["plan"]
         self.assertIn("passport_validity", [item["id"] for item in plan["applied_constraints"]])
-        self.assertIn("us_visa", [item["id"] for item in plan["applied_constraints"]])
+        self.assertEqual([item["id"] for item in plan["applied_constraints"]], ["passport_validity"])
         self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "passport_validity")["constraint"]["must_be_valid"])
-        self.assertTrue(next(item for item in plan["applied_constraints"] if item["id"] == "us_visa")["constraint"]["required"])
+        self.assertEqual([item["id"] for item in plan["unapplied_constraints"]], ["us_visa"])
+        self.assertEqual(plan["unapplied_constraints"][0]["reason"], "unsupported_filter_family")
+
+    def test_build_shadow_llm_query_plan_vetoes_unanchored_us_visa_controls(self):
+        for prompt in ("Canadian visa", "must have proper visas", "visa-free US entry"):
+            with self.subTest(prompt=prompt):
+                plan_payload = {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": prompt,
+                        "rank_context": "2nd Engineer",
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [
+                        {"filter_family": "us_visa", "parameters": {"required": True}},
+                    ],
+                    "unapplied_constraints": [],
+                    "semantic_query": "",
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                }
+
+                result = self._run_shadow_plan(prompt, plan_payload)
+
+                self.assertIsNotNone(result)
+                plan = result["plan"]
+                self.assertNotIn("us_visa", [item["id"] for item in plan["applied_constraints"]])
+                unapplied_items = [item for item in plan["unapplied_constraints"] if item["id"] == "us_visa"]
+                self.assertEqual(len(unapplied_items), 1)
+                self.assertEqual(unapplied_items[0]["reason"], "unsupported_filter_family")
 
     def _run_shadow_plan(self, prompt: str, plan_payload: dict, *, rank: str | None = "2nd Engineer"):
         with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):

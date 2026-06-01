@@ -242,6 +242,8 @@ class LegacyParserAdapter:
                         "type": "us_visa",
                         "required": True,
                         "minimum_months_remaining": visa.get("minimum_months_remaining"),
+                        "visa_group": visa.get("visa_group"),
+                        "accepted_types": visa.get("accepted_types") or None,
                     },
                     visa.get("display_value") or user_prompt,
                     "us_visa",

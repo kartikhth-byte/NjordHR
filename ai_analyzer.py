@@ -1562,6 +1562,22 @@ class AIResumeAnalyzer:
             },
             "stcw_basic": {
                 "patterns": [
+                    r"\bbst\b",
+                    r"\bbst\s+mandatory\b",
+                    r"\bvalid\s+bst\b",
+                    r"\bmust\s+have\s+bst\b",
+                    r"\bbasic\s+safety\s+training\b",
+                    r"\bstcw\s+basic\s+safety(?:\s+training)?\b",
+                    r"\bbasic\s+safety\s+training\s*\(\s*bst\s*\)\s+required\b",
+                    r"\bstcw\s+basic\s+refresher\s+current\b",
+                    r"\bstcw\s+basic\s+in\s+date\b",
+                    r"\ball\s+four\s+basic\s+courses(?:\s+current)?\b",
+                    r"\ball\s+four\s+basic\s+stcw\b",
+                    r"\b(?:all\s+)?four\s+basic\s+certificates\b",
+                    r"\bvalid\s+4\s+basic\s+certificates\b",
+                    r"\bbasic\s+training\s+package\b",
+                    r"\bstcw\s+a-?vi/1\b",
+                    r"(?=.*\bpssr\b)(?=.*\bpst\b)(?=.*\bfpff\b)(?=.*\befa\b).+",
                     r"\bvalid\s+stcw\s+basic\b",
                     r"\bstcw\s+basic\s+required\b",
                     r"\bbasic\s+stcw\s+required\b",
@@ -1973,7 +1989,7 @@ class AIResumeAnalyzer:
     def _extract_stcw_basic_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         patterns = self._prompt_parsing_registry()["stcw_basic"]["patterns"]
-        if any(re.search(pattern, prompt) for pattern in patterns):
+        if any(re.search(pattern, prompt, flags=re.IGNORECASE) for pattern in patterns):
             return {"required": True}
         return None
 
@@ -2939,6 +2955,21 @@ class AIResumeAnalyzer:
 
     def _prompt_observability_stcw_basic_phrase(self, prompt):
         patterns = [
+            r"\bbst\b",
+            r"\bbst\s+mandatory\b",
+            r"\bvalid\s+bst\b",
+            r"\bmust\s+have\s+bst\b",
+            r"\bbasic\s+safety\s+training\b",
+            r"\bstcw\s+basic\s+safety(?:\s+training)?\b",
+            r"\bbasic\s+safety\s+training\s*\(\s*bst\s*\)\s+required\b",
+            r"\bstcw\s+basic\s+refresher\s+current\b",
+            r"\bstcw\s+basic\s+in\s+date\b",
+            r"\ball\s+four\s+basic\s+courses(?:\s+current)?\b",
+            r"\ball\s+four\s+basic\s+stcw\b",
+            r"\b(?:all\s+)?four\s+basic\s+certificates\b",
+            r"\bvalid\s+4\s+basic\s+certificates\b",
+            r"\bbasic\s+training\s+package\b",
+            r"\bstcw\s+a-?vi/1\b",
             r"\bvalid\s+stcw\s+basic\b",
             r"\bstcw\s+basic\s+required\b",
             r"\bbasic\s+stcw\s+required\b",

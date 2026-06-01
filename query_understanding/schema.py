@@ -26,6 +26,7 @@ from .hard_filter_catalog import (
 )
 
 QUERY_PLAN_SCHEMA_VERSION = "query_plan.v1"
+SUPPORTED_VISA_GROUPS = {"usa", "australia", "schengen"}
 VALID_STATUSES = {"valid", "invalid", "degraded"}
 VALID_CONSTRAINT_MODES = {"required", "preferred"}
 VALID_CONFIDENCE_VALUES = {"high", "medium", "low"}
@@ -353,7 +354,24 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
         months = payload.get("minimum_months_remaining")
         if not (_is_int(months) or months is None):
             errors.append(_error("invalid_months", "constraint.minimum_months_remaining", "minimum_months_remaining must be an integer or null"))
-        return {"type": "us_visa", "required": True, "minimum_months_remaining": months}, errors
+        visa_group = payload.get("visa_group")
+        if visa_group is not None:
+            if not isinstance(visa_group, str) or not visa_group.strip() or visa_group.strip().lower() not in SUPPORTED_VISA_GROUPS:
+                errors.append(_error("invalid_visa_group", "constraint.visa_group", f"visa_group must be one of {sorted(SUPPORTED_VISA_GROUPS)} or null"))
+        accepted_types = payload.get("accepted_types")
+        if accepted_types is not None:
+            if not isinstance(accepted_types, list) or not all(isinstance(item, str) and item.strip() for item in accepted_types):
+                errors.append(_error("invalid_accepted_types", "constraint.accepted_types", "accepted_types must be a list of non-empty strings or null"))
+            else:
+                accepted_types = [item.strip() for item in accepted_types if item.strip()]
+        normalized_visa_group = visa_group.strip().lower() if isinstance(visa_group, str) and visa_group.strip() else None
+        return {
+            "type": "us_visa",
+            "required": True,
+            "minimum_months_remaining": months,
+            "visa_group": normalized_visa_group,
+            "accepted_types": accepted_types,
+        }, errors
 
     if family_id == "passport_validity":
         if payload.get("type") != "passport_validity":

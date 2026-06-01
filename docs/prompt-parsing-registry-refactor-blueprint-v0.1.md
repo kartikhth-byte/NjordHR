@@ -675,6 +675,76 @@ python scripts/tail_set_score.py \
 - Do **not** change the live decision path or disable the deterministic parser.
 - Surface the scores and the open caveats to a human; promotion is a human decision.
 
+### 11.7 Eval workflow — iteration vs. promotion
+
+The shadow audit serves two distinct purposes; treat them with different rigor.
+
+**Iteration eval (fast, focused, optional)**
+
+Use during development when tuning prompt rules, regex patterns, or deterministic
+repair logic for a specific family.
+
+- When the harness's `--family-filter` flag is implemented, use it to run
+  per-family corpora. Otherwise maintain small per-family JSON files alongside
+  the combined corpus.
+- Faster turnaround, lower Gemini cost.
+- Acceptable to iterate prompt rules and re-run dozens of times.
+- Not authoritative for any promotion decision.
+
+**Promotion eval (slow, full, required before any shadow→active flip)**
+
+Always run with the full combined corpus before voting on any family promotion.
+
+- No `--family-filter` flag.
+- Captures cross-family regressions (e.g. patch-15's STCW additions indirectly
+  broke age_range by bloating the system prompt).
+- Required to verify the per-family confidence gate from
+  `guarded-llm-prompt-normalizer-v0.1.md`.
+- Must show stable numbers across **at least two consecutive runs** to control
+  for LLM non-determinism (Gemini Flash Lite is not fully deterministic even
+  with seed=0). The 2026-06-01 promotion eval needed three consecutive runs to
+  confirm stability.
+- Use a date-stable variable to avoid the midnight-rollover filename bug:
+```bash
+EVAL_DATE=$(date +%F)
+```
+
+**Anti-patterns**
+
+- Promoting a family based on per-family eval alone. Per-family runs cannot
+  detect cross-family interference (the patch-15 lesson).
+- Single-run promotion votes. Flash Lite jitter can swing single-row results,
+  especially on small tail sets (< 10 rows). Always confirm with a re-run.
+- Adding LLM prompt content without re-validating all already-cleared families.
+  The system prompt is a global resource; extending family rules for one family
+  can degrade unrelated families if the prompt crosses a length threshold.
+  Patch series confirmed empirically at ~3500 chars for Gemini Flash Lite.
+
+### 11.8 Per-family promotion checklist
+
+For each family flipping from shadow to active:
+
+1. **Full combined eval gate**: rescue ≥0.8, zero controls, zero solved-set
+   regressions, in at least two consecutive runs.
+2. **Per-family confidence gate** from `guarded-llm-prompt-normalizer-v0.1.md`:
+   ≥0.90 confidence on majority of rescue rows for auto-apply.
+3. **Deterministic floor in place**: either an `_extract_<family>_constraint`
+   in `ai_analyzer.py` or a deterministic repair path in
+   `shadow_llm_provider.py` that catches family-detection failures when the
+   LLM emits empty plans.
+4. **Anchor veto in place**: `_<family>_is_anchored` helper that vetoes LLM
+   proposals on figurative or context-mismatched prompts. Pattern: positive
+   cue check + negative deny-list.
+5. **Schema field coverage**: any constraint values the family needs (e.g.
+   `visa_group`, `accepted_types`) must be in `query_understanding/schema.py`
+   and propagated through `legacy_parser_adapter.py` and the LLM translation
+   path.
+6. **Tail-set coverage**: ≥10 rescue rows for statistical stability of the
+   rescue rate; ≥3 family-adjacent controls testing the anchor veto's
+   resilience against figurative or substring-overlap hallucinations.
+7. **Watch live shadow telemetry** in Supabase for at least one observation
+   window after promotion before promoting the next family.
+
 ## 12. Bottom line
 
 You will always have families — that is the schema, and it is correct. What you stop
@@ -752,8 +822,10 @@ at the end of Phase 1. This is captured in the 7A.2 visible-vs-enforced split.
   solved-set gate is mandatory for any verdict beyond `hold`. No family should be flipped
   on eval evidence alone unless both the tail set and solved set are clean.
 - The gold labels in `seajobs_tail_set_v0.1.json` still need a human review pass.
-- Promotion note: `age_range` is the first family promoted from shadow to active in this
-  branch, after clearing the tail-set gate, controls, and solved-set checks.
+- Cycle outcome: `age_range`, `certificate_requirement`, `stcw_basic`, and `us_visa`
+  all cleared the promotion gate in the 2026-06-01 cycle. `age_range` remains the first
+  family promoted from shadow to active in this branch after clearing the tail-set gate,
+  controls, and solved-set checks. The remaining families stay on the follow-up backlog.
 
 ### 13.5 Adjacent implementation notes in the current branch
 
