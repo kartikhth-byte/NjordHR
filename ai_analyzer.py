@@ -2923,7 +2923,99 @@ class AIResumeAnalyzer:
         constraints["applied_constraints"] = list(dict.fromkeys(constraints["applied_constraints"]))
         constraints["unapplied_constraints"] = list(dict.fromkeys(constraints["unapplied_constraints"]))
         constraints["parsing_notes"] = list(dict.fromkeys(note for note in constraints["parsing_notes"] if note))
+        # --- LLM-rescue promotion (blueprint §9.3, §11.5) ---
+        try:
+            promoted = self._llm_promoted_families()
+            if promoted:
+                existing_families = set(constraints.get("applied_constraints", []))
+                if not promoted.issubset(existing_families):
+                    llm_constraints = self._llm_rescue_constraints(
+                        user_prompt=user_prompt,
+                        rank=rank,
+                        families=promoted - existing_families,
+                    )
+                    for family_id, payload in (llm_constraints or {}).items():
+                        if family_id in existing_families:
+                            continue
+                        self._merge_promoted_constraint(constraints, family_id, payload)
+        except Exception as exc:
+            # LLM rescue MUST NEVER break live search — log and continue with legacy.
+            print(f"[promotion] LLM rescue skipped: {exc}")
         return constraints
+
+    def _llm_promoted_families(self) -> set[str]:
+        """Set of family ids currently enabled for LLM rescue via env var."""
+        raw = os.getenv("NJORDHR_LLM_PROMOTED_FAMILIES", "").strip()
+        if not raw:
+            return set()
+        return {family.strip() for family in raw.split(",") if family.strip()}
+
+    def _llm_rescue_constraints(
+        self,
+        *,
+        user_prompt: str,
+        rank: str | None,
+        families: set[str],
+    ) -> dict | None:
+        """Call shadow normalizer; return per-family payloads for high-confidence rescues."""
+        if not families:
+            return None
+        from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
+
+        plan = build_shadow_llm_query_plan(analyzer=self, prompt=user_prompt, rank=rank)
+        if not plan:
+            return None
+
+        rescued: dict[str, dict] = {}
+        for item in (plan.get("applied_constraints") or []):
+            family_id = item.get("id")
+            if family_id not in families:
+                continue
+            if item.get("confidence") != "high":
+                continue
+            payload = item.get("constraint") or {}
+            if payload:
+                rescued[family_id] = payload
+        return rescued
+
+    def _merge_promoted_constraint(self, constraints: dict, family_id: str, payload: dict) -> None:
+        """Inject LLM-rescued payload into the legacy constraints dict."""
+        applied = constraints.setdefault("applied_constraints", [])
+        if family_id in applied:
+            return
+
+        hard = constraints.setdefault("hard_constraints", {})
+
+        if family_id == "age_range":
+            hard["age_years"] = {
+                "min_age": payload.get("minimum_years"),
+                "max_age": payload.get("maximum_years"),
+            }
+        elif family_id == "us_visa":
+            hard["us_visa"] = {
+                "required": True,
+                "must_be_valid": True,
+                "minimum_months_remaining": payload.get("minimum_months_remaining"),
+                "visa_group": payload.get("visa_group"),
+                "accepted_types": payload.get("accepted_types") or [],
+            }
+        elif family_id == "stcw_basic":
+            hard["stcw_basic"] = {"required": True}
+        elif family_id == "certificate_requirement":
+            certs = hard.setdefault("certifications", {})
+            existing = certs.get("certificates_required") or []
+            new = payload.get("certificates_required") or []
+            certs["certificates_required"] = list(dict.fromkeys([*existing, *new]))
+        elif family_id == "rank_match":
+            hard["rank"] = {
+                "applied_rank_normalized": payload.get("applied_rank_normalized") or [],
+                "operator": "contains_any",
+            }
+        else:
+            return
+
+        applied.append(family_id)
+        constraints["llm_promoted"] = list(dict.fromkeys([*(constraints.get("llm_promoted") or []), family_id]))
 
     def _prompt_observability_normalize(self, text):
         return re.sub(r"\s+", " ", str(text or "")).strip()
