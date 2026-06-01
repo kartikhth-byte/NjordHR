@@ -16,7 +16,7 @@ def _load_keyring():
 
 
 class SecretStore:
-    CHUNK_SIZE = 1800
+    CHUNK_SIZE = 1000
 
     def __init__(self, service_name="NjordHR", backend=None):
         self.service_name = service_name

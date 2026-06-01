@@ -196,7 +196,7 @@ class AgentComponentsTests(unittest.TestCase):
                 return self.rows.get((service, key))
 
             def set_password(self, service, key, value):
-                if len(value) > 30:
+                if len(value.encode("utf-16-le")) > 2560:
                     raise RuntimeError("CredWrite bad data")
                 self.rows[(service, key)] = value
 
@@ -205,8 +205,7 @@ class AgentComponentsTests(unittest.TestCase):
 
         backend = SizeLimitedBackend()
         store = SecretStore(service_name="NjordHR.Test", backend=backend)
-        store.CHUNK_SIZE = 8
-        value = "abcdefghijklmnopqrstuvwxyz"
+        value = "x" * 3200
 
         store.set("cache", value)
 
