@@ -108,27 +108,14 @@ class Scraper:
         mobile_input = self.wait.until(EC.element_to_be_clickable((By.XPATH, MOBILE_NUMBER_INPUT_XPATH)))
         mobile_value = str(mobile_number or "").strip()
         self._set_input_value(mobile_input, mobile_value)
-        observed_mobile = mobile_input.get_attribute("value") or ""
         send_otp_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, SEND_OTP_BUTTON_XPATH)))
-        click_mode = self._click_send_otp(send_otp_button)
-        LOGGER.info(
-            "SeaJobs OTP requested via %s click; mobile length=%s observed_length=%s",
-            click_mode,
-            len(mobile_value),
-            len(observed_mobile),
-        )
-        print(
-            f"[SeaJobs] OTP requested via {click_mode} click; "
-            f"mobile length={len(mobile_value)} observed_length={len(observed_mobile)}",
-            flush=True,
-        )
+        self._click_send_otp(send_otp_button)
         try:
             WebDriverWait(self.driver, 10).until(EC.alert_is_present())
             alert = self.driver.switch_to.alert
             alert_text = alert.text
             alert.accept()
             LOGGER.info("SeaJobs OTP alert: %s", alert_text)
-            print(f"[SeaJobs] OTP alert: {alert_text}", flush=True)
             if "Not Registered" in alert_text:
                 self.quit()
                 return {"success": False, "message": f"Login failed: {alert_text}"}
