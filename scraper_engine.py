@@ -4,7 +4,6 @@ import re
 import json
 import logging
 import os
-import sys
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -49,7 +48,7 @@ def _env_bool(name, default=False):
 def _should_run_chrome_headless():
     if os.getenv("NJORDHR_SELENIUM_HEADLESS", "").strip():
         return _env_bool("NJORDHR_SELENIUM_HEADLESS", default=True)
-    return sys.platform != "win32"
+    return True
 
 
 class Scraper:

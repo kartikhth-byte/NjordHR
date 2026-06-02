@@ -69,20 +69,21 @@ class WindowsCompatibilityTests(unittest.TestCase):
             self.assertIn(b"\n", content)
             self.assertNotIn(b"\r\n", content)
 
-    def test_seajobs_chrome_runs_headed_by_default_on_windows(self):
+    def test_seajobs_chrome_stays_headless_by_default_on_windows(self):
         with mock.patch.dict("os.environ", {}, clear=True):
-            with mock.patch("scraper_engine.sys.platform", "win32"):
-                self.assertFalse(_should_run_chrome_headless())
+            self.assertTrue(_should_run_chrome_headless())
 
     def test_seajobs_chrome_stays_headless_by_default_off_windows(self):
         with mock.patch.dict("os.environ", {}, clear=True):
-            with mock.patch("scraper_engine.sys.platform", "darwin"):
-                self.assertTrue(_should_run_chrome_headless())
+            self.assertTrue(_should_run_chrome_headless())
 
     def test_seajobs_chrome_headless_env_override_wins_on_windows(self):
         with mock.patch.dict("os.environ", {"NJORDHR_SELENIUM_HEADLESS": "true"}, clear=True):
-            with mock.patch("scraper_engine.sys.platform", "win32"):
-                self.assertTrue(_should_run_chrome_headless())
+            self.assertTrue(_should_run_chrome_headless())
+
+    def test_seajobs_chrome_can_run_headed_for_debugging(self):
+        with mock.patch.dict("os.environ", {"NJORDHR_SELENIUM_HEADLESS": "false"}, clear=True):
+            self.assertFalse(_should_run_chrome_headless())
 
     def test_seajobs_input_helper_dispatches_browser_events(self):
         class FakeElement:
