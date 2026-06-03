@@ -52,8 +52,10 @@ Clone or update the Windows checkout:
 cd $HOME
 git clone https://github.com/kartikhth-byte/NjordHR.git
 cd .\NjordHR
-git checkout deterministic-engine-gaps-v1
-git pull origin deterministic-engine-gaps-v1
+# Stay on the current branch by default; only checkout a specific branch if you
+# are intentionally building a named spec/release branch.
+git branch --show-current
+git pull
 ```
 
 Install Electron build dependencies:

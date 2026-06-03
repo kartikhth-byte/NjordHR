@@ -26,7 +26,7 @@ from .llm_normalizer import is_enabled
 from .schema import normalize_query_plan_v1
 
 SHADOW_LLM_PROMPT_TEMPLATE_VERSION = "query_understanding.shadow_llm.v1"
-SHADOW_LLM_DEFAULT_MODEL = "gemini-2.0-flash-lite"
+SHADOW_LLM_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 SHADOW_LLM_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 SHADOW_LLM_RESPONSE_SEED = 0
 _AGE_TEXT_TO_VALUE = {
@@ -197,6 +197,73 @@ def _config_value(config: Any, attr: str, fallback: Any = None) -> Any:
         return fallback
     value = getattr(config, attr, fallback)
     return fallback if value is None else value
+
+
+def _resolve_reasoning_model(analyzer: Any, fallback: str = SHADOW_LLM_DEFAULT_MODEL) -> str:
+    """Resolve the active reasoning model from the analyzer config.
+
+    The admin settings UI persists ``reasoning_model_name`` in ``config.ini``.
+    That setting should drive both the live reasoning path and the shadow LLM
+    path. Keep the module constant as a fallback only.
+    """
+
+    direct_model = _first_string(getattr(analyzer, "reasoning_model", None))
+    if direct_model:
+        return direct_model
+
+    config = getattr(analyzer, "config", None)
+    getter = getattr(config, "get", None)
+    if callable(getter):
+        for option in ("reasoning_model_name", "reasoning_model"):
+            try:
+                value = getter("Advanced", option, fallback=None)
+            except TypeError:
+                try:
+                    value = getter("Advanced", option)
+                except Exception:
+                    value = None
+            except Exception:
+                value = None
+            model = _first_string(value)
+            if model:
+                return model
+
+    legacy_model = _first_string(_config_value(config, "reasoning_model_name"), _config_value(config, "reasoning_model"))
+    if legacy_model:
+        return legacy_model
+
+    return fallback
+
+
+def _resolve_gemini_api_key(analyzer: Any) -> str | None:
+    """Resolve the Gemini API key from the analyzer or its config object."""
+
+    direct_key = _first_string(getattr(analyzer, "gemini_api_key", None))
+    if direct_key:
+        return direct_key
+
+    config = getattr(analyzer, "config", None)
+    getter = getattr(config, "get", None)
+    if callable(getter):
+        for option in ("Gemini_API_Key", "gemini_api_key"):
+            try:
+                value = getter("Credentials", option, fallback=None)
+            except TypeError:
+                try:
+                    value = getter("Credentials", option)
+                except Exception:
+                    value = None
+            except Exception:
+                value = None
+            api_key = _first_string(value)
+            if api_key:
+                return api_key
+
+    legacy_key = _first_string(_config_value(config, "gemini_api_key"), _config_value(config, "Gemini_API_Key"))
+    if legacy_key:
+        return legacy_key
+
+    return None
 
 
 def _normalize_rank_value(analyzer: Any, raw_rank: Any) -> str | None:
@@ -1744,7 +1811,7 @@ def _translate_model_payload(
         "schema_version": "query_plan.v1",
         "normalizer": {
             "name": "llm",
-            "model": str(parsed.get("normalizer", {}).get("model") or _config_value(getattr(analyzer, "config", None), "reasoning_model", SHADOW_LLM_DEFAULT_MODEL)),
+            "model": str(parsed.get("normalizer", {}).get("model") or _resolve_reasoning_model(analyzer)),
             "prompt_template_version": SHADOW_LLM_PROMPT_TEMPLATE_VERSION,
             "catalog_version": str(parsed.get("normalizer", {}).get("catalog_version") or parsed.get("catalog_version") or CATALOG_VERSION),
             "created_at": str(parsed.get("normalizer", {}).get("created_at") or _utc_now_iso()),
@@ -1787,8 +1854,8 @@ def build_shadow_llm_query_plan(
     prompt_text = str(prompt or "").strip()
     canonical_rank = _normalize_rank_value(analyzer, rank)
     config = getattr(analyzer, "config", None)
-    api_key = _config_value(config, "gemini_api_key")
-    model = _config_value(config, "reasoning_model", SHADOW_LLM_DEFAULT_MODEL)
+    api_key = _resolve_gemini_api_key(analyzer)
+    model = _resolve_reasoning_model(analyzer)
     timeout = getattr(analyzer, "LLM_REQUEST_TIMEOUT_SECONDS", getattr(getattr(analyzer, "__class__", object), "LLM_REQUEST_TIMEOUT_SECONDS", 45))
 
     if not api_key or not model:
