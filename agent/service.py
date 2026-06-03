@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
+import requests
 
 from app_settings import load_app_settings
 from scraper_engine import Scraper
@@ -21,9 +22,56 @@ from .runtime import AgentRuntime
 from .updater import AgentUpdater
 
 
+def _env_bool(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_value(name):
+    return str(os.getenv(name, "") or "").strip()
+
+
+def _load_runtime_secrets_from_cloud():
+    if not _env_bool("USE_SUPABASE_DB", default=False):
+        return
+    supabase_url = _env_value("SUPABASE_URL").rstrip("/")
+    supabase_key = _env_value("SUPABASE_SECRET_KEY") or _env_value("SUPABASE_SERVICE_ROLE_KEY")
+    if not supabase_url or not supabase_key:
+        return
+    response = requests.get(
+        f"{supabase_url}/rest/v1/app_runtime_config",
+        params={"select": "key,value"},
+        headers={"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"},
+        timeout=12,
+    )
+    if response.status_code >= 400:
+        return
+    rows = response.json() if response.content else []
+    if not isinstance(rows, list):
+        return
+    mapping = {
+        "seajob_username": "SEAJOB_USERNAME",
+        "seajob_password": "SEAJOB_PASSWORD",
+    }
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        env_name = mapping.get(str(row.get("key", "")).strip())
+        value = str(row.get("value", "") or "").strip()
+        if env_name and value:
+            os.environ[env_name] = value
+
+
 def create_agent_app():
     app = Flask(__name__)
     CORS(app)
+
+    try:
+        _load_runtime_secrets_from_cloud()
+    except Exception:
+        pass
 
     app_settings = load_app_settings()
     creds = app_settings.credentials
@@ -91,6 +139,11 @@ def create_agent_app():
             login_url=parser.get("Advanced", "seajob_login_url", fallback="http://seajob.net/seajob_login.php"),
             dashboard_url=parser.get("Advanced", "seajob_dashboard_url", fallback="http://seajob.net/company/dashboard.php"),
         )
+
+    def _seajob_credentials():
+        username = _env_value("SEAJOB_USERNAME") or str(creds.get("Username", "") or "").strip()
+        password = _env_value("SEAJOB_PASSWORD") or str(creds.get("Password", "") or "").strip()
+        return username, password
 
     def _diagnostics_payload():
         cfg = settings_store.get()
@@ -172,6 +225,12 @@ def create_agent_app():
         mobile = str(payload.get("mobile_number", "")).strip()
         if not mobile:
             return jsonify({"success": False, "message": "mobile_number is required"}), 400
+        username, password = _seajob_credentials()
+        if not username or not password:
+            return jsonify({
+                "success": False,
+                "message": "SeaJobs username/password are missing. Save them in Settings > Operational Settings.",
+            }), 400
         scraper = None
         try:
             with session_lock:
@@ -179,7 +238,7 @@ def create_agent_app():
                     scraper_session["scraper"].quit()
                 scraper = _build_scraper()
                 scraper_session["scraper"] = scraper
-            result = scraper.start_session(creds["Username"], creds["Password"], mobile)
+            result = scraper.start_session(username, password, mobile)
             if not isinstance(result, dict) or not result.get("success"):
                 with session_lock:
                     if scraper_session.get("scraper") is scraper:

@@ -113,8 +113,12 @@ class AgentSessionRouteTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.prev_agent_cfg = os.environ.get("NJORDHR_AGENT_CONFIG_PATH")
         self.prev_agent_token = os.environ.get("NJORDHR_AGENT_SYNC_TOKEN")
+        self.prev_seajob_username = os.environ.get("SEAJOB_USERNAME")
+        self.prev_seajob_password = os.environ.get("SEAJOB_PASSWORD")
         os.environ["NJORDHR_AGENT_CONFIG_PATH"] = os.path.join(self.temp_dir.name, "agent.json")
         os.environ["NJORDHR_AGENT_SYNC_TOKEN"] = "agent-preview-token"
+        os.environ.pop("SEAJOB_USERNAME", None)
+        os.environ.pop("SEAJOB_PASSWORD", None)
 
         parser = configparser.ConfigParser()
         parser["Advanced"] = {
@@ -158,6 +162,14 @@ class AgentSessionRouteTests(unittest.TestCase):
             os.environ.pop("NJORDHR_AGENT_SYNC_TOKEN", None)
         else:
             os.environ["NJORDHR_AGENT_SYNC_TOKEN"] = self.prev_agent_token
+        if self.prev_seajob_username is None:
+            os.environ.pop("SEAJOB_USERNAME", None)
+        else:
+            os.environ["SEAJOB_USERNAME"] = self.prev_seajob_username
+        if self.prev_seajob_password is None:
+            os.environ.pop("SEAJOB_PASSWORD", None)
+        else:
+            os.environ["SEAJOB_PASSWORD"] = self.prev_seajob_password
         self.temp_dir.cleanup()
 
     def test_session_start_verify_disconnect_are_exposed_on_agent_api(self):
@@ -178,6 +190,62 @@ class AgentSessionRouteTests(unittest.TestCase):
         disconnect_body = disconnect_resp.get_json()
         self.assertTrue(disconnect_body["success"])
         self.assertTrue(_FakeScraper.last_instance.quit_called)
+
+    def test_session_start_uses_cloud_hydrated_seajobs_credentials(self):
+        import agent.service as agent_service
+
+        blank_parser = configparser.ConfigParser()
+        blank_parser["Credentials"] = {"Username": "", "Password": ""}
+        blank_parser["Settings"] = {}
+        blank_parser["Advanced"] = {
+            "otp_window_seconds": "120",
+            "seajob_login_url": "http://seajob.net/seajob_login.php",
+            "seajob_dashboard_url": "http://seajob.net/company/dashboard.php",
+        }
+
+        with patch.dict(os.environ, {"SEAJOB_USERNAME": "cloud-user", "SEAJOB_PASSWORD": "cloud-pass"}), \
+                patch("agent.service.load_app_settings", return_value=SimpleNamespace(
+                    credentials=blank_parser["Credentials"],
+                    config=blank_parser,
+                )), \
+                patch("agent.service.Scraper", _FakeScraper), \
+                patch("agent.service.AgentRuntime", _FakeAgentRuntime), \
+                patch("agent.service.CloudSyncClient", _FakeCloudSyncClient):
+            app = agent_service.create_agent_app()
+            client = app.test_client()
+            client.put("/settings", json={"download_folder": self.temp_dir.name})
+            resp = client.post("/session/start", json={"mobile_number": "9999999999"})
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(_FakeScraper.last_instance.started_with, ("cloud-user", "cloud-pass", "9999999999"))
+
+    def test_session_start_rejects_missing_seajobs_credentials(self):
+        blank_parser = configparser.ConfigParser()
+        blank_parser["Credentials"] = {"Username": "", "Password": ""}
+        blank_parser["Settings"] = {}
+        blank_parser["Advanced"] = {
+            "otp_window_seconds": "120",
+            "seajob_login_url": "http://seajob.net/seajob_login.php",
+            "seajob_dashboard_url": "http://seajob.net/company/dashboard.php",
+        }
+
+        with patch("agent.service.load_app_settings", return_value=SimpleNamespace(
+                credentials=blank_parser["Credentials"],
+                config=blank_parser,
+        )), \
+                patch("agent.service.Scraper", _FakeScraper), \
+                patch("agent.service.AgentRuntime", _FakeAgentRuntime), \
+                patch("agent.service.CloudSyncClient", _FakeCloudSyncClient):
+            from agent.service import create_agent_app
+
+            app = create_agent_app()
+            client = app.test_client()
+            resp = client.post("/session/start", json={"mobile_number": "9999999999"})
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.get_json()["success"])
+        self.assertIn("SeaJobs username/password are missing", resp.get_json()["message"])
 
     def test_agent_preview_downloaded_resume_serves_local_file(self):
         rank_dir = os.path.join(self.temp_dir.name, "Chief_Officer")
@@ -204,7 +272,12 @@ class AgentSessionRouteTests(unittest.TestCase):
             with open(outside_file, "wb") as fh:
                 fh.write(b"%PDF-1.4 escaped")
             link_path = os.path.join(rank_dir, "escape.pdf")
-            os.symlink(outside_file, link_path)
+            try:
+                os.symlink(outside_file, link_path)
+            except OSError as exc:
+                if getattr(exc, "winerror", None) == 1314:
+                    self.skipTest("Windows symlink privilege is not available")
+                raise
 
             resp = self.client.get(
                 "/preview_downloaded_resume/Chief_Officer/escape.pdf",

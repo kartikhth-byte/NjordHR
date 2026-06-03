@@ -111,9 +111,9 @@ test("bootstrapConfigFile creates first-run config.ini from the template with ru
   assert.match(content, /^Additional_Local_Folder = .*Verified_Resumes$/m);
   assert.match(content, /^admin_password =$/m);
   assert.match(content, /^admin_token =$/m);
-  assert.match(content, /^log_dir = .*\/logs$/m);
-  assert.match(content, /^registry_db_path = .*\/runtime\/registry\.db$/m);
-  assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
+  assert.match(content, /^log_dir = .*[\\/]logs$/m);
+  assert.match(content, /^registry_db_path = .*[\\/]runtime[\\/]registry\.db$/m);
+  assert.match(content, /^feedback_db_path = .*[\\/]runtime[\\/]feedback\.db$/m);
 });
 
 test("bootstrapConfigFile prefers bundled default_config.ini and preserves provisioned auth values", () => {
@@ -163,9 +163,9 @@ test("bootstrapConfigFile prefers bundled default_config.ini and preserves provi
   assert.match(content, /^admin_password = keep-me$/m);
   assert.match(content, /^recruiter_password = keep-recruiter$/m);
   assert.match(content, /^admin_token =$/m);
-  assert.match(content, /^log_dir = .*\/logs$/m);
-  assert.match(content, /^registry_db_path = .*\/runtime\/registry\.db$/m);
-  assert.match(content, /^feedback_db_path = .*\/runtime\/feedback\.db$/m);
+  assert.match(content, /^log_dir = .*[\\/]logs$/m);
+  assert.match(content, /^registry_db_path = .*[\\/]runtime[\\/]registry\.db$/m);
+  assert.match(content, /^feedback_db_path = .*[\\/]runtime[\\/]feedback\.db$/m);
 });
 
 test("committed packaged baseline config exists for reproducible Electron builds", () => {
