@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 from repositories.csv_feedback_repo import CSVFeedbackStore
 from repositories.csv_registry_repo import CSVFileRegistry
@@ -19,6 +20,21 @@ class CsvRepoAdapterTests(unittest.TestCase):
                 repo.upsert_file_record(file_path, 123.0, resume_id)
                 self.assertFalse(repo.needs_processing(file_path, 122.0))
                 self.assertEqual(repo.get_resume_id(file_path), resume_id)
+            finally:
+                repo.close()
+
+    def test_registry_resume_id_is_content_stable_across_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = CSVFileRegistry(os.path.join(temp_dir, "registry.db"))
+            try:
+                first = Path(temp_dir) / "a" / "resume.pdf"
+                second = Path(temp_dir) / "b" / "resume.pdf"
+                first.parent.mkdir(parents=True, exist_ok=True)
+                second.parent.mkdir(parents=True, exist_ok=True)
+                first.write_bytes(b"%PDF-1.4\nsame-content")
+                second.write_bytes(b"%PDF-1.4\nsame-content")
+
+                self.assertEqual(repo.generate_resume_id(str(first)), repo.generate_resume_id(str(second)))
             finally:
                 repo.close()
 

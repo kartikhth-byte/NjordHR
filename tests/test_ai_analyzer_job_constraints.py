@@ -2202,8 +2202,8 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
     def test_sync_reextract_per_search_limit_surfaces_partial_evaluation_notice(self):
         filenames = [f"2nd_Engineer_10{i}.pdf" for i in range(2)]
-        for filename in filenames:
-            (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+        for idx, filename in enumerate(filenames):
+            (self.rank_folder / filename).write_bytes(f"%PDF-1.4-{idx}".encode("utf-8"))
 
         self.analyzer.SYNC_REEXTRACT_PER_SEARCH_LIMIT = 1
         self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
@@ -2214,7 +2214,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     "metadata": {
                         "resume_id": Path(filename).stem,
                         "rank": self.rank,
-                        "raw_text": "Present Rank: 2nd Engineer",
+                        "raw_text": f"Present Rank: 2nd Engineer ({Path(filename).stem})",
                         "source_path": str(self.rank_folder / filename),
                     },
                 }

@@ -5053,6 +5053,9 @@
                                         <p>
                                             This page documents each setting, where to find its value, and how to reset it.
                                         </p>
+                                        <p>
+                                            Persisted app settings are the source of truth. Environment variables are treated as bootstrap or compatibility fallbacks only, so most runtime changes can be made here without rebuilding the app.
+                                        </p>
 
                                         <div>
                                             <p className="font-semibold text-gray-900">Runtime Flags</p>
@@ -5090,6 +5093,11 @@
                                         <div>
                                             <p className="font-semibold text-gray-900">Settings Password</p>
                                             <p>Use the Settings Password tab to set a new password manually or generate a strong password. After update, re-auth with the new password.</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="font-semibold text-gray-900">Bootstrap-Only Environment Variables</p>
+                                            <p>These are read at launch or for compatibility fallbacks, but the saved config remains the source of truth after startup: `NJORDHR_CONFIG_PATH`, `NJORDHR_FLASK_SECRET`, `NJORDHR_PORT`, `NJORDHR_RUNTIME_DIR`, `NJORDHR_ADMIN_TOKEN`.</p>
                                         </div>
                                     </div>
                                 )}

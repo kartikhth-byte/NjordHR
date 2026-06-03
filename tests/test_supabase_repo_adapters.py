@@ -50,15 +50,45 @@ class SupabaseRepoAdapterTests(unittest.TestCase):
                 return _FakeResponse(json_data=[{"resume_id": "resume-123"}])
             return _FakeResponse(json_data=[])
 
-        with patch("repositories.supabase_registry_repo.requests.request", side_effect=fake_request):
-            repo = SupabaseFileRegistry()
-            self.assertNotEqual(repo.generate_resume_id("/tmp/a.pdf"), repo.generate_resume_id("a.pdf"))
-            self.assertTrue(repo.needs_processing("/tmp/a.pdf", 10.0))
-            repo.upsert_file_record("/tmp/a.pdf", 10.0, "resume-123")
-            self.assertEqual(repo.get_resume_id("/tmp/a.pdf"), "resume-123")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "config.ini")
+            with open(config_path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "[Credentials]\n"
+                    "Supabase_Secret_Key = sb_secret_test\n"
+                    "Supabase_Service_Role_Key = sb_secret_test\n"
+                    "\n"
+                    "[Settings]\n"
+                    "Default_Download_Folder = Downloads\n"
+                    "\n"
+                    "[Advanced]\n"
+                    "supabase_url = https://example.supabase.co\n"
+                )
+            with patch.dict(os.environ, {"NJORDHR_CONFIG_PATH": config_path}, clear=False):
+                with patch("repositories.supabase_registry_repo.requests.request", side_effect=fake_request):
+                    repo = SupabaseFileRegistry()
+                    self.assertNotEqual(repo.generate_resume_id("/tmp/a.pdf"), repo.generate_resume_id("a.pdf"))
+                    self.assertTrue(repo.needs_processing("/tmp/a.pdf", 10.0))
+                    repo.upsert_file_record("/tmp/a.pdf", 10.0, "resume-123")
+                    self.assertEqual(repo.get_resume_id("/tmp/a.pdf"), "resume-123")
 
         self.assertGreaterEqual(len(calls), 3)
         self.assertTrue(all(call["url"].startswith("https://example.supabase.co/rest/v1/ai_file_registry") for call in calls))
+
+    def test_registry_resume_id_is_content_stable_across_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first = os.path.join(temp_dir, "a", "resume.pdf")
+            second = os.path.join(temp_dir, "b", "resume.pdf")
+            os.makedirs(os.path.dirname(first), exist_ok=True)
+            os.makedirs(os.path.dirname(second), exist_ok=True)
+            with open(first, "wb") as handle:
+                handle.write(b"%PDF-1.4\nsame-content")
+            with open(second, "wb") as handle:
+                handle.write(b"%PDF-1.4\nsame-content")
+
+            with patch("repositories.supabase_registry_repo.requests.request", return_value=_FakeResponse(json_data=[])):
+                repo = SupabaseFileRegistry()
+                self.assertEqual(repo.generate_resume_id(first), repo.generate_resume_id(second))
 
     def test_feedback_round_trip_uses_supabase_rest(self):
         calls = []
@@ -82,10 +112,25 @@ class SupabaseRepoAdapterTests(unittest.TestCase):
                 "user_notes": "looks good",
             }])
 
-        with patch("repositories.supabase_feedback_repo.requests.request", side_effect=fake_request):
-            repo = SupabaseFeedbackStore()
-            repo.add_feedback("resume-a.pdf", "2nd engineer", "good", "matched well", 0.93, "approve", "looks good")
-            rows = repo.get_recent_feedback("2nd engineer", limit=5)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = os.path.join(tmp_dir, "config.ini")
+            with open(config_path, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "[Credentials]\n"
+                    "Supabase_Secret_Key = sb_secret_test\n"
+                    "Supabase_Service_Role_Key = sb_secret_test\n"
+                    "\n"
+                    "[Settings]\n"
+                    "Default_Download_Folder = Downloads\n"
+                    "\n"
+                    "[Advanced]\n"
+                    "supabase_url = https://example.supabase.co\n"
+                )
+            with patch.dict(os.environ, {"NJORDHR_CONFIG_PATH": config_path}, clear=False):
+                with patch("repositories.supabase_feedback_repo.requests.request", side_effect=fake_request):
+                    repo = SupabaseFeedbackStore()
+                    repo.add_feedback("resume-a.pdf", "2nd engineer", "good", "matched well", 0.93, "approve", "looks good")
+                    rows = repo.get_recent_feedback("2nd engineer", limit=5)
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][0], "resume-a.pdf")

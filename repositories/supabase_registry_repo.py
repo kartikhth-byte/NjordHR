@@ -1,4 +1,3 @@
-import hashlib
 import os
 import threading
 from datetime import UTC, datetime
@@ -6,13 +5,16 @@ from datetime import UTC, datetime
 import requests
 
 from repositories.registry_repo import RegistryRepo
-from runtime_env import normalize_env_value, normalized_url
+from repositories.resume_identity import stable_resume_id
+from runtime_env import config_value, normalize_env_value, normalized_url
 
 
 def resolve_supabase_api_key():
     """Prefer the modern secret key, fall back to the legacy service role key."""
     return (
-        normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        config_value("Credentials", "Supabase_Secret_Key", "")
+        or config_value("Credentials", "Supabase_Service_Role_Key", "")
+        or normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
         or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
 
@@ -30,7 +32,11 @@ class SupabaseFileRegistry(RegistryRepo):
     DEFAULT_TIMEOUT_SECONDS = 30
 
     def __init__(self, supabase_url=None, service_role_key=None, timeout_seconds=30):
-        self.supabase_url = normalized_url(supabase_url or os.getenv("SUPABASE_URL", ""))
+        self.supabase_url = normalized_url(
+            supabase_url
+            or config_value("Advanced", "supabase_url", "")
+            or os.getenv("SUPABASE_URL", "")
+        )
         self.api_key = normalize_env_value(service_role_key or resolve_supabase_api_key())
         self.timeout_seconds = timeout_seconds
         self.headers = {
@@ -68,8 +74,7 @@ class SupabaseFileRegistry(RegistryRepo):
         return canonical_file_key(file_path)
 
     def generate_resume_id(self, file_path):
-        file_key = self._file_key(file_path)
-        return hashlib.sha1(file_key.encode()).hexdigest()
+        return stable_resume_id(file_path)
 
     def needs_processing(self, file_path, last_modified):
         file_key = self._file_key(file_path)

@@ -37,7 +37,7 @@ from app_settings import load_app_settings, FeatureFlags
 from cloud_api.runtime import cloud_api_settings_payload, load_cloud_api_settings
 from repositories.repo_factory import build_candidate_event_repo
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
-from runtime_env import normalize_env_value, normalized_url
+from runtime_env import config_value, normalize_env_value, normalized_url
 from ai_analyzer import Analyzer
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
@@ -417,14 +417,12 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global feature_flags, csv_manager, VERIFIED_RESUMES_DIR, candidate_facts_repo
-    feature_flags = FeatureFlags(
-        use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
-        use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
-        use_supabase_reads=_env_bool("USE_SUPABASE_READS", default=False),
-        use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
-        use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
-    )
+    global app_settings, config, creds, settings, feature_flags, csv_manager, VERIFIED_RESUMES_DIR, candidate_facts_repo
+    app_settings = load_app_settings()
+    config = app_settings.config
+    creds = app_settings.credentials
+    settings = app_settings.settings
+    feature_flags = app_settings.feature_flags
     _load_runtime_secrets_from_cloud()
     VERIFIED_RESUMES_DIR = _resolve_verified_resumes_dir()
     os.makedirs(VERIFIED_RESUMES_DIR, exist_ok=True)
@@ -445,10 +443,24 @@ def _advanced_value(name, fallback=""):
 
 
 def _credential_value(config_key, env_name, fallback=""):
-    env_value = normalize_env_value(os.getenv(env_name, ""))
-    if env_value:
-        return env_value
-    return normalize_env_value(creds.get(config_key, fallback=fallback))
+    config_value = normalize_env_value(creds.get(config_key, fallback=fallback))
+    if config_value:
+        return config_value
+    return normalize_env_value(os.getenv(env_name, ""))
+
+
+def _set_config_value_or_clear(section, key, value):
+    if value:
+        _config_set_literal(config, section, key, value)
+    elif config.has_option(section, key):
+        config.remove_option(section, key)
+
+
+def _set_env_value_or_clear(name, value):
+    if value:
+        os.environ[name] = value
+    else:
+        os.environ.pop(name, None)
 
 
 def _seajob_username():
@@ -476,15 +488,15 @@ def _supabase_service_role_key():
 
 
 def _supabase_url():
-    env_value = normalized_url(os.getenv("SUPABASE_URL", ""))
-    if env_value:
-        return env_value
-    return normalized_url(config.get("Advanced", "supabase_url", fallback=""))
+    configured = config_value("Advanced", "supabase_url", "")
+    if configured:
+        return normalized_url(configured)
+    return normalized_url(os.getenv("SUPABASE_URL", ""))
 
 
-def _supabase_runtime_config_endpoint():
-    supabase_url = _supabase_url()
-    supabase_key = resolve_supabase_api_key()
+def _supabase_runtime_config_endpoint(supabase_url=None, supabase_key=None):
+    supabase_url = normalized_url(supabase_url or _supabase_url())
+    supabase_key = normalize_env_value(supabase_key or resolve_supabase_api_key())
     if not supabase_url or not supabase_key:
         return "", {}
     return (
@@ -497,10 +509,10 @@ def _supabase_runtime_config_endpoint():
     )
 
 
-def _supabase_runtime_config_get():
-    endpoint, headers = _supabase_runtime_config_endpoint()
+def _supabase_runtime_config_get(supabase_url=None, supabase_key=None):
+    endpoint, headers = _supabase_runtime_config_endpoint(supabase_url=supabase_url, supabase_key=supabase_key)
     if not endpoint:
-        return {}
+        return None
     try:
         resp = requests.get(
             endpoint,
@@ -509,7 +521,7 @@ def _supabase_runtime_config_get():
             timeout=10,
         )
         if resp.status_code >= 400:
-            return {}
+            return None
         rows = resp.json() if resp.text else []
         out = {}
         for row in rows or []:
@@ -518,11 +530,11 @@ def _supabase_runtime_config_get():
                 out[key] = str(row.get("value", "") or "")
         return out
     except Exception:
-        return {}
+        return None
 
 
-def _supabase_runtime_config_set(pairs):
-    endpoint, headers = _supabase_runtime_config_endpoint()
+def _supabase_runtime_config_set(pairs, supabase_url=None, supabase_key=None):
+    endpoint, headers = _supabase_runtime_config_endpoint(supabase_url=supabase_url, supabase_key=supabase_key)
     if not endpoint:
         raise RuntimeError("Supabase runtime config unavailable")
     body = []
@@ -556,6 +568,8 @@ def _load_runtime_secrets_from_cloud():
     if not bool(getattr(feature_flags, "use_supabase_db", False)):
         return
     cfg = _supabase_runtime_config_get()
+    if cfg is None:
+        return
     mapping = {
         "seajob_username": "SEAJOB_USERNAME",
         "seajob_password": "SEAJOB_PASSWORD",
@@ -566,6 +580,8 @@ def _load_runtime_secrets_from_cloud():
         val = normalize_env_value(cfg.get(key, ""))
         if val:
             os.environ[env_name] = val
+        else:
+            os.environ.pop(env_name, None)
 
 
 # Best-effort one-time hydration at startup (safe no-op when cloud config is unavailable).
@@ -874,13 +890,15 @@ def _enforce_seajobs_idle_timeout():
 
 
 def _admin_token():
+    configured = config.get("Advanced", "admin_token", fallback="").strip()
+    if _is_placeholder_password(configured):
+        configured = ""
+    if configured:
+        return configured
     token = os.getenv("NJORDHR_ADMIN_TOKEN", "").strip()
     if token and not _is_placeholder_password(token):
         return token
-    configured = config.get("Advanced", "admin_token", fallback="").strip()
-    if _is_placeholder_password(configured):
-        return ""
-    return configured
+    return ""
 
 
 def _is_placeholder_password(value):
@@ -901,12 +919,12 @@ def _is_placeholder_password(value):
 
 def _auth_user_list_local(include_placeholder_passwords=False):
     auth_cfg = config["Auth"] if "Auth" in config else {}
-    admin_username = os.getenv("NJORDHR_ADMIN_USERNAME", auth_cfg.get("admin_username", "admin")).strip() or "admin"
-    admin_password = os.getenv("NJORDHR_ADMIN_PASSWORD", auth_cfg.get("admin_password", "")).strip() or _admin_token()
-    manager_username = os.getenv("NJORDHR_MANAGER_USERNAME", auth_cfg.get("manager_username", "manager")).strip() or "manager"
-    manager_password = os.getenv("NJORDHR_MANAGER_PASSWORD", auth_cfg.get("manager_password", "")).strip()
-    recruiter_username = os.getenv("NJORDHR_RECRUITER_USERNAME", auth_cfg.get("recruiter_username", "recruiter")).strip() or "recruiter"
-    recruiter_password = os.getenv("NJORDHR_RECRUITER_PASSWORD", auth_cfg.get("recruiter_password", "")).strip()
+    admin_username = auth_cfg.get("admin_username", "").strip() or os.getenv("NJORDHR_ADMIN_USERNAME", "admin").strip() or "admin"
+    admin_password = auth_cfg.get("admin_password", "").strip() or os.getenv("NJORDHR_ADMIN_PASSWORD", "").strip() or _admin_token()
+    manager_username = auth_cfg.get("manager_username", "").strip() or os.getenv("NJORDHR_MANAGER_USERNAME", "manager").strip() or "manager"
+    manager_password = auth_cfg.get("manager_password", "").strip() or os.getenv("NJORDHR_MANAGER_PASSWORD", "").strip()
+    recruiter_username = auth_cfg.get("recruiter_username", "").strip() or os.getenv("NJORDHR_RECRUITER_USERNAME", "recruiter").strip() or "recruiter"
+    recruiter_password = auth_cfg.get("recruiter_password", "").strip() or os.getenv("NJORDHR_RECRUITER_PASSWORD", "").strip()
 
     users = {}
     if admin_password and (include_placeholder_passwords or not _is_placeholder_password(admin_password)):
@@ -937,7 +955,9 @@ def _auth_user_list_local(include_placeholder_passwords=False):
 
 
 def _auth_mode_preference():
-    raw = normalize_env_value(os.getenv("NJORDHR_AUTH_MODE", "auto")).lower()
+    raw = normalize_env_value(config.get("Advanced", "auth_mode", fallback="")).lower()
+    if not raw:
+        raw = normalize_env_value(os.getenv("NJORDHR_AUTH_MODE", "auto")).lower()
     if raw in {"cloud", "local", "auto"}:
         return raw
     return "auto"
@@ -3197,6 +3217,33 @@ def save_admin_settings():
 
     data = request.json or {}
     payload = data.get("settings", {}) if isinstance(data.get("settings", {}), dict) else data
+    # Capture the current cloud connection details before mutating config so a
+    # mid-save Supabase write still targets the existing runtime endpoint/key.
+    current_supabase_url = _supabase_url()
+    current_supabase_key = resolve_supabase_api_key()
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    try:
+        with open(config_path, "r", encoding="utf-8") as fh:
+            original_config_text = fh.read()
+    except OSError:
+        original_config_text = None
+    env_snapshot = {
+        name: os.environ.get(name)
+        for name in [
+            "SEAJOB_USERNAME",
+            "SEAJOB_PASSWORD",
+            "GEMINI_API_KEY",
+            "PINECONE_API_KEY",
+            "SUPABASE_URL",
+            "SUPABASE_SECRET_KEY",
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "USE_SUPABASE_DB",
+            "USE_DUAL_WRITE",
+            "USE_SUPABASE_READS",
+            "USE_LOCAL_AGENT",
+            "USE_CLOUD_EXPORT",
+        ]
+    }
 
     if "Credentials" not in config:
         config["Credentials"] = {}
@@ -3208,32 +3255,53 @@ def save_admin_settings():
     def _set_if_present(section, key, payload_key):
         if payload_key in payload:
             value = normalize_env_value(payload.get(payload_key, ""))
-            if value:
-                _config_set_literal(config, section, key, value)
+            _set_config_value_or_clear(section, key, value)
+            return value
+        return None
+
+    def _restore_state():
+        global app_settings, config, creds, settings
+        if original_config_text is not None:
+            with open(config_path, "w", encoding="utf-8") as fh:
+                fh.write(original_config_text)
+        for env_name, prev_value in env_snapshot.items():
+            if prev_value is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = prev_value
+        restored_settings = load_app_settings()
+        app_settings = restored_settings
+        config = restored_settings.config
+        creds = restored_settings.credentials
+        settings = restored_settings.settings
+        try:
+            _refresh_runtime_managers()
+        except Exception:
+            pass
 
     # Credentials are applied to the running process immediately and also persisted
     # for future manual terminal starts via config.ini.
     sensitive_pairs = {}
     if "seajob_username" in payload:
         val = normalize_env_value(payload.get("seajob_username", ""))
-        if val:
-            os.environ["SEAJOB_USERNAME"] = val
-            sensitive_pairs["seajob_username"] = val
+        _set_config_value_or_clear("Credentials", "Username", val)
+        _set_env_value_or_clear("SEAJOB_USERNAME", val)
+        sensitive_pairs["seajob_username"] = val
     if "seajob_password" in payload:
         val = normalize_env_value(payload.get("seajob_password", ""))
-        if val:
-            os.environ["SEAJOB_PASSWORD"] = val
-            sensitive_pairs["seajob_password"] = val
+        _set_config_value_or_clear("Credentials", "Password", val)
+        _set_env_value_or_clear("SEAJOB_PASSWORD", val)
+        sensitive_pairs["seajob_password"] = val
     if "gemini_api_key" in payload:
         val = normalize_env_value(payload.get("gemini_api_key", ""))
-        if val:
-            os.environ["GEMINI_API_KEY"] = val
-            sensitive_pairs["gemini_api_key"] = val
+        _set_config_value_or_clear("Credentials", "Gemini_API_Key", val)
+        _set_env_value_or_clear("GEMINI_API_KEY", val)
+        sensitive_pairs["gemini_api_key"] = val
     if "pinecone_api_key" in payload:
         val = normalize_env_value(payload.get("pinecone_api_key", ""))
-        if val:
-            os.environ["PINECONE_API_KEY"] = val
-            sensitive_pairs["pinecone_api_key"] = val
+        _set_config_value_or_clear("Credentials", "Pinecone_API_Key", val)
+        _set_env_value_or_clear("PINECONE_API_KEY", val)
+        sensitive_pairs["pinecone_api_key"] = val
     _set_if_present("Settings", "Default_Download_Folder", "default_download_folder")
     _set_if_present("Settings", "Additional_Local_Folder", "verified_resumes_folder")
     _set_if_present("Advanced", "seajob_login_url", "seajob_login_url")
@@ -3313,28 +3381,34 @@ def save_admin_settings():
 
     if "supabase_url" in payload:
         supabase_url = normalized_url(payload.get("supabase_url", ""))
-        _config_set_literal(config, "Advanced", "supabase_url", supabase_url)
-        os.environ["SUPABASE_URL"] = supabase_url
+        _set_config_value_or_clear("Advanced", "supabase_url", supabase_url)
+        _set_env_value_or_clear("SUPABASE_URL", supabase_url)
         sensitive_pairs["supabase_url"] = supabase_url
     if "supabase_secret_key" in payload:
         sup_key = normalize_env_value(payload.get("supabase_secret_key", ""))
+        _set_config_value_or_clear("Credentials", "Supabase_Secret_Key", sup_key)
+        _set_env_value_or_clear("SUPABASE_SECRET_KEY", sup_key)
         if sup_key:
-            _config_set_literal(config, "Credentials", "Supabase_Secret_Key", sup_key)
-            os.environ["SUPABASE_SECRET_KEY"] = sup_key
             os.environ.pop("SUPABASE_SERVICE_ROLE_KEY", None)
-            sensitive_pairs["supabase_secret_key"] = sup_key
+        else:
+            os.environ.pop("SUPABASE_SECRET_KEY", None)
+        sensitive_pairs["supabase_secret_key"] = sup_key
     if "supabase_service_role_key" in payload:
         legacy_key = normalize_env_value(payload.get("supabase_service_role_key", ""))
-        if legacy_key:
-            _config_set_literal(config, "Credentials", "Supabase_Service_Role_Key", legacy_key)
-            os.environ["SUPABASE_SERVICE_ROLE_KEY"] = legacy_key
-            sensitive_pairs["supabase_service_role_key"] = legacy_key
+        _set_config_value_or_clear("Credentials", "Supabase_Service_Role_Key", legacy_key)
+        _set_env_value_or_clear("SUPABASE_SERVICE_ROLE_KEY", legacy_key)
+        sensitive_pairs["supabase_service_role_key"] = legacy_key
 
     # Persist sensitive runtime config centrally in Supabase when available.
     if sensitive_pairs and bool(getattr(feature_flags, "use_supabase_db", False)):
         try:
-            _supabase_runtime_config_set(sensitive_pairs)
+            _supabase_runtime_config_set(
+                sensitive_pairs,
+                supabase_url=current_supabase_url,
+                supabase_key=current_supabase_key,
+            )
         except Exception as exc:
+            _restore_state()
             return jsonify({"success": False, "message": f"Failed to save cloud secrets: {exc}"}), 400
 
     env_flags = [
@@ -3344,7 +3418,6 @@ def save_admin_settings():
         "use_local_agent",
         "use_cloud_export",
     ]
-    prev_env = {name.upper(): os.environ.get(name.upper()) for name in env_flags}
     for flag_name in env_flags:
         if flag_name in payload:
             env_name = flag_name.upper()
@@ -3352,26 +3425,16 @@ def save_admin_settings():
             _config_set_literal(config, "Advanced", env_name.lower(), "true" if coerced else "false")
             os.environ[env_name] = "true" if coerced else "false"
 
-    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
-    with open(config_path, "w", encoding="utf-8") as fh:
-        config.write(fh)
-
     try:
+        with open(config_path, "w", encoding="utf-8") as fh:
+            config.write(fh)
         app_settings = load_app_settings()
         config = app_settings.config
         creds = app_settings.credentials
         settings = app_settings.settings
         _refresh_runtime_managers()
-    except RuntimeError as exc:
-        for env_name, prev_value in prev_env.items():
-            if prev_value is None:
-                os.environ.pop(env_name, None)
-            else:
-                os.environ[env_name] = prev_value
-        app_settings = load_app_settings()
-        config = app_settings.config
-        creds = app_settings.credentials
-        settings = app_settings.settings
+    except Exception as exc:
+        _restore_state()
         return jsonify({"success": False, "message": str(exc)}), 400
 
     warnings = []
@@ -3466,7 +3529,7 @@ def admin_list_directories():
 
 @app.route('/admin/settings/change_password', methods=['POST'])
 def change_admin_password():
-    global app_settings, config
+    global app_settings, config, creds, settings
     ok, reason = _require_admin()
     if not ok:
         return jsonify({"success": False, "message": reason}), 401
@@ -3482,17 +3545,39 @@ def change_admin_password():
     if new_password != confirm_password:
         return jsonify({"success": False, "message": "Password confirmation does not match"}), 400
 
+    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
+    try:
+        with open(config_path, "r", encoding="utf-8") as fh:
+            original_config_text = fh.read()
+    except OSError:
+        original_config_text = None
+
     if "Advanced" not in config:
         config["Advanced"] = {}
     _config_set_literal(config, "Advanced", "admin_token", new_password)
 
-    config_path = os.getenv("NJORDHR_CONFIG_PATH", "config.ini")
-    with open(config_path, "w", encoding="utf-8") as fh:
-        config.write(fh)
+    try:
+        with open(config_path, "w", encoding="utf-8") as fh:
+            config.write(fh)
 
-    os.environ["NJORDHR_ADMIN_TOKEN"] = new_password
-    app_settings = load_app_settings()
-    config = app_settings.config
+        app_settings = load_app_settings()
+        config = app_settings.config
+        creds = app_settings.credentials
+        settings = app_settings.settings
+        _refresh_runtime_managers()
+    except Exception as exc:
+        if original_config_text is not None:
+            with open(config_path, "w", encoding="utf-8") as fh:
+                fh.write(original_config_text)
+        app_settings = load_app_settings()
+        config = app_settings.config
+        creds = app_settings.credentials
+        settings = app_settings.settings
+        try:
+            _refresh_runtime_managers()
+        except Exception:
+            pass
+        return jsonify({"success": False, "message": str(exc)}), 400
 
     return jsonify({"success": True, "message": "Settings password updated successfully."})
 

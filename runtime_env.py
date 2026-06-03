@@ -1,3 +1,5 @@
+import configparser
+import os
 import re
 
 
@@ -16,3 +18,29 @@ def normalize_env_value(raw_value):
 
 def normalized_url(raw_value):
     return normalize_env_value(raw_value).rstrip("/")
+
+
+def _load_config_parser(config_path=None):
+    parser = configparser.ConfigParser(interpolation=None)
+    candidate = normalize_env_value(config_path or os.getenv("NJORDHR_CONFIG_PATH", "config.ini"))
+    if candidate:
+        parser.read(candidate)
+    return parser
+
+
+def config_value(section, key, default="", config_path=None):
+    parser = _load_config_parser(config_path=config_path)
+    if parser.has_option(section, key):
+        value = normalize_env_value(parser.get(section, key, fallback=""))
+        if value:
+            return value
+    return normalize_env_value(default)
+
+
+def config_bool(section, key, default=False, config_path=None):
+    parser = _load_config_parser(config_path=config_path)
+    if parser.has_option(section, key):
+        raw = normalize_env_value(parser.get(section, key, fallback=""))
+        if raw:
+            return raw.lower() in {"1", "true", "yes", "on"}
+    return bool(default)

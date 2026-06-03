@@ -6,13 +6,15 @@ import requests
 
 from csv_manager import CSVManager
 from repositories.candidate_event_repo import CandidateEventRepo
-from runtime_env import normalize_env_value, normalized_url
+from runtime_env import config_value, normalize_env_value, normalized_url
 
 
 def resolve_supabase_api_key():
     """Prefer modern Supabase secret key, fallback to legacy service role key."""
     return (
-        normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        config_value("Credentials", "Supabase_Secret_Key", "")
+        or config_value("Credentials", "Supabase_Service_Role_Key", "")
+        or normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
         or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
 
@@ -326,4 +328,4 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
 
 def can_enable_supabase_repo():
-    return bool(normalized_url(os.getenv("SUPABASE_URL", "")) and resolve_supabase_api_key())
+    return bool(normalized_url(config_value("Advanced", "supabase_url", "") or os.getenv("SUPABASE_URL", "")) and resolve_supabase_api_key())

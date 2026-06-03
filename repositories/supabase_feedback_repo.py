@@ -5,13 +5,15 @@ from datetime import UTC, datetime
 import requests
 
 from repositories.feedback_repo import FeedbackRepo
-from runtime_env import normalize_env_value, normalized_url
+from runtime_env import config_value, normalize_env_value, normalized_url
 
 
 def resolve_supabase_api_key():
     """Prefer the modern secret key, fall back to the legacy service role key."""
     return (
-        normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        config_value("Credentials", "Supabase_Secret_Key", "")
+        or config_value("Credentials", "Supabase_Service_Role_Key", "")
+        or normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
         or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
 
@@ -22,7 +24,11 @@ class SupabaseFeedbackStore(FeedbackRepo):
     DEFAULT_TIMEOUT_SECONDS = 30
 
     def __init__(self, supabase_url=None, service_role_key=None, timeout_seconds=30):
-        self.supabase_url = normalized_url(supabase_url or os.getenv("SUPABASE_URL", ""))
+        self.supabase_url = normalized_url(
+            supabase_url
+            or config_value("Advanced", "supabase_url", "")
+            or os.getenv("SUPABASE_URL", "")
+        )
         self.api_key = normalize_env_value(service_role_key or resolve_supabase_api_key())
         self.timeout_seconds = timeout_seconds
         self.headers = {

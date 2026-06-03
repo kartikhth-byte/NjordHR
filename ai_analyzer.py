@@ -30,7 +30,8 @@ from repositories.feedback_repo import FeedbackRepo
 from repositories.registry_repo import RegistryRepo
 from repositories.supabase_feedback_repo import SupabaseFeedbackStore
 from repositories.supabase_registry_repo import SupabaseFileRegistry
-from runtime_env import normalize_env_value, normalized_url
+from repositories.resume_identity import build_resume_fingerprint, stable_resume_id
+from runtime_env import config_value, normalize_env_value, normalized_url
 from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candidate_facts_contract_v1
 from candidate_facts.review_summary import build_candidate_facts_review_summary
 from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS, SUPPORTED_FAMILY_IDS
@@ -100,9 +101,12 @@ class ConfigManager:
         return os.path.abspath(os.path.join(self.log_dir, candidate))
 
     @property
-    def gemini_api_key(self): return os.getenv('GEMINI_API_KEY', self.config.get('Credentials', 'Gemini_API_Key'))
+    def gemini_api_key(self):
+        return normalize_env_value(self.config.get('Credentials', 'Gemini_API_Key', fallback='')) or normalize_env_value(os.getenv('GEMINI_API_KEY', ''))
+
     @property
-    def pinecone_api_key(self): return os.getenv('PINECONE_API_KEY', self.config.get('Credentials', 'Pinecone_API_Key'))
+    def pinecone_api_key(self):
+        return normalize_env_value(self.config.get('Credentials', 'Pinecone_API_Key', fallback='')) or normalize_env_value(os.getenv('PINECONE_API_KEY', ''))
     @property
     def download_root(self): return self.config.get('Settings', 'Default_Download_Folder')
     @property
@@ -173,7 +177,7 @@ class FileRegistry(RegistryRepo):
             self.conn.commit()
 
     def generate_resume_id(self, file_path):
-        return hashlib.sha1(file_path.encode()).hexdigest()
+        return stable_resume_id(file_path)
 
     def needs_processing(self, file_path, last_modified):
         with self.lock:
@@ -187,7 +191,9 @@ class FileRegistry(RegistryRepo):
         with self.lock:
             self.conn.execute("""
                 INSERT INTO files (file_path, last_modified, resume_id) VALUES (?, ?, ?)
-                ON CONFLICT(file_path) DO UPDATE SET last_modified=excluded.last_modified
+                ON CONFLICT(file_path) DO UPDATE SET
+                    last_modified=excluded.last_modified,
+                    resume_id=excluded.resume_id
             """, (file_path, last_modified, resume_id))
             self.conn.commit()
 
@@ -261,152 +267,11 @@ class FeedbackStore(FeedbackRepo):
 
 def _resolve_supabase_api_key():
     return (
-        normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        config_value("Credentials", "Supabase_Secret_Key", "")
+        or config_value("Credentials", "Supabase_Service_Role_Key", "")
+        or normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
         or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
-
-
-class SupabaseStoreBase:
-    DEFAULT_TIMEOUT_SECONDS = 30
-
-    def __init__(self):
-        self.supabase_url = normalized_url(os.getenv("SUPABASE_URL", ""))
-        self.api_key = _resolve_supabase_api_key()
-        self.headers = {
-            "apikey": self.api_key,
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        self.lock = threading.Lock()
-
-    def _request(self, method, path, params=None, json_body=None, timeout=None, headers=None):
-        if timeout is None:
-            timeout = self.DEFAULT_TIMEOUT_SECONDS
-        req_headers = dict(self.headers)
-        if headers:
-            req_headers.update(headers)
-        resp = requests.request(
-            method=method,
-            url=f"{self.supabase_url}{path}",
-            params=params or {},
-            json=json_body,
-            headers=req_headers,
-            timeout=timeout,
-        )
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Supabase AI store request failed ({resp.status_code}): {resp.text}")
-        if not resp.text:
-            return []
-        try:
-            return resp.json()
-        except Exception:
-            return []
-
-
-class SupabaseFileRegistryLegacy(SupabaseStoreBase, RegistryRepo):
-    """Cloud-backed replacement for local registry.db."""
-
-    @staticmethod
-    def _file_key(file_path):
-        return os.path.basename(str(file_path or "")).strip()
-
-    def generate_resume_id(self, file_path):
-        file_key = self._file_key(file_path)
-        return hashlib.sha1(file_key.encode()).hexdigest()
-
-    def needs_processing(self, file_path, last_modified):
-        file_key = self._file_key(file_path)
-        with self.lock:
-            rows = self._request(
-                "GET",
-                "/rest/v1/ai_file_registry",
-                params={"select": "last_modified", "file_key": f"eq.{file_key}", "limit": 1},
-            )
-        if not rows:
-            return True
-        stored = float(rows[0].get("last_modified", 0) or 0)
-        return stored < float(last_modified)
-
-    def upsert_file_record(self, file_path, last_modified, resume_id):
-        file_key = self._file_key(file_path)
-        body = [{
-            "file_key": file_key,
-            "last_modified": float(last_modified),
-            "resume_id": str(resume_id),
-            "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        }]
-        with self.lock:
-            self._request(
-                "POST",
-                "/rest/v1/ai_file_registry",
-                params={"on_conflict": "file_key"},
-                json_body=body,
-                timeout=45,
-                headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
-            )
-
-    def get_resume_id(self, file_path):
-        file_key = self._file_key(file_path)
-        with self.lock:
-            rows = self._request(
-                "GET",
-                "/rest/v1/ai_file_registry",
-                params={"select": "resume_id", "file_key": f"eq.{file_key}", "limit": 1},
-            )
-        if rows:
-            resume_id = str(rows[0].get("resume_id", "")).strip()
-            if resume_id:
-                return resume_id
-        return self.generate_resume_id(file_path)
-
-
-class SupabaseFeedbackStoreLegacy(SupabaseStoreBase, FeedbackRepo):
-    """Cloud-backed replacement for local feedback.db."""
-
-    def add_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence,
-                     user_decision, user_notes=""):
-        body = [{
-            "filename": filename,
-            "query": query,
-            "llm_decision": llm_decision,
-            "llm_reason": llm_reason,
-            "llm_confidence": llm_confidence,
-            "user_decision": user_decision,
-            "user_notes": user_notes or "",
-            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        }]
-        with self.lock:
-            self._request("POST", "/rest/v1/ai_feedback", json_body=body, timeout=45)
-        print(f"[FEEDBACK] Stored (cloud): {filename} - User: {user_decision}, LLM: {llm_decision}")
-
-    def get_recent_feedback(self, query, limit=5):
-        query_terms = (query or "").split()
-        if not query_terms:
-            return []
-        like_term = f"*{query_terms[0]}*"
-        with self.lock:
-            rows = self._request(
-                "GET",
-                "/rest/v1/ai_feedback",
-                params={
-                    "select": "filename,llm_decision,user_decision,llm_reason,user_notes",
-                    "query": f"ilike.{like_term}",
-                    "order": "timestamp.desc",
-                    "limit": int(limit),
-                },
-            )
-        return [
-            (
-                row.get("filename", ""),
-                row.get("llm_decision", ""),
-                row.get("user_decision", ""),
-                row.get("llm_reason", ""),
-                row.get("user_notes", ""),
-            )
-            for row in (rows or [])
-        ]
-
-
 # ==============================================================================
 # 4. PDF PROCESSING MODULE
 # ==============================================================================
@@ -492,6 +357,11 @@ class RAGPrepper:
             "resume_id": resume_id,
             "rank": rank,
             "raw_text": chunk_text,
+            "resume_fingerprint": build_resume_fingerprint(
+                source_path=source_path,
+                raw_text=chunk_text,
+                fallback_id=resume_id,
+            ),
         }
         if filename:
             metadata["filename"] = str(filename)
@@ -908,6 +778,159 @@ class AIResumeAnalyzer:
     LLM_RATE_LIMIT_SLEEP_SECONDS = 0.5
     LLM_REQUEST_TIMEOUT_SECONDS = 45
     LLM_CONTEXT_TEXT_CHAR_LIMIT = 30000
+
+    @staticmethod
+    def _cross_platform_basename(path_like):
+        raw = str(path_like or "").strip()
+        if not raw:
+            return ""
+        normalized = raw.replace("\\", "/").rstrip("/")
+        if not normalized:
+            return ""
+        return normalized.split("/")[-1]
+
+    def _resolve_candidate_path(self, metadata, target_folder, resume_id=None):
+        metadata = metadata if isinstance(metadata, dict) else {}
+        source_path = str(metadata.get("source_path") or "").strip()
+        filename_hint = self._cross_platform_basename(metadata.get("filename") or source_path)
+        resume_hint = self._cross_platform_basename(resume_id or "")
+        if not filename_hint and resume_hint:
+            filename_hint = resume_hint
+
+        if source_path:
+            source_candidate = Path(source_path)
+            if source_candidate.exists():
+                return source_candidate
+
+        if filename_hint:
+            direct_candidate = Path(target_folder) / filename_hint
+            if direct_candidate.exists():
+                return direct_candidate
+            if not direct_candidate.suffix:
+                pdf_candidate = direct_candidate.with_suffix(".pdf")
+                if pdf_candidate.exists():
+                    return pdf_candidate
+
+            for candidate in self._iter_pdf_files(target_folder):
+                candidate_name = self._cross_platform_basename(candidate.name).lower()
+                candidate_stem = self._cross_platform_basename(candidate.stem).lower()
+                if candidate_name == filename_hint.lower() or candidate_stem == filename_hint.lower():
+                    return candidate
+
+        return None
+
+    def _current_rank_file_index(self, target_folder):
+        index = {}
+        folder = Path(target_folder)
+        if not folder.exists():
+            return index
+        for pdf_path in self._iter_pdf_files(folder):
+            try:
+                stable_id = stable_resume_id(pdf_path)
+            except Exception:
+                continue
+            if stable_id and stable_id not in index:
+                index[stable_id.lower()] = pdf_path
+        return index
+
+    def _candidate_display_filename(self, resume_id, chunks, original_path=None, current_rank_index=None):
+        current_rank_index = current_rank_index if isinstance(current_rank_index, dict) else {}
+        metadata = chunks[0].get("metadata") if chunks else {}
+        metadata = metadata if isinstance(metadata, dict) else {}
+        return (
+            self._cross_platform_basename(metadata.get("filename"))
+            or self._cross_platform_basename(original_path)
+            or self._cross_platform_basename(current_rank_index.get(str(resume_id or "").strip().lower()))
+            or self._cross_platform_basename(resume_id)
+            or str(resume_id or "")[:8]
+        )
+
+    @staticmethod
+    def _normalize_signature_text(value):
+        return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+    def _candidate_dedupe_signature(self, resume_id, chunks, metadata=None, resolved_path=None):
+        metadata = metadata if isinstance(metadata, dict) else {}
+        for key in ("resume_fingerprint", "content_hash"):
+            value = str(metadata.get(key) or "").strip()
+            if value:
+                return f"meta:{value.lower()}"
+
+        if resolved_path:
+            file_sig = build_resume_fingerprint(source_path=resolved_path)
+            if file_sig:
+                return f"file:{file_sig}"
+
+        raw_parts = []
+        for chunk in chunks or []:
+            chunk_meta = chunk.get("metadata") if isinstance(chunk, dict) else {}
+            if not isinstance(chunk_meta, dict):
+                continue
+            raw_text = str(chunk_meta.get("raw_text") or "").strip()
+            if raw_text:
+                raw_parts.append(self._normalize_signature_text(raw_text))
+
+        if raw_parts:
+            return "text:" + hashlib.sha1("\n".join(raw_parts).encode("utf-8", "ignore")).hexdigest()
+
+        fallback = self._cross_platform_basename(
+            metadata.get("filename") or metadata.get("source_path") or resume_id
+        ).lower() or str(resume_id or "").lower()
+        return f"id:{fallback}"
+
+    def _normalize_rank_candidates(self, candidates, target_folder, current_rank_index=None):
+        grouped_candidates = {}
+        candidate_paths = {}
+        resolved_candidates = {}
+        stale_candidates = 0
+        duplicate_candidates = 0
+        current_rank_index = (
+            current_rank_index
+            if isinstance(current_rank_index, dict)
+            else self._current_rank_file_index(target_folder)
+        )
+
+        for resume_id, chunks in (candidates or {}).items():
+            chunk_list = chunks or []
+            metadata = chunk_list[0].get("metadata") if chunk_list else {}
+            metadata = metadata if isinstance(metadata, dict) else {}
+            resolved_path = self._resolve_candidate_path(metadata, target_folder, resume_id=resume_id)
+            if not resolved_path:
+                resolved_path = current_rank_index.get(str(resume_id or "").strip().lower())
+
+            dedupe_key = self._candidate_dedupe_signature(
+                resume_id,
+                chunks,
+                metadata=metadata,
+                resolved_path=resolved_path,
+            )
+            bucket = grouped_candidates.setdefault(dedupe_key, {"resolved": [], "unresolved": []})
+            if resolved_path:
+                bucket["resolved"].append((resume_id, chunks, resolved_path))
+            else:
+                bucket["unresolved"].append((resume_id, chunks))
+
+        for bucket in grouped_candidates.values():
+            resolved_entries = bucket.get("resolved") or []
+            unresolved_entries = bucket.get("unresolved") or []
+
+            if resolved_entries:
+                resume_id, chunks, resolved_path = resolved_entries[0]
+                resolved_candidates[resume_id] = chunks
+                candidate_paths[resume_id] = resolved_path
+                if len(resolved_entries) > 1:
+                    duplicate_candidates += len(resolved_entries) - 1
+                stale_candidates += len(unresolved_entries)
+                duplicate_candidates += len(unresolved_entries)
+            else:
+                stale_candidates += len(unresolved_entries)
+                if not current_rank_index and unresolved_entries:
+                    resume_id, chunks = unresolved_entries[0]
+                    resolved_candidates[resume_id] = chunks
+                    if len(unresolved_entries) > 1:
+                        duplicate_candidates += len(unresolved_entries) - 1
+
+        return resolved_candidates, candidate_paths, stale_candidates, duplicate_candidates
     V2_ONLY_CONSTRAINT_IDS = {
         "rank_match",
         "coc_document_gate",
@@ -1256,13 +1279,20 @@ class AIResumeAnalyzer:
                 repo_feature_flags = getattr(config_parser, "feature_flags", None)
                 if repo_feature_flags is None:
                     repo_feature_flags = type("RepoFeatureFlags", (), {
-                        "use_supabase_db": normalize_env_value(os.getenv("USE_SUPABASE_DB", "")).lower() in {"1", "true", "yes", "on"},
+                        "use_supabase_db": str(config_parser.get("Advanced", "use_supabase_db", fallback="")).strip().lower() in {"1", "true", "yes", "on"},
+                        "use_dual_write": str(config_parser.get("Advanced", "use_dual_write", fallback="")).strip().lower() in {"1", "true", "yes", "on"},
+                        "use_supabase_reads": str(config_parser.get("Advanced", "use_supabase_reads", fallback="")).strip().lower() in {"1", "true", "yes", "on"},
+                        "use_local_agent": str(config_parser.get("Advanced", "use_local_agent", fallback="")).strip().lower() in {"1", "true", "yes", "on"},
+                        "use_cloud_export": str(config_parser.get("Advanced", "use_cloud_export", fallback="")).strip().lower() in {"1", "true", "yes", "on"},
                     })()
                 store_bundle = build_ai_store_bundle(
                     repo_feature_flags,
                     registry_db_path=self.config.registry_db_path,
                     feedback_db_path=self.config.feedback_db_path,
-                    supabase_url=normalized_url(os.getenv("SUPABASE_URL", "")),
+                    supabase_url=normalized_url(
+                        config_parser.get("Advanced", "supabase_url", fallback="")
+                        or os.getenv("SUPABASE_URL", "")
+                    ),
                     supabase_api_key=_resolve_supabase_api_key(),
                 )
             except Exception as exc:
@@ -4354,7 +4384,7 @@ class AIResumeAnalyzer:
                 "source_label": None,
             }
 
-        path_name = Path(original_path).name if original_path else ""
+        path_name = self._cross_platform_basename(original_path) if original_path else ""
         if path_name.upper().startswith("EMAIL_"):
             return {
                 "count": None,
@@ -4912,7 +4942,7 @@ class AIResumeAnalyzer:
                 "source_label": None,
             }
 
-        path_name = Path(original_path).name if original_path else ""
+        path_name = self._cross_platform_basename(original_path) if original_path else ""
         if path_name.upper().startswith("EMAIL_"):
             return self._extract_email_experience_rows(text)
 
@@ -5213,7 +5243,7 @@ class AIResumeAnalyzer:
 
     def _extract_seajobs_total_experience_rows(self, raw_text, original_path=None):
         text = str(raw_text or "")
-        path_name = Path(original_path).name if original_path else ""
+        path_name = self._cross_platform_basename(original_path) if original_path else ""
         if not text.strip() or path_name.upper().startswith("EMAIL_"):
             return {
                 "rows": [],
@@ -5302,7 +5332,7 @@ class AIResumeAnalyzer:
                 "source_label": None,
             }
 
-        path_name = Path(original_path).name if original_path else ""
+        path_name = self._cross_platform_basename(original_path) if original_path else ""
         if path_name.upper().startswith("EMAIL_"):
             return {
                 "last_sign_off_date": None,
@@ -9978,22 +10008,30 @@ Examples of GOOD responses:
                 if search_warning:
                     yield {"type": "warning", "message": search_warning}
             
+            past_feedback = self.feedback.get_recent_feedback(user_prompt)
+            text_cache = {}
+            perf_state = {}
+            candidate_paths = {}
+            resolved_candidates = {}
+            current_rank_index = self._current_rank_file_index(target_folder)
+            path_index_started_at = time.perf_counter()
+            resolved_candidates, candidate_paths, stale_candidates, duplicate_candidates = self._normalize_rank_candidates(
+                candidates,
+                target_folder,
+                current_rank_index=current_rank_index,
+            )
+            self._record_perf_timing(perf_state, "candidate_path_index", time.perf_counter() - path_index_started_at)
+            if stale_candidates or duplicate_candidates:
+                print(
+                    f"[RANK] Skipped {stale_candidates} stale and {duplicate_candidates} duplicate "
+                    f"candidate(s) before analysis for rank={rank}."
+                )
+            candidates = resolved_candidates
             total_candidates = len(candidates)
             yield {"type": "progress", "current": 0, "total": total_candidates, 
                    "message": f"Found {total_candidates} candidates to analyze"}
             
             # Deterministic hard filter gate
-            past_feedback = self.feedback.get_recent_feedback(user_prompt)
-            text_cache = {}
-            perf_state = {}
-            candidate_paths = {}
-            path_index_started_at = time.perf_counter()
-            for resume_id, chunks in candidates.items():
-                chunk_list = chunks or []
-                source_path = str(((chunk_list[0].get("metadata") or {}).get("source_path") or "")).strip() if chunk_list else ""
-                if source_path:
-                    candidate_paths[resume_id] = Path(source_path)
-            self._record_perf_timing(perf_state, "candidate_path_index", time.perf_counter() - path_index_started_at)
             
             verified_matches = []
             uncertain_matches = []
@@ -10017,7 +10055,14 @@ Examples of GOOD responses:
             for i, (resume_id, chunks) in enumerate(candidates.items(), 1):
                 candidate_started_at = time.perf_counter()
                 original_path = candidate_paths.get(resume_id)
-                filename = original_path.name if original_path else resume_id[:8]
+                filename = self._candidate_display_filename(
+                    resume_id,
+                    chunks,
+                    original_path=original_path,
+                    current_rank_index=current_rank_index,
+                )
+                if not original_path:
+                    original_path = current_rank_index.get(str(resume_id or "").strip().lower())
                 
                 yield {"type": "progress", "current": i, "total": total_candidates, 
                        "message": f"Analyzing: {filename}"}

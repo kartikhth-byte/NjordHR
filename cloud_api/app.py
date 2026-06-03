@@ -6,6 +6,8 @@ import os
 
 from flask import Flask, jsonify, request
 
+from runtime_env import config_value
+
 from .runtime import CloudApiSettings, cloud_api_settings_payload, load_cloud_api_settings
 
 
@@ -14,7 +16,7 @@ def _env_value(name: str) -> str:
 
 
 def _require_bearer_token(settings: CloudApiSettings):
-    token = _env_value("NJORDHR_API_TOKEN") or _env_value("NJORDHR_ADMIN_TOKEN")
+    token = config_value("Advanced", "admin_token", "") or _env_value("NJORDHR_API_TOKEN") or _env_value("NJORDHR_ADMIN_TOKEN")
     if not token:
         return None
     header = str(request.headers.get("Authorization", "") or "")

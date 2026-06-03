@@ -1,9 +1,9 @@
-import hashlib
 import os
 import sqlite3
 import threading
 
 from repositories.registry_repo import RegistryRepo
+from repositories.resume_identity import stable_resume_id
 
 
 class CSVFileRegistry(RegistryRepo):
@@ -54,7 +54,7 @@ class CSVFileRegistry(RegistryRepo):
             self.conn.commit()
 
     def generate_resume_id(self, file_path):
-        return hashlib.sha1(str(file_path).encode()).hexdigest()
+        return stable_resume_id(file_path)
 
     def needs_processing(self, file_path, last_modified):
         with self.lock:
@@ -68,7 +68,9 @@ class CSVFileRegistry(RegistryRepo):
         with self.lock:
             self.conn.execute("""
                 INSERT INTO files (file_path, last_modified, resume_id) VALUES (?, ?, ?)
-                ON CONFLICT(file_path) DO UPDATE SET last_modified=excluded.last_modified
+                ON CONFLICT(file_path) DO UPDATE SET
+                    last_modified=excluded.last_modified,
+                    resume_id=excluded.resume_id
             """, (file_path, last_modified, resume_id))
             self.conn.commit()
 

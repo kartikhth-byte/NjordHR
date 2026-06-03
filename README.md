@@ -252,8 +252,8 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
 - `USE_SUPABASE_DB` (default `false`)
 - `USE_LOCAL_AGENT` (default `false`)
 - `USE_CLOUD_EXPORT` (default `false`)
-- `NJORDHR_SERVER_URL` (default `http://127.0.0.1:5000`)
-- `NJORDHR_ADMIN_TOKEN` (required for Admin Settings API/UI access)
+- `NJORDHR_SERVER_URL` (bootstrap/runtime wiring; default `http://127.0.0.1:5000`)
+- `NJORDHR_ADMIN_TOKEN` (bootstrap fallback for admin settings access; persisted `[Advanced].admin_token` wins when present)
 
 Setup Wizard installer URL overrides (optional):
 - `NJORDHR_MACOS_FULL_INSTALLER_URL`
@@ -413,11 +413,10 @@ Required env vars:
 
 Credential sources:
 - Admin username/password:
-  - `NJORDHR_ADMIN_USERNAME` / `NJORDHR_ADMIN_PASSWORD`, or
-  - `[Auth] admin_username` / `admin_password`, fallback to `NJORDHR_ADMIN_TOKEN`/`[Advanced].admin_token` for password.
+  - `[Auth] admin_username` / `admin_password` when configured, with `NJORDHR_ADMIN_USERNAME` / `NJORDHR_ADMIN_PASSWORD` as bootstrap or compatibility fallbacks
+  - Settings password uses `[Advanced] admin_token` as the persisted source of truth, with `NJORDHR_ADMIN_TOKEN` as a bootstrap fallback
 - Recruiter username/password:
-  - `NJORDHR_RECRUITER_USERNAME` / `NJORDHR_RECRUITER_PASSWORD`, or
-  - `[Auth] recruiter_username` / `recruiter_password`
+  - `[Auth] recruiter_username` / `recruiter_password` when configured, with `NJORDHR_RECRUITER_USERNAME` / `NJORDHR_RECRUITER_PASSWORD` as bootstrap or compatibility fallbacks
 - `GET /jobs/<job_id>`
 - `GET /jobs/<job_id>/stream`
 - `GET /diagnostics`
