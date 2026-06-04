@@ -1368,7 +1368,7 @@ class AIResumeAnalyzer:
             rf'within\s+the\s+age\s+of\s+{token}\s+(?:and|to)\s+{token}(?:\s+years?\s+old)?',
             rf'with\s*in\s+the\s+age\s+of\s+{token}\s+(?:and|to)\s+{token}',
             rf'between\s+ages?\s+{token}\s+(?:and|to)\s+{token}(?:\s+years?\s+old)?',
-            rf'between\s+{token}\s+(?:and|to)\s+{token}\s+years?\s+old',
+            rf'between\s+{token}(?:\s+years?)?\s+(?:and|to)\s+{token}\s+years?\s+old',
             rf'between\s+{token}\s+(?:and|to)\s+{token}',
             rf'age\s+between\s+{token}\s+(?:and|to)\s+{token}',
             rf'age\s+range\s+of\s+{token}\s+(?:and|to)\s+{token}',
@@ -2220,7 +2220,7 @@ class AIResumeAnalyzer:
             "min_months": min_months,
             "lookback_contracts": lookback_contracts,
             "requested_label": requested_label,
-            "display_value": " ".join(prompt.split()),
+            "display_value": self._experience_constraint_display_value(prompt, vessel_type=vessel_type),
         }
 
     def _extract_ship_type_from_prompt(self, user_prompt):
@@ -2442,6 +2442,67 @@ class AIResumeAnalyzer:
         }
         return expanded.get(requested, [requested])
 
+    def _experience_constraint_display_value(self, user_prompt, engine_type=None, vessel_type=None):
+        """Return the smallest prompt clause range containing the requested experience terms."""
+        prompt = " ".join(str(user_prompt or "").split())
+        if not prompt:
+            return ""
+
+        clause_spans = []
+        clause_start = 0
+        for separator in re.finditer(r"\s+(?:and|or)\s+|[,;\n]+", prompt, flags=re.IGNORECASE):
+            if clause_start < separator.start():
+                clause_spans.append((clause_start, separator.start()))
+            clause_start = separator.end()
+        if clause_start < len(prompt):
+            clause_spans.append((clause_start, len(prompt)))
+        if not clause_spans:
+            return prompt
+
+        required_clause_indexes = []
+        requested_engine_type = self._normalize_engine_type(engine_type).replace(" ", "_")
+        if requested_engine_type:
+            engine_aliases = []
+            for canonical, aliases in self._engine_type_aliases().items():
+                canonical_id = self._normalize_engine_type(canonical).replace(" ", "_")
+                if canonical_id == requested_engine_type:
+                    engine_aliases.extend(aliases)
+            for index, (start, end) in enumerate(clause_spans):
+                normalized_clause = self._normalize_engine_type(prompt[start:end])
+                if any(self._engine_alias_matches_text(normalized_clause, alias) for alias in engine_aliases):
+                    required_clause_indexes.append(index)
+                    break
+
+        requested_vessel_type = self._normalize_ship_type(vessel_type)
+        if requested_vessel_type:
+            vessel_aliases = [
+                requested_vessel_type,
+                *(self._ship_type_aliases().get(requested_vessel_type) or []),
+            ]
+            normalized_aliases = []
+            for alias in vessel_aliases:
+                normalized_alias = self._normalize_ship_type(alias)
+                if normalized_alias:
+                    normalized_aliases.append(normalized_alias)
+            for index, (start, end) in enumerate(clause_spans):
+                normalized_clause = self._normalize_ship_type(prompt[start:end])
+                if any(
+                    re.search(rf"\b{re.escape(alias)}\b", normalized_clause)
+                    for alias in normalized_aliases
+                ):
+                    required_clause_indexes.append(index)
+                    break
+
+        required_count = int(bool(requested_engine_type)) + int(bool(requested_vessel_type))
+        if len(required_clause_indexes) < required_count:
+            return prompt
+
+        first_clause = min(required_clause_indexes)
+        last_clause = max(required_clause_indexes)
+        start = clause_spans[first_clause][0]
+        end = clause_spans[last_clause][1]
+        return prompt[start:end].strip(" ,;")
+
     def _extract_engine_experience_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         normalized_prompt = self._normalize_engine_type(prompt)
@@ -2528,7 +2589,7 @@ class AIResumeAnalyzer:
             "min_months": min_months,
             "lookback_contracts": int(contracts_match.group(1)) if contracts_match else 0,
             "recent_contract_match_mode": recent_contract_match_mode,
-            "display_value": " ".join(prompt.split()),
+            "display_value": self._experience_constraint_display_value(prompt, engine_type=engine_type),
             "operator": "contains_any",
         }
 
@@ -2563,7 +2624,11 @@ class AIResumeAnalyzer:
             "min_months": engine_constraint.get("min_months", 0),
             "lookback_contracts": engine_constraint.get("lookback_contracts", 0),
             "recent_contract_match_mode": engine_constraint.get("recent_contract_match_mode", "any"),
-            "display_value": " ".join(prompt.split()),
+            "display_value": self._experience_constraint_display_value(
+                prompt,
+                engine_type=engine_constraint["engine_type"],
+                vessel_type=vessel_type,
+            ),
             "operator": "contains_all_same_row",
         }
 
@@ -3537,7 +3602,11 @@ class AIResumeAnalyzer:
         residual_text = re.sub(r"^(?:and|or|with|,|&|/|\s)+", "", residual_text, flags=re.IGNORECASE)
         residual_text = re.sub(r"(?:and|or|,|&|/|\s)+$", "", residual_text, flags=re.IGNORECASE)
         residual_text = self._prompt_observability_normalize(residual_text)
-        if residual_text and re.fullmatch(r"(?:and|or|,|&|/|\s)+", residual_text, flags=re.IGNORECASE):
+        if residual_text and re.fullmatch(
+            r"(?:(?:and|or|with|has|have|having|is|are|was|were|a|an|the)\b|,|&|/|\s)+",
+            residual_text,
+            flags=re.IGNORECASE,
+        ):
             residual_text = ""
         if residual_text:
             ledger.append({

@@ -524,6 +524,18 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("engine_experience", constraints["applied_constraints"])
         self.assertEqual(constraints["hard_constraints"]["engine_experience"]["engine_type"], "dual_fuel")
         self.assertEqual(constraints["hard_constraints"]["engine_experience"]["min_months"], 0)
+        self.assertEqual(
+            constraints["hard_constraints"]["engine_experience"]["display_value"],
+            "has dual fuel experience",
+        )
+
+        observability = self.analyzer._build_prompt_observability(
+            "has dual fuel experience and has valid passport and is between 30 years and 50 years old",
+            constraints,
+            has_semantic_intent=False,
+        )
+        self.assertEqual(observability["residual_text"], "")
+        self.assertEqual(observability["clause_accounting"], {"applied": 3, "soft": 0, "unsupported": 0})
 
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -549,6 +561,93 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             [rule["reason_code"] for rule in result["results"]],
             ["AGE_IN_RANGE", "PASSPORT_VALID", "ENGINE_EXPERIENCE_MATCH"],
         )
+
+    def test_dual_fuel_passport_age_prompt_emits_deterministic_match_without_llm(self):
+        filename = "Chief-Engineer_Container_10060_2026-01-29_16-36-29.pdf"
+        pdf_path = self.rank_folder / filename
+        pdf_path.write_bytes(b"%PDF-1.4")
+        resume_id = self.analyzer.registry.get_resume_id(pdf_path)
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            resume_id: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": resume_id,
+                        "rank": self.rank,
+                        "filename": filename,
+                        "source_path": str(pdf_path),
+                        "raw_text": "Dual Fuel (X-DF) ENGINE",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "personal": {"dob": date(1986, 11, 1), "dob_parse_status": "PARSED"},
+            "derived": {"age_years": 39},
+            "logistics": {
+                "passport_expiry_date": "2033-09-05",
+                "passport_expiry_status": "PARSED",
+            },
+            "application": {"applied_ship_types": []},
+            "experience": {"engine_types": ["dual_fuel"], "vessel_types": []},
+            "fact_meta": {
+                "derived.age_years": {"confidence": 0.9},
+                "logistics.passport_expiry_date": {"confidence": 0.9},
+                "experience.engine_types": {"confidence": 0.8},
+            },
+        }
+        self.analyzer._reason_with_llm = lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("LLM should be skipped for fully consumed deterministic constraints")
+        )
+
+        prompt = "has dual fuel experience and has valid passport and is between 30 years and 50 years old"
+        events = list(self.analyzer.run_analysis_stream(self.rank, prompt))
+
+        match_event = next(event for event in events if event["type"] == "match_found")
+        complete_event = next(event for event in events if event["type"] == "complete")
+        candidate_audit = next(
+            entry for entry in complete_event["hard_filter_audit"] if entry["filename"] == filename
+        )
+
+        self.assertEqual(match_event["match"]["filename"], filename)
+        self.assertEqual(match_event["match"]["confidence"], 1.0)
+        self.assertEqual(complete_event["residual_text"], "")
+        self.assertFalse(candidate_audit["llm_reached"])
+        self.assertEqual(candidate_audit["result_bucket"], "verified_match")
+
+    def test_experience_display_values_scope_compound_prompt_clauses(self):
+        cases = [
+            (
+                "Mitsubishi UEC experience and tanker experience in last 3 contracts and has valid passport",
+                {
+                    "engine_experience": "Mitsubishi UEC experience",
+                    "recent_contract_vessel_experience": "tanker experience in last 3 contracts",
+                },
+            ),
+            (
+                "recent 3 vessels with UEC engine and container experience and has valid passport",
+                {
+                    "engine_vessel_experience": "recent 3 vessels with UEC engine and container experience",
+                },
+            ),
+        ]
+
+        for prompt, expected_display_values in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                for constraint_id, expected_display_value in expected_display_values.items():
+                    self.assertEqual(
+                        constraints["hard_constraints"][constraint_id]["display_value"],
+                        expected_display_value,
+                    )
+                observability = self.analyzer._build_prompt_observability(
+                    prompt,
+                    constraints,
+                    has_semantic_intent=False,
+                )
+                self.assertEqual(observability["residual_text"], "")
 
     def test_engine_experience_slot_parser_handles_recruiter_variants(self):
         cases = [
