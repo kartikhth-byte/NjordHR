@@ -9287,6 +9287,25 @@ class AIResumeAnalyzer:
             "facts_version": facts_version,
         }
 
+    def _should_allow_llm_after_unknown(self, hard_filter_result):
+        """Allow semantic fallback when the only blocker is missing experience evidence."""
+        reviewable_unknown_reason_codes = {
+            "ENGINE_EXPERIENCE_MISSING",
+            "ENGINE_EXPERIENCE_ROWS_MISSING",
+            "ENGINE_EXPERIENCE_CONSTRAINT_INVALID",
+            "ENGINE_VESSEL_EXPERIENCE_MISSING",
+            "ENGINE_VESSEL_EXPERIENCE_RULE_REQUIRES_V2_FACTS",
+            "ENGINE_VESSEL_EXPERIENCE_ROWS_MISSING",
+            "RECENT_CONTRACT_VESSEL_RULE_REQUIRES_V2_FACTS",
+        }
+        unknown_reason_codes = {
+            reason.get("reason_code")
+            for reason in (hard_filter_result or {}).get("results") or []
+            if reason.get("decision") == "UNKNOWN" or reason.get("unknown_reason")
+        }
+        unknown_reason_codes.discard(None)
+        return bool(unknown_reason_codes) and unknown_reason_codes.issubset(reviewable_unknown_reason_codes)
+
     def _capture_candidate_facts_for_review(self, review_capture_callback, candidate_facts, capture_context):
         if not callable(review_capture_callback):
             return None
@@ -10184,7 +10203,8 @@ Examples of GOOD responses:
                         )
                     continue
 
-                if hard_filter_result["decision"] == "UNKNOWN":
+                allow_llm_after_unknown = self._should_allow_llm_after_unknown(hard_filter_result)
+                if hard_filter_result["decision"] == "UNKNOWN" and not allow_llm_after_unknown:
                     hard_filter_summary["unknown"] += 1
                     audit_entry["result_bucket"] = "needs_review"
                     hard_filter_audit.append(audit_entry)

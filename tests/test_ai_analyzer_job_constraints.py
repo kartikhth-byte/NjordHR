@@ -1943,6 +1943,67 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(match_event["match"]["confidence"], 1.0)
         self.assertEqual(match_event["match"]["reason"], "Candidate age 36 meets requested age filter.")
 
+    def test_engine_experience_unknown_still_allows_llm_fallback(self):
+        filename = "Chief-Engineer_Container_10060_2026-01-29_16-36-29.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Chief Engineer resume mentioning dual fuel experience, passport and age details.",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {"applied_rank_normalized": "chief_engineer"},
+            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
+            "personal": {"dob": None},
+            "derived": {"age_years": 39},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": []},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "UNKNOWN",
+            "results": [
+                {
+                    "decision": "UNKNOWN",
+                    "reason_code": "ENGINE_EXPERIENCE_MISSING",
+                    "message": "Could not determine contract-level engine experience from the selected resume.",
+                    "actual_value": None,
+                    "expected_value": {"engine_type": "dual_fuel"},
+                    "confidence": None,
+                    "unknown_reason": "FACTUAL_UNKNOWN",
+                }
+            ],
+            "evaluation_date_used": "2026-04-06",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+        llm_calls = []
+
+        def fake_reason_with_llm(prompt, retrieved_chunks, past_feedback):
+            llm_calls.append(prompt)
+            return {"is_match": True, "reason": "Match found.", "confidence": 0.95}
+
+        self.analyzer._reason_with_llm = fake_reason_with_llm
+
+        events = list(
+            self.analyzer.run_analysis_stream(
+                self.rank,
+                "has dual fuel experience and has valid passport and is between 30 years and 50 years old",
+            )
+        )
+
+        self.assertTrue(llm_calls)
+        self.assertTrue(any(event["type"] == "match_found" for event in events))
+        self.assertFalse(any(event["type"] == "hard_filter_unknown" for event in events))
+
     def test_structured_only_recency_pass_skips_llm_and_surfaces_match(self):
         filename = "Chief-Engineer_Container_12309_2026-01-29_16-35-43.pdf"
         (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
