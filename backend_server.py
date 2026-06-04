@@ -442,6 +442,13 @@ def _advanced_value(name, fallback=""):
     return config.get("Advanced", name, fallback=fallback)
 
 
+def _advanced_bool(name, fallback=False):
+    raw = normalize_env_value(config.get("Advanced", name, fallback=""))
+    if raw:
+        return raw.lower() in {"1", "true", "yes", "on"}
+    return bool(fallback)
+
+
 def _credential_value(config_key, env_name, fallback=""):
     config_value = normalize_env_value(creds.get(config_key, fallback=fallback))
     if config_value:
@@ -1446,14 +1453,39 @@ def _settings_payload(include_plain_secrets=False):
             "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
             "use_local_agent": bool(feature_flags.use_local_agent),
             "use_cloud_export": bool(feature_flags.use_cloud_export),
-            "email_intake_enabled": bool(agent_settings.get("email_intake_enabled", False)),
-            "email_intake_mailbox": str(agent_settings.get("email_intake_mailbox", "")).strip(),
-            "email_intake_monitored_folder": str(agent_settings.get("email_intake_monitored_folder", "")).strip(),
-            "email_intake_processed_folder": str(agent_settings.get("email_intake_processed_folder", "")).strip(),
-            "email_intake_failed_folder": str(agent_settings.get("email_intake_failed_folder", "")).strip(),
-            "email_intake_poll_interval_seconds": agent_settings.get("email_intake_poll_interval_seconds", 60),
-            "outlook_client_id": str(agent_settings.get("outlook_client_id", "")).strip(),
-            "outlook_tenant_id": str(agent_settings.get("outlook_tenant_id", "organizations")).strip() or "organizations",
+            "email_intake_enabled": _advanced_bool(
+                "email_intake_enabled",
+                bool(agent_settings.get("email_intake_enabled", False)),
+            ),
+            "email_intake_mailbox": _advanced_value(
+                "email_intake_mailbox",
+                str(agent_settings.get("email_intake_mailbox", "")).strip(),
+            ),
+            "email_intake_monitored_folder": _advanced_value(
+                "email_intake_monitored_folder",
+                str(agent_settings.get("email_intake_monitored_folder", "")).strip() or "Inbox/NjordHR Resumes",
+            ),
+            "email_intake_processed_folder": _advanced_value(
+                "email_intake_processed_folder",
+                str(agent_settings.get("email_intake_processed_folder", "")).strip() or "Inbox/NjordHR Processed",
+            ),
+            "email_intake_failed_folder": _advanced_value(
+                "email_intake_failed_folder",
+                str(agent_settings.get("email_intake_failed_folder", "")).strip() or "Inbox/NjordHR Failed",
+            ),
+            "email_intake_poll_interval_seconds": _int_setting(
+                "Advanced",
+                "email_intake_poll_interval_seconds",
+                int(agent_settings.get("email_intake_poll_interval_seconds", 60) or 60),
+            ),
+            "outlook_client_id": _advanced_value(
+                "outlook_client_id",
+                str(agent_settings.get("outlook_client_id", "")).strip(),
+            ),
+            "outlook_tenant_id": _advanced_value(
+                "outlook_tenant_id",
+                str(agent_settings.get("outlook_tenant_id", "organizations")).strip() or "organizations",
+            ) or "organizations",
         },
         "secrets": {
             "seajob_username": _mask_secret(_seajob_username()),
@@ -3345,7 +3377,9 @@ def save_admin_settings():
 
     email_intake_payload = {}
     if "email_intake_enabled" in payload:
-        email_intake_payload["email_intake_enabled"] = _payload_bool(payload, "email_intake_enabled")
+        enabled = _payload_bool(payload, "email_intake_enabled")
+        _set_config_value_or_clear("Advanced", "email_intake_enabled", "true" if enabled else "false")
+        email_intake_payload["email_intake_enabled"] = enabled
     for key in [
         "email_intake_mailbox",
         "email_intake_monitored_folder",
@@ -3356,26 +3390,27 @@ def save_admin_settings():
     ]:
         if key in payload:
             value = normalize_env_value(payload.get(key, ""))
-            if value:
-                email_intake_payload[key] = value
+            _set_config_value_or_clear("Advanced", key, value)
+            email_intake_payload[key] = value
     if "email_intake_poll_interval_seconds" in payload:
         raw_interval = str(payload.get("email_intake_poll_interval_seconds", "")).strip()
         if raw_interval:
             try:
-                email_intake_payload["email_intake_poll_interval_seconds"] = int(raw_interval)
+                poll_interval = int(raw_interval)
+                _config_set_literal(config, "Advanced", "email_intake_poll_interval_seconds", str(poll_interval))
+                email_intake_payload["email_intake_poll_interval_seconds"] = poll_interval
             except Exception:
                 return jsonify({"success": False, "message": "email_intake_poll_interval_seconds must be an integer"}), 400
     if email_intake_payload:
-        if not intended_use_local_agent:
-            return jsonify({"success": False, "message": "Local agent is required to save Outlook mailbox intake settings."}), 400
         try:
-            resp = _agent_request("PUT", "/settings", json_body=email_intake_payload, timeout=15)
-            if getattr(resp, "status_code", 500) >= 400:
-                try:
-                    message = resp.json().get("message", "Local agent rejected Outlook mailbox intake settings.")
-                except Exception:
-                    message = "Local agent rejected Outlook mailbox intake settings."
-                return jsonify({"success": False, "message": message}), resp.status_code
+            if intended_use_local_agent:
+                resp = _agent_request("PUT", "/settings", json_body=email_intake_payload, timeout=15)
+                if getattr(resp, "status_code", 500) >= 400:
+                    try:
+                        message = resp.json().get("message", "Local agent rejected Outlook mailbox intake settings.")
+                    except Exception:
+                        message = "Local agent rejected Outlook mailbox intake settings."
+                    return jsonify({"success": False, "message": message}), resp.status_code
         except Exception as exc:
             return jsonify({"success": False, "message": f"Local agent unavailable: {exc}"}), 502
 
@@ -3454,6 +3489,9 @@ def save_admin_settings():
                 warnings.append(message)
         except Exception as exc:
             warnings.append(f"Local agent unavailable: {exc}")
+
+    if email_intake_payload and not intended_use_local_agent:
+        warnings.append("Mailbox intake settings were saved locally; enable Local Agent to sync them.")
 
     response = {
         "success": True,

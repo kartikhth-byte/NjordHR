@@ -274,6 +274,65 @@ class SettingsPrecedenceTests(unittest.TestCase):
                     self.assertEqual(os.environ.get("GEMINI_API_KEY"), "cloud-gemini")
                     self.assertNotIn("PINECONE_API_KEY", os.environ)
 
+    def test_admin_settings_persists_email_intake_fields_in_config(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config_path = self._write_config(
+                tmp_dir,
+                [
+                    "use_supabase_db = false",
+                    "use_dual_write = false",
+                    "use_supabase_reads = false",
+                    "use_local_agent = false",
+                    "use_cloud_export = false",
+                ],
+            )
+            parser = configparser.ConfigParser()
+            parser.read(config_path)
+            fake_settings = SimpleNamespace(
+                config=parser,
+                credentials=parser["Credentials"],
+                settings=parser["Settings"],
+                feature_flags=FeatureFlags(False, False, False, False, False),
+                server_url="http://127.0.0.1:5000",
+            )
+
+            with patch.dict(os.environ, {"NJORDHR_CONFIG_PATH": config_path}, clear=False):
+                with patch.object(backend_server, "app_settings", fake_settings):
+                    with patch.object(backend_server, "config", parser):
+                        with patch.object(backend_server, "creds", parser["Credentials"]):
+                            with patch.object(backend_server, "settings", parser["Settings"]):
+                                with patch.object(backend_server, "feature_flags", fake_settings.feature_flags):
+                                    with patch.object(backend_server, "_require_admin", return_value=(True, "")):
+                                        with patch.object(backend_server, "_refresh_runtime_managers"):
+                                            with backend_server.app.test_request_context(
+                                                "/admin/settings",
+                                                method="POST",
+                                                json={
+                                                    "settings": {
+                                                        "email_intake_enabled": True,
+                                                        "email_intake_mailbox": "recruitment@example.com",
+                                                        "outlook_client_id": "client-123",
+                                                    }
+                                                },
+                                            ):
+                                                response = backend_server.save_admin_settings()
+
+            self.assertEqual(response.status_code, 200)
+            reread = configparser.ConfigParser()
+            reread.read(config_path)
+            self.assertEqual(reread.get("Advanced", "email_intake_enabled"), "true")
+            self.assertEqual(reread.get("Advanced", "email_intake_mailbox"), "recruitment@example.com")
+            self.assertEqual(reread.get("Advanced", "outlook_client_id"), "client-123")
+
+            with patch.object(backend_server, "config", reread):
+                with patch.object(backend_server, "settings", reread["Settings"]):
+                    with patch.object(backend_server, "feature_flags", fake_settings.feature_flags):
+                        payload = backend_server._settings_payload()
+
+            self.assertEqual(payload["non_secret"]["email_intake_mailbox"], "recruitment@example.com")
+            self.assertEqual(payload["non_secret"]["outlook_client_id"], "client-123")
+            self.assertTrue(payload["non_secret"]["email_intake_enabled"])
+
     def test_save_admin_settings_clears_empty_values_and_reloads(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = self._write_config(
