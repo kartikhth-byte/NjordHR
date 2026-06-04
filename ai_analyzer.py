@@ -2447,6 +2447,7 @@ class AIResumeAnalyzer:
         normalized_prompt = self._normalize_engine_type(prompt)
         if not normalized_prompt:
             return None
+        duration_prompt = self._normalize_engine_type(self._strip_age_constraint_phrases(prompt))
 
         matches = []
         for canonical, aliases in self._engine_type_aliases().items():
@@ -2476,7 +2477,7 @@ class AIResumeAnalyzer:
         ]
         contracts_match = None
         for pattern in contract_patterns:
-            contracts_match = re.search(pattern, normalized_prompt, flags=re.IGNORECASE)
+            contracts_match = re.search(pattern, duration_prompt, flags=re.IGNORECASE)
             if contracts_match:
                 break
         recent_contract_match_mode = "any"
@@ -2486,11 +2487,11 @@ class AIResumeAnalyzer:
                 r"\b(?:last|recent|latest)\s+\d+\s+(?:contracts?|vessels?|ships?)\s+(?:with|on|fitted\s+with|should\s+(?:be|have)|must\s+(?:be|have)|need(?:s)?\s+to\s+(?:be|have))\b",
                 r"\b(?:contracts?|vessels?|ships?)\s+(?:last|recent|latest)\s+\d+\s+(?:with|on|fitted\s+with|should\s+(?:be|have)|must\s+(?:be|have))\b",
             ]
-            if any(re.search(pattern, normalized_prompt, flags=re.IGNORECASE) for pattern in strict_contract_patterns):
+            if any(re.search(pattern, duration_prompt, flags=re.IGNORECASE) for pattern in strict_contract_patterns):
                 recent_contract_match_mode = "all"
         months_match = re.search(
             r"\b(?:minimum|at\s+least)?\s*(\d+)\s*(years?|months?)\b",
-            normalized_prompt,
+            duration_prompt,
             flags=re.IGNORECASE,
         )
         min_months = 0
@@ -4062,7 +4063,7 @@ class AIResumeAnalyzer:
             return ""
 
         patterns = [
-            r'between\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
+            r'between\s+\d{1,2}(?:\s+years?)?\s+(?:and|to)\s+\d{1,2}\s+years?\s+old',
             r'between\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'between\s+ages?\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
             r'within\s+the\s+ages?\s+of\s+\d{1,2}\s+(?:and|to)\s+\d{1,2}',
@@ -9287,26 +9288,6 @@ class AIResumeAnalyzer:
             "facts_version": facts_version,
         }
 
-    def _should_allow_llm_after_unknown(self, hard_filter_result):
-        """Allow semantic fallback when the only blocker is missing experience evidence."""
-        reviewable_unknown_reason_codes = {
-            "ENGINE_EXPERIENCE_MISSING",
-            "ENGINE_EXPERIENCE_ROWS_MISSING",
-            "ENGINE_EXPERIENCE_CONSTRAINT_INVALID",
-            "ENGINE_EXPERIENCE_RULE_REQUIRES_V2_FACTS",
-            "ENGINE_VESSEL_EXPERIENCE_MISSING",
-            "ENGINE_VESSEL_EXPERIENCE_RULE_REQUIRES_V2_FACTS",
-            "ENGINE_VESSEL_EXPERIENCE_ROWS_MISSING",
-            "RECENT_CONTRACT_VESSEL_RULE_REQUIRES_V2_FACTS",
-        }
-        unknown_reason_codes = {
-            reason.get("reason_code")
-            for reason in (hard_filter_result or {}).get("results") or []
-            if reason.get("decision") == "UNKNOWN" or reason.get("unknown_reason")
-        }
-        unknown_reason_codes.discard(None)
-        return bool(unknown_reason_codes) and unknown_reason_codes.issubset(reviewable_unknown_reason_codes)
-
     def _capture_candidate_facts_for_review(self, review_capture_callback, candidate_facts, capture_context):
         if not callable(review_capture_callback):
             return None
@@ -10204,8 +10185,7 @@ Examples of GOOD responses:
                         )
                     continue
 
-                allow_llm_after_unknown = self._should_allow_llm_after_unknown(hard_filter_result)
-                if hard_filter_result["decision"] == "UNKNOWN" and not allow_llm_after_unknown:
+                if hard_filter_result["decision"] == "UNKNOWN":
                     hard_filter_summary["unknown"] += 1
                     audit_entry["result_bucket"] = "needs_review"
                     hard_filter_audit.append(audit_entry)
