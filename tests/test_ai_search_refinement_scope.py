@@ -321,6 +321,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "secret": "must-not-survive",
                     "search_state": {
                         "prompt": "has valid passport",
+                        "active_search_step_index": 99,
                         "current_completed_results": {
                             "verified_matches": [{
                                 "filename": long_filename,
@@ -346,6 +347,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         loaded = client.get("/ai_search/recovery_draft").get_json()["draft"]["draft"]
         self.assertNotIn("secret", loaded)
+        self.assertEqual(loaded["search_state"]["active_search_step_index"], 9)
         card = loaded["search_state"]["current_completed_results"]["verified_matches"][0]
         self.assertNotIn("reason", card)
         self.assertNotIn("raw_text", card)

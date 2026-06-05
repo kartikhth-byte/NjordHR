@@ -1457,6 +1457,14 @@ def _sanitize_recovery_result_bucket(value, default_bucket):
     return default_bucket
 
 
+def _sanitize_recovery_step_index(value):
+    try:
+        index = int(value)
+    except (TypeError, ValueError):
+        return -1
+    return max(-1, min(index, 9))
+
+
 def _sanitize_recovery_result_card(card, *, default_bucket="verified_match"):
     card = card if isinstance(card, dict) else {}
     return {
@@ -1565,6 +1573,9 @@ def _sanitize_ai_search_recovery_draft(payload):
             "applied_ship_type": str(search_state.get("applied_ship_type") or "")[:256],
             "experienced_ship_type": str(search_state.get("experienced_ship_type") or "")[:256],
             "refinement_state": str(search_state.get("refinement_state") or "disabled")[:64],
+            "active_search_step_index": _sanitize_recovery_step_index(
+                search_state.get("active_search_step_index")
+            ),
             "current_completed_results": (
                 _sanitize_recovery_results(current_completed_results)
                 if isinstance(current_completed_results, dict)
