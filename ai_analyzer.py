@@ -11,6 +11,7 @@ import configparser
 import re
 import io
 import threading
+import uuid
 from dataclasses import dataclass, asdict
 from copy import deepcopy
 from pathlib import Path
@@ -30,7 +31,13 @@ from repositories.feedback_repo import FeedbackRepo
 from repositories.registry_repo import RegistryRepo
 from repositories.supabase_feedback_repo import SupabaseFeedbackStore
 from repositories.supabase_registry_repo import SupabaseFileRegistry
-from repositories.resume_identity import build_resume_fingerprint, stable_resume_id
+from repositories.resume_identity import (
+    LEGACY_UNKNOWN_PROVENANCE,
+    VERIFIED_CONTENT_HASH_PROVENANCE,
+    build_resume_fingerprint,
+    stable_resume_id,
+    stable_resume_identity,
+)
 from runtime_env import config_value, normalize_env_value, normalized_url
 from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candidate_facts_contract_v1
 from candidate_facts.review_summary import build_candidate_facts_review_summary
@@ -132,7 +139,7 @@ class ConfigManager:
 # ==============================================================================
 class FileRegistry(RegistryRepo):
     """Manages a local SQLite database to track file states and avoid reprocessing."""
-    DB_VERSION = 2
+    DB_VERSION = 4
     
     def __init__(self, db_path='registry.db'):
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -157,12 +164,15 @@ class FileRegistry(RegistryRepo):
 
     def _migrate_schema(self):
         current_version = self._get_db_version()
-        if current_version < self.DB_VERSION:
-            if current_version > 0:
-                print(f"[Database Migration] Upgrading from version {current_version} to {self.DB_VERSION}...")
-                with self.lock:
-                    self.conn.execute("DROP TABLE IF EXISTS files")
+        if current_version <= 0:
             self._create_table()
+            self._ensure_identity_columns()
+            self._set_db_version(self.DB_VERSION)
+            return
+        if current_version < self.DB_VERSION:
+            print(f"[Database Migration] Upgrading from version {current_version} to {self.DB_VERSION}...")
+            self._create_table()
+            self._ensure_identity_columns()
             self._set_db_version(self.DB_VERSION)
 
     def _create_table(self):
@@ -171,13 +181,83 @@ class FileRegistry(RegistryRepo):
                 CREATE TABLE IF NOT EXISTS files (
                     file_path TEXT PRIMARY KEY,
                     last_modified REAL NOT NULL,
-                    resume_id TEXT NOT NULL
+                    resume_id TEXT NOT NULL,
+                    resume_id_provenance TEXT NOT NULL DEFAULT 'legacy_unknown',
+                    content_hash TEXT NOT NULL DEFAULT '',
+                    candidate_scope_id TEXT NOT NULL DEFAULT ''
                 )
             """)
             self.conn.commit()
 
+    def _ensure_column(self, table_name, column_name, column_sql):
+        with self.lock:
+            columns = {
+                row[1]
+                for row in self.conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+            }
+            if column_name not in columns:
+                self.conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+                self.conn.commit()
+
+    def _ensure_identity_columns(self):
+        self._ensure_column(
+            "files",
+            "resume_id_provenance",
+            f"TEXT NOT NULL DEFAULT '{LEGACY_UNKNOWN_PROVENANCE}'",
+        )
+        self._ensure_column("files", "content_hash", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("files", "candidate_scope_id", "TEXT NOT NULL DEFAULT ''")
+        self._backfill_candidate_scope_ids()
+
+    def _backfill_candidate_scope_ids(self):
+        with self.lock:
+            rows = self.conn.execute(
+                """
+                SELECT file_path, candidate_scope_id
+                FROM files
+                WHERE candidate_scope_id IS NULL OR candidate_scope_id=''
+                """
+            ).fetchall()
+            for file_path, candidate_scope_id in rows:
+                if candidate_scope_id:
+                    continue
+                self.conn.execute(
+                    "UPDATE files SET candidate_scope_id=? WHERE file_path=?",
+                    (str(uuid.uuid4()), file_path),
+                )
+            if rows:
+                self.conn.commit()
+
+    def _candidate_scope_id_for_identity(self, file_path, identity):
+        with self.lock:
+            existing = self.conn.execute(
+                "SELECT candidate_scope_id FROM files WHERE file_path=?",
+                (file_path,),
+            ).fetchone()
+            if existing and str(existing[0] or "").strip():
+                return str(existing[0]).strip()
+
+            if identity.content_hash:
+                content_match = self.conn.execute(
+                    """
+                    SELECT candidate_scope_id
+                    FROM files
+                    WHERE content_hash=? AND candidate_scope_id IS NOT NULL AND candidate_scope_id!=''
+                    ORDER BY rowid ASC
+                    LIMIT 1
+                    """,
+                    (identity.content_hash,),
+                ).fetchone()
+                if content_match and str(content_match[0] or "").strip():
+                    return str(content_match[0]).strip()
+
+        return str(uuid.uuid4())
+
     def generate_resume_id(self, file_path):
         return stable_resume_id(file_path)
+
+    def generate_resume_identity(self, file_path):
+        return stable_resume_identity(file_path)
 
     def needs_processing(self, file_path, last_modified):
         with self.lock:
@@ -188,13 +268,26 @@ class FileRegistry(RegistryRepo):
         return not result or result[0] < last_modified
 
     def upsert_file_record(self, file_path, last_modified, resume_id):
+        identity = stable_resume_identity(file_path)
+        if identity.resume_id == str(resume_id):
+            provenance = identity.alias_provenance
+            content_hash = identity.content_hash
+        else:
+            provenance = LEGACY_UNKNOWN_PROVENANCE
+            content_hash = ""
+        candidate_scope_id = self._candidate_scope_id_for_identity(file_path, identity)
         with self.lock:
             self.conn.execute("""
-                INSERT INTO files (file_path, last_modified, resume_id) VALUES (?, ?, ?)
+                INSERT INTO files (
+                    file_path, last_modified, resume_id, resume_id_provenance, content_hash, candidate_scope_id
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(file_path) DO UPDATE SET
                     last_modified=excluded.last_modified,
-                    resume_id=excluded.resume_id
-            """, (file_path, last_modified, resume_id))
+                    resume_id=excluded.resume_id,
+                    resume_id_provenance=excluded.resume_id_provenance,
+                    content_hash=excluded.content_hash,
+                    candidate_scope_id=excluded.candidate_scope_id
+            """, (file_path, last_modified, resume_id, provenance, content_hash, candidate_scope_id))
             self.conn.commit()
 
     def get_resume_id(self, file_path):
@@ -204,6 +297,40 @@ class FileRegistry(RegistryRepo):
                 (file_path,)
             ).fetchone()
         return result[0] if result else self.generate_resume_id(file_path)
+
+    def get_resume_identity_record(self, file_path):
+        with self.lock:
+            result = self.conn.execute(
+                """
+                SELECT resume_id, resume_id_provenance, content_hash, candidate_scope_id
+                FROM files
+                WHERE file_path=?
+                """,
+                (file_path,),
+            ).fetchone()
+        if result:
+            return {
+                "resume_id": result[0],
+                "alias_provenance": result[1],
+                "content_hash": result[2],
+                "candidate_scope_id": result[3],
+                "is_authoritative_content_alias": (
+                    result[1] == VERIFIED_CONTENT_HASH_PROVENANCE
+                    and bool(result[2])
+                    and result[0] == result[2]
+                ),
+            }
+        identity = stable_resume_identity(file_path)
+        return {
+            "resume_id": identity.resume_id,
+            "alias_provenance": identity.alias_provenance,
+            "content_hash": identity.content_hash,
+            "candidate_scope_id": "",
+            "is_authoritative_content_alias": identity.is_authoritative_content_alias,
+        }
+
+    def get_candidate_scope_id(self, file_path):
+        return str(self.get_resume_identity_record(file_path).get("candidate_scope_id") or "").strip()
 
 
 # ==============================================================================
@@ -931,6 +1058,47 @@ class AIResumeAnalyzer:
                         duplicate_candidates += len(unresolved_entries) - 1
 
         return resolved_candidates, candidate_paths, stale_candidates, duplicate_candidates
+
+    def _candidate_scope_identity_record(self, original_path):
+        if not original_path:
+            return {}
+        for repo in (getattr(self, "ingest_registry_cache", None), getattr(self, "registry", None)):
+            if repo is None:
+                continue
+            getter = getattr(repo, "get_resume_identity_record", None)
+            if getter is None:
+                continue
+            try:
+                record = getter(str(original_path))
+            except Exception:
+                continue
+            if isinstance(record, dict) and str(record.get("candidate_scope_id") or "").strip():
+                return record
+        return {}
+
+    def _candidate_scope_metadata(self, resume_id, original_path=None, chunks=None):
+        metadata = {
+            "resume_id": str(resume_id or "").strip(),
+            "candidate_scope_id": "",
+            "content_hash": "",
+            "lineage_warning_codes": [],
+        }
+        chunk_metadata = {}
+        if chunks:
+            chunk_metadata = chunks[0].get("metadata") if isinstance(chunks[0], dict) else {}
+            chunk_metadata = chunk_metadata if isinstance(chunk_metadata, dict) else {}
+        metadata["lineage_warning_codes"] = list(dict.fromkeys(
+            str(code or "").strip()
+            for code in chunk_metadata.get("lineage_warning_codes", [])
+            if str(code or "").strip()
+        ))
+        record = self._candidate_scope_identity_record(original_path)
+        candidate_scope_id = str(record.get("candidate_scope_id") or "").strip()
+        if candidate_scope_id:
+            metadata["candidate_scope_id"] = candidate_scope_id
+            metadata["content_hash"] = str(record.get("content_hash") or "").strip()
+            metadata["resume_id"] = str(record.get("resume_id") or resume_id or "").strip()
+        return metadata
     V2_ONLY_CONSTRAINT_IDS = {
         "rank_match",
         "coc_document_gate",
@@ -4430,6 +4598,164 @@ class AIResumeAnalyzer:
             }]
         print(f"[FULL SCAN] Enumerated {len(candidates)} candidate resumes from rank folder")
         return candidates
+
+    def resolve_candidate_scope_snapshot(
+        self,
+        target_folder,
+        candidate_scope_ids,
+        candidate_scope_memberships=None,
+    ):
+        raw_scope_ids = [
+            str(candidate_scope_id or "").strip()
+            for candidate_scope_id in (candidate_scope_ids or [])
+            if str(candidate_scope_id or "").strip()
+        ]
+        requested_scope_ids = list(dict.fromkeys(raw_scope_ids))
+        requested_scope_set = set(requested_scope_ids)
+        parent_memberships = {
+            str(member.get("candidate_scope_id") or "").strip(): member
+            for member in (candidate_scope_memberships or [])
+            if isinstance(member, dict) and str(member.get("candidate_scope_id") or "").strip()
+        }
+        paths_by_scope_id = {}
+        for pdf_path in self._iter_pdf_files(target_folder):
+            record = self._candidate_scope_identity_record(pdf_path)
+            candidate_scope_id = str(record.get("candidate_scope_id") or "").strip()
+            if candidate_scope_id in requested_scope_set:
+                paths_by_scope_id.setdefault(candidate_scope_id, []).append((pdf_path, record))
+
+        changed_members = []
+        resolved_scope_ids = []
+        duplicate_count = max(0, len(raw_scope_ids) - len(requested_scope_ids))
+        for candidate_scope_id in requested_scope_ids:
+            resolved_entries = paths_by_scope_id.get(candidate_scope_id) or []
+            if not resolved_entries:
+                continue
+            duplicate_count += max(0, len(resolved_entries) - 1)
+            _pdf_path, record = resolved_entries[0]
+            resolved_scope_ids.append(candidate_scope_id)
+            current_content_hash = str(record.get("content_hash") or "").strip()
+            parent_content_hash = str(
+                (parent_memberships.get(candidate_scope_id) or {}).get("content_hash_at_event") or ""
+            ).strip()
+            if parent_content_hash and current_content_hash and parent_content_hash != current_content_hash:
+                changed_members.append({
+                    "candidate_scope_id": candidate_scope_id,
+                    "parent_content_hash": parent_content_hash,
+                    "current_content_hash": current_content_hash,
+                })
+
+        requested_count = len(requested_scope_ids)
+        resolved_count = len(resolved_scope_ids)
+        return {
+            "requested_count": requested_count,
+            "resolved_count": resolved_count,
+            "changed_content_count": len(changed_members),
+            "stale_count": 0,
+            "unresolvable_count": max(0, requested_count - resolved_count),
+            "duplicate_count": duplicate_count,
+            "resolved_candidate_scope_ids": resolved_scope_ids,
+            "changed_members": changed_members,
+        }
+
+    def _enumerate_scoped_rank_candidates(
+        self,
+        target_folder,
+        rank,
+        candidate_scope_ids,
+        candidate_scope_memberships=None,
+    ):
+        raw_scope_ids = [
+            str(candidate_scope_id or "").strip()
+            for candidate_scope_id in (candidate_scope_ids or [])
+            if str(candidate_scope_id or "").strip()
+        ]
+        requested_scope_ids = list(dict.fromkeys(raw_scope_ids))
+        requested_scope_set = set(requested_scope_ids)
+        parent_memberships = {
+            str(member.get("candidate_scope_id") or "").strip(): member
+            for member in (candidate_scope_memberships or [])
+            if isinstance(member, dict) and str(member.get("candidate_scope_id") or "").strip()
+        }
+        scope_summary = {
+            "eligible_population_count": len(requested_scope_ids),
+            "retrieved_count": None,
+            "evaluated_count": 0,
+            "requested_count": len(requested_scope_ids),
+            "resolved_count": 0,
+            "changed_content_count": 0,
+            "stale_count": 0,
+            "unresolvable_count": 0,
+            "duplicate_count": max(0, len(raw_scope_ids) - len(requested_scope_ids)),
+        }
+        if not requested_scope_ids:
+            return {}, scope_summary
+
+        paths_by_scope_id = {}
+        for pdf_path in self._iter_pdf_files(target_folder):
+            record = self._candidate_scope_identity_record(pdf_path)
+            candidate_scope_id = str(record.get("candidate_scope_id") or "").strip()
+            if candidate_scope_id not in requested_scope_set:
+                continue
+            paths_by_scope_id.setdefault(candidate_scope_id, []).append((pdf_path, record))
+
+        candidates = {}
+        for idx, candidate_scope_id in enumerate(requested_scope_ids):
+            resolved_entries = paths_by_scope_id.get(candidate_scope_id) or []
+            if not resolved_entries:
+                scope_summary["unresolvable_count"] += 1
+                continue
+            if len(resolved_entries) > 1:
+                scope_summary["duplicate_count"] += len(resolved_entries) - 1
+
+            pdf_path, record = resolved_entries[0]
+            try:
+                text = self.pdf_processor.extract_text(str(pdf_path))
+            except Exception:
+                text = ""
+            if not text:
+                scope_summary["unresolvable_count"] += 1
+                continue
+
+            current_content_hash = str(record.get("content_hash") or "").strip()
+            parent_member = parent_memberships.get(candidate_scope_id) or {}
+            parent_content_hash = str(parent_member.get("content_hash_at_event") or "").strip()
+            lineage_warning_codes = [
+                str(code or "").strip()
+                for code in parent_member.get("lineage_warning_codes", [])
+                if str(code or "").strip()
+            ]
+            if parent_content_hash and current_content_hash and parent_content_hash != current_content_hash:
+                scope_summary["changed_content_count"] += 1
+                lineage_warning_codes.append("EARLIER_CONDITIONS_NOT_RECERTIFIED")
+
+            resume_id = str(record.get("resume_id") or "").strip()
+            if not resume_id:
+                resume_id = self.registry.generate_resume_id(str(pdf_path))
+            candidates[resume_id] = [{
+                "id": f"scoped-{resume_id}-{idx}",
+                "score": 1.0,
+                "metadata": {
+                    "resume_id": resume_id,
+                    "candidate_scope_id": candidate_scope_id,
+                    "content_hash": current_content_hash,
+                    "lineage_warning_codes": list(dict.fromkeys(lineage_warning_codes)),
+                    "rank": rank,
+                    "filename": pdf_path.name,
+                    "source_path": str(pdf_path),
+                    "raw_text": text[:self.LLM_CONTEXT_TEXT_CHAR_LIMIT],
+                },
+            }]
+            scope_summary["resolved_count"] += 1
+
+        print(
+            "[SCOPED SCAN] "
+            f"Requested {scope_summary['requested_count']}, "
+            f"resolved {scope_summary['resolved_count']}, "
+            f"unresolvable {scope_summary['unresolvable_count']}, "
+            f"duplicates {scope_summary['duplicate_count']}."
+        )
+        return candidates, scope_summary
 
     def _rank_manifest_metadata(self, target_folder):
         manifest_path = Path(target_folder) / "manifest.json"
@@ -9924,15 +10250,44 @@ Examples of GOOD responses:
         applied_ship_type=None,
         experienced_ship_type=None,
         review_capture_callback=None,
+        candidate_scope_ids=None,
+        candidate_scope_memberships=None,
     ):
         """Streaming analysis with multi-stage retrieval for compound queries"""
         yield {"type": "status", "message": "Initializing analysis..."}
         
         try:
             target_folder = rank_folder_path(self.config.download_root, rank)
+            scoped_mode = candidate_scope_ids is not None
+            normalized_scope_ids = None
+            if scoped_mode:
+                normalized_scope_ids = list(dict.fromkeys(
+                    str(candidate_scope_id or "").strip()
+                    for candidate_scope_id in candidate_scope_ids
+                    if str(candidate_scope_id or "").strip()
+                ))
             
             if not target_folder.exists():
                 yield {"type": "error", "message": f"Rank folder for '{rank}' not found."}
+                return
+
+            if scoped_mode and not normalized_scope_ids:
+                yield {
+                    "type": "graceful_failure",
+                    "error_code": "REFINEMENT_SCOPE_EMPTY",
+                    "message": "Refinement could not run because the parent search has no verified candidates in scope.",
+                    "scope_summary": {
+                        "eligible_population_count": 0,
+                        "retrieved_count": None,
+                        "evaluated_count": 0,
+                        "requested_count": 0,
+                        "resolved_count": 0,
+                        "changed_content_count": 0,
+                        "stale_count": 0,
+                        "unresolvable_count": 0,
+                        "duplicate_count": 0,
+                    },
+                }
                 return
 
             yield {"type": "status", "message": "Scanning for new files..."}
@@ -10026,8 +10381,28 @@ Examples of GOOD responses:
             # Parse query to detect compound logic
             compound_source = prompt_observability.get("residual_text") or user_prompt
             is_compound, operator, sub_queries = self._parse_compound_query(compound_source)
-            
-            if has_actionable_constraints:
+
+            scope_summary = None
+            if scoped_mode:
+                yield {
+                    "type": "status",
+                    "message": f"Evaluating the complete previous verified scope of {len(normalized_scope_ids)} candidate(s)...",
+                }
+                candidates, scope_summary = self._enumerate_scoped_rank_candidates(
+                    target_folder,
+                    rank,
+                    normalized_scope_ids,
+                    candidate_scope_memberships=candidate_scope_memberships,
+                )
+                if not candidates:
+                    yield {
+                        "type": "graceful_failure",
+                        "error_code": "REFINEMENT_SCOPE_UNRESOLVABLE",
+                        "message": "Refinement could not run because none of the previous verified candidates can be resolved in the current rank folder.",
+                        "scope_summary": scope_summary,
+                    }
+                    return
+            elif has_actionable_constraints:
                 status_message = "Supported hard constraints detected. Evaluating all resumes in selected rank folder..."
                 if has_semantic_intent:
                     status_message = "Mixed query detected. Evaluating all resumes in selected rank folder before semantic reasoning..."
@@ -10098,6 +10473,19 @@ Examples of GOOD responses:
                 )
             candidates = resolved_candidates
             total_candidates = len(candidates)
+            if scoped_mode:
+                scope_summary["resolved_count"] = total_candidates
+                scope_summary["evaluated_count"] = total_candidates
+                scope_summary["stale_count"] += stale_candidates
+                scope_summary["duplicate_count"] += duplicate_candidates
+                if total_candidates <= 0:
+                    yield {
+                        "type": "graceful_failure",
+                        "error_code": "REFINEMENT_SCOPE_UNRESOLVABLE",
+                        "message": "Refinement could not run because none of the previous verified candidates can be resolved in the current rank folder.",
+                        "scope_summary": scope_summary,
+                    }
+                    return
             yield {"type": "progress", "current": 0, "total": total_candidates, 
                    "message": f"Found {total_candidates} candidates to analyze"}
             
@@ -10228,6 +10616,12 @@ Examples of GOOD responses:
                     "sync_reextract": reextract_meta,
                 }
                 audit_entry.update(self._derive_evidence_review_metadata(hard_filter_result, candidate_facts))
+                candidate_scope_metadata = self._candidate_scope_metadata(
+                    resume_id,
+                    original_path,
+                    chunks=chunks,
+                )
+                audit_entry.update(candidate_scope_metadata)
 
                 if reextract_meta and not reextract_meta.get("succeeded"):
                     partial_evaluation["occurred"] = True
@@ -10265,6 +10659,10 @@ Examples of GOOD responses:
                     ))
                     evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
                     unknown_match = {
+                        "resume_id": candidate_scope_metadata.get("resume_id") or resume_id,
+                        "candidate_scope_id": candidate_scope_metadata.get("candidate_scope_id", ""),
+                        "content_hash": candidate_scope_metadata.get("content_hash", ""),
+                        "lineage_warning_codes": candidate_scope_metadata.get("lineage_warning_codes", []),
                         "filename": filename,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
                         "hard_filter_decision": "UNKNOWN",
@@ -10323,6 +10721,10 @@ Examples of GOOD responses:
                 if should_skip_llm:
                     evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
                     match_data = {
+                        "resume_id": candidate_scope_metadata.get("resume_id") or resume_id,
+                        "candidate_scope_id": candidate_scope_metadata.get("candidate_scope_id", ""),
+                        "content_hash": candidate_scope_metadata.get("content_hash", ""),
+                        "lineage_warning_codes": candidate_scope_metadata.get("lineage_warning_codes", []),
                         "filename": filename,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Passed deterministic hard filters.",
                         "confidence": 1.0,
@@ -10358,6 +10760,10 @@ Examples of GOOD responses:
                     if llm_result.get('is_match'):
                         evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
                         match_data = {
+                            "resume_id": candidate_scope_metadata.get("resume_id") or resume_id,
+                            "candidate_scope_id": candidate_scope_metadata.get("candidate_scope_id", ""),
+                            "content_hash": candidate_scope_metadata.get("content_hash", ""),
+                            "lineage_warning_codes": candidate_scope_metadata.get("lineage_warning_codes", []),
                             "filename": filename,
                             "reason": llm_result.get('reason', 'Match found.'),
                             "confidence": llm_result.get('confidence', 0.5),
@@ -10423,6 +10829,7 @@ Examples of GOOD responses:
                    "search_warning": search_warning,
                    "hard_filter_audit": hard_filter_audit,
                    "hard_filter_summary": hard_filter_summary,
+                   "scope_summary": scope_summary or {},
                    "partial_evaluation": partial_evaluation,
                    "partial_evaluation_notice": (
                        "Some v1.1 candidates fell back to partial evaluation because synchronous re-extraction hit cooldown, per-search limits, timeout, failure, or concurrency guardrails."
@@ -10449,6 +10856,8 @@ Examples of GOOD responses:
         applied_ship_type=None,
         experienced_ship_type=None,
         review_capture_callback=None,
+        candidate_scope_ids=None,
+        candidate_scope_memberships=None,
     ):
         """Non-streaming version"""
         verified_matches = []
@@ -10467,6 +10876,8 @@ Examples of GOOD responses:
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
             review_capture_callback=review_capture_callback,
+            candidate_scope_ids=candidate_scope_ids,
+            candidate_scope_memberships=candidate_scope_memberships,
         ):
             if event['type'] == 'match_found':
                 verified_matches.append(event['match'])
@@ -10497,6 +10908,8 @@ Examples of GOOD responses:
                     "clause_ledger": event.get("clause_ledger", []),
                     "clause_accounting": event.get("clause_accounting", {}),
                     "search_warning": event.get("search_warning", ""),
+                    "error_code": event.get("error_code", ""),
+                    "scope_summary": event.get("scope_summary", {}),
                 }
             elif event['type'] == 'error':
                 return {
@@ -10561,6 +10974,8 @@ class Analyzer:
         applied_ship_type=None,
         experienced_ship_type=None,
         review_capture_callback=None,
+        candidate_scope_ids=None,
+        candidate_scope_memberships=None,
     ):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
         return Analyzer._instance.run_analysis(
@@ -10569,6 +10984,8 @@ class Analyzer:
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
             review_capture_callback=review_capture_callback,
+            candidate_scope_ids=candidate_scope_ids,
+            candidate_scope_memberships=candidate_scope_memberships,
         )
     
     def run_analysis_stream(
@@ -10578,6 +10995,8 @@ class Analyzer:
         applied_ship_type=None,
         experienced_ship_type=None,
         review_capture_callback=None,
+        candidate_scope_ids=None,
+        candidate_scope_memberships=None,
     ):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
         for progress_event in Analyzer._instance.run_analysis_stream(
@@ -10586,8 +11005,22 @@ class Analyzer:
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
             review_capture_callback=review_capture_callback,
+            candidate_scope_ids=candidate_scope_ids,
+            candidate_scope_memberships=candidate_scope_memberships,
         ):
             yield progress_event
+
+    def resolve_candidate_scope_snapshot(
+        self,
+        target_folder,
+        candidate_scope_ids,
+        candidate_scope_memberships=None,
+    ):
+        return Analyzer._instance.resolve_candidate_scope_snapshot(
+            target_folder,
+            candidate_scope_ids,
+            candidate_scope_memberships=candidate_scope_memberships,
+        )
     
     def store_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence,
                        user_decision, user_notes=""):

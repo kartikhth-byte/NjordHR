@@ -200,3 +200,50 @@ test("ensureBackendStarted fails early when spawned backend errors before readin
   const backendErr = fs.readFileSync(path.join(paths.runtimeDir, "backend.err"), "utf8");
   assert.match(backendErr, /Backend launch error: spawn ENOENT/);
 });
+
+test("restartServices can restart the backend without touching the SeaJobs agent", async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "njordhr-backend-restart-"));
+  const manager = new ProcessManager({
+    app: {},
+    paths: createPaths(tempRoot),
+    ports: createPorts(6500, 6501),
+    python: { command: "python3", args: [] },
+    env: {},
+    launchId: "launch-4"
+  });
+  const backend = new EventEmitter();
+  const agent = new EventEmitter();
+  let backendKillCount = 0;
+  let agentKillCount = 0;
+  let backendStartCount = 0;
+  let agentStartCount = 0;
+  backend.kill = () => {
+    backendKillCount += 1;
+    backend.killed = true;
+    backend.emit("exit", 0, "SIGTERM");
+    return true;
+  };
+  agent.kill = () => {
+    agentKillCount += 1;
+    agent.killed = true;
+    agent.emit("exit", 0, "SIGTERM");
+    return true;
+  };
+  manager.backendProcess = backend;
+  manager.agentProcess = agent;
+  manager.ensureBackendStarted = async () => {
+    backendStartCount += 1;
+  };
+  manager.ensureAgentStarted = () => {
+    agentStartCount += 1;
+  };
+
+  const result = await manager.restartServices({ backend: true, agent: false });
+
+  assert.deepEqual(result, { backendRestarted: true, agentRestarted: false });
+  assert.equal(backendKillCount, 1);
+  assert.equal(backendStartCount, 1);
+  assert.equal(agentKillCount, 0);
+  assert.equal(agentStartCount, 0);
+  assert.equal(manager.agentProcess, agent);
+});

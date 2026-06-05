@@ -2,8 +2,32 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+
+
+VERIFIED_CONTENT_HASH_PROVENANCE = "verified_content_hash"
+LEGACY_PATH_FALLBACK_PROVENANCE = "legacy_path_fallback"
+EMPTY_INPUT_PROVENANCE = "empty_input"
+LEGACY_UNKNOWN_PROVENANCE = "legacy_unknown"
+
+
+@dataclass(frozen=True)
+class ResumeIdentity:
+    """Legacy resume identifier plus provenance for safe future identity linking."""
+
+    resume_id: str
+    alias_provenance: str
+    content_hash: str = ""
+
+    @property
+    def is_authoritative_content_alias(self) -> bool:
+        return (
+            self.alias_provenance == VERIFIED_CONTENT_HASH_PROVENANCE
+            and bool(self.content_hash)
+            and self.resume_id == self.content_hash
+        )
 
 
 def _normalize_path_text(file_path: Any) -> str:
@@ -30,14 +54,28 @@ def file_bytes_sha1(file_path: Any) -> str:
 
 
 def stable_resume_id(file_path: Any) -> str:
+    return stable_resume_identity(file_path).resume_id
+
+
+def stable_resume_identity(file_path: Any) -> ResumeIdentity:
     content_hash = file_bytes_sha1(file_path)
     if content_hash:
-        return content_hash
+        return ResumeIdentity(
+            resume_id=content_hash,
+            alias_provenance=VERIFIED_CONTENT_HASH_PROVENANCE,
+            content_hash=content_hash,
+        )
 
     normalized = _normalize_path_text(file_path)
     if not normalized:
-        return hashlib.sha1(b"").hexdigest()
-    return hashlib.sha1(normalized.encode("utf-8", "ignore")).hexdigest()
+        return ResumeIdentity(
+            resume_id=hashlib.sha1(b"").hexdigest(),
+            alias_provenance=EMPTY_INPUT_PROVENANCE,
+        )
+    return ResumeIdentity(
+        resume_id=hashlib.sha1(normalized.encode("utf-8", "ignore")).hexdigest(),
+        alias_provenance=LEGACY_PATH_FALLBACK_PROVENANCE,
+    )
 
 
 def normalize_text_signature(value: Any) -> str:

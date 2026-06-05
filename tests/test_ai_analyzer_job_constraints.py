@@ -2221,6 +2221,135 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
         self.assertEqual(match_event["match"]["filename"], filename)
 
+    def test_scoped_semantic_search_evaluates_only_scope_without_broad_retrieval(self):
+        selected_filename = "2nd_Engineer_Selected.pdf"
+        outside_filename = "2nd_Engineer_Outside.pdf"
+        selected_path = self.rank_folder / selected_filename
+        outside_path = self.rank_folder / outside_filename
+        selected_path.write_bytes(b"%PDF-1.4\nselected")
+        outside_path.write_bytes(b"%PDF-1.4\noutside")
+
+        class _ScopedRegistry(_FakeRegistry):
+            def get_resume_identity_record(self, file_path):
+                path = Path(file_path)
+                if path == selected_path:
+                    return {
+                        "resume_id": "resume-selected",
+                        "candidate_scope_id": "scope-selected",
+                        "content_hash": "hash-selected",
+                    }
+                if path == outside_path:
+                    return {
+                        "resume_id": "resume-outside",
+                        "candidate_scope_id": "scope-outside",
+                        "content_hash": "hash-outside",
+                    }
+                return {}
+
+        class _PdfProcessor:
+            def extract_text(self, file_path):
+                return f"Strong leadership under pressure: {Path(file_path).stem}"
+
+        class _NoBroadVectorSearch:
+            last_error = None
+
+            def query(self, *_args, **_kwargs):
+                raise AssertionError("scoped search must not call broad vector retrieval")
+
+        self.analyzer.registry = _ScopedRegistry()
+        self.analyzer.pdf_processor = _PdfProcessor()
+        self.analyzer.vector_db = _NoBroadVectorSearch()
+        self.analyzer._retrieve_for_subquery = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("scoped search must not call compound retrieval")
+        )
+        self.analyzer._retrieve_candidates_keyword_fallback = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("scoped search must not call keyword retrieval")
+        )
+        self.analyzer._build_candidate_facts = lambda resolved_filename, *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "candidate_id": resolved_filename,
+            "role": {"applied_rank_normalized": None},
+            "fact_meta": {"role.applied_rank_normalized": {"confidence": None}},
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": []},
+        }
+        self.analyzer._evaluate_hard_filters = lambda *args, **kwargs: {
+            "decision": "PASS",
+            "results": [],
+            "evaluation_date_used": "2026-04-06",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+        }
+        self.analyzer._reason_with_llm = lambda *args, **kwargs: {
+            "is_match": True,
+            "reason": "ok",
+            "confidence": 0.9,
+        }
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "strong leadership under pressure",
+            candidate_scope_ids=["scope-selected"],
+            candidate_scope_memberships=[{
+                "candidate_scope_id": "scope-selected",
+                "content_hash_at_event": "hash-selected",
+            }],
+        ))
+
+        match_events = [event for event in events if event["type"] == "match_found"]
+        complete_event = next(event for event in events if event["type"] == "complete")
+        self.assertEqual([event["match"]["filename"] for event in match_events], [selected_filename])
+        self.assertEqual(complete_event["hard_filter_summary"]["scanned"], 1)
+        self.assertEqual(complete_event["scope_summary"]["requested_count"], 1)
+        self.assertEqual(complete_event["scope_summary"]["resolved_count"], 1)
+
+    def test_empty_scoped_search_fails_before_ingestion_or_full_scan(self):
+        self.analyzer._ingest_folder = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("empty scope must fail before ingestion")
+        )
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("empty scope must not become a full scan")
+        )
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "strong leadership under pressure",
+            candidate_scope_ids=[],
+        ))
+
+        failure_event = next(event for event in events if event["type"] == "graceful_failure")
+        self.assertEqual(failure_event["error_code"], "REFINEMENT_SCOPE_EMPTY")
+        self.assertEqual(failure_event["scope_summary"]["requested_count"], 0)
+
+    def test_changed_content_scope_is_not_blocked_after_backend_ack_gate(self):
+        self.analyzer._enumerate_scoped_rank_candidates = lambda *_args, **_kwargs: (
+            {"resume-selected": [{"metadata": {"resume_id": "resume-selected"}}]},
+            {
+                "eligible_population_count": 1,
+                "retrieved_count": None,
+                "evaluated_count": 0,
+                "requested_count": 1,
+                "resolved_count": 1,
+                "changed_content_count": 1,
+                "stale_count": 0,
+                "unresolvable_count": 0,
+                "duplicate_count": 0,
+            },
+        )
+        self.analyzer._normalize_rank_candidates = lambda *_args, **_kwargs: ({}, {}, 0, 0)
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "strong leadership under pressure",
+            candidate_scope_ids=["scope-selected"],
+        ))
+
+        self.assertFalse(any(
+            event.get("error_code") == "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED"
+            for event in events
+        ))
+
     def test_version_mismatch_unknown_is_preserved_in_candidate_routing(self):
         filename = "2nd_Engineer_1001.pdf"
         (self.rank_folder / filename).write_bytes(b"%PDF-1.4")

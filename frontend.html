@@ -254,6 +254,25 @@
             const [aiPrompt, setAiPrompt] = useState('');
             const [analysisResults, setAnalysisResults] = useState(null);
             const [isNeedsReviewCollapsed, setIsNeedsReviewCollapsed] = useState(false);
+            const [refinementMode, setRefinementMode] = useState(false);
+            const [refinementState, setRefinementState] = useState('disabled');
+            const [refinementAvailability, setRefinementAvailability] = useState({
+                available: false,
+                candidateCount: 0,
+                reason: 'Available after a search returns at least one verified match.',
+                parentSearchSessionId: '',
+            });
+            const [refinementPreflight, setRefinementPreflight] = useState(null);
+            const [searchChain, setSearchChain] = useState([]);
+            const [pendingRefinementConfirmation, setPendingRefinementConfirmation] = useState(null);
+            const [changedContentAcknowledged, setChangedContentAcknowledged] = useState(false);
+            const [isRefinementConfirming, setIsRefinementConfirming] = useState(false);
+            const [recoveryNotice, setRecoveryNotice] = useState(null);
+            const [serviceRecovery, setServiceRecovery] = useState({
+                state: 'healthy',
+                message: '',
+                recovering: false,
+            });
             
             const [analysisProgress, setAnalysisProgress] = useState({
                 isAnalyzing: false,
@@ -395,6 +414,22 @@
             const dashboardTableScrollRef = useRef(null);
             const drawerNoteInputRef = useRef(null);
             const adminPasswordInputRef = useRef(null);
+            const refinementCancelButtonRef = useRef(null);
+            const refinementConfirmInitiatorRef = useRef(null);
+            const analysisResultsRef = useRef(null);
+            const recoveryLoadedRef = useRef(false);
+            const recoveryTabIdRef = useRef((() => {
+                try {
+                    const key = 'njordhr_ai_search_recovery_tab_id';
+                    const existing = window.sessionStorage.getItem(key);
+                    if (existing) return existing;
+                    const generated = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+                    window.sessionStorage.setItem(key, generated);
+                    return generated;
+                } catch (_err) {
+                    return `tab_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+                }
+            })());
             const uiClientIdRef = useRef((() => {
                 try {
                     const key = 'njordhr_ui_client_id';
@@ -1044,14 +1079,17 @@
                         setHistoryModal({ open: false, candidateId: '', rows: [] });
                     } else if (downloadFolderBrowser.open) {
                         setDownloadFolderBrowser({ open: false, rankFolder: '', files: [], selectedFile: '', loading: false });
+                    } else if (pendingRefinementConfirmation) {
+                        setPendingRefinementConfirmation(null);
+                        setChangedContentAcknowledged(false);
                     }
                 };
                 window.addEventListener('keydown', onKeyDown);
                 return () => window.removeEventListener('keydown', onKeyDown);
-            }, [isDashboardDrawerOpen, manualReviewModal.open, historyModal.open, downloadFolderBrowser.open]);
+            }, [isDashboardDrawerOpen, manualReviewModal.open, historyModal.open, downloadFolderBrowser.open, pendingRefinementConfirmation]);
 
             useEffect(() => {
-                if (!downloadFolderBrowser.open && !manualReviewModal.open) return undefined;
+                if (!downloadFolderBrowser.open && !manualReviewModal.open && !pendingRefinementConfirmation) return undefined;
                 const previousBodyOverflow = document.body.style.overflow;
                 const previousHtmlOverflow = document.documentElement.style.overflow;
                 document.body.style.overflow = 'hidden';
@@ -1060,7 +1098,7 @@
                     document.body.style.overflow = previousBodyOverflow;
                     document.documentElement.style.overflow = previousHtmlOverflow;
                 };
-            }, [downloadFolderBrowser.open, manualReviewModal.open]);
+            }, [downloadFolderBrowser.open, manualReviewModal.open, pendingRefinementConfirmation]);
 
             const fetchRankFolders = async (currentUser = authUser) => {
                 if (!currentUser) {
@@ -3119,16 +3157,98 @@
                 } catch(error) { handleSendMessage('error', 'Failed to disconnect session cleanly.'); }
                 setIsDisconnecting(false);
             };
-            const handleAnalyze = async () => {
-                if (!selectedRankFolder) return handleSendMessage('error', 'Please select a rank folder to analyze.');
-                if (!aiPrompt.trim()) return handleSendMessage('error', 'AI prompt cannot be empty.');
-                
+            const newSearchRequestId = () => (
+                window.crypto?.randomUUID
+                    ? window.crypto.randomUUID()
+                    : `search_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+            );
+
+            const currentParentSearchSessionId = () => (
+                analysisResultsRef.current?.search_session?.search_session_id
+                || refinementAvailability.parentSearchSessionId
+                || ''
+            );
+
+            const fetchRefinementPreflight = async (parentSearchSessionId = currentParentSearchSessionId()) => {
+                if (!parentSearchSessionId) {
+                    throw new Error('The previous verified search scope is not available.');
+                }
+                const response = await fetch(
+                    `${API_BASE_URL}/ai_search/refinement_scope/${encodeURIComponent(parentSearchSessionId)}/preflight`
+                );
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.success) {
+                    const error = new Error(data.message || 'The previous verified search scope is not available.');
+                    error.code = data.error_code || 'REFINEMENT_SCOPE_UNAVAILABLE';
+                    error.retryable = Boolean(data.retryable);
+                    throw error;
+                }
+                setRefinementPreflight(data);
+                return data;
+            };
+
+            const handleRefinementToggle = async (enabled) => {
+                if (!enabled) {
+                    setRefinementMode(false);
+                    setRefinementState(analysisResults ? 'mode_off_with_stale_results' : 'disabled');
+                    return;
+                }
+                try {
+                    const preflight = await fetchRefinementPreflight();
+                    const resolvedCount = Number(preflight.scope_summary?.resolved_count || 0);
+                    setRefinementMode(true);
+                    setRefinementState(resolvedCount > 0 ? 'active_idle' : 'disabled');
+                    setRefinementAvailability(prev => ({
+                        ...prev,
+                        available: resolvedCount > 0,
+                        candidateCount: resolvedCount,
+                        reason: resolvedCount > 0 ? '' : 'No previous verified candidates are currently available.',
+                    }));
+                } catch (error) {
+                    setRefinementMode(false);
+                    setRefinementState(error.retryable ? 'available' : 'disabled');
+                    setRefinementAvailability(prev => ({
+                        ...prev,
+                        available: Boolean(error.retryable),
+                        reason: error.message,
+                    }));
+                    handleSendMessage(error.retryable ? 'warning' : 'error', error.message);
+                }
+            };
+
+            const invalidateRefinementForFilterChange = () => {
+                if (!analysisResultsRef.current || refinementMode) return;
+                setRefinementState('invalidated_by_filter_change');
+                setRefinementAvailability({
+                    available: false,
+                    candidateCount: 0,
+                    reason: 'Displayed results belong to an earlier filter context. Run a new search to enable refinement.',
+                    parentSearchSessionId: '',
+                });
+            };
+
+            const startAnalysis = async ({
+                mode = 'root',
+                requestId = newSearchRequestId(),
+                parentSearchSessionId = '',
+                acknowledgementId = '',
+                prompt = aiPrompt,
+            } = {}) => {
                 if (eventSourceRef.current) {
                     eventSourceRef.current.close();
                 }
-                
+                const isRefinement = mode === 'refinement';
+                if (!isRefinement) {
+                    setAnalysisResults(null);
+                    setSearchChain([]);
+                    setRefinementMode(false);
+                    setRefinementState('disabled');
+                } else {
+                    setRefinementState('active_running');
+                }
+                setPendingRefinementConfirmation(null);
+                setChangedContentAcknowledged(false);
                 setIsAnalyzeLoading(true);
-                setAnalysisResults(null);
                 setSelectedFiles(new Set());
                 setFeedbackNotes({});
                 setVerifyStatus('idle');
@@ -3136,43 +3256,47 @@
                     isAnalyzing: true,
                     stage: 'connecting',
                     current: 0,
-                    total: 0,
-                    message: 'Connecting...',
+                    total: isRefinement ? refinementAvailability.candidateCount : 0,
+                    message: isRefinement
+                        ? `Connecting to refine ${refinementAvailability.candidateCount} previous verified match${refinementAvailability.candidateCount === 1 ? '' : 'es'}...`
+                        : 'Connecting...',
                     liveVerified: [],
                     liveUncertain: [],
                     liveUnknown: []
                 });
-                
+
                 try {
-                    const url = `${getCloudApiBaseUrl()}/analyze_stream?` + new URLSearchParams({
-                        prompt: aiPrompt,
-                        rank_folder: selectedRankFolder,
-                        applied_ship_type: selectedSearchShipType,
-                        experienced_ship_type: selectedExperienceShipType
-                    });
-                    
-                    const eventSource = new EventSource(url);
+                    const params = new URLSearchParams({ prompt, search_request_id: requestId });
+                    if (isRefinement) {
+                        params.set('parent_search_session_id', parentSearchSessionId);
+                        if (acknowledgementId) {
+                            params.set('changed_content_acknowledgement_id', acknowledgementId);
+                        }
+                    } else {
+                        params.set('rank_folder', selectedRankFolder);
+                        params.set('applied_ship_type', selectedSearchShipType);
+                        params.set('experienced_ship_type', selectedExperienceShipType);
+                    }
+                    const eventSource = new EventSource(`${getCloudApiBaseUrl()}/analyze_stream?${params.toString()}`);
                     eventSourceRef.current = eventSource;
-                    
+
+                    const finishStream = () => {
+                        setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                        setIsAnalyzeLoading(false);
+                        eventSource.close();
+                        if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
+                    };
+
                     eventSource.onmessage = (event) => {
                         const data = JSON.parse(event.data);
-                        
                         if (data.type === 'status') {
                             setAnalysisProgress(prev => ({ ...prev, message: data.message }));
-                        } else if (data.type === 'indexing_start') {
+                        } else if (data.type === 'indexing_start' || data.type === 'indexing_progress') {
                             setAnalysisProgress(prev => ({
                                 ...prev,
                                 stage: 'indexing',
                                 current: data.current || 0,
-                                total: data.total || 0,
-                                message: data.message || 'Indexing resumes...'
-                            }));
-                        } else if (data.type === 'indexing_progress') {
-                            setAnalysisProgress(prev => ({
-                                ...prev,
-                                stage: 'indexing',
-                                current: data.current || 0,
-                                total: data.total || 0,
+                                total: data.total || prev.total || 0,
                                 message: data.message || 'Indexing resumes...'
                             }));
                         } else if (data.type === 'indexing_complete') {
@@ -3180,7 +3304,7 @@
                                 ...prev,
                                 stage: 'analyzing',
                                 current: 0,
-                                total: 0,
+                                total: prev.total || 0,
                                 message: data.message || 'Indexing complete. Starting AI analysis...'
                             }));
                         } else if (data.type === 'progress') {
@@ -3188,99 +3312,451 @@
                                 ...prev,
                                 stage: 'analyzing',
                                 current: data.current,
-                                total: data.total,
-                                message: data.message
+                                total: data.total || prev.total,
+                                message: isRefinement
+                                    ? `Analyzing ${data.current || 0} of ${data.total || prev.total || refinementAvailability.candidateCount} candidates from the previous verified matches.`
+                                    : data.message
                             }));
                         } else if (data.type === 'match_found') {
                             setAnalysisProgress(prev => ({
                                 ...prev,
                                 liveVerified: [...prev.liveVerified, data.match],
                                 current: data.current,
-                                total: data.total
+                                total: data.total || prev.total
                             }));
                         } else if (data.type === 'uncertain_found') {
                             setAnalysisProgress(prev => ({
                                 ...prev,
                                 liveUncertain: [...prev.liveUncertain, data.match],
                                 current: data.current,
-                                total: data.total
+                                total: data.total || prev.total
                             }));
                         } else if (data.type === 'hard_filter_unknown') {
                             setAnalysisProgress(prev => ({
                                 ...prev,
                                 liveUnknown: [...prev.liveUnknown, data.match],
                                 current: data.current,
-                                total: data.total
+                                total: data.total || prev.total
                             }));
                         } else if (data.type === 'complete') {
-                            setAnalysisResults({
+                            const completedResults = {
+                                ...data,
                                 success: true,
                                 verified_matches: data.verified_matches || [],
                                 uncertain_matches: data.uncertain_matches || [],
                                 unknown_matches: data.unknown_matches || [],
                                 hard_filter_summary: data.hard_filter_summary || {},
-                                message: data.message,
-                                applied_constraints: data.applied_constraints || [],
-                                unapplied_constraints: data.unapplied_constraints || [],
-                                parsing_notes: data.parsing_notes || [],
-                                residual_text: data.residual_text || '',
-                                clause_ledger: data.clause_ledger || [],
-                                clause_accounting: data.clause_accounting || {},
-                                partial_evaluation: data.partial_evaluation || { occurred: false, reasons: [], candidates: [] },
-                                partial_evaluation_notice: data.partial_evaluation_notice || '',
-                                search_warning: data.search_warning || '',
-                                graceful_failure: false
+                                graceful_failure: false,
+                            };
+                            setAnalysisResults(completedResults);
+                            analysisResultsRef.current = completedResults;
+                            const step = { prompt, results: completedResults };
+                            setSearchChain(prev => (
+                                isRefinement ? [...prev, step].slice(-10) : [step]
+                            ));
+                            const verifiedCount = completedResults.verified_matches.length;
+                            const refinement = completedResults.refinement || {};
+                            const nextAvailable = Boolean(refinement.available && verifiedCount > 0);
+                            setRefinementAvailability({
+                                available: nextAvailable,
+                                candidateCount: Number(refinement.candidate_scope_member_count || verifiedCount),
+                                reason: refinement.message || (verifiedCount ? '' : 'No verified matches are available to refine.'),
+                                parentSearchSessionId: completedResults.search_session?.search_session_id || '',
                             });
-                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
-                            setIsAnalyzeLoading(false);
-                            handleSendMessage('success', data.message);
-                            eventSource.close();
+                            if (isRefinement) {
+                                setRefinementMode(true);
+                                setRefinementState(verifiedCount === 0 ? 'active_zero_result' : (nextAvailable ? 'active_idle' : 'disabled'));
+                            } else {
+                                setRefinementState(nextAvailable ? 'available' : 'disabled');
+                            }
+                            finishStream();
+                            handleSendMessage('success', data.message || 'Analysis complete.');
                         } else if (data.type === 'graceful_failure') {
-                            setAnalysisResults({
-                                success: false,
-                                verified_matches: [],
-                                uncertain_matches: [],
-                                unknown_matches: [],
-                                hard_filter_summary: { scanned: 0, passed: 0, failed: 0, unknown: 0, matched: 0 },
-                                message: data.message,
-                                applied_constraints: data.applied_constraints || [],
-                                unapplied_constraints: data.unapplied_constraints || [],
-                                parsing_notes: data.parsing_notes || [],
-                                residual_text: data.residual_text || '',
-                                clause_ledger: data.clause_ledger || [],
-                                clause_accounting: data.clause_accounting || {},
-                                partial_evaluation: data.partial_evaluation || { occurred: false, reasons: [], candidates: [] },
-                                partial_evaluation_notice: data.partial_evaluation_notice || '',
-                                search_warning: data.search_warning || '',
-                                graceful_failure: true
-                            });
-                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
-                            setIsAnalyzeLoading(false);
+                            if (!isRefinement) {
+                                setAnalysisResults({
+                                    ...data,
+                                    success: false,
+                                    verified_matches: [],
+                                    uncertain_matches: [],
+                                    unknown_matches: [],
+                                    hard_filter_summary: data.hard_filter_summary || { scanned: 0, passed: 0, failed: 0, unknown: 0, matched: 0 },
+                                    graceful_failure: true,
+                                });
+                            } else {
+                                setRefinementState('active_idle');
+                            }
+                            finishStream();
                             handleSendMessage('warning', data.message);
-                            eventSource.close();
-                        } else if (data.type === 'error') {
-                            handleSendMessage('error', data.message);
-                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
-                            setIsAnalyzeLoading(false);
-                            eventSource.close();
+                        } else if (data.type === 'error' || data.type === 'request_status') {
+                            if (isRefinement) setRefinementState('active_idle');
+                            finishStream();
+                            handleSendMessage(data.retryable ? 'warning' : 'error', data.message || 'Analysis failed.');
                         }
                     };
-                    
+
                     eventSource.onerror = (error) => {
                         console.error('EventSource error:', error);
-                        handleSendMessage('error', 'Connection to server lost.');
-                        setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
-                        setIsAnalyzeLoading(false);
-                        eventSource.close();
+                        if (isRefinement) setRefinementState('active_idle');
+                        finishStream();
+                        setServiceRecovery({ state: 'backend_unreachable', message: 'NjordHR service is unavailable.', recovering: false });
+                        handleSendMessage('error', 'Connection to server lost. Previous completed results were preserved.');
                     };
-                    
                 } catch (error) {
                     console.error('Analysis error:', error);
-                    handleSendMessage('error', 'Failed to connect to backend.');
+                    if (isRefinement) setRefinementState('active_idle');
                     setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
                     setIsAnalyzeLoading(false);
+                    setServiceRecovery({ state: 'backend_unreachable', message: 'NjordHR service is unavailable.', recovering: false });
+                    handleSendMessage('error', 'Failed to connect to backend. Previous completed results were preserved.');
                 }
             };
+
+            const handleAnalyze = async () => {
+                if (!selectedRankFolder) return handleSendMessage('error', 'Please select a rank folder to analyze.');
+                if (!aiPrompt.trim()) return handleSendMessage('error', 'AI prompt cannot be empty.');
+                if (!refinementMode) {
+                    return startAnalysis({ mode: 'root', prompt: aiPrompt.trim() });
+                }
+                try {
+                    const preflight = await fetchRefinementPreflight();
+                    const resolvedCount = Number(preflight.scope_summary?.resolved_count || 0);
+                    if (!resolvedCount) {
+                        throw new Error('None of the previous verified candidates are currently available to refine.');
+                    }
+                    setChangedContentAcknowledged(false);
+                    refinementConfirmInitiatorRef.current = document.activeElement;
+                    setPendingRefinementConfirmation({
+                        preflight,
+                        prompt: aiPrompt.trim(),
+                        requestId: newSearchRequestId(),
+                        parentSearchSessionId: currentParentSearchSessionId(),
+                    });
+                } catch (error) {
+                    if (!error.retryable) {
+                        setRefinementMode(false);
+                        setRefinementState('disabled');
+                    }
+                    handleSendMessage(error.retryable ? 'warning' : 'error', error.message);
+                }
+            };
+
+            const handleConfirmRefinement = async () => {
+                const pending = pendingRefinementConfirmation;
+                if (!pending || isRefinementConfirming) return;
+                setIsRefinementConfirming(true);
+                try {
+                    const fingerprint = String(
+                        pending.preflight?.scope_summary?.changed_content_set_fingerprint || ''
+                    );
+                    let acknowledgementId = '';
+                    if (fingerprint) {
+                        if (!changedContentAcknowledged) return;
+                        const response = await fetch(
+                            `${API_BASE_URL}/ai_search/refinement_scope/changed_content_acknowledgements`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    parent_search_session_id: pending.parentSearchSessionId,
+                                    search_request_id: pending.requestId,
+                                    changed_content_set_fingerprint: fingerprint,
+                                }),
+                            }
+                        );
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || !data.success) {
+                            setChangedContentAcknowledged(false);
+                            handleSendMessage('warning', data.message || 'The changed resume set must be reviewed again.');
+                            return;
+                        }
+                        acknowledgementId = data.acknowledgement_id || '';
+                    }
+                    await startAnalysis({
+                        mode: 'refinement',
+                        requestId: pending.requestId,
+                        parentSearchSessionId: pending.parentSearchSessionId,
+                        acknowledgementId,
+                        prompt: pending.prompt,
+                    });
+                } catch (error) {
+                    setServiceRecovery({
+                        state: 'backend_unreachable',
+                        message: 'NjordHR service is unavailable. Completed AI Search results are preserved.',
+                        recovering: false,
+                    });
+                    handleSendMessage('error', error?.message || 'Could not confirm the refinement. Previous completed results were preserved.');
+                } finally {
+                    setIsRefinementConfirming(false);
+                }
+            };
+
+            const handleReturnToPreviousSearch = () => {
+                if (searchChain.length < 2) return;
+                const previousChain = searchChain.slice(0, -1);
+                const previous = previousChain[previousChain.length - 1];
+                setSearchChain(previousChain);
+                setAnalysisResults(previous.results);
+                analysisResultsRef.current = previous.results;
+                const count = previous.results?.verified_matches?.length || 0;
+                setRefinementAvailability({
+                    available: count > 0 && Boolean(previous.results?.refinement?.available),
+                    candidateCount: count,
+                    reason: '',
+                    parentSearchSessionId: previous.results?.search_session?.search_session_id || '',
+                });
+                setRefinementMode(true);
+                setRefinementState('active_idle');
+            };
+
+            const handleStartNewSearch = async () => {
+                const confirmed = window.confirm('Start a new AI Search? This will clear the recovered AI Search prompt, results, and refinement chain from this device.');
+                if (!confirmed) return;
+                try {
+                    await fetch(`${API_BASE_URL}/ai_search/recovery_draft`, {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tab_id: recoveryTabIdRef.current }),
+                    });
+                } catch (_error) {}
+                setAnalysisResults(null);
+                analysisResultsRef.current = null;
+                setSearchChain([]);
+                setRefinementMode(false);
+                setRefinementState('disabled');
+                setRefinementAvailability({
+                    available: false,
+                    candidateCount: 0,
+                    reason: 'Available after a search returns at least one verified match.',
+                    parentSearchSessionId: '',
+                });
+                setRecoveryNotice(null);
+            };
+
+            const recoveryCard = (card) => ({
+                schema_version: 'recovery_result_card.v1',
+                filename: String(card?.filename || ''),
+                candidate_scope_id: String(card?.candidate_scope_id || ''),
+                content_hash: String(card?.content_hash || '').toLowerCase(),
+                result_bucket: String(card?.result_bucket || ''),
+                confidence: typeof card?.confidence === 'number' ? card.confidence : null,
+                lineage_warning_codes: Array.isArray(card?.lineage_warning_codes) ? card.lineage_warning_codes : [],
+                evidence_review_badges: Array.isArray(card?.evidence_review_badges)
+                    ? card.evidence_review_badges
+                    : (Array.isArray(card?.evidence_review_reasons) ? card.evidence_review_reasons : []),
+                detail_available_after_recovery: false,
+            });
+
+            const recoveryResults = (results) => {
+                if (!results) return null;
+                return {
+                    schema_version: 'recovery_results.v1',
+                    verified_matches: (results.verified_matches || []).map(recoveryCard),
+                    uncertain_matches: (results.uncertain_matches || []).map(recoveryCard),
+                    unknown_matches: (results.unknown_matches || []).map(recoveryCard),
+                    hard_filter_summary: results.hard_filter_summary || {},
+                    search_session: results.search_session || {},
+                    search_context: results.search_context || {},
+                    scope_summary: results.scope_summary || {},
+                    refinement: results.refinement || {},
+                    message: results.message || '',
+                };
+            };
+
+            const buildRecoveryDraft = (reason = 'checkpoint') => ({
+                schema_version: 'ai_search_recovery.v1',
+                recovery_reason: reason,
+                active_tab: activeTab,
+                search_state: {
+                    prompt: aiPrompt,
+                    selected_rank_folder: selectedRankFolder,
+                    applied_ship_type: selectedSearchShipType,
+                    experienced_ship_type: selectedExperienceShipType,
+                    refinement_state: refinementState,
+                    current_completed_results: recoveryResults(analysisResultsRef.current),
+                    search_chain: searchChain.map(step => ({
+                        prompt: step.prompt,
+                        results: recoveryResults(step.results),
+                    })),
+                    refinement_availability: refinementAvailability,
+                    interrupted_attempt: analysisProgress.isAnalyzing ? {
+                        search_request_id: '',
+                        prompt_summary: aiPrompt.slice(0, 60),
+                        parent_search_session_id: currentParentSearchSessionId() || null,
+                        attempted_at: new Date().toISOString(),
+                        interruption_reason: 'renderer_unload',
+                    } : null,
+                },
+            });
+
+            const saveRecoveryDraft = async (reason = 'checkpoint') => {
+                if (!authUser) return;
+                try {
+                    await fetch(`${API_BASE_URL}/ai_search/recovery_draft`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            tab_id: recoveryTabIdRef.current,
+                            draft: buildRecoveryDraft(reason),
+                        }),
+                        keepalive: reason === 'renderer_unload' || reason === 'service_restart',
+                    });
+                } catch (_error) {
+                    // Recovery storage is best effort and must not block AI Search.
+                }
+            };
+
+            const restoreRecoveryDraft = async () => {
+                if (!authUser || recoveryLoadedRef.current) return;
+                recoveryLoadedRef.current = true;
+                try {
+                    const response = await fetch(`${API_BASE_URL}/ai_search/recovery_draft`);
+                    const data = await response.json();
+                    const record = data?.draft;
+                    const draft = record?.draft;
+                    const state = draft?.search_state;
+                    if (!response.ok || !data.success || !state) return;
+                    setAiPrompt(state.prompt || '');
+                    setSelectedRankFolder(state.selected_rank_folder || '');
+                    setSelectedSearchShipType(state.applied_ship_type || '');
+                    setSelectedExperienceShipType(state.experienced_ship_type || '');
+                    const restoredResults = state.current_completed_results || null;
+                    setAnalysisResults(restoredResults);
+                    analysisResultsRef.current = restoredResults;
+                    setSearchChain(Array.isArray(state.search_chain) ? state.search_chain : []);
+                    setRefinementAvailability(state.refinement_availability || {
+                        available: false,
+                        candidateCount: 0,
+                        reason: 'Recovered results are not refinable.',
+                        parentSearchSessionId: '',
+                    });
+                    const storedRefinementState = state.refinement_state || 'disabled';
+                    const restoredRefinementState = storedRefinementState === 'active_running'
+                        ? (restoredResults && state.refinement_availability?.available ? 'active_idle' : 'disabled')
+                        : storedRefinementState;
+                    setRefinementMode(['active_idle', 'active_zero_result'].includes(restoredRefinementState));
+                    setRefinementState(restoredRefinementState);
+                    if (canAccessTab(draft.active_tab)) setActiveTab(draft.active_tab);
+                    setRecoveryNotice({
+                        completeness: draft.recovery_completeness || 'full',
+                        savedAt: record.saved_at || '',
+                        interrupted: Boolean(state.interrupted_attempt),
+                    });
+                    const parentId = state.refinement_availability?.parentSearchSessionId
+                        || restoredResults?.search_session?.search_session_id
+                        || '';
+                    if (state.refinement_availability?.available && parentId) {
+                        try {
+                            await fetchRefinementPreflight(parentId);
+                        } catch (error) {
+                            setRefinementMode(false);
+                            setRefinementState(error.retryable ? 'available' : 'disabled');
+                            setRefinementAvailability(prev => ({ ...prev, available: Boolean(error.retryable), reason: error.message }));
+                        }
+                    }
+                } catch (_error) {
+                    // A missing or unavailable draft starts a normal fresh session.
+                }
+            };
+
+            const checkBackendRecovery = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/runtime/ready`, { cache: 'no-store' });
+                    if (!response.ok) throw new Error('Backend not ready');
+                    setServiceRecovery(prev => (
+                        prev.state === 'healthy'
+                            ? prev
+                            : { state: 'recovered', message: 'NjordHR service reconnected. Your completed AI Search state was preserved.', recovering: false }
+                    ));
+                    return true;
+                } catch (_error) {
+                    setServiceRecovery({ state: 'backend_unreachable', message: 'NjordHR service is unavailable. Completed AI Search results are preserved.', recovering: false });
+                    return false;
+                }
+            };
+
+            const handleReconnectLocalServices = async () => {
+                setServiceRecovery(prev => ({ ...prev, state: 'recovering', recovering: true }));
+                await saveRecoveryDraft('service_restart');
+                try {
+                    if (window.NjordDesktop?.restartLocalServices) {
+                        await window.NjordDesktop.restartLocalServices({ backend: true, agent: false });
+                    }
+                    let recovered = false;
+                    for (let attempt = 0; attempt < 12; attempt += 1) {
+                        if (await checkBackendRecovery()) {
+                            recovered = true;
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, Math.min(5000, 500 * (2 ** Math.min(attempt, 3)))));
+                    }
+                    if (!recovered) {
+                        setServiceRecovery({ state: 'recovery_failed', message: 'NjordHR service is still unavailable. Open logs or restart it using the NjordHR launcher.', recovering: false });
+                        return;
+                    }
+                    await fetchRuntimeConfig();
+                    const parentId = currentParentSearchSessionId();
+                    if (refinementMode && parentId) {
+                        await fetchRefinementPreflight(parentId);
+                    }
+                    setServiceRecovery({ state: 'healthy', message: '', recovering: false });
+                } catch (error) {
+                    setServiceRecovery({ state: 'recovery_failed', message: error?.message || 'Local service recovery failed.', recovering: false });
+                }
+            };
+
+            useEffect(() => {
+                analysisResultsRef.current = analysisResults;
+            }, [analysisResults]);
+
+            useEffect(() => {
+                if (pendingRefinementConfirmation) {
+                    window.setTimeout(() => refinementCancelButtonRef.current?.focus(), 0);
+                    return;
+                }
+                refinementConfirmInitiatorRef.current?.focus?.();
+                refinementConfirmInitiatorRef.current = null;
+            }, [pendingRefinementConfirmation]);
+
+            useEffect(() => {
+                if (!authUser) {
+                    recoveryLoadedRef.current = false;
+                    return;
+                }
+                restoreRecoveryDraft();
+            }, [authUser]);
+
+            useEffect(() => {
+                if (!authUser || !recoveryLoadedRef.current) return undefined;
+                const timer = setTimeout(() => saveRecoveryDraft('checkpoint'), 800);
+                return () => clearTimeout(timer);
+            }, [
+                authUser, activeTab, aiPrompt, selectedRankFolder, selectedSearchShipType,
+                selectedExperienceShipType, refinementState, refinementAvailability,
+                analysisResults, searchChain,
+            ]);
+
+            useEffect(() => {
+                if (!authUser) return undefined;
+                const check = () => checkBackendRecovery();
+                const visibilityCheck = () => {
+                    if (document.visibilityState === 'visible') check();
+                };
+                check();
+                const poller = setInterval(check, 15000);
+                window.addEventListener('online', check);
+                document.addEventListener('visibilitychange', visibilityCheck);
+                return () => {
+                    clearInterval(poller);
+                    window.removeEventListener('online', check);
+                    document.removeEventListener('visibilitychange', visibilityCheck);
+                };
+            }, [authUser]);
+
+            useEffect(() => {
+                const checkpoint = () => saveRecoveryDraft('renderer_unload');
+                window.addEventListener('pagehide', checkpoint);
+                return () => window.removeEventListener('pagehide', checkpoint);
+            }, [authUser, activeTab, aiPrompt, analysisResults, searchChain, refinementState]);
 
             const handleFeedback = async (filename, llmDecision, reason, confidence, userDecision) => {
                 const notes = feedbackNotes[filename] || '';
@@ -6177,6 +6653,38 @@
                             {canAccessTab('settings') && <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'settings' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Settings</button>}
                             {canAccessTab('logs') && <button onClick={() => setActiveTab('logs')} className={`px-6 py-3 text-lg font-medium border-b-2 transition ${activeTab === 'logs' ? 'tab-active' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>Logs</button>}
                         </div>
+                        {serviceRecovery.state !== 'healthy' && serviceRecovery.state !== 'recovered' && (
+                            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3" role="alert">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <p className="text-sm font-semibold text-red-900">
+                                            {serviceRecovery.state === 'recovering' ? 'Reconnecting NjordHR service' : 'NjordHR service disconnected'}
+                                        </p>
+                                        <p className="mt-1 text-sm text-red-800">{serviceRecovery.message}</p>
+                                        <p className="mt-1 text-xs text-red-700">SeaJobs connection behavior is unchanged by this recovery action.</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleReconnectLocalServices}
+                                            disabled={serviceRecovery.recovering}
+                                            className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-900 hover:bg-red-100 disabled:opacity-50"
+                                        >
+                                            {window.NjordDesktop?.restartLocalServices ? 'Reconnect Local Services' : 'Check Again'}
+                                        </button>
+                                        {window.NjordDesktop?.openLogs && (
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenDesktopLogs}
+                                                className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-900 hover:bg-red-100"
+                                            >
+                                                Open Logs
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {localAgentSummary.enabled && !localAgentSummary.reachable && (
                             <div className={`mb-4 rounded-lg border px-4 py-3 ${
                                 localAgentSummary.waitingToStart
@@ -6252,15 +6760,80 @@
                              {activeTab === 'search' && (
                                 <div>
                                     <h2 className="text-2xl font-semibold mb-6">AI Search</h2>
+                                    {recoveryNotice && (
+                                        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-blue-900">Recovered previous AI Search</p>
+                                                    <p className="mt-1 text-sm text-blue-800">
+                                                        Recovery is {recoveryNotice.completeness.replace(/_/g, ' ')}
+                                                        {recoveryNotice.interrupted ? '. An interrupted attempt was not resumed.' : '.'}
+                                                    </p>
+                                                </div>
+                                                <button type="button" onClick={handleStartNewSearch} className="rounded-md border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-900 hover:bg-blue-100">
+                                                    Discard recovered search
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {searchChain.length > 0 && (
+                                        <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                                                {searchChain.map((step, index) => (
+                                                    <React.Fragment key={`${step.results?.search_session?.search_session_id || index}`}>
+                                                        {index > 0 && <span aria-hidden="true">→</span>}
+                                                        <span
+                                                            className={`rounded-full border px-2.5 py-1 ${index === searchChain.length - 1 ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white'}`}
+                                                            title={step.prompt}
+                                                        >
+                                                            {index === 0 ? 'Search 1' : `Refinement ${index}`}: {step.results?.verified_matches?.length || 0} verified
+                                                        </span>
+                                                    </React.Fragment>
+                                                ))}
+                                                {searchChain.length > 1 && (
+                                                    <button type="button" onClick={handleReturnToPreviousSearch} className="ml-auto rounded-md border border-slate-300 bg-white px-3 py-1 font-medium hover:bg-slate-100">
+                                                        Return to previous results
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="space-y-6">
+                                        <div className={`rounded-lg border p-4 ${refinementMode ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-slate-50'}`}>
+                                            <label className="flex items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-1 h-4 w-4"
+                                                    checked={refinementMode}
+                                                    disabled={
+                                                        analysisProgress.isAnalyzing
+                                                        || (!refinementMode && !refinementAvailability.available)
+                                                    }
+                                                    onChange={e => handleRefinementToggle(e.target.checked)}
+                                                />
+                                                <span>
+                                                    <span className="block text-sm font-semibold text-slate-900">
+                                                        Search within previous verified matches
+                                                        {refinementAvailability.candidateCount > 0 ? ` (${refinementAvailability.candidateCount})` : ''}
+                                                    </span>
+                                                    <span className="mt-1 block text-xs text-slate-600">
+                                                        {refinementMode
+                                                            ? `Refinement Mode is on. New prompts search only within the current ${refinementAvailability.candidateCount} verified match${refinementAvailability.candidateCount === 1 ? '' : 'es'}. Candidates excluded earlier will not be reconsidered.`
+                                                            : refinementAvailability.reason}
+                                                    </span>
+                                                </span>
+                                            </label>
+                                        </div>
                                         <div>
-                                            <label htmlFor="rankFolder" className="block text-sm font-medium text-gray-700 mb-1">Select Rank Folder to Analyze</label>
+                                            <label htmlFor="rankFolder" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Select Rank Folder to Analyze {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
                                             <select 
                                                 id="rankFolder" 
                                                 value={selectedRankFolder} 
-                                                onChange={e => setSelectedRankFolder(e.target.value)} 
-                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                                                disabled={rankFolders.length === 0}
+                                                onChange={e => { setSelectedRankFolder(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                disabled={rankFolders.length === 0 || refinementMode}
                                             >
                                                 {rankFolders.length > 0 ? (
                                                     rankFolders.map(folder => <option key={folder} value={folder}>{folder.replace(/_/g, ' ')}</option>)
@@ -6270,12 +6843,15 @@
                                             </select>
                                         </div>
                                         <div>
-                                            <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">Applied Ship Type Filter</label>
+                                            <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Applied Ship Type Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
                                             <select
                                                 id="searchShipType"
                                                 value={selectedSearchShipType}
-                                                onChange={e => setSelectedSearchShipType(e.target.value)}
-                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                                onChange={e => { setSelectedSearchShipType(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                disabled={refinementMode}
                                             >
                                                 <option value="">Any applied ship type</option>
                                                 {rankFolderShipTypes.map(shipType => <option key={shipType} value={shipType}>{shipType}</option>)}
@@ -6283,12 +6859,15 @@
                                             <p className="mt-1 text-xs text-gray-500">Uses ship type captured from the Seajobs download filter, not resume-derived vessel experience.</p>
                                         </div>
                                         <div>
-                                            <label htmlFor="experienceShipType" className="block text-sm font-medium text-gray-700 mb-1">Experienced Ship Type Filter</label>
+                                            <label htmlFor="experienceShipType" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Experienced Ship Type Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
                                             <select
                                                 id="experienceShipType"
                                                 value={selectedExperienceShipType}
-                                                onChange={e => setSelectedExperienceShipType(e.target.value)}
-                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                                onChange={e => { setSelectedExperienceShipType(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                disabled={refinementMode}
                                             >
                                                 <option value="">Any experienced ship type</option>
                                                 {shipTypes.map(shipType => <option key={shipType} value={shipType}>{shipType}</option>)}
@@ -6299,9 +6878,24 @@
                                             <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-1">Enter AI Search Prompt</label>
                                             <textarea id="prompt" rows="4" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Having a valid US visa and oil tanker experience"></textarea>
                                         </div>
-                                        <button onClick={handleAnalyze} disabled={isAnalyzeLoading || sessionConnected || analysisProgress.isAnalyzing} className="bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition">
-                                            {isAnalyzeLoading || analysisProgress.isAnalyzing ? 'Analyzing...' : 'Analyze Resumes'}
+                                        <button
+                                            onClick={handleAnalyze}
+                                            disabled={isAnalyzeLoading || sessionConnected || analysisProgress.isAnalyzing || refinementState === 'active_zero_result'}
+                                            className="bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition"
+                                        >
+                                            {isAnalyzeLoading || analysisProgress.isAnalyzing
+                                                ? 'Analyzing...'
+                                                : refinementMode
+                                                    ? `Refine ${refinementAvailability.candidateCount} Match${refinementAvailability.candidateCount === 1 ? '' : 'es'}`
+                                                    : 'Analyze Resumes'}
                                         </button>
+                                        {refinementState === 'active_zero_result' && (
+                                            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                                <p className="text-sm text-amber-900">This refinement returned no verified matches. Return to the previous results or start a new search.</p>
+                                                <button type="button" onClick={handleReturnToPreviousSearch} className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Return to previous results</button>
+                                                <button type="button" onClick={handleStartNewSearch} className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Start a new search</button>
+                                            </div>
+                                        )}
                                         {sessionConnected && <p className="text-xs text-gray-500">Note: AI Search is disabled while a download session is active.</p>}
                                     </div>
                                     
@@ -6568,7 +7162,12 @@
                                                                         </td>
                                                                         <td className="px-6 py-4 text-sm">{getConfidenceBadge(match.confidence)}</td>
                                                                         <td className="px-6 py-4 text-sm text-gray-500">
-                                                                            <p>{match.reason}</p>
+                                                                            <p>{match.reason || (match.detail_available_after_recovery === false ? 'Result summary restored. Run a new search to refresh detailed evidence.' : '')}</p>
+                                                                            {match.lineage_warning_codes?.includes('EARLIER_CONDITIONS_NOT_RECERTIFIED') && (
+                                                                                <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+                                                                                    Earlier conditions were not re-certified against this changed resume.
+                                                                                </p>
+                                                                            )}
                                                                             {match.review_path_type && match.review_path_type !== 'none' && (
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
                                                                                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
@@ -6750,6 +7349,69 @@
                         </div>
                     ))}
                 </div>
+                {pendingRefinementConfirmation && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+                        <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="refinement-confirm-title">
+                            <div className="border-b border-slate-200 px-6 py-4">
+                                <h3 id="refinement-confirm-title" className="text-lg font-semibold text-slate-900">Refine current verified matches?</h3>
+                                <p className="mt-1 text-sm text-slate-600">
+                                    This prompt will search only within the current {pendingRefinementConfirmation.preflight.scope_summary?.resolved_count || 0} verified match{Number(pendingRefinementConfirmation.preflight.scope_summary?.resolved_count || 0) === 1 ? '' : 'es'}. Candidates excluded by previous searches will not be considered.
+                                </p>
+                            </div>
+                            <div className="space-y-4 px-6 py-5">
+                                <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                                    <p><span className="font-medium">New prompt:</span> {pendingRefinementConfirmation.prompt}</p>
+                                    <p className="mt-1"><span className="font-medium">Rank:</span> {pendingRefinementConfirmation.preflight.search_context?.rank_folder || selectedRankFolder}</p>
+                                    <p className="mt-1"><span className="font-medium">Applied ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.applied_ship_type || 'Any'}</p>
+                                    <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.experienced_ship_type || 'Any'}</p>
+                                    <p className="mt-1"><span className="font-medium">Next step:</span> Refinement {searchChain.length}</p>
+                                </div>
+                                {Number(pendingRefinementConfirmation.preflight.scope_summary?.unavailable_percentage || 0) > 30 && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                        Some candidates from the previous step are no longer available. This refinement will search {pendingRefinementConfirmation.preflight.scope_summary?.resolved_count || 0} of {pendingRefinementConfirmation.preflight.scope_summary?.requested_count || 0} previous verified matches.
+                                    </div>
+                                )}
+                                {Number(pendingRefinementConfirmation.preflight.scope_summary?.changed_content_count || 0) > 0 && (
+                                    <label className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                                        <input
+                                            type="checkbox"
+                                            className="mt-1 h-4 w-4"
+                                            checked={changedContentAcknowledged}
+                                            onChange={e => setChangedContentAcknowledged(e.target.checked)}
+                                        />
+                                        <span>
+                                            Some candidate resumes changed after an earlier search step. Earlier conditions have not been re-certified against the changed content. Continue using the current resumes?
+                                        </span>
+                                    </label>
+                                )}
+                            </div>
+                            <div className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                <button
+                                    type="button"
+                                    ref={refinementCancelButtonRef}
+                                    onClick={() => { setPendingRefinementConfirmation(null); setChangedContentAcknowledged(false); }}
+                                    disabled={isRefinementConfirming}
+                                    className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleConfirmRefinement}
+                                    disabled={
+                                        isRefinementConfirming
+                                        || (Boolean(pendingRefinementConfirmation.preflight.scope_summary?.changed_content_set_fingerprint) && !changedContentAcknowledged)
+                                    }
+                                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-400"
+                                >
+                                    {isRefinementConfirming
+                                        ? 'Confirming...'
+                                        : <>Refine {pendingRefinementConfirmation.preflight.scope_summary?.resolved_count || 0} Match{Number(pendingRefinementConfirmation.preflight.scope_summary?.resolved_count || 0) === 1 ? '' : 'es'}</>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {historyModal.open && (
                     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
                         <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden" role="dialog" aria-modal="true" aria-label={`Candidate history for ${historyModal.candidateId}`}>

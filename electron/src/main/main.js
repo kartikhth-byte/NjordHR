@@ -142,6 +142,15 @@ ipcMain.handle("njordhr:open-logs", async () => {
   if (!target) return "";
   return openLogsFolder(target);
 });
+ipcMain.handle("njordhr:restart-local-services", async (_event, options = {}) => {
+  if (!processManager) {
+    throw new Error("Local services are not initialized.");
+  }
+  return processManager.restartServices({
+    backend: Boolean(options.backend),
+    agent: Boolean(options.agent)
+  });
+});
 ipcMain.handle("njordhr:retry-startup", async () => {
   app.relaunch();
   app.quit();

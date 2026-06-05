@@ -4,6 +4,7 @@ import configparser
 import csv
 import hashlib
 import io
+import math
 import os
 import re
 import sys
@@ -36,6 +37,7 @@ from resume_extractor import ResumeExtractor
 from app_settings import load_app_settings, FeatureFlags
 from cloud_api.runtime import cloud_api_settings_payload, load_cloud_api_settings
 from repositories.repo_factory import build_candidate_event_repo
+from repositories.search_scope_repo import SQLiteSearchScopeRepository
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import config_value, normalize_env_value, normalized_url
 from ai_analyzer import Analyzer
@@ -82,6 +84,30 @@ def _build_analyzer():
     return Analyzer(analyzer_config, feature_flags=feature_flags)
 
 
+def _resolve_advanced_runtime_path(raw_path, fallback_name):
+    candidate = str(raw_path or "").strip() or fallback_name
+    candidate = os.path.expanduser(candidate)
+    if os.path.isabs(candidate):
+        return os.path.abspath(candidate)
+    log_dir = os.path.abspath(os.path.expanduser(config.get("Advanced", "log_dir", fallback="logs") or "logs"))
+    return os.path.abspath(os.path.join(log_dir, candidate))
+
+
+def _resolve_search_scope_db_path():
+    configured = config.get("Advanced", "search_scope_db_path", fallback="")
+    if str(configured or "").strip():
+        return _resolve_advanced_runtime_path(configured, "ai_search_scope.db")
+    registry_db_path = _resolve_advanced_runtime_path(
+        config.get("Advanced", "registry_db_path", fallback="registry.db"),
+        "registry.db",
+    )
+    return os.path.join(os.path.dirname(registry_db_path), "ai_search_scope.db")
+
+
+def _build_search_scope_repo():
+    return SQLiteSearchScopeRepository(_resolve_search_scope_db_path())
+
+
 def _resolve_verified_resumes_dir():
     configured = settings.get('Additional_Local_Folder', fallback='Verified_Resumes').strip()
     if not configured:
@@ -97,6 +123,7 @@ csv_manager = build_candidate_event_repo(
     base_folder=VERIFIED_RESUMES_DIR,
     server_url=app_settings.server_url
 )
+search_scope_repo = _build_search_scope_repo()
 
 
 def _env_bool(name, default=False):
@@ -417,7 +444,7 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global app_settings, config, creds, settings, feature_flags, csv_manager, VERIFIED_RESUMES_DIR, candidate_facts_repo
+    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo
     app_settings = load_app_settings()
     config = app_settings.config
     creds = app_settings.credentials
@@ -431,6 +458,18 @@ def _refresh_runtime_managers():
         base_folder=VERIFIED_RESUMES_DIR,
         server_url=app_settings.server_url
     )
+    try:
+        old_scope_repo = search_scope_repo
+    except NameError:
+        old_scope_repo = None
+    new_scope_db_path = _resolve_search_scope_db_path()
+    if old_scope_repo is None or str(getattr(old_scope_repo, "db_path", "")) != new_scope_db_path:
+        search_scope_repo = SQLiteSearchScopeRepository(new_scope_db_path)
+        if old_scope_repo is not None:
+            try:
+                old_scope_repo.close()
+            except Exception:
+                pass
     candidate_facts_repo = None
     try:
         Analyzer._instance = None
@@ -1109,7 +1148,7 @@ def _auth_verify_user(username, password):
     if _auth_mode() == "cloud":
         stored_hash = str(record.get("password_hash", "")).strip()
         if stored_hash and _check_password(stored_hash, password):
-            return {"username": username, "role": record.get("role", "")}
+            return {"username": username, "role": record.get("role", ""), "id": record.get("id")}
         return None
     if password == str(record.get("password", "")):
         return {"username": username, "role": record.get("role", "")}
@@ -1227,6 +1266,327 @@ def _session_role():
 
 def _session_username():
     return str(session.get("username", "")).strip()
+
+
+def _session_actor_user_id():
+    explicit_id = str(session.get("user_id", "")).strip()
+    if explicit_id:
+        return explicit_id
+    username = _session_username()
+    if not username:
+        return ""
+    mode = "cloud" if _auth_mode() == "cloud" else "local"
+    digest = hashlib.sha256(username.strip().lower().encode("utf-8", "ignore")).hexdigest()
+    return f"{mode}:legacy:{digest[:32]}"
+
+
+def _scope_memberships_from_verified_matches(verified_matches):
+    memberships = []
+    missing_identity = []
+    seen_scope_ids = set()
+    for match in verified_matches or []:
+        if not isinstance(match, dict):
+            continue
+        candidate_scope_id = str(match.get("candidate_scope_id") or "").strip()
+        filename = str(match.get("filename") or "").strip()
+        if not candidate_scope_id:
+            missing_identity.append(filename or str(match.get("resume_id") or "").strip() or "unknown")
+            continue
+        if candidate_scope_id in seen_scope_ids:
+            continue
+        seen_scope_ids.add(candidate_scope_id)
+        hard_filter_reasons = match.get("hard_filter_reasons") or []
+        reason_codes = [
+            str(reason.get("reason_code") or "").strip()
+            for reason in hard_filter_reasons
+            if isinstance(reason, dict) and str(reason.get("reason_code") or "").strip()
+        ]
+        confidence = match.get("confidence")
+        try:
+            confidence_value = float(confidence)
+        except (TypeError, ValueError):
+            confidence_value = 0.0
+        decision_mode = "deterministic" if confidence_value >= 1.0 else "mixed"
+        memberships.append({
+            "candidate_scope_id": candidate_scope_id,
+            "content_hash_at_event": str(match.get("content_hash") or "").strip(),
+            "result_bucket": "verified_match",
+            "filename": filename,
+            "resume_id": str(match.get("resume_id") or "").strip(),
+            "decision_mode": decision_mode,
+            "facts_version": str(match.get("facts_version") or "").strip(),
+            "reason_codes": reason_codes,
+            "lineage_warning_codes": list(dict.fromkeys(
+                str(code or "").strip()
+                for code in match.get("lineage_warning_codes", [])
+                if str(code or "").strip()
+            )),
+        })
+    return memberships, missing_identity
+
+
+def _changed_content_set_fingerprint(changed_members):
+    canonical_members = sorted(
+        (
+            {
+                "candidate_scope_id": str(member.get("candidate_scope_id") or "").strip(),
+                "parent_content_hash": str(member.get("parent_content_hash") or "").strip(),
+                "current_content_hash": str(member.get("current_content_hash") or "").strip(),
+            }
+            for member in (changed_members or [])
+            if str(member.get("candidate_scope_id") or "").strip()
+        ),
+        key=lambda member: member["candidate_scope_id"],
+    )
+    if not canonical_members:
+        return ""
+    payload = json.dumps(canonical_members, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8", "ignore")).hexdigest()
+
+
+def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_id):
+    parent_scope = search_scope_repo.get_refinement_parent_scope(
+        parent_search_session_id,
+        actor_user_id=actor_user_id,
+    )
+    if not parent_scope.get("success"):
+        return parent_scope
+
+    parent_session = parent_scope.get("session") or {}
+    rank_folder = str(parent_session.get("rank_folder") or "").strip()
+    if not rank_folder or not _is_safe_name(rank_folder):
+        return {
+            "success": False,
+            "available": False,
+            "error_code": "REFINEMENT_CONTEXT_UNAVAILABLE",
+            "message": "The original rank folder is no longer available.",
+            "retryable": False,
+        }
+    target_folder = _resolve_within_base(_active_download_root(), rank_folder)
+    if not os.path.isdir(target_folder):
+        return {
+            "success": False,
+            "available": False,
+            "error_code": "REFINEMENT_CONTEXT_UNAVAILABLE",
+            "message": "The original rank folder is no longer available.",
+            "retryable": False,
+        }
+
+    analyzer = _build_analyzer()
+    scope_summary = analyzer.resolve_candidate_scope_snapshot(
+        target_folder,
+        parent_scope.get("candidate_scope_ids") or [],
+        candidate_scope_memberships=parent_scope.get("memberships") or [],
+    )
+    changed_members = list(scope_summary.pop("changed_members", []) or [])
+    scope_summary.pop("resolved_candidate_scope_ids", None)
+    requested_count = int(scope_summary.get("requested_count") or 0)
+    resolved_count = int(scope_summary.get("resolved_count") or 0)
+    scope_summary["changed_content_set_fingerprint"] = _changed_content_set_fingerprint(changed_members)
+    scope_summary["unavailable_percentage"] = round(
+        (max(0, requested_count - resolved_count) / requested_count) * 100,
+        2,
+    ) if requested_count else 100.0
+    if resolved_count <= 0:
+        return {
+            "success": False,
+            "available": False,
+            "error_code": "REFINEMENT_SCOPE_UNRESOLVABLE",
+            "message": "None of the previous verified candidates are currently available to refine.",
+            "retryable": False,
+            "scope_summary": scope_summary,
+        }
+    return {
+        "success": True,
+        "available": True,
+        "parent_search_session_id": str(parent_search_session_id or "").strip(),
+        "search_context": {
+            "rank_folder": rank_folder,
+            "applied_ship_type": str(parent_session.get("applied_ship_type") or "").strip(),
+            "experienced_ship_type": str(parent_session.get("experienced_ship_type") or "").strip(),
+        },
+        "scope_summary": scope_summary,
+        "refinement": {
+            "available": True,
+            "unavailable_reason": "",
+            "retryable": False,
+            "retry_after_seconds": None,
+        },
+        "_parent_scope": parent_scope,
+        "_changed_members": changed_members,
+    }
+
+
+def _safe_recovery_scalar_mapping(value, allowed_keys):
+    value = value if isinstance(value, dict) else {}
+    result = {}
+    for key in allowed_keys:
+        item = value.get(key)
+        if item is None or isinstance(item, (str, int, float, bool)):
+            result[key] = item
+    return result
+
+
+def _sanitize_recovery_machine_codes(values, *, limit, max_length):
+    values = values if isinstance(values, list) else []
+    sanitized = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        code = value.strip()[:max_length]
+        if code and re.fullmatch(r"[A-Za-z0-9_.:-]+", code):
+            sanitized.append(code)
+        if len(sanitized) >= limit:
+            break
+    return sanitized
+
+
+def _sanitize_recovery_confidence(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    confidence = float(value)
+    if not math.isfinite(confidence) or confidence < 0 or confidence > 1:
+        return None
+    return confidence
+
+
+def _sanitize_recovery_result_bucket(value, default_bucket):
+    bucket = str(value or "").strip()
+    if bucket in {"verified_match", "uncertain_match", "needs_review"}:
+        return bucket
+    return default_bucket
+
+
+def _sanitize_recovery_result_card(card, *, default_bucket="verified_match"):
+    card = card if isinstance(card, dict) else {}
+    return {
+        "schema_version": "recovery_result_card.v1",
+        "candidate_scope_id": str(card.get("candidate_scope_id") or "")[:64],
+        "content_hash": str(card.get("content_hash") or "").strip().lower()[:128],
+        "filename": str(card.get("filename") or "")[:255],
+        "result_bucket": _sanitize_recovery_result_bucket(card.get("result_bucket"), default_bucket),
+        "confidence": _sanitize_recovery_confidence(card.get("confidence")),
+        "lineage_warning_codes": _sanitize_recovery_machine_codes(
+            card.get("lineage_warning_codes"),
+            limit=10,
+            max_length=64,
+        ),
+        "evidence_review_badges": _sanitize_recovery_machine_codes(
+            card.get("evidence_review_badges"),
+            limit=10,
+            max_length=64,
+        ),
+        "detail_available_after_recovery": False,
+    }
+
+
+def _sanitize_recovery_results(results):
+    results = results if isinstance(results, dict) else {}
+    return {
+        "schema_version": "recovery_results.v1",
+        "verified_matches": [
+            _sanitize_recovery_result_card(card, default_bucket="verified_match")
+            for card in (results.get("verified_matches") or [])[:500]
+        ],
+        "uncertain_matches": [
+            _sanitize_recovery_result_card(card, default_bucket="uncertain_match")
+            for card in (results.get("uncertain_matches") or [])[:500]
+        ],
+        "unknown_matches": [
+            _sanitize_recovery_result_card(card, default_bucket="needs_review")
+            for card in (results.get("unknown_matches") or [])[:500]
+        ],
+        "hard_filter_summary": _safe_recovery_scalar_mapping(
+            results.get("hard_filter_summary"),
+            ("scanned", "passed", "failed", "unknown", "matched"),
+        ),
+        "search_session": _safe_recovery_scalar_mapping(
+            results.get("search_session"),
+            (
+                "search_session_id", "root_search_session_id", "parent_search_session_id",
+                "search_mode", "refinement_depth", "search_request_id",
+            ),
+        ),
+        "search_context": _safe_recovery_scalar_mapping(
+            results.get("search_context"),
+            ("rank_folder", "applied_ship_type", "experienced_ship_type"),
+        ),
+        "scope_summary": _safe_recovery_scalar_mapping(
+            results.get("scope_summary"),
+            (
+                "eligible_population_count", "retrieved_count", "evaluated_count",
+                "requested_count", "resolved_count", "changed_content_count",
+                "stale_count", "unresolvable_count", "duplicate_count",
+            ),
+        ),
+        "refinement": _safe_recovery_scalar_mapping(
+            results.get("refinement"),
+            (
+                "available", "search_session_id", "search_mode",
+                "candidate_scope_member_count", "reason_code", "message",
+                "membership_expires_at",
+            ),
+        ),
+        "message": str(results.get("message") or "")[:512],
+        "recovered_summary_only": True,
+    }
+
+
+def _sanitize_ai_search_recovery_draft(payload):
+    payload = payload if isinstance(payload, dict) else {}
+    search_state = payload.get("search_state") if isinstance(payload.get("search_state"), dict) else {}
+    current_completed_results = search_state.get("current_completed_results")
+    chain = []
+    for step in (search_state.get("search_chain") or [])[-10:]:
+        if not isinstance(step, dict) or not isinstance(step.get("results"), dict):
+            continue
+        chain.append({
+            "prompt": str(step.get("prompt") or "")[:4000],
+            "results": _sanitize_recovery_results(step.get("results")),
+        })
+    interrupted = search_state.get("interrupted_attempt")
+    interrupted_attempt = None
+    if isinstance(interrupted, dict):
+        interrupted_attempt = _safe_recovery_scalar_mapping(
+            interrupted,
+            (
+                "search_request_id", "prompt_summary", "parent_search_session_id",
+                "attempted_at", "interruption_reason",
+            ),
+        )
+    draft = {
+        "schema_version": "ai_search_recovery.v1",
+        "recovery_reason": str(payload.get("recovery_reason") or "checkpoint")[:64],
+        "recovery_completeness": "full",
+        "active_tab": str(payload.get("active_tab") or "search")[:64],
+        "search_state": {
+            "prompt": str(search_state.get("prompt") or "")[:4000],
+            "selected_rank_folder": str(search_state.get("selected_rank_folder") or "")[:256],
+            "applied_ship_type": str(search_state.get("applied_ship_type") or "")[:256],
+            "experienced_ship_type": str(search_state.get("experienced_ship_type") or "")[:256],
+            "refinement_state": str(search_state.get("refinement_state") or "disabled")[:64],
+            "current_completed_results": (
+                _sanitize_recovery_results(current_completed_results)
+                if isinstance(current_completed_results, dict)
+                else None
+            ),
+            "search_chain": chain,
+            "refinement_availability": _safe_recovery_scalar_mapping(
+                search_state.get("refinement_availability"),
+                ("available", "candidateCount", "reason", "parentSearchSessionId"),
+            ),
+            "interrupted_attempt": interrupted_attempt,
+        },
+    }
+    encoded = json.dumps(draft, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > 4 * 1024 * 1024:
+        draft["search_state"]["search_chain"] = []
+        draft["recovery_completeness"] = "trimmed"
+        encoded = json.dumps(draft, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > 4 * 1024 * 1024:
+        draft["search_state"]["current_completed_results"] = _sanitize_recovery_results({})
+        draft["recovery_completeness"] = "context_only"
+    return draft
 
 
 def _is_authenticated():
@@ -1954,6 +2314,7 @@ def auth_bootstrap():
 
     session["username"] = admin_username
     session["role"] = "admin"
+    session["user_id"] = f"local:legacy:{hashlib.sha256(admin_username.strip().lower().encode('utf-8', 'ignore')).hexdigest()[:32]}"
     session.permanent = False
     _log_usage("bootstrap_success", f"Bootstrap admin created: username={admin_username}")
     return jsonify({
@@ -1984,6 +2345,10 @@ def auth_login():
         return jsonify({"success": False, "message": "Invalid username or password."}), 401
     session["username"] = username
     session["role"] = str(record.get("role", "")).strip().lower()
+    if record.get("id"):
+        session["user_id"] = f"cloud:{record.get('id')}"
+    else:
+        session["user_id"] = f"local:legacy:{hashlib.sha256(username.strip().lower().encode('utf-8', 'ignore')).hexdigest()[:32]}"
     session.permanent = False
     _log_usage("login", f"User logged in as {session['role']}")
     return jsonify({
@@ -1996,6 +2361,10 @@ def auth_login():
 def auth_logout():
     _disconnect_seajobs_best_effort()
     _log_usage("logout", "User logged out")
+    try:
+        search_scope_repo.delete_recovery_drafts(actor_user_id=_session_actor_user_id())
+    except Exception:
+        pass
     session.clear()
     return jsonify({"success": True})
 
@@ -3390,6 +3759,8 @@ def save_admin_settings():
     ]:
         if key in payload:
             value = normalize_env_value(payload.get(key, ""))
+            if not value:
+                continue
             _set_config_value_or_clear("Advanced", key, value)
             email_intake_payload[key] = value
     if "email_intake_poll_interval_seconds" in payload:
@@ -4012,6 +4383,121 @@ def get_config_ship_types():
     except Exception as e:
         return jsonify({"success": False, "message": str(e), "ship_types": []}), 500
 
+
+@app.route('/ai_search/refinement_scope/<search_session_id>/preflight', methods=['GET'])
+def ai_search_refinement_scope_preflight(search_session_id):
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "available": False, "message": reason}), 403
+    try:
+        payload = _resolve_refinement_scope_preflight(
+            search_session_id,
+            actor_user_id=_session_actor_user_id(),
+        )
+        payload.pop("_parent_scope", None)
+        payload.pop("_changed_members", None)
+        status = 200 if payload.get("success") else 409
+        return jsonify(payload), status
+    except Exception as exc:
+        return jsonify({
+            "success": False,
+            "available": False,
+            "error_code": "REFINEMENT_SCOPE_STORE_UNAVAILABLE",
+            "message": str(exc),
+            "retryable": True,
+        }), 503
+
+
+@app.route('/ai_search/refinement_scope/changed_content_acknowledgements', methods=['POST'])
+def ai_search_changed_content_acknowledgement():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    payload = request.json if request.is_json else {}
+    parent_search_session_id = str((payload or {}).get("parent_search_session_id") or "").strip()
+    search_request_id = str((payload or {}).get("search_request_id") or "").strip()
+    submitted_fingerprint = str(
+        (payload or {}).get("changed_content_set_fingerprint") or ""
+    ).strip()
+    if not parent_search_session_id or not search_request_id or not submitted_fingerprint:
+        return jsonify({
+            "success": False,
+            "error_code": "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED",
+            "message": "A fresh changed-content acknowledgement is required.",
+            "retryable": False,
+        }), 400
+    try:
+        preflight = _resolve_refinement_scope_preflight(
+            parent_search_session_id,
+            actor_user_id=_session_actor_user_id(),
+        )
+        current_fingerprint = str(
+            (preflight.get("scope_summary") or {}).get("changed_content_set_fingerprint") or ""
+        ).strip()
+        if (
+            not preflight.get("success")
+            or not current_fingerprint
+            or current_fingerprint != submitted_fingerprint
+        ):
+            return jsonify({
+                "success": False,
+                "error_code": "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED",
+                "message": "The changed resume set was updated. Review the latest warning before continuing.",
+                "retryable": False,
+            }), 409
+        acknowledgement = search_scope_repo.issue_changed_content_acknowledgement(
+            actor_user_id=_session_actor_user_id(),
+            parent_search_session_id=parent_search_session_id,
+            search_request_id=search_request_id,
+            changed_content_set_fingerprint=current_fingerprint,
+        )
+        return jsonify({"success": True, **acknowledgement})
+    except Exception as exc:
+        print(f"[BACKEND WARN] Failed to issue changed-content acknowledgement: {exc}")
+        return jsonify({
+            "success": False,
+            "error_code": "REFINEMENT_SCOPE_STORE_UNAVAILABLE",
+            "message": "The refinement acknowledgement store is temporarily unavailable.",
+            "retryable": True,
+        }), 503
+
+
+@app.route('/ai_search/recovery_draft', methods=['GET', 'PUT', 'DELETE'])
+def ai_search_recovery_draft():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    actor_user_id = _session_actor_user_id()
+    try:
+        if request.method == "GET":
+            record = search_scope_repo.load_latest_recovery_draft(actor_user_id=actor_user_id)
+            return jsonify({"success": True, "draft": record})
+        payload = request.json if request.is_json else {}
+        if request.method == "DELETE":
+            search_scope_repo.delete_recovery_drafts(
+                actor_user_id=actor_user_id,
+                tab_id=str((payload or {}).get("tab_id") or "").strip() or None,
+            )
+            return jsonify({"success": True})
+
+        tab_id = str((payload or {}).get("tab_id") or "").strip()
+        if not re.match(r"^[A-Za-z0-9._-]{8,128}$", tab_id):
+            return jsonify({"success": False, "message": "Invalid recovery tab identifier."}), 400
+        draft = _sanitize_ai_search_recovery_draft((payload or {}).get("draft"))
+        saved = search_scope_repo.save_recovery_draft(
+            actor_user_id=actor_user_id,
+            tab_id=tab_id,
+            draft=draft,
+        )
+        return jsonify({"success": True, **saved, "recovery_completeness": draft["recovery_completeness"]})
+    except Exception as exc:
+        print(f"[BACKEND WARN] AI Search recovery draft operation failed: {exc}")
+        return jsonify({
+            "success": False,
+            "message": "AI Search recovery storage is temporarily unavailable.",
+        }), 503
+
+
 @app.route('/analyze_stream', methods=['GET'])
 def analyze_stream():
     """Stream analysis progress using Server-Sent Events"""
@@ -4024,10 +4510,17 @@ def analyze_stream():
     rank_folder = request.args.get('rank_folder')
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
+    parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
+    search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
+    changed_content_acknowledgement_id = request.args.get(
+        'changed_content_acknowledgement_id',
+        '',
+    ).strip()
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
     search_session_id = str(uuid.uuid4())
     actor_role = _session_role()
     actor_username = _session_username()
+    actor_user_id = _session_actor_user_id()
 
     def _log_ai_search_audit_rows(audit_rows, rank_folder, prompt, applied_ship_type, experienced_ship_type, search_session_id):
         for row in audit_rows or []:
@@ -4064,13 +4557,102 @@ def analyze_stream():
 
     def generate():
         try:
-            if not prompt or not rank_folder:
+            if not prompt:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Missing required data'})}\n\n"
                 return
-            
-            target_folder = os.path.join(_active_download_root(), rank_folder)
+
+            effective_rank_folder = str(rank_folder or "").strip()
+            effective_applied_ship_type = applied_ship_type
+            effective_experienced_ship_type = experienced_ship_type
+            search_mode = "root"
+            root_search_session_id = search_session_id
+            refinement_depth = 0
+            candidate_scope_ids = None
+            candidate_scope_memberships = None
+            parent_scope = {}
+
+            if parent_search_session_id:
+                try:
+                    parent_scope = search_scope_repo.get_refinement_parent_scope(
+                        parent_search_session_id,
+                        actor_user_id=actor_user_id,
+                    )
+                except Exception as scope_exc:
+                    print(f"[BACKEND WARN] Failed to resolve AI search refinement scope: {scope_exc}")
+                    yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_SCOPE_STORE_UNAVAILABLE', 'message': 'The previous verified search scope is temporarily unavailable.', 'retryable': True})}\n\n"
+                    return
+                if not parent_scope.get("success"):
+                    yield f"data: {json.dumps({'type': 'error', 'error_code': parent_scope.get('error_code', 'REFINEMENT_PARENT_NOT_FOUND'), 'message': parent_scope.get('message') or 'The previous verified search scope is not available for refinement.', 'retryable': bool(parent_scope.get('retryable', False))})}\n\n"
+                    return
+
+                parent_session = parent_scope.get("session") or {}
+                parent_rank_folder = str(parent_session.get("rank_folder") or "").strip()
+                parent_applied_ship_type = str(parent_session.get("applied_ship_type") or "").strip()
+                parent_experienced_ship_type = str(parent_session.get("experienced_ship_type") or "").strip()
+                context_mismatch = (
+                    (effective_rank_folder and effective_rank_folder != parent_rank_folder)
+                    or (effective_applied_ship_type and effective_applied_ship_type != parent_applied_ship_type)
+                    or (
+                        effective_experienced_ship_type
+                        and effective_experienced_ship_type != parent_experienced_ship_type
+                    )
+                )
+                if context_mismatch:
+                    yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_CONTEXT_MISMATCH', 'message': 'Refinement must use the rank and ship-type filters saved with the previous verified search.', 'retryable': False})}\n\n"
+                    return
+
+                try:
+                    authoritative_preflight = _resolve_refinement_scope_preflight(
+                        parent_search_session_id,
+                        actor_user_id=actor_user_id,
+                    )
+                except Exception as scope_exc:
+                    print(f"[BACKEND WARN] Failed to resolve live AI search refinement scope: {scope_exc}")
+                    yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_SCOPE_STORE_UNAVAILABLE', 'message': 'The previous verified search scope is temporarily unavailable.', 'retryable': True})}\n\n"
+                    return
+                if not authoritative_preflight.get("success"):
+                    yield f"data: {json.dumps({'type': 'error', 'error_code': authoritative_preflight.get('error_code', 'REFINEMENT_SCOPE_UNRESOLVABLE'), 'message': authoritative_preflight.get('message') or 'The previous verified search scope is not available for refinement.', 'retryable': bool(authoritative_preflight.get('retryable', False))})}\n\n"
+                    return
+
+                effective_rank_folder = parent_rank_folder
+                effective_applied_ship_type = parent_applied_ship_type
+                effective_experienced_ship_type = parent_experienced_ship_type
+                search_mode = "refinement"
+                root_search_session_id = str(
+                    parent_session.get("root_search_session_id") or parent_search_session_id
+                ).strip()
+                refinement_depth = int(parent_session.get("refinement_depth") or 0) + 1
+                candidate_scope_ids = list(parent_scope.get("candidate_scope_ids") or [])
+                candidate_scope_memberships = list(parent_scope.get("memberships") or [])
+                current_changed_fingerprint = str(
+                    (authoritative_preflight.get("scope_summary") or {}).get(
+                        "changed_content_set_fingerprint"
+                    ) or ""
+                ).strip()
+                if current_changed_fingerprint:
+                    acknowledgement_ok = search_scope_repo.consume_changed_content_acknowledgement(
+                        acknowledgement_id=changed_content_acknowledgement_id,
+                        actor_user_id=actor_user_id,
+                        parent_search_session_id=parent_search_session_id,
+                        search_request_id=search_request_id,
+                        changed_content_set_fingerprint=current_changed_fingerprint,
+                    )
+                    if not acknowledgement_ok:
+                        yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED', 'message': 'One or more resumes changed after the previous search. Review and acknowledge the updated resume set before continuing.', 'retryable': False})}\n\n"
+                        return
+
+            if not effective_rank_folder:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Missing required data'})}\n\n"
+                return
+            if not _is_safe_name(effective_rank_folder):
+                error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "INVALID_RANK_FOLDER"
+                yield f"data: {json.dumps({'type': 'error', 'error_code': error_code, 'message': 'Invalid rank folder.'})}\n\n"
+                return
+
+            target_folder = _resolve_within_base(_active_download_root(), effective_rank_folder)
             if not os.path.isdir(target_folder):
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Rank folder not found: ' + rank_folder})}\n\n"
+                error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "RANK_FOLDER_NOT_FOUND"
+                yield f"data: {json.dumps({'type': 'error', 'error_code': error_code, 'message': 'Rank folder not found: ' + effective_rank_folder})}\n\n"
                 return
             
             # Create analyzer and run streaming analysis
@@ -4079,12 +4661,15 @@ def analyze_stream():
                 telemetry_kind="system_log",
                 category="ai_search",
                 status="started",
-                summary=f"Streaming AI search started for rank={rank_folder}.",
+                summary=f"Streaming AI search started for rank={effective_rank_folder}.",
                 payload={
-                    "rank_folder": rank_folder,
-                    "applied_ship_type": applied_ship_type,
-                    "experienced_ship_type": experienced_ship_type,
+                    "rank_folder": effective_rank_folder,
+                    "applied_ship_type": effective_applied_ship_type,
+                    "experienced_ship_type": effective_experienced_ship_type,
                     "search_session_id": search_session_id,
+                    "search_mode": search_mode,
+                    "parent_search_session_id": parent_search_session_id,
+                    "search_request_id": search_request_id,
                 },
                 actor_role=actor_role,
                 actor_username=actor_username,
@@ -4093,7 +4678,7 @@ def analyze_stream():
             _schedule_search_prompt_audit(
                 analyzer,
                 prompt,
-                rank_folder,
+                effective_rank_folder,
                 search_session_id=search_session_id,
                 actor_role=actor_role,
                 actor_username=actor_username,
@@ -4101,21 +4686,23 @@ def analyze_stream():
             
             # Stream progress events
             for progress_event in analyzer.run_analysis_stream(
-                rank_folder,
+                effective_rank_folder,
                 prompt,
-                applied_ship_type=applied_ship_type,
-                experienced_ship_type=experienced_ship_type,
+                applied_ship_type=effective_applied_ship_type,
+                experienced_ship_type=effective_experienced_ship_type,
                 review_capture_callback=_candidate_facts_review_capture_callback,
+                candidate_scope_ids=candidate_scope_ids,
+                candidate_scope_memberships=candidate_scope_memberships,
             ):
                 event_to_client = progress_event
                 if progress_event.get("type") == "complete":
                     try:
                         _log_ai_search_audit_rows(
                             progress_event.get("hard_filter_audit"),
-                            rank_folder,
+                            effective_rank_folder,
                             prompt,
-                            applied_ship_type,
-                            experienced_ship_type,
+                            effective_applied_ship_type,
+                            effective_experienced_ship_type,
                             search_session_id,
                         )
                     except Exception as audit_exc:
@@ -4127,16 +4714,118 @@ def analyze_stream():
                         for key, value in progress_event.items()
                         if key != "hard_filter_audit"
                     }
+                    verified_matches = progress_event.get("verified_matches", [])
+                    memberships, missing_identity = _scope_memberships_from_verified_matches(verified_matches)
+                    memberships_to_persist = memberships if not missing_identity else []
+                    hard_filter_summary = progress_event.get("hard_filter_summary") or {}
+                    scope_summary = dict(progress_event.get("scope_summary") or {})
+                    if not scope_summary:
+                        scanned_count = int(hard_filter_summary.get("scanned", 0) or 0)
+                        scope_summary = {
+                            "eligible_population_count": scanned_count,
+                            "retrieved_count": None,
+                            "evaluated_count": scanned_count,
+                            "requested_count": scanned_count,
+                            "resolved_count": scanned_count,
+                            "changed_content_count": 0,
+                            "stale_count": 0,
+                            "unresolvable_count": 0,
+                            "duplicate_count": 0,
+                        }
+                    refinement_payload = {
+                        "available": False,
+                        "search_session_id": search_session_id,
+                        "search_mode": search_mode,
+                        "candidate_scope_member_count": 0,
+                        "reason_code": "",
+                        "message": "",
+                    }
+                    if not verified_matches:
+                        refinement_payload.update({
+                            "reason_code": "NO_VERIFIED_MATCHES",
+                            "message": "No verified matches are available to refine.",
+                        })
+                    elif missing_identity:
+                        refinement_payload.update({
+                            "reason_code": "REFINEMENT_SCOPE_IDENTITY_INCOMPLETE",
+                            "message": "These results cannot be refined because candidate identity preparation is incomplete.",
+                            "missing_identity_count": len(missing_identity),
+                        })
+
+                    try:
+                        output_counts = {
+                            "candidate_scope_member_count": len(memberships_to_persist),
+                            "verified_count": len(verified_matches),
+                            "uncertain_count": len(progress_event.get("uncertain_matches", [])),
+                            "needs_review_count": len(progress_event.get("unknown_matches", [])),
+                        }
+                        persisted_scope = search_scope_repo.complete_search_session(
+                            search_session_id=search_session_id,
+                            actor_user_id=actor_user_id,
+                            actor_username=actor_username,
+                            actor_role=actor_role,
+                            rank_folder=effective_rank_folder,
+                            applied_ship_type=effective_applied_ship_type,
+                            experienced_ship_type=effective_experienced_ship_type,
+                            prompt=prompt,
+                            search_mode=search_mode,
+                            root_search_session_id=root_search_session_id,
+                            parent_search_session_id=parent_search_session_id or None,
+                            refinement_depth=refinement_depth,
+                            context={
+                                "rank_folder": effective_rank_folder,
+                                "applied_ship_type": effective_applied_ship_type,
+                                "experienced_ship_type": effective_experienced_ship_type,
+                            },
+                            input_scope=scope_summary,
+                            output=output_counts,
+                            memberships=memberships_to_persist,
+                        )
+                        if verified_matches and not missing_identity:
+                            refinement_payload.update({
+                                "available": True,
+                                "candidate_scope_member_count": persisted_scope.get(
+                                    "candidate_scope_member_count",
+                                    len(memberships_to_persist),
+                                ),
+                                "membership_expires_at": persisted_scope.get("membership_expires_at", ""),
+                                "message": "Search scope saved. Previous verified matches can be refined.",
+                            })
+                    except Exception as scope_exc:
+                        print(f"[BACKEND WARN] Failed to persist AI search refinement scope: {scope_exc}")
+                        refinement_payload.update({
+                            "available": False,
+                            "reason_code": "REFINEMENT_SCOPE_STORE_UNAVAILABLE",
+                            "message": "These results cannot be refined because the search scope could not be saved.",
+                        })
+                    event_to_client["search_session_id"] = search_session_id
+                    event_to_client["search_session"] = {
+                        "search_session_id": search_session_id,
+                        "root_search_session_id": root_search_session_id,
+                        "parent_search_session_id": parent_search_session_id or None,
+                        "search_mode": search_mode,
+                        "refinement_depth": refinement_depth,
+                        "search_request_id": search_request_id,
+                    }
+                    event_to_client["search_context"] = {
+                        "rank_folder": effective_rank_folder,
+                        "applied_ship_type": effective_applied_ship_type,
+                        "experienced_ship_type": effective_experienced_ship_type,
+                    }
+                    event_to_client["scope_summary"] = scope_summary
+                    event_to_client["refinement"] = refinement_payload
                     _record_supabase_telemetry(
                         telemetry_kind="system_log",
                         category="ai_search",
                         status="complete",
-                        summary=f"Streaming AI search completed for rank={rank_folder}.",
+                        summary=f"Streaming AI search completed for rank={effective_rank_folder}.",
                         payload={
-                            "rank_folder": rank_folder,
-                            "applied_ship_type": applied_ship_type,
-                            "experienced_ship_type": experienced_ship_type,
+                            "rank_folder": effective_rank_folder,
+                            "applied_ship_type": effective_applied_ship_type,
+                            "experienced_ship_type": effective_experienced_ship_type,
                             "search_session_id": search_session_id,
+                            "search_mode": search_mode,
+                            "parent_search_session_id": parent_search_session_id,
                             "verified_matches": len(progress_event.get("verified_matches", [])),
                             "uncertain_matches": len(progress_event.get("uncertain_matches", [])),
                         },

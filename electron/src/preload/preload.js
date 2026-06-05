@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("NjordDesktop", {
     return () => ipcRenderer.removeListener("njordhr:error-details", listener);
   },
   openLogs: () => ipcRenderer.invoke("njordhr:open-logs"),
+  restartLocalServices: (options) => ipcRenderer.invoke("njordhr:restart-local-services", options || {}),
   retryStartup: () => ipcRenderer.invoke("njordhr:retry-startup"),
   copyText: (text) => ipcRenderer.invoke("njordhr:copy-text", text),
   closeWindow: () => ipcRenderer.invoke("njordhr:close-window")

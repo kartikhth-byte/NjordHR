@@ -270,6 +270,27 @@ class ProcessManager {
     });
   }
 
+  async restartServices({ backend = false, agent = false } = {}) {
+    const result = { backendRestarted: false, agentRestarted: false };
+    if (backend) {
+      if (this.backendProcess) {
+        await stopChildGracefully(this.backendProcess);
+        this.backendProcess = null;
+      }
+      await this.ensureBackendStarted();
+      result.backendRestarted = true;
+    }
+    if (agent) {
+      if (this.agentProcess) {
+        await stopChildGracefully(this.agentProcess);
+        this.agentProcess = null;
+      }
+      this.ensureAgentStarted();
+      result.agentRestarted = true;
+    }
+    return result;
+  }
+
   async shutdown() {
     const children = [this.agentProcess, this.backendProcess].filter(Boolean);
     for (const child of children) {
