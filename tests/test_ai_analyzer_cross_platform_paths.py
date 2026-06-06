@@ -279,6 +279,44 @@ class AIAnalyzerCrossPlatformPathTests(unittest.TestCase):
         self.assertEqual(summary["changed_content_count"], 1)
         self.assertIn("EARLIER_CONDITIONS_NOT_RECERTIFIED", metadata["lineage_warning_codes"])
 
+    def test_scoped_enumeration_preserves_existing_lineage_warning_without_new_change(self):
+        selected_path = self.rank_folder / "selected.pdf"
+        selected_path.write_bytes(b"%PDF-1.4\nsame-content")
+        warning_code = "EARLIER_CONDITIONS_NOT_RECERTIFIED"
+
+        class _Registry:
+            def get_resume_identity_record(self, _file_path):
+                return {
+                    "resume_id": "resume-selected",
+                    "candidate_scope_id": "scope-selected",
+                    "content_hash": "same-hash",
+                }
+
+            def generate_resume_id(self, _file_path):
+                return "resume-selected"
+
+        class _PdfProcessor:
+            def extract_text(self, _file_path):
+                return "Same resume text"
+
+        self.analyzer.registry = _Registry()
+        self.analyzer.pdf_processor = _PdfProcessor()
+
+        candidates, summary = self.analyzer._enumerate_scoped_rank_candidates(
+            self.rank_folder,
+            "2nd Engineer",
+            ["scope-selected"],
+            candidate_scope_memberships=[{
+                "candidate_scope_id": "scope-selected",
+                "content_hash_at_event": "same-hash",
+                "lineage_warning_codes": [warning_code],
+            }],
+        )
+
+        metadata = candidates["resume-selected"][0]["metadata"]
+        self.assertEqual(summary["changed_content_count"], 0)
+        self.assertEqual(metadata["lineage_warning_codes"], [warning_code])
+
     def test_legacy_scope_identity_record_gets_current_content_hash_for_ack_detection(self):
         selected_path = self.rank_folder / "legacy.pdf"
         selected_path.write_bytes(b"%PDF-1.4\nlegacy-current-content")

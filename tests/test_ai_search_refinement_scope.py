@@ -83,7 +83,12 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             sess["user_id"] = "local:test-recruiter"
         return client
 
-    def _save_parent_scope(self, search_session_id="parent-search", content_hash_at_event="content-a"):
+    def _save_parent_scope(
+        self,
+        search_session_id="parent-search",
+        content_hash_at_event="content-a",
+        lineage_warning_codes=None,
+    ):
         backend_server.search_scope_repo.complete_search_session(
             search_session_id=search_session_id,
             actor_user_id="local:test-recruiter",
@@ -98,6 +103,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 "content_hash_at_event": content_hash_at_event,
                 "filename": "candidate-a.pdf",
                 "resume_id": "resume-a",
+                "lineage_warning_codes": list(lineage_warning_codes or []),
             }],
         )
 
@@ -146,6 +152,29 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         events = _sse_events(response)
         self.assertEqual(events[0].get("type"), "error")
         self.assertEqual(events[0].get("error_code"), "REFINEMENT_PARENT_NOT_FOUND")
+        build_analyzer.assert_not_called()
+
+    def test_expired_parent_scope_request_does_not_fall_back_to_root_search(self):
+        self._save_parent_scope()
+        backend_server.search_scope_repo.conn.execute(
+            "UPDATE search_session_lineage SET membership_expires_at=? WHERE search_session_id=?",
+            ("2000-01-01T00:00:00+00:00", "parent-search"),
+        )
+        backend_server.search_scope_repo.conn.commit()
+
+        client = self._client()
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "strong leadership under pressure",
+                    "parent_search_session_id": "parent-search",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "error")
+        self.assertEqual(events[0].get("error_code"), "REFINEMENT_PARENT_EXPIRED")
         build_analyzer.assert_not_called()
 
     def test_refinement_inherits_parent_context_and_persists_child_lineage(self):
@@ -208,6 +237,76 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(child["parent_search_session_id"], "parent-search")
         self.assertEqual(child["root_search_session_id"], "parent-search")
         self.assertEqual(child["rank_folder"], "Chief_Engineer")
+
+    def test_refinement_lineage_warning_persists_into_next_refinement(self):
+        self._save_parent_scope()
+        client = self._client()
+        warning_code = "EARLIER_CONDITIONS_NOT_RECERTIFIED"
+        captured_second_parent_memberships = {}
+
+        class _WarningAnalyzer(_FakeAnalyzer):
+            def run_analysis_stream(self, *args, **kwargs):
+                for event in super().run_analysis_stream(*args, **kwargs):
+                    if event.get("type") == "complete":
+                        event["verified_matches"][0]["lineage_warning_codes"] = [warning_code]
+                    yield event
+
+        class _SecondRefinementAnalyzer(_FakeAnalyzer):
+            def run_analysis_stream(self, *args, **kwargs):
+                captured_second_parent_memberships["memberships"] = kwargs.get(
+                    "candidate_scope_memberships"
+                )
+                yield from super().run_analysis_stream(*args, **kwargs)
+
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch(
+                "backend_server._build_analyzer",
+                side_effect=[_FakeAnalyzer(), _WarningAnalyzer()],
+            ),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            first_response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has tanker experience",
+                    "parent_search_session_id": "parent-search",
+                },
+            )
+
+        first_complete = next(
+            event for event in _sse_events(first_response) if event.get("type") == "complete"
+        )
+        child_session_id = first_complete["search_session_id"]
+        child_memberships = backend_server.search_scope_repo.get_scope_memberships(
+            child_session_id,
+            actor_user_id="local:test-recruiter",
+        )
+        self.assertIn(warning_code, child_memberships[0]["lineage_warning_codes"])
+
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch(
+                "backend_server._build_analyzer",
+                side_effect=[_FakeAnalyzer(), _SecondRefinementAnalyzer()],
+            ),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            second_response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has basic coc",
+                    "parent_search_session_id": child_session_id,
+                },
+            )
+
+        self.assertTrue(
+            any(event.get("type") == "complete" for event in _sse_events(second_response))
+        )
+        second_parent_memberships = captured_second_parent_memberships["memberships"]
+        self.assertIn(warning_code, second_parent_memberships[0]["lineage_warning_codes"])
 
     def test_refinement_rejects_client_context_override_before_analyzer_runs(self):
         self._save_parent_scope()
