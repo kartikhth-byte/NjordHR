@@ -83,7 +83,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             sess["user_id"] = "local:test-recruiter"
         return client
 
-    def _save_parent_scope(self, search_session_id="parent-search"):
+    def _save_parent_scope(self, search_session_id="parent-search", content_hash_at_event="content-a"):
         backend_server.search_scope_repo.complete_search_session(
             search_session_id=search_session_id,
             actor_user_id="local:test-recruiter",
@@ -95,7 +95,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             prompt="has valid passport",
             memberships=[{
                 "candidate_scope_id": "candidate-scope-a",
-                "content_hash_at_event": "content-a",
+                "content_hash_at_event": content_hash_at_event,
                 "filename": "candidate-a.pdf",
                 "resume_id": "resume-a",
             }],
@@ -303,6 +303,46 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 _sse_events(replayed)[0]["error_code"],
                 "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED",
             )
+
+    def test_refinement_requires_acknowledgement_when_parent_hash_was_legacy_empty(self):
+        self._save_parent_scope(content_hash_at_event="")
+        client = self._client()
+        test_case = self
+
+        class _LegacyEmptyHashChangedAnalyzer(_FakeAnalyzer):
+            def resolve_candidate_scope_snapshot(self, _target_folder, candidate_scope_ids, **kwargs):
+                memberships = kwargs.get("candidate_scope_memberships") or []
+                test_case.assertEqual(memberships[0].get("content_hash_at_event"), "")
+                return {
+                    "requested_count": 1,
+                    "resolved_count": 1,
+                    "changed_content_count": 1,
+                    "stale_count": 0,
+                    "unresolvable_count": 0,
+                    "duplicate_count": 0,
+                    "resolved_candidate_scope_ids": list(candidate_scope_ids),
+                    "changed_members": [{
+                        "candidate_scope_id": "candidate-scope-a",
+                        "parent_content_hash": "",
+                        "current_content_hash": "current-content-hash",
+                    }],
+                }
+
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_LegacyEmptyHashChangedAnalyzer()),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "strong leadership",
+                    "parent_search_session_id": "parent-search",
+                    "search_request_id": "request-legacy-empty",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("error_code"), "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED")
 
     def test_recovery_draft_is_same_actor_and_sanitized(self):
         client = self._client()

@@ -242,11 +242,14 @@ class FileRegistry(RegistryRepo):
                     """
                     SELECT candidate_scope_id
                     FROM files
-                    WHERE content_hash=? AND candidate_scope_id IS NOT NULL AND candidate_scope_id!=''
+                    WHERE content_hash=?
+                      AND resume_id_provenance=?
+                      AND candidate_scope_id IS NOT NULL
+                      AND candidate_scope_id!=''
                     ORDER BY rowid ASC
                     LIMIT 1
                     """,
-                    (identity.content_hash,),
+                    (identity.content_hash, VERIFIED_CONTENT_HASH_PROVENANCE),
                 ).fetchone()
                 if content_match and str(content_match[0] or "").strip():
                     return str(content_match[0]).strip()
@@ -1073,8 +1076,21 @@ class AIResumeAnalyzer:
             except Exception:
                 continue
             if isinstance(record, dict) and str(record.get("candidate_scope_id") or "").strip():
+                if not str(record.get("content_hash") or "").strip():
+                    identity = stable_resume_identity(original_path)
+                    if identity.content_hash:
+                        record = dict(record)
+                        record["content_hash"] = identity.content_hash
                 return record
         return {}
+
+    @staticmethod
+    def _scope_content_changed_or_uncertified(parent_content_hash, current_content_hash):
+        parent_content_hash = str(parent_content_hash or "").strip()
+        current_content_hash = str(current_content_hash or "").strip()
+        if not parent_content_hash and not current_content_hash:
+            return False
+        return parent_content_hash != current_content_hash
 
     def _candidate_scope_metadata(self, resume_id, original_path=None, chunks=None):
         metadata = {
@@ -4638,7 +4654,7 @@ class AIResumeAnalyzer:
             parent_content_hash = str(
                 (parent_memberships.get(candidate_scope_id) or {}).get("content_hash_at_event") or ""
             ).strip()
-            if parent_content_hash and current_content_hash and parent_content_hash != current_content_hash:
+            if self._scope_content_changed_or_uncertified(parent_content_hash, current_content_hash):
                 changed_members.append({
                     "candidate_scope_id": candidate_scope_id,
                     "parent_content_hash": parent_content_hash,
@@ -4725,7 +4741,7 @@ class AIResumeAnalyzer:
                 for code in parent_member.get("lineage_warning_codes", [])
                 if str(code or "").strip()
             ]
-            if parent_content_hash and current_content_hash and parent_content_hash != current_content_hash:
+            if self._scope_content_changed_or_uncertified(parent_content_hash, current_content_hash):
                 scope_summary["changed_content_count"] += 1
                 lineage_warning_codes.append("EARLIER_CONDITIONS_NOT_RECERTIFIED")
 

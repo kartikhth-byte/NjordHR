@@ -278,3 +278,87 @@ class AIAnalyzerCrossPlatformPathTests(unittest.TestCase):
         metadata = candidates["resume-selected"][0]["metadata"]
         self.assertEqual(summary["changed_content_count"], 1)
         self.assertIn("EARLIER_CONDITIONS_NOT_RECERTIFIED", metadata["lineage_warning_codes"])
+
+    def test_legacy_scope_identity_record_gets_current_content_hash_for_ack_detection(self):
+        selected_path = self.rank_folder / "legacy.pdf"
+        selected_path.write_bytes(b"%PDF-1.4\nlegacy-current-content")
+
+        class _Registry:
+            def get_resume_identity_record(self, _file_path):
+                return {
+                    "resume_id": "legacy-resume-id",
+                    "candidate_scope_id": "scope-legacy",
+                    "content_hash": "",
+                }
+
+        self.analyzer.registry = _Registry()
+
+        record = self.analyzer._candidate_scope_identity_record(selected_path)
+
+        self.assertEqual(record["candidate_scope_id"], "scope-legacy")
+        self.assertTrue(record["content_hash"])
+
+    def test_scope_snapshot_requires_ack_when_parent_hash_is_missing(self):
+        selected_path = self.rank_folder / "selected.pdf"
+        selected_path.write_bytes(b"%PDF-1.4\nlegacy-upgraded-content")
+
+        class _Registry:
+            def get_resume_identity_record(self, _file_path):
+                return {
+                    "resume_id": "legacy-resume-id",
+                    "candidate_scope_id": "scope-selected",
+                    "content_hash": "",
+                }
+
+        self.analyzer.registry = _Registry()
+
+        summary = self.analyzer.resolve_candidate_scope_snapshot(
+            self.rank_folder,
+            ["scope-selected"],
+            candidate_scope_memberships=[{
+                "candidate_scope_id": "scope-selected",
+                "content_hash_at_event": "",
+            }],
+        )
+
+        self.assertEqual(summary["resolved_count"], 1)
+        self.assertEqual(summary["changed_content_count"], 1)
+        self.assertEqual(summary["changed_members"][0]["parent_content_hash"], "")
+        self.assertTrue(summary["changed_members"][0]["current_content_hash"])
+
+    def test_scoped_enumeration_marks_uncertified_when_parent_hash_is_missing(self):
+        selected_path = self.rank_folder / "selected.pdf"
+        selected_path.write_bytes(b"%PDF-1.4\nlegacy-upgraded-content")
+
+        class _Registry:
+            def get_resume_identity_record(self, _file_path):
+                return {
+                    "resume_id": "legacy-resume-id",
+                    "candidate_scope_id": "scope-selected",
+                    "content_hash": "",
+                }
+
+            def generate_resume_id(self, _file_path):
+                return "legacy-resume-id"
+
+        class _PdfProcessor:
+            def extract_text(self, _file_path):
+                return "Updated resume text"
+
+        self.analyzer.registry = _Registry()
+        self.analyzer.pdf_processor = _PdfProcessor()
+
+        candidates, summary = self.analyzer._enumerate_scoped_rank_candidates(
+            self.rank_folder,
+            "2nd Engineer",
+            ["scope-selected"],
+            candidate_scope_memberships=[{
+                "candidate_scope_id": "scope-selected",
+                "content_hash_at_event": "",
+            }],
+        )
+
+        metadata = candidates["legacy-resume-id"][0]["metadata"]
+        self.assertEqual(summary["changed_content_count"], 1)
+        self.assertTrue(metadata["content_hash"])
+        self.assertIn("EARLIER_CONDITIONS_NOT_RECERTIFIED", metadata["lineage_warning_codes"])

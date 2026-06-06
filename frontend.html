@@ -3370,10 +3370,11 @@
                             setAnalysisResults(completedResults);
                             analysisResultsRef.current = completedResults;
                             const step = { prompt, results: completedResults };
-                            setSearchChain(prev => (
-                                isRefinement ? [...prev, step].slice(-10) : [step]
-                            ));
-                            setActiveSearchStepIndex(isRefinement ? Math.min(searchChain.length, 9) : 0);
+                            setSearchChain(prev => {
+                                const nextChain = isRefinement ? [...prev, step].slice(-10) : [step];
+                                setActiveSearchStepIndex(nextChain.length - 1);
+                                return nextChain;
+                            });
                             const verifiedCount = completedResults.verified_matches.length;
                             const refinement = completedResults.refinement || {};
                             const nextAvailable = Boolean(refinement.available && verifiedCount > 0);
@@ -3564,7 +3565,6 @@
                 setSearchChain(nextChain);
                 setAiPrompt(nextLatestStep?.prompt || '');
                 applySearchStepView(nextChain.length - 1, nextChain);
-                setRefinementMode(true);
             };
 
             const handleStartNewSearch = async () => {
