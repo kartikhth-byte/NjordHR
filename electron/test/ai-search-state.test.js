@@ -180,3 +180,40 @@ test("stream failure state explicitly preserves completed results", () => {
   assert.equal(failure.refinementState, "active_idle");
   assert.equal(failure.serviceRecovery.state, "backend_unreachable");
 });
+
+test("root stream failure restores the previous completed search state", () => {
+  const chain = [
+    { prompt: "has a valid passport", results: results("search-1", 4) },
+    { prompt: "has tanker experience", results: results("search-2", 2) },
+  ];
+  const previousAvailability = {
+    available: true,
+    candidateCount: 2,
+    reason: "",
+    parentSearchSessionId: "search-2",
+  };
+
+  const snapshot = helpers.completedSearchSnapshot({
+    prompt: "new root prompt that fails",
+    analysisResults: chain[1].results,
+    searchChain: chain,
+    activeSearchStepIndex: 1,
+    refinementMode: true,
+    refinementState: "active_idle",
+    refinementAvailability: previousAvailability,
+  });
+  const failure = helpers.streamFailureRecoveryState({
+    isRefinement: false,
+    completedSearchSnapshot: snapshot,
+  });
+  const restore = JSON.parse(JSON.stringify(failure.restoreCompletedResults));
+
+  assert.equal(failure.preserveCompletedResults, true);
+  assert.equal(failure.refinementState, "active_idle");
+  assert.equal(restore.prompt, "has tanker experience");
+  assert.equal(restore.analysisResults.search_session.search_session_id, "search-2");
+  assert.equal(restore.searchChain.length, 2);
+  assert.equal(restore.activeSearchStepIndex, 1);
+  assert.equal(restore.refinementMode, true);
+  assert.deepEqual(restore.refinementAvailability, previousAvailability);
+});

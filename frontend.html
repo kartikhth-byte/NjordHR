@@ -265,6 +265,51 @@
                 parentSearchSessionId: '',
             });
 
+            const completedSearchSnapshot = ({
+                prompt,
+                analysisResults,
+                searchChain,
+                activeSearchStepIndex,
+                refinementMode,
+                refinementState,
+                refinementAvailability,
+            }) => {
+                const chain = chainArray(searchChain);
+                const rawIndex = Number(activeSearchStepIndex);
+                const boundedIndex = chain.length > 0
+                    ? Math.max(
+                        0,
+                        Math.min(
+                            Number.isFinite(rawIndex) ? rawIndex : chain.length - 1,
+                            chain.length - 1,
+                        ),
+                    )
+                    : -1;
+                const restoredResults = analysisResults
+                    || (boundedIndex >= 0 ? chain[boundedIndex]?.results || null : null);
+                if (!restoredResults && chain.length === 0) return null;
+                const snapshotPrompt = boundedIndex >= 0
+                    ? String(chain[boundedIndex]?.prompt || prompt || '')
+                    : String(prompt || '');
+                return {
+                    prompt: snapshotPrompt,
+                    analysisResults: restoredResults || null,
+                    searchChain: chain.map(step => ({
+                        prompt: String(step?.prompt || ''),
+                        results: step?.results || null,
+                    })),
+                    activeSearchStepIndex: boundedIndex,
+                    refinementMode: Boolean(refinementMode),
+                    refinementState: String(refinementState || 'disabled'),
+                    refinementAvailability: refinementAvailability ? { ...refinementAvailability } : {
+                        available: false,
+                        candidateCount: 0,
+                        reason: DEFAULT_RECOVERED_REASON,
+                        parentSearchSessionId: '',
+                    },
+                };
+            };
+
             const deriveRecoveredSearchState = (state) => {
                 const restoredChain = chainArray(state?.search_chain);
                 const rawRestoredIndex = Number(state?.active_search_step_index);
@@ -313,15 +358,21 @@
                 };
             };
 
-            const streamFailureRecoveryState = ({ isRefinement }) => ({
-                preserveCompletedResults: true,
-                refinementState: isRefinement ? 'active_idle' : null,
-                serviceRecovery: {
-                    state: 'backend_unreachable',
-                    message: 'NjordHR service is unavailable.',
-                    recovering: false,
-                },
-            });
+            const streamFailureRecoveryState = ({ isRefinement, completedSearchSnapshot: snapshot = null }) => {
+                const restoreCompletedResults = !isRefinement && snapshot?.analysisResults ? snapshot : null;
+                return {
+                    preserveCompletedResults: true,
+                    restoreCompletedResults,
+                    refinementState: isRefinement
+                        ? 'active_idle'
+                        : (restoreCompletedResults ? restoreCompletedResults.refinementState : null),
+                    serviceRecovery: {
+                        state: 'backend_unreachable',
+                        message: 'NjordHR service is unavailable.',
+                        recovering: false,
+                    },
+                };
+            };
 
             return {
                 HISTORY_MESSAGE,
@@ -337,6 +388,7 @@
                 removeLatestRefinement,
                 shouldInvalidateRefinementForFilterChange,
                 invalidatedRefinementAvailability,
+                completedSearchSnapshot,
                 deriveRecoveredSearchState,
                 streamFailureRecoveryState,
             };
@@ -3450,6 +3502,42 @@
                     eventSourceRef.current.close();
                 }
                 const isRefinement = mode === 'refinement';
+                const priorCompletedSearchSnapshot = aiSearchState.completedSearchSnapshot({
+                    prompt: aiPrompt,
+                    analysisResults: analysisResultsRef.current,
+                    searchChain,
+                    activeSearchStepIndex,
+                    refinementMode,
+                    refinementState,
+                    refinementAvailability,
+                });
+                const restoreCompletedSearchSnapshot = (snapshot) => {
+                    if (!snapshot?.analysisResults) return false;
+                    setAiPrompt(snapshot.prompt);
+                    setAnalysisResults(snapshot.analysisResults);
+                    analysisResultsRef.current = snapshot.analysisResults;
+                    setSearchChain(snapshot.searchChain);
+                    setActiveSearchStepIndex(snapshot.activeSearchStepIndex);
+                    setRefinementMode(snapshot.refinementMode);
+                    setRefinementState(snapshot.refinementState);
+                    setRefinementAvailability(snapshot.refinementAvailability);
+                    return true;
+                };
+                const preserveCompletedResultsAfterFailure = ({ markServiceUnreachable = false } = {}) => {
+                    const failureState = aiSearchState.streamFailureRecoveryState({
+                        isRefinement,
+                        completedSearchSnapshot: priorCompletedSearchSnapshot,
+                    });
+                    if (failureState.restoreCompletedResults) {
+                        restoreCompletedSearchSnapshot(failureState.restoreCompletedResults);
+                    } else if (failureState.refinementState) {
+                        setRefinementState(failureState.refinementState);
+                    }
+                    if (markServiceUnreachable) {
+                        setServiceRecovery(failureState.serviceRecovery);
+                    }
+                    return failureState;
+                };
                 if (!isRefinement) {
                     setAnalysisResults(null);
                     setSearchChain([]);
@@ -3608,7 +3696,7 @@
                             finishStream();
                             handleSendMessage('warning', data.message);
                         } else if (data.type === 'error' || data.type === 'request_status') {
-                            if (isRefinement) setRefinementState('active_idle');
+                            preserveCompletedResultsAfterFailure();
                             finishStream();
                             handleSendMessage(data.retryable ? 'warning' : 'error', data.message || 'Analysis failed.');
                         }
@@ -3616,19 +3704,15 @@
 
                     eventSource.onerror = (error) => {
                         console.error('EventSource error:', error);
-                        const failureState = aiSearchState.streamFailureRecoveryState({ isRefinement });
-                        if (failureState.refinementState) setRefinementState(failureState.refinementState);
+                        preserveCompletedResultsAfterFailure({ markServiceUnreachable: true });
                         finishStream();
-                        setServiceRecovery(failureState.serviceRecovery);
                         handleSendMessage('error', 'Connection to server lost. Previous completed results were preserved.');
                     };
                 } catch (error) {
                     console.error('Analysis error:', error);
-                    const failureState = aiSearchState.streamFailureRecoveryState({ isRefinement });
-                    if (failureState.refinementState) setRefinementState(failureState.refinementState);
+                    preserveCompletedResultsAfterFailure({ markServiceUnreachable: true });
                     setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
                     setIsAnalyzeLoading(false);
-                    setServiceRecovery(failureState.serviceRecovery);
                     handleSendMessage('error', 'Failed to connect to backend. Previous completed results were preserved.');
                 }
             };
