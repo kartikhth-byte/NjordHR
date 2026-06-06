@@ -145,8 +145,207 @@
 <body class="bg-gray-100">
     <div id="root"></div>
 
+    <script>
+        window.NjordAiSearchState = (() => {
+            const HISTORY_MESSAGE = 'You are viewing an earlier result set. Return to latest results to refine further.';
+            const NO_VERIFIED_MESSAGE = 'No verified matches are available to refine.';
+            const FILTER_INVALIDATED_MESSAGE = 'Displayed results belong to an earlier filter context. Run a new search to enable refinement.';
+            const DEFAULT_RECOVERED_REASON = 'Recovered results are not refinable.';
+
+            const chainArray = (searchChain) => (Array.isArray(searchChain) ? searchChain : []);
+            const verifiedCount = (results) => (
+                Array.isArray(results?.verified_matches) ? results.verified_matches.length : 0
+            );
+            const sessionId = (results) => String(results?.search_session?.search_session_id || '');
+
+            const latestSearchStepIndex = (searchChain) => chainArray(searchChain).length - 1;
+
+            const isViewingHistoricalSearchStep = (searchChain, activeSearchStepIndex) => {
+                const latestIndex = latestSearchStepIndex(searchChain);
+                return (
+                    latestIndex >= 0
+                    && Number(activeSearchStepIndex) >= 0
+                    && Number(activeSearchStepIndex) < latestIndex
+                );
+            };
+
+            const activeHistoricalSearchPrompt = (searchChain, activeSearchStepIndex) => (
+                isViewingHistoricalSearchStep(searchChain, activeSearchStepIndex)
+                    ? String(chainArray(searchChain)[activeSearchStepIndex]?.prompt || '')
+                    : ''
+            );
+
+            const displayedAiPrompt = ({ searchChain, activeSearchStepIndex, aiPrompt }) => (
+                isViewingHistoricalSearchStep(searchChain, activeSearchStepIndex)
+                    ? activeHistoricalSearchPrompt(searchChain, activeSearchStepIndex)
+                    : aiPrompt
+            );
+
+            const latestSearchResults = (searchChain, fallbackResults) => {
+                const chain = chainArray(searchChain);
+                if (chain.length === 0) return fallbackResults || null;
+                return chain[chain.length - 1]?.results || null;
+            };
+
+            const currentParentSearchSessionId = ({
+                searchChain,
+                fallbackResults,
+                refinementAvailability,
+            }) => (
+                sessionId(latestSearchResults(searchChain, fallbackResults))
+                || String(refinementAvailability?.parentSearchSessionId || '')
+            );
+
+            const buildNextSearchChain = ({
+                previousChain,
+                step,
+                isRefinement,
+                maxSteps = 10,
+            }) => {
+                const safeLimit = Math.max(1, Number(maxSteps) || 10);
+                const nextChain = isRefinement ? [...chainArray(previousChain), step] : [step];
+                return nextChain.slice(-safeLimit);
+            };
+
+            const deriveSearchStepView = (index, searchChain) => {
+                const chain = chainArray(searchChain);
+                if (chain.length === 0) return null;
+                const boundedIndex = Math.max(0, Math.min(Number(index) || 0, chain.length - 1));
+                const step = chain[boundedIndex];
+                if (!step?.results) return null;
+                const count = verifiedCount(step.results);
+                const refinement = step.results?.refinement || {};
+                const isLatestStep = boundedIndex === chain.length - 1;
+                const candidateCount = Number(refinement.candidate_scope_member_count || count);
+                const latestAvailable = isLatestStep && count > 0 && Boolean(refinement.available);
+                return {
+                    boundedIndex,
+                    step,
+                    results: step.results,
+                    verifiedCount: count,
+                    isLatestStep,
+                    refinementAvailability: {
+                        available: latestAvailable,
+                        candidateCount,
+                        reason: isLatestStep
+                            ? (refinement.message || (count ? '' : NO_VERIFIED_MESSAGE))
+                            : HISTORY_MESSAGE,
+                        parentSearchSessionId: isLatestStep ? sessionId(step.results) : '',
+                    },
+                    refinementState: isLatestStep
+                        ? (count === 0 ? 'active_zero_result' : (latestAvailable ? 'active_idle' : 'disabled'))
+                        : 'viewing_history',
+                    refinementMode: isLatestStep ? null : true,
+                };
+            };
+
+            const removeLatestRefinement = (searchChain) => {
+                const chain = chainArray(searchChain);
+                if (chain.length < 2) {
+                    return { canRemove: false, chain, prompt: '', view: null };
+                }
+                const nextChain = chain.slice(0, -1);
+                const view = deriveSearchStepView(nextChain.length - 1, nextChain);
+                return {
+                    canRemove: true,
+                    chain: nextChain,
+                    prompt: String(nextChain[nextChain.length - 1]?.prompt || ''),
+                    view,
+                };
+            };
+
+            const shouldInvalidateRefinementForFilterChange = ({ analysisResults, refinementMode }) => (
+                Boolean(analysisResults) && !Boolean(refinementMode)
+            );
+
+            const invalidatedRefinementAvailability = () => ({
+                available: false,
+                candidateCount: 0,
+                reason: FILTER_INVALIDATED_MESSAGE,
+                parentSearchSessionId: '',
+            });
+
+            const deriveRecoveredSearchState = (state) => {
+                const restoredChain = chainArray(state?.search_chain);
+                const rawRestoredIndex = Number(state?.active_search_step_index);
+                const restoredIndex = restoredChain.length > 0
+                    ? Math.max(
+                        0,
+                        Math.min(
+                            Number.isFinite(rawRestoredIndex) ? rawRestoredIndex : restoredChain.length - 1,
+                            restoredChain.length - 1,
+                        ),
+                    )
+                    : -1;
+                const restoredResults = restoredIndex >= 0
+                    ? restoredChain[restoredIndex]?.results || state?.current_completed_results || null
+                    : state?.current_completed_results || null;
+                const refinementAvailability = state?.refinement_availability || {
+                    available: false,
+                    candidateCount: 0,
+                    reason: DEFAULT_RECOVERED_REASON,
+                    parentSearchSessionId: '',
+                };
+                const storedRefinementState = state?.refinement_state || 'disabled';
+                const recoveredRefinementState = storedRefinementState === 'active_running'
+                    ? (restoredResults && refinementAvailability?.available ? 'active_idle' : 'disabled')
+                    : storedRefinementState;
+                const restoredViewingHistory = restoredIndex >= 0 && restoredIndex < restoredChain.length - 1;
+                const latestRestoredResults = restoredChain.length > 0
+                    ? restoredChain[restoredChain.length - 1]?.results
+                    : restoredResults;
+                return {
+                    prompt: state?.prompt || '',
+                    selectedRankFolder: state?.selected_rank_folder || '',
+                    appliedShipType: state?.applied_ship_type || '',
+                    experiencedShipType: state?.experienced_ship_type || '',
+                    restoredChain,
+                    restoredIndex,
+                    restoredResults,
+                    refinementAvailability,
+                    refinementMode: restoredViewingHistory || ['active_idle', 'active_zero_result'].includes(recoveredRefinementState),
+                    refinementState: restoredViewingHistory ? 'viewing_history' : recoveredRefinementState,
+                    parentSearchSessionIdForPreflight: String(
+                        refinementAvailability?.parentSearchSessionId
+                        || sessionId(latestRestoredResults)
+                        || '',
+                    ),
+                };
+            };
+
+            const streamFailureRecoveryState = ({ isRefinement }) => ({
+                preserveCompletedResults: true,
+                refinementState: isRefinement ? 'active_idle' : null,
+                serviceRecovery: {
+                    state: 'backend_unreachable',
+                    message: 'NjordHR service is unavailable.',
+                    recovering: false,
+                },
+            });
+
+            return {
+                HISTORY_MESSAGE,
+                FILTER_INVALIDATED_MESSAGE,
+                latestSearchStepIndex,
+                isViewingHistoricalSearchStep,
+                activeHistoricalSearchPrompt,
+                displayedAiPrompt,
+                latestSearchResults,
+                currentParentSearchSessionId,
+                buildNextSearchChain,
+                deriveSearchStepView,
+                removeLatestRefinement,
+                shouldInvalidateRefinementForFilterChange,
+                invalidatedRefinementAvailability,
+                deriveRecoveredSearchState,
+                streamFailureRecoveryState,
+            };
+        })();
+    </script>
+
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
+        const aiSearchState = window.NjordAiSearchState;
 
         function App() {
             const [activeTab, setActiveTab] = useState('download');
@@ -3164,27 +3363,24 @@
                     : `search_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
             );
 
-            const latestSearchStepIndex = searchChain.length - 1;
-            const isViewingHistoricalSearchStep = (
-                searchChain.length > 0
-                && activeSearchStepIndex >= 0
-                && activeSearchStepIndex < latestSearchStepIndex
+            const isViewingHistoricalSearchStep = aiSearchState.isViewingHistoricalSearchStep(
+                searchChain,
+                activeSearchStepIndex,
             );
-            const activeHistoricalSearchPrompt = (
-                isViewingHistoricalSearchStep
-                    ? String(searchChain[activeSearchStepIndex]?.prompt || '')
-                    : ''
-            );
-            const displayedAiPrompt = isViewingHistoricalSearchStep ? activeHistoricalSearchPrompt : aiPrompt;
+            const displayedAiPrompt = aiSearchState.displayedAiPrompt({
+                searchChain,
+                activeSearchStepIndex,
+                aiPrompt,
+            });
             const latestSearchResults = () => (
-                searchChain.length > 0
-                    ? searchChain[latestSearchStepIndex]?.results
-                    : analysisResultsRef.current
+                aiSearchState.latestSearchResults(searchChain, analysisResultsRef.current)
             );
             const currentParentSearchSessionId = () => (
-                latestSearchResults()?.search_session?.search_session_id
-                || refinementAvailability.parentSearchSessionId
-                || ''
+                aiSearchState.currentParentSearchSessionId({
+                    searchChain,
+                    fallbackResults: analysisResultsRef.current,
+                    refinementAvailability,
+                })
             );
 
             const fetchRefinementPreflight = async (parentSearchSessionId = currentParentSearchSessionId()) => {
@@ -3235,14 +3431,12 @@
             };
 
             const invalidateRefinementForFilterChange = () => {
-                if (!analysisResultsRef.current || refinementMode) return;
+                if (!aiSearchState.shouldInvalidateRefinementForFilterChange({
+                    analysisResults: analysisResultsRef.current,
+                    refinementMode,
+                })) return;
                 setRefinementState('invalidated_by_filter_change');
-                setRefinementAvailability({
-                    available: false,
-                    candidateCount: 0,
-                    reason: 'Displayed results belong to an earlier filter context. Run a new search to enable refinement.',
-                    parentSearchSessionId: '',
-                });
+                setRefinementAvailability(aiSearchState.invalidatedRefinementAvailability());
             };
 
             const startAnalysis = async ({
@@ -3371,7 +3565,12 @@
                             analysisResultsRef.current = completedResults;
                             const step = { prompt, results: completedResults };
                             setSearchChain(prev => {
-                                const nextChain = isRefinement ? [...prev, step].slice(-10) : [step];
+                                const nextChain = aiSearchState.buildNextSearchChain({
+                                    previousChain: prev,
+                                    step,
+                                    isRefinement,
+                                    maxSteps: 10,
+                                });
                                 setActiveSearchStepIndex(nextChain.length - 1);
                                 return nextChain;
                             });
@@ -3417,17 +3616,19 @@
 
                     eventSource.onerror = (error) => {
                         console.error('EventSource error:', error);
-                        if (isRefinement) setRefinementState('active_idle');
+                        const failureState = aiSearchState.streamFailureRecoveryState({ isRefinement });
+                        if (failureState.refinementState) setRefinementState(failureState.refinementState);
                         finishStream();
-                        setServiceRecovery({ state: 'backend_unreachable', message: 'NjordHR service is unavailable.', recovering: false });
+                        setServiceRecovery(failureState.serviceRecovery);
                         handleSendMessage('error', 'Connection to server lost. Previous completed results were preserved.');
                     };
                 } catch (error) {
                     console.error('Analysis error:', error);
-                    if (isRefinement) setRefinementState('active_idle');
+                    const failureState = aiSearchState.streamFailureRecoveryState({ isRefinement });
+                    if (failureState.refinementState) setRefinementState(failureState.refinementState);
                     setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
                     setIsAnalyzeLoading(false);
-                    setServiceRecovery({ state: 'backend_unreachable', message: 'NjordHR service is unavailable.', recovering: false });
+                    setServiceRecovery(failureState.serviceRecovery);
                     handleSendMessage('error', 'Failed to connect to backend. Previous completed results were preserved.');
                 }
             };
@@ -3515,29 +3716,17 @@
             };
 
             const applySearchStepView = (index, chain = searchChain) => {
-                if (!Array.isArray(chain) || chain.length === 0) return;
-                const boundedIndex = Math.max(0, Math.min(index, chain.length - 1));
-                const step = chain[boundedIndex];
-                if (!step?.results) return;
-                setActiveSearchStepIndex(boundedIndex);
-                setAnalysisResults(step.results);
-                analysisResultsRef.current = step.results;
-                const count = step.results?.verified_matches?.length || 0;
-                const refinement = step.results?.refinement || {};
-                const isLatestStep = boundedIndex === chain.length - 1;
-                setRefinementAvailability({
-                    available: isLatestStep && count > 0 && Boolean(refinement.available),
-                    candidateCount: Number(refinement.candidate_scope_member_count || count),
-                    reason: isLatestStep
-                        ? (refinement.message || (count ? '' : 'No verified matches are available to refine.'))
-                        : 'You are viewing an earlier result set. Return to latest results to refine further.',
-                    parentSearchSessionId: isLatestStep ? (step.results?.search_session?.search_session_id || '') : '',
-                });
-                if (isLatestStep) {
-                    setRefinementState(count === 0 ? 'active_zero_result' : (refinement.available && count > 0 ? 'active_idle' : 'disabled'));
+                const view = aiSearchState.deriveSearchStepView(index, chain);
+                if (!view) return;
+                setActiveSearchStepIndex(view.boundedIndex);
+                setAnalysisResults(view.results);
+                analysisResultsRef.current = view.results;
+                setRefinementAvailability(view.refinementAvailability);
+                if (view.isLatestStep) {
+                    setRefinementState(view.refinementState);
                 } else {
-                    setRefinementMode(true);
-                    setRefinementState('viewing_history');
+                    setRefinementMode(view.refinementMode);
+                    setRefinementState(view.refinementState);
                 }
             };
 
@@ -3560,11 +3749,11 @@
                 if (searchChain.length < 2) return;
                 const confirmed = window.confirm('Remove the latest refinement? The previous result set will become the latest refinable search.');
                 if (!confirmed) return;
-                const nextChain = searchChain.slice(0, -1);
-                const nextLatestStep = nextChain[nextChain.length - 1];
-                setSearchChain(nextChain);
-                setAiPrompt(nextLatestStep?.prompt || '');
-                applySearchStepView(nextChain.length - 1, nextChain);
+                const removal = aiSearchState.removeLatestRefinement(searchChain);
+                if (!removal.canRemove) return;
+                setSearchChain(removal.chain);
+                setAiPrompt(removal.prompt);
+                applySearchStepView(removal.chain.length - 1, removal.chain);
             };
 
             const handleStartNewSearch = async () => {
@@ -3676,47 +3865,25 @@
                     const draft = record?.draft;
                     const state = draft?.search_state;
                     if (!response.ok || !data.success || !state) return;
-                    setAiPrompt(state.prompt || '');
-                    setSelectedRankFolder(state.selected_rank_folder || '');
-                    setSelectedSearchShipType(state.applied_ship_type || '');
-                    setSelectedExperienceShipType(state.experienced_ship_type || '');
-                    const restoredChain = Array.isArray(state.search_chain) ? state.search_chain : [];
-                    const rawRestoredIndex = Number(state.active_search_step_index);
-                    const restoredIndex = restoredChain.length > 0
-                        ? Math.max(0, Math.min(Number.isFinite(rawRestoredIndex) ? rawRestoredIndex : restoredChain.length - 1, restoredChain.length - 1))
-                        : -1;
-                    const restoredResults = restoredIndex >= 0
-                        ? restoredChain[restoredIndex]?.results || state.current_completed_results || null
-                        : state.current_completed_results || null;
-                    setAnalysisResults(restoredResults);
-                    analysisResultsRef.current = restoredResults;
-                    setSearchChain(restoredChain);
-                    setActiveSearchStepIndex(restoredIndex);
-                    setRefinementAvailability(state.refinement_availability || {
-                        available: false,
-                        candidateCount: 0,
-                        reason: 'Recovered results are not refinable.',
-                        parentSearchSessionId: '',
-                    });
-                    const storedRefinementState = state.refinement_state || 'disabled';
-                    const restoredRefinementState = storedRefinementState === 'active_running'
-                        ? (restoredResults && state.refinement_availability?.available ? 'active_idle' : 'disabled')
-                        : storedRefinementState;
-                    const restoredViewingHistory = restoredIndex >= 0 && restoredIndex < restoredChain.length - 1;
-                    setRefinementMode(restoredViewingHistory || ['active_idle', 'active_zero_result'].includes(restoredRefinementState));
-                    setRefinementState(restoredViewingHistory ? 'viewing_history' : restoredRefinementState);
+                    const restored = aiSearchState.deriveRecoveredSearchState(state);
+                    setAiPrompt(restored.prompt);
+                    setSelectedRankFolder(restored.selectedRankFolder);
+                    setSelectedSearchShipType(restored.appliedShipType);
+                    setSelectedExperienceShipType(restored.experiencedShipType);
+                    setAnalysisResults(restored.restoredResults);
+                    analysisResultsRef.current = restored.restoredResults;
+                    setSearchChain(restored.restoredChain);
+                    setActiveSearchStepIndex(restored.restoredIndex);
+                    setRefinementAvailability(restored.refinementAvailability);
+                    setRefinementMode(restored.refinementMode);
+                    setRefinementState(restored.refinementState);
                     if (canAccessTab(draft.active_tab)) setActiveTab(draft.active_tab);
                     setRecoveryNotice({
                         completeness: draft.recovery_completeness || 'full',
                         savedAt: record.saved_at || '',
                         interrupted: Boolean(state.interrupted_attempt),
                     });
-                    const latestRestoredResults = restoredChain.length > 0
-                        ? restoredChain[restoredChain.length - 1]?.results
-                        : restoredResults;
-                    const parentId = state.refinement_availability?.parentSearchSessionId
-                        || latestRestoredResults?.search_session?.search_session_id
-                        || '';
+                    const parentId = restored.parentSearchSessionIdForPreflight;
                     if (state.refinement_availability?.available && parentId) {
                         try {
                             await fetchRefinementPreflight(parentId);
