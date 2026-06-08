@@ -126,7 +126,9 @@ The backend must independently enforce:
 - Every refinement search requires confirmation.
 - Rank, applied ship type, experienced ship type, and future scope-defining filters are locked while Refinement Mode is active.
 - Each successful refinement replaces the current scope with its new verified matches.
-- Core Refinement Mode lets the recruiter return to an earlier retained result step within the current browser session; the Resilience Extension preserves retained steps for the 24-hour same-actor recovery-draft lifetime.
+- Core Refinement Mode retains earlier result steps for read-only inspection within the current browser session. New prompts can run only from the latest step.
+- Only the latest refinement step can be removed. Removing it restores the immediately preceding step as the latest refinable state.
+- The Resilience Extension preserves the same bounded latest-only chain behavior for the 24-hour same-actor recovery-draft lifetime.
 - Turning Refinement Mode off unlocks filters and makes the next search a new root search.
 - Refinement Mode does not concatenate prompts or re-run prior prompts. It applies the new prompt to the previous verified-candidate snapshot.
 - v0.1 refinement is same-actor-only. Managers and administrators cannot refine another user's search.
@@ -148,6 +150,7 @@ The backend must independently enforce:
 - Do not require separate Windows and macOS behavior.
 - Do not use an unvalidated `refinement_confirmed=true` request flag as a substitute for the frontend confirmation interaction.
 - Do not use the unrelated prospect-enrollment audit surface for AI Search refinement lineage.
+- Do not allow a non-latest historical result step to become a new refinement branch in v0.1.
 - Do not automatically keep the SeaJobs session alive, request an OTP, reconnect SeaJobs, or change its idle timeout as part of local-agent recovery.
 - Do not automatically resume interrupted or long-running work, including searches, scheduled downloads, or mailbox sync, after local-service recovery.
 - Do not persist passwords, OTPs, API keys, authentication tokens, settings secrets, or raw resume text in the frontend recovery draft.
@@ -260,7 +263,7 @@ It may contain:
 - selected rank and scope-defining filters;
 - current completed analysis results;
 - Refinement Mode state;
-- up to the 10 retained interactive search-chain snapshots;
+- up to the 10 retained search-chain snapshots, with non-latest steps restored as read-only views;
 - current parent/root/session references;
 - refinement availability and scope summaries; and
 - the timestamp and reason for the last safe checkpoint.
@@ -567,26 +570,41 @@ When a refinement completes with zero verified matches:
 - display the zero-result search normally;
 - keep Refinement Mode visibly active;
 - disable further refinement because there is no valid input scope;
-- keep filters locked until the recruiter goes back or turns Refinement Mode off;
-- offer `Return to previous results`;
+- keep filters locked until the recruiter removes the latest refinement or turns Refinement Mode off;
+- offer `View previous results` as a read-only history action when a previous step exists;
+- offer `Remove latest refinement` to discard the zero-result latest step and restore the immediately preceding step as the latest refinable state;
 - offer `Start a new search`.
 
 Do not silently reuse the previous non-empty scope for the next prompt.
 
-### 5.9 Returning to an earlier result step
+### 5.9 Viewing retained result steps and removing the latest refinement
 
-Core Refinement Mode must allow return to the immediately preceding retained result step within the current browser session. When the Resilience Extension is enabled, the same ability persists within the recovery-draft lifetime.
+Core Refinement Mode must allow retained result steps to be viewed within the current browser session. Viewing an older step is informational only: it must not create a new refinement branch, and it must not make that older step eligible for a new prompt.
 
-When returning:
+When viewing a non-latest step:
 
 - restore that step's result snapshot;
 - restore its search-session reference;
 - restore its refinement count and chain position;
-- allow a new branch of refinement from that earlier step.
+- restore that step's prompt as read-only display text;
+- disable prompt editing, the analyze action, and any refinement action; and
+- show a clear way to return to the latest step before running another prompt.
 
-Core back-navigation restores an in-memory frontend result snapshot from `searchChain`; the backend does not re-emit or reconstruct prior result cards. When the Resilience Extension is enabled, the same bounded snapshots may also be restored from an authorized recovery draft.
+New prompts can run only from the latest retained step. If the latest step has no verified matches, the recruiter must remove that latest refinement or start a new root search before another refinement prompt can run.
 
-The frontend may retain at most 10 result snapshots for back-navigation. Refinement itself is not capped: after the tenth retained snapshot, the oldest interactive snapshot is discarded while lineage remains persisted on the backend.
+Only the latest refinement step may show a remove/X action. The root step cannot be removed through this action, and older refinements cannot be removed directly.
+
+Removing the latest refinement:
+
+- asks for confirmation;
+- deletes only that latest step from the current frontend chain;
+- restores the immediately preceding step's result snapshot, prompt, search-session reference, refinement count, and scope reference;
+- makes the restored preceding step the latest refinable state when it has an eligible verified scope; and
+- preserves backend lineage and audit records. The removal is a frontend chain action, not an audit delete.
+
+Core history viewing and latest-refinement removal restore in-memory frontend result snapshots from `searchChain`; the backend does not re-emit or reconstruct prior result cards. When the Resilience Extension is enabled, the same bounded snapshots may also be restored from an authorized recovery draft.
+
+The frontend may retain at most 10 result snapshots for read-only history viewing and latest-refinement removal. Refinement itself is not capped: after the tenth retained snapshot, the oldest full snapshot is discarded while compact lineage remains visible and backend lineage remains persisted.
 
 The Resilience Extension restores only the bounded same-actor frontend recovery draft. It does not reconstruct missing result cards from backend audit or lineage records.
 
@@ -620,7 +638,7 @@ The draft is updated after:
 
 - a root or refinement search completes successfully;
 - Refinement Mode is enabled or disabled;
-- the recruiter returns to an earlier result step;
+- the recruiter views an earlier result step, returns to the latest step, or removes the latest refinement;
 - the prompt or scope-defining filters change; and
 - the active tab changes.
 
@@ -631,7 +649,8 @@ After browser refresh, tab close/reopen, renderer reload, or application restart
 - authenticate the user normally;
 - load only a non-expired draft belonging to the same stable `actor.user_id`;
 - restore the active tab, prompt, filters, current completed results, and recoverable chain;
-- revalidate the current parent scope through preflight before enabling another refinement;
+- revalidate only the latest retained step's parent scope through preflight before enabling another refinement;
+- if the restored displayed step is non-latest, restore `viewing_history`, keep analyze/refine controls disabled, and require returning to the latest step or starting a new search before prompting;
 - show a visible `Recovered previous AI Search` notice with `Discard recovered search` and `Start a new search` actions; and
 - disclose whether the restored draft is full, trimmed, or context-only; and
 - preserve persisted search audit and lineage for operational review.
@@ -688,6 +707,7 @@ The frontend must implement the following explicit state model.
 | `active_idle` | Switch is on, filters are locked, and the user may enter another prompt. |
 | `active_running` | A confirmed refinement is running. |
 | `active_zero_result` | The latest refinement completed with zero verified matches; filters remain locked and further refinement is disabled. |
+| `viewing_history` | A non-latest retained step is displayed read-only; prompts cannot run until the latest step is restored. |
 | `invalidated_by_filter_change` | Previous results remain visible, but an unlocked scope-defining filter changed and the old scope cannot be reused. |
 | `mode_off_with_stale_results` | Switch is off and current results are displayed only for reference; the next analysis is a root search. |
 
@@ -706,11 +726,14 @@ Required transitions:
 | `active_idle` | Refinement confirmed | `active_running` | Start scoped search. |
 | `active_running` | Refinement completes with verified matches and saved scope | `active_idle` | Replace current results and update scope. |
 | `active_running` | Refinement completes but scope save fails | `disabled` | Show completed results, turn mode off, unlock filters, and explain why further refinement is unavailable. |
-| `active_running` | Refinement completes with zero verified matches | `active_zero_result` | Disable further refinement and offer back/new search. |
+| `active_running` | Refinement completes with zero verified matches | `active_zero_result` | Disable further refinement and offer read-only history, latest-removal, or new-search actions. |
 | `active_running` | Transient request failure, local-service interruption, or SSE disconnect | `active_idle` | Preserve or restore parent results, mark the attempt interrupted, and allow a newly confirmed retry. |
 | `active_running` | Structural refinement failure such as expired, unauthorized, empty, unresolvable, or unavailable parent scope | `disabled` | Preserve results for reference, unlock filters, and show the non-retryable reason. |
 | Any refinable completed state | Preflight returns `REFINEMENT_SCOPE_BACKFILL_PENDING` | Same completed state | Preserve results and lock intent, temporarily disable the refine action, show `Refinement will be available when candidate identity preparation completes`, and retry preflight later. |
-| `active_zero_result` | Return to previous results | `active_idle` | Restore the previous frontend snapshot and scope reference. |
+| `active_idle` or `active_zero_result` | View non-latest retained step | `viewing_history` | Restore that step's snapshot and prompt for read-only display; disable analyze/refine controls. |
+| `viewing_history` | Return to latest results | Latest completed state | Restore the latest retained snapshot and its correct prompt, scope, and refinement availability. |
+| `viewing_history` | Analyze requested | `viewing_history` | Block the request and show guidance to return to latest results or start a new search. |
+| `active_idle` with latest step as a refinement, or `active_zero_result` | Remove latest refinement | Prior latest completed state | Confirm, delete only the latest frontend chain step, and restore the immediately preceding snapshot and scope reference. Root steps cannot be removed. |
 | `active_idle` or `active_zero_result` | Toggle off | `mode_off_with_stale_results` | Unlock filters; next search is root. |
 | `mode_off_with_stale_results` | Toggle on before context changes and preflight succeeds | `active_idle` | Reuse current eligible scope and show any warning. |
 | `mode_off_with_stale_results` | Toggle on and preflight resolves zero candidates or fails authoritatively | `disabled` | Keep results for reference and disable reuse. |
@@ -729,6 +752,8 @@ Required transitions:
 Each displayed prompt label must be truncated to approximately 60 characters with an ellipsis. The full prompt must remain available through an accessible tooltip or details interaction.
 
 The chain should show user-facing step labels such as `Search 1`, `Refinement 1`, and `Refinement 2`. It must not expose the technical `refinement_depth` value as the primary label.
+
+The chain may allow selecting prior steps for read-only inspection. Selecting a non-latest step must disable prompt editing and analysis until the recruiter returns to the latest step. Only the latest refinement step may expose a remove/X action.
 
 The chain and summary must show the count taxonomy from Section 3.11:
 
@@ -1656,6 +1681,8 @@ Failure of the richer per-candidate audit write does not invalidate a scope only
 
 Multiple tabs or requests may create distinct child refinements from the same completed parent scope.
 
+This is an operational/backend lineage allowance only. The frontend still presents a single latest-only chain per tab, with no selectable branches and no ability to refine from a non-latest historical step.
+
 Required behavior:
 
 - each child receives a unique `search_request_id` and `search_session_id`;
@@ -1910,7 +1937,7 @@ Each `searchChain` step should retain:
 - verified count; and
 - scope summary.
 
-The frontend retains at most 10 full result snapshots for back-navigation. Older steps remain visible as compact lineage metadata but are no longer interactive after their snapshots are discarded.
+The frontend retains at most 10 full result snapshots for read-only history viewing and latest-refinement removal. Older steps remain visible as compact lineage metadata after their snapshots are discarded, but they are never refinable.
 
 ### 11.2 Analyze handler
 
@@ -1928,6 +1955,8 @@ The analysis handler must:
 - never send an unvalidated `refinement_confirmed=true` flag;
 - restore the previous state on cancellation or failure;
 - append successful searches to the chain;
+- prevent prompt submission when a non-latest history step is being viewed;
+- expose removal only for the latest refinement step and restore the immediately preceding step when that latest refinement is removed;
 - preserve the additive `search_session`, `search_context`, `scope_summary`, and `refinement` objects from the complete event rather than reconstructing a result object that discards them;
 - invalidate refinement availability if unlocked filters change.
 
@@ -1989,7 +2018,9 @@ Minimum information:
 - each step's prompt label or sequence number;
 - each step's verified count;
 - current step;
-- back action.
+- read-only previous-step selection;
+- return-to-latest action when a previous step is being viewed; and
+- remove/X action on the latest refinement step only.
 
 The chain must not imply that prior prompts were re-evaluated during later steps.
 
@@ -2264,7 +2295,7 @@ Operational logs should make it possible to answer:
 | Refinement returns results but child scope save fails | Show results; turn mode off; unlock filters; disable further refinement with reason. |
 | Recruiter cancels confirmation | Send no request; preserve results and mode. |
 | Refinement returns verified matches | Replace current results; keep mode on; update scope. |
-| Refinement returns zero verified matches | Disable further refinement; offer back/new search. |
+| Refinement returns zero verified matches | Disable further refinement; offer read-only history, latest-refinement removal, and new-search actions. |
 | Refinement request fails | Preserve parent results and chain. |
 | Refinement fails transiently | Preserve parent results and return to `active_idle`; allow a newly confirmed retry. |
 | Refinement fails structurally because parent is expired, unauthorized, empty, unresolvable, or unavailable | Preserve results for reference; disable refinement and show the non-retryable reason. |
@@ -2299,7 +2330,7 @@ Operational logs should make it possible to answer:
 | Recovery projection exceeds 4 MiB | Apply deterministic trim policy and disclose partial restoration; never fail silently. |
 | Device clock shifts around draft restoration | Apply conservative skew validation and never extend beyond recorded expiry. |
 | Browser heartbeat is throttled or suspended in packaged desktop mode | Do not terminate backend or agent solely because heartbeats were missed. |
-| Same actor refines one parent in two tabs | Allow distinct child searches with unique request/session IDs. |
+| Same actor refines one parent in two tabs | Allow distinct child searches with unique request/session IDs as backend lineage siblings only; each frontend tab still presents a single latest-only chain with no historical branching. |
 | Same `search_request_id` is retried | Reuse existing request state; never create duplicate child scope. |
 | Same request ID repeats an identical `started` request | Return `SEARCH_REQUEST_IN_PROGRESS`; do not attach to its SSE producer. |
 | Same request ID repeats an identical `complete` request | Return `SEARCH_REQUEST_ALREADY_COMPLETE` with summary only; do not replay cards. |
@@ -2437,8 +2468,11 @@ Add tests proving:
 - SSE disconnect returns the UI to `active_idle` and preserves parent results;
 - transient and structural failures follow their distinct state-machine transitions;
 - zero-match refinement disables further prompts;
-- returning to the previous step restores its results and scope;
-- only the 10 most recent full result snapshots remain interactive;
+- viewing a previous step restores its results and prompt in read-only mode and blocks analysis;
+- only the latest refinement step exposes a remove/X action;
+- removing the latest refinement restores the immediately preceding step's results, prompt, scope, and refinement availability;
+- zero-match latest refinements can be removed to restore the immediately preceding step;
+- only the 10 most recent full result snapshots remain available for read-only viewing and latest-refinement removal;
 - turning the switch off unlocks filters;
 - changing an unlocked filter invalidates old refinement eligibility;
 - every state and transition in the frontend state-machine table is covered;
@@ -2531,7 +2565,7 @@ Core Refinement Mode may ship after its gate passes without waiting for the Resi
 6. Needs-review, uncertain, excluded, and unrelated candidates cannot enter the refinement.
 7. Invalid or empty refinement scopes never fall back to a full search.
 8. Successful refinements can be chained while at least one verified match remains.
-9. The recruiter can return to the previous retained result step within the current browser session; the Resilience Extension may preserve that ability across restart.
+9. The recruiter can view previous retained result steps read-only, cannot refine from non-latest history, and can remove only the latest refinement to restore the immediately preceding step; the Resilience Extension may preserve that latest-only chain behavior across restart.
 10. Failed or cancelled refinements do not destroy previous results.
 11. Search lineage is visible in the UI and persisted in operational audit data.
 12. Same-actor ownership is enforced with stable local/cloud `user_id` values rather than usernames.
@@ -2637,14 +2671,14 @@ Phase 2 exit gate:
 - add changed-content acknowledgement and persistent warning presentation;
 - handle every terminal `request_status` and standard error event without leaving loading state;
 - preserve previous results while refinement runs;
-- add chain indicator, 10-snapshot retention, and return-to-previous-step behavior;
+- add chain indicator, 10-snapshot retention, read-only history viewing, and latest-refinement removal behavior;
 - display truthful eligible, retrieved, evaluated, and verified counts;
 - implement every state-machine transition.
 
 Phase 3 exit gate:
 
 - all core-refinement portions of Section 15.4 frontend behavior tests pass;
-- confirmation, changed-content acknowledgement, cancellation, zero-result, back-navigation, disconnect, and backfill-pending flows are manually smoke-tested;
+- confirmation, changed-content acknowledgement, cancellation, zero-result, read-only history, latest-refinement removal, disconnect, and backfill-pending flows are manually smoke-tested;
 - accessibility checks pass for the switch, confirmation modal, locked controls, and truncated prompt labels.
 
 ### Phase 4: Core cross-platform and packaged validation
@@ -2729,6 +2763,7 @@ If either rollout flag is used, it must be persisted-settings-first. It must not
 
 - Automatically including needs-review or uncertain candidates.
 - Union/OR operations that add candidates back into a refinement chain.
+- Branching refinement from a non-latest historical result step.
 - Editing rank or ship-type filters while Refinement Mode remains active.
 - Sharing or transferring refinement chains between users.
 - Automatically re-evaluating all previous prompts at every step.
@@ -2750,9 +2785,10 @@ The following product questions remain open:
 
 Resolved v0.1 decisions:
 
-- include return-to-previous-step;
+- include read-only retained-step viewing;
+- allow only the latest refinement step to be removed, restoring the immediately preceding step as the latest refinable state;
 - keep Core Refinement Mode and the Local-service Resilience Extension in this document but give them independent implementation workstreams, acceptance gates, rollout flags, and release decisions;
-- allow core return-to-previous-step from bounded in-memory frontend snapshots; when the Resilience Extension is enabled, restore only the bounded same-actor recovery draft after refresh or restart, without reconstructing missing result cards from backend audit;
+- preserve latest-only chain semantics from bounded in-memory frontend snapshots; when the Resilience Extension is enabled, restore only the bounded same-actor recovery draft after refresh or restart, without reconstructing missing result cards from backend audit;
 - require same-actor ownership with stable `user_id`;
 - do not allow manager/admin cross-actor refinement;
 - reserve `refine_others_searches` for a possible later permissioned release;
