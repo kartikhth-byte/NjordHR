@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import tempfile
 import unittest
 
@@ -126,6 +127,115 @@ class SearchScopeRepositoryTests(unittest.TestCase):
                     search_request_id="request-1",
                     changed_content_set_fingerprint="fingerprint-1",
                 ))
+            finally:
+                repo.close()
+
+    def test_search_request_claims_are_terminal_and_conflict_safe(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = SQLiteSearchScopeRepository(os.path.join(temp_dir, "scope.db"))
+            try:
+                first = repo.claim_search_request(
+                    search_request_id="request-1",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-1",
+                    search_session_id="search-1",
+                    request={"prompt": "has valid passport"},
+                )
+                self.assertTrue(first["claimed"])
+
+                duplicate_running = repo.claim_search_request(
+                    search_request_id="request-1",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-1",
+                    search_session_id="search-ignored",
+                    request={"prompt": "has valid passport"},
+                )
+                self.assertFalse(duplicate_running["claimed"])
+                self.assertEqual(
+                    duplicate_running["request_status"],
+                    "SEARCH_REQUEST_IN_PROGRESS",
+                )
+                self.assertEqual(duplicate_running["search_session_id"], "search-1")
+
+                conflict = repo.claim_search_request(
+                    search_request_id="request-1",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="different-fingerprint",
+                    search_session_id="search-conflict",
+                    request={"prompt": "different"},
+                )
+                self.assertFalse(conflict["claimed"])
+                self.assertEqual(conflict["request_status"], "SEARCH_REQUEST_ID_CONFLICT")
+
+                self.assertTrue(repo.complete_search_request(
+                    search_request_id="request-1",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-1",
+                    summary={"verified_count": 2},
+                ))
+                duplicate_complete = repo.claim_search_request(
+                    search_request_id="request-1",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-1",
+                    search_session_id="search-ignored",
+                    request={"prompt": "has valid passport"},
+                )
+                self.assertFalse(duplicate_complete["claimed"])
+                self.assertEqual(
+                    duplicate_complete["request_status"],
+                    "SEARCH_REQUEST_ALREADY_COMPLETE",
+                )
+                self.assertEqual(duplicate_complete["summary"]["verified_count"], 2)
+
+                failed = repo.claim_search_request(
+                    search_request_id="request-2",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-2",
+                    search_session_id="search-2",
+                    request={"prompt": "has tanker experience"},
+                )
+                self.assertTrue(failed["claimed"])
+                self.assertTrue(repo.fail_search_request(
+                    search_request_id="request-2",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-2",
+                    error_code="TEST_FAILURE",
+                    error_message="Synthetic failure",
+                ))
+                duplicate_failed = repo.claim_search_request(
+                    search_request_id="request-2",
+                    actor_user_id="local:user-1",
+                    request_fingerprint="fingerprint-2",
+                    search_session_id="search-ignored",
+                    request={"prompt": "has tanker experience"},
+                )
+                self.assertFalse(duplicate_failed["claimed"])
+                self.assertEqual(
+                    duplicate_failed["request_status"],
+                    "SEARCH_REQUEST_ALREADY_FAILED",
+                )
+                self.assertEqual(duplicate_failed["error_code"], "TEST_FAILURE")
+            finally:
+                repo.close()
+
+    def test_v2_database_migrates_request_claim_table(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "scope.db")
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE schema_version (version INTEGER)")
+            conn.execute("INSERT INTO schema_version VALUES (2)")
+            conn.commit()
+            conn.close()
+
+            repo = SQLiteSearchScopeRepository(db_path)
+            try:
+                table = repo.conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    ("ai_search_request_claim",),
+                ).fetchone()
+                self.assertIsNotNone(table)
+                version = repo.conn.execute("SELECT version FROM schema_version").fetchone()[0]
+                self.assertEqual(version, 3)
             finally:
                 repo.close()
 

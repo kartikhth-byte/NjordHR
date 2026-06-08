@@ -144,6 +144,46 @@ def _payload_bool(payload, key, default=False):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _ai_search_request_fingerprint(
+    *,
+    prompt,
+    rank_folder="",
+    applied_ship_type="",
+    experienced_ship_type="",
+    parent_search_session_id="",
+    changed_content_acknowledgement_id="",
+):
+    is_refinement = bool(str(parent_search_session_id or "").strip())
+    payload = {
+        "prompt": str(prompt or "").strip(),
+        "rank_folder": "" if is_refinement else str(rank_folder or "").strip(),
+        "applied_ship_type": "" if is_refinement else str(applied_ship_type or "").strip(),
+        "experienced_ship_type": "" if is_refinement else str(experienced_ship_type or "").strip(),
+        "parent_search_session_id": str(parent_search_session_id or "").strip(),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8", "ignore")).hexdigest()
+
+
+def _request_status_event(claim_result):
+    request_status = claim_result.get("request_status") or "SEARCH_REQUEST_STORE_UNAVAILABLE"
+    payload = {
+        "type": "error" if request_status == "SEARCH_REQUEST_ID_CONFLICT" else "request_status",
+        "request_status": request_status,
+        "message": claim_result.get("message") or "AI Search request tracking is temporarily unavailable.",
+        "retryable": bool(claim_result.get("retryable", False)),
+        "search_request_id": claim_result.get("search_request_id") or "",
+        "search_session_id": claim_result.get("search_session_id") or "",
+    }
+    if claim_result.get("retry_after_seconds") is not None:
+        payload["retry_after_seconds"] = claim_result.get("retry_after_seconds")
+    if claim_result.get("error_code"):
+        payload["error_code"] = claim_result.get("error_code")
+    if claim_result.get("summary"):
+        payload["summary"] = claim_result.get("summary")
+    return payload
+
+
 def _cloud_api_runtime_summary():
     settings = load_cloud_api_settings()
     return cloud_api_settings_payload(settings)
@@ -4527,6 +4567,22 @@ def analyze_stream():
         'changed_content_acknowledgement_id',
         '',
     ).strip()
+    request_fingerprint = _ai_search_request_fingerprint(
+        prompt=prompt,
+        rank_folder=rank_folder,
+        applied_ship_type=applied_ship_type,
+        experienced_ship_type=experienced_ship_type,
+        parent_search_session_id=parent_search_session_id,
+        changed_content_acknowledgement_id=changed_content_acknowledgement_id,
+    )
+    request_claim_payload = {
+        "prompt": str(prompt or "").strip(),
+        "rank_folder": str(rank_folder or "").strip(),
+        "applied_ship_type": applied_ship_type,
+        "experienced_ship_type": experienced_ship_type,
+        "parent_search_session_id": parent_search_session_id,
+        "changed_content_acknowledgement_id": changed_content_acknowledgement_id,
+    }
     _log_usage("analyze_stream", f"AI search started for rank_folder={rank_folder}")
     search_session_id = str(uuid.uuid4())
     actor_role = _session_role()
@@ -4567,10 +4623,91 @@ def analyze_stream():
             )
 
     def generate():
+        request_claim_started = False
+        claim_terminal_recorded = False
+
+        def _mark_request_failed(error_code, message):
+            nonlocal claim_terminal_recorded
+            if not request_claim_started:
+                return True
+            try:
+                marked = bool(search_scope_repo.fail_search_request(
+                    search_request_id=search_request_id,
+                    actor_user_id=actor_user_id,
+                    request_fingerprint=request_fingerprint,
+                    error_code=error_code,
+                    error_message=message,
+                ))
+                if marked:
+                    claim_terminal_recorded = True
+                return marked
+            except Exception as claim_exc:
+                print(f"[BACKEND WARN] Failed to mark AI search request failed: {claim_exc}")
+                return False
+
+        def _mark_request_complete(summary):
+            nonlocal claim_terminal_recorded
+            if not request_claim_started:
+                return True
+            try:
+                marked = bool(search_scope_repo.complete_search_request(
+                    search_request_id=search_request_id,
+                    actor_user_id=actor_user_id,
+                    request_fingerprint=request_fingerprint,
+                    summary=summary,
+                ))
+                if marked:
+                    claim_terminal_recorded = True
+                return marked
+            except Exception as claim_exc:
+                print(f"[BACKEND WARN] Failed to mark AI search request complete: {claim_exc}")
+                return False
+
+        def _request_store_unavailable_sse(message=None):
+            payload = _request_status_event({
+                "request_status": "SEARCH_REQUEST_STORE_UNAVAILABLE",
+                "message": message or "AI Search request tracking is temporarily unavailable. Please retry with a new request.",
+                "retryable": True,
+                "search_request_id": search_request_id,
+                "search_session_id": search_session_id,
+            })
+            return f"data: {json.dumps(payload)}\n\n"
+
+        def _error_sse(message, *, error_code="AI_SEARCH_REQUEST_FAILED", retryable=False):
+            if not _mark_request_failed(error_code, message):
+                return _request_store_unavailable_sse(
+                    "AI Search request tracking could not record the failed request. Please retry with a new request.",
+                )
+            payload = {
+                "type": "error",
+                "message": message,
+                "retryable": bool(retryable),
+            }
+            if error_code:
+                payload["error_code"] = error_code
+            return f"data: {json.dumps(payload)}\n\n"
+
         try:
             if not prompt:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Missing required data'})}\n\n"
                 return
+
+            try:
+                claim = search_scope_repo.claim_search_request(
+                    search_request_id=search_request_id,
+                    actor_user_id=actor_user_id,
+                    request_fingerprint=request_fingerprint,
+                    search_session_id=search_session_id,
+                    request=request_claim_payload,
+                )
+            except Exception as claim_exc:
+                print(f"[BACKEND WARN] Failed to claim AI search request: {claim_exc}")
+                yield f"data: {json.dumps(_request_status_event({'request_status': 'SEARCH_REQUEST_STORE_UNAVAILABLE', 'message': 'AI Search request tracking is temporarily unavailable. Please retry.', 'retryable': True, 'search_request_id': search_request_id}))}\n\n"
+                return
+            if not claim.get("claimed"):
+                yield f"data: {json.dumps(_request_status_event(claim))}\n\n"
+                return
+            request_claim_started = True
 
             effective_rank_folder = str(rank_folder or "").strip()
             effective_applied_ship_type = applied_ship_type
@@ -4590,10 +4727,18 @@ def analyze_stream():
                     )
                 except Exception as scope_exc:
                     print(f"[BACKEND WARN] Failed to resolve AI search refinement scope: {scope_exc}")
-                    yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_SCOPE_STORE_UNAVAILABLE', 'message': 'The previous verified search scope is temporarily unavailable.', 'retryable': True})}\n\n"
+                    yield _error_sse(
+                        "The previous verified search scope is temporarily unavailable.",
+                        error_code="REFINEMENT_SCOPE_STORE_UNAVAILABLE",
+                        retryable=True,
+                    )
                     return
                 if not parent_scope.get("success"):
-                    yield f"data: {json.dumps({'type': 'error', 'error_code': parent_scope.get('error_code', 'REFINEMENT_PARENT_NOT_FOUND'), 'message': parent_scope.get('message') or 'The previous verified search scope is not available for refinement.', 'retryable': bool(parent_scope.get('retryable', False))})}\n\n"
+                    yield _error_sse(
+                        parent_scope.get("message") or "The previous verified search scope is not available for refinement.",
+                        error_code=parent_scope.get("error_code", "REFINEMENT_PARENT_NOT_FOUND"),
+                        retryable=bool(parent_scope.get("retryable", False)),
+                    )
                     return
 
                 parent_session = parent_scope.get("session") or {}
@@ -4609,7 +4754,11 @@ def analyze_stream():
                     )
                 )
                 if context_mismatch:
-                    yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_CONTEXT_MISMATCH', 'message': 'Refinement must use the rank and ship-type filters saved with the previous verified search.', 'retryable': False})}\n\n"
+                    yield _error_sse(
+                        "Refinement must use the rank and ship-type filters saved with the previous verified search.",
+                        error_code="REFINEMENT_CONTEXT_MISMATCH",
+                        retryable=False,
+                    )
                     return
 
                 try:
@@ -4619,10 +4768,18 @@ def analyze_stream():
                     )
                 except Exception as scope_exc:
                     print(f"[BACKEND WARN] Failed to resolve live AI search refinement scope: {scope_exc}")
-                    yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_SCOPE_STORE_UNAVAILABLE', 'message': 'The previous verified search scope is temporarily unavailable.', 'retryable': True})}\n\n"
+                    yield _error_sse(
+                        "The previous verified search scope is temporarily unavailable.",
+                        error_code="REFINEMENT_SCOPE_STORE_UNAVAILABLE",
+                        retryable=True,
+                    )
                     return
                 if not authoritative_preflight.get("success"):
-                    yield f"data: {json.dumps({'type': 'error', 'error_code': authoritative_preflight.get('error_code', 'REFINEMENT_SCOPE_UNRESOLVABLE'), 'message': authoritative_preflight.get('message') or 'The previous verified search scope is not available for refinement.', 'retryable': bool(authoritative_preflight.get('retryable', False))})}\n\n"
+                    yield _error_sse(
+                        authoritative_preflight.get("message") or "The previous verified search scope is not available for refinement.",
+                        error_code=authoritative_preflight.get("error_code", "REFINEMENT_SCOPE_UNRESOLVABLE"),
+                        retryable=bool(authoritative_preflight.get("retryable", False)),
+                    )
                     return
 
                 effective_rank_folder = parent_rank_folder
@@ -4649,21 +4806,37 @@ def analyze_stream():
                         changed_content_set_fingerprint=current_changed_fingerprint,
                     )
                     if not acknowledgement_ok:
-                        yield f"data: {json.dumps({'type': 'error', 'error_code': 'REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED', 'message': 'One or more resumes changed after the previous search. Review and acknowledge the updated resume set before continuing.', 'retryable': False})}\n\n"
+                        yield _error_sse(
+                            "One or more resumes changed after the previous search. Review and acknowledge the updated resume set before continuing.",
+                            error_code="REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED",
+                            retryable=False,
+                        )
                         return
 
             if not effective_rank_folder:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Missing required data'})}\n\n"
+                yield _error_sse(
+                    "Missing required data",
+                    error_code="AI_SEARCH_MISSING_REQUIRED_DATA",
+                    retryable=False,
+                )
                 return
             if not _is_safe_name(effective_rank_folder):
                 error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "INVALID_RANK_FOLDER"
-                yield f"data: {json.dumps({'type': 'error', 'error_code': error_code, 'message': 'Invalid rank folder.'})}\n\n"
+                yield _error_sse(
+                    "Invalid rank folder.",
+                    error_code=error_code,
+                    retryable=False,
+                )
                 return
 
             target_folder = _resolve_within_base(_active_download_root(), effective_rank_folder)
             if not os.path.isdir(target_folder):
                 error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "RANK_FOLDER_NOT_FOUND"
-                yield f"data: {json.dumps({'type': 'error', 'error_code': error_code, 'message': 'Rank folder not found: ' + effective_rank_folder})}\n\n"
+                yield _error_sse(
+                    "Rank folder not found: " + effective_rank_folder,
+                    error_code=error_code,
+                    retryable=False,
+                )
                 return
             
             # Create analyzer and run streaming analysis
@@ -4844,6 +5017,27 @@ def analyze_stream():
                         actor_username=actor_username,
                         session_id=search_session_id,
                     )
+                if event_to_client.get("type") in {"complete", "graceful_failure"}:
+                    terminal_refinement = event_to_client.get("refinement") or {}
+                    terminal_marked = _mark_request_complete({
+                        "search_session_id": search_session_id,
+                        "search_mode": search_mode,
+                        "parent_search_session_id": parent_search_session_id or "",
+                        "verified_count": len(event_to_client.get("verified_matches", []) or []),
+                        "uncertain_count": len(event_to_client.get("uncertain_matches", []) or []),
+                        "needs_review_count": len(event_to_client.get("unknown_matches", []) or []),
+                        "refinement_available": bool(terminal_refinement.get("available", False)),
+                        "candidate_scope_member_count": int(
+                            terminal_refinement.get("candidate_scope_member_count") or 0
+                        ),
+                        "graceful_failure": event_to_client.get("type") == "graceful_failure",
+                        "message": event_to_client.get("message") or "",
+                    })
+                    if not terminal_marked:
+                        yield _request_store_unavailable_sse(
+                            "AI Search request tracking could not record the completed request. Please retry with a new request.",
+                        )
+                        return
                 yield f"data: {json.dumps(event_to_client)}\n\n"
             
         except Exception as e:
@@ -4866,7 +5060,19 @@ def analyze_stream():
                 actor_username=actor_username,
                 session_id=search_session_id,
             )
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield _error_sse(str(e), error_code=type(e).__name__, retryable=False)
+        finally:
+            if request_claim_started and not claim_terminal_recorded:
+                try:
+                    search_scope_repo.fail_search_request(
+                        search_request_id=search_request_id,
+                        actor_user_id=actor_user_id,
+                        request_fingerprint=request_fingerprint,
+                        error_code="AI_SEARCH_REQUEST_ABANDONED",
+                        error_message="AI Search request ended before a terminal event was durably recorded.",
+                    )
+                except Exception as claim_exc:
+                    print(f"[BACKEND WARN] Failed to mark AI search request abandoned: {claim_exc}")
     
     return Response(generate(), mimetype='text/event-stream')
 

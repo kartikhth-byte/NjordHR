@@ -75,12 +75,12 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         backend_server.search_scope_repo = self.old_scope_repo
         self.temp_dir.cleanup()
 
-    def _client(self):
+    def _client(self, *, username="recruiter", role="recruiter", user_id="local:test-recruiter"):
         client = backend_server.app.test_client()
         with client.session_transaction() as sess:
-            sess["username"] = "recruiter"
-            sess["role"] = "recruiter"
-            sess["user_id"] = "local:test-recruiter"
+            sess["username"] = username
+            sess["role"] = role
+            sess["user_id"] = user_id
         return client
 
     def _save_parent_scope(
@@ -136,6 +136,339 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         )
         self.assertTrue(preflight["success"])
         self.assertEqual(preflight["requested_count"], 1)
+
+    def test_duplicate_running_search_request_returns_status_without_analyzer(self):
+        client = self._client()
+        fingerprint = backend_server._ai_search_request_fingerprint(
+            prompt="has valid passport",
+            rank_folder="Chief_Engineer",
+        )
+        backend_server.search_scope_repo.claim_search_request(
+            search_request_id="request-running",
+            actor_user_id="local:test-recruiter",
+            request_fingerprint=fingerprint,
+            search_session_id="existing-search-session",
+            request={"prompt": "has valid passport", "rank_folder": "Chief_Engineer"},
+        )
+
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-running",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_IN_PROGRESS")
+        self.assertEqual(events[0].get("search_session_id"), "existing-search-session")
+        build_analyzer.assert_not_called()
+
+    def test_completed_search_request_returns_summary_without_replay(self):
+        client = self._client()
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_FakeAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            first_response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-complete",
+                },
+            )
+        self.assertTrue(any(event.get("type") == "complete" for event in _sse_events(first_response)))
+
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            replay_response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-complete",
+                },
+            )
+
+        events = _sse_events(replay_response)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_ALREADY_COMPLETE")
+        self.assertEqual((events[0].get("summary") or {}).get("verified_count"), 1)
+        self.assertTrue((events[0].get("summary") or {}).get("refinement_available"))
+        self.assertEqual((events[0].get("summary") or {}).get("candidate_scope_member_count"), 1)
+        build_analyzer.assert_not_called()
+
+    def test_complete_mark_failure_returns_store_unavailable_without_complete_event(self):
+        client = self._client()
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_FakeAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+            patch.object(
+                backend_server.search_scope_repo,
+                "complete_search_request",
+                return_value=False,
+            ),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-complete-mark-false",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertFalse(any(event.get("type") == "complete" for event in events))
+        self.assertEqual(events[-1].get("type"), "request_status")
+        self.assertEqual(events[-1].get("request_status"), "SEARCH_REQUEST_STORE_UNAVAILABLE")
+
+    def test_complete_mark_exception_returns_store_unavailable_without_complete_event(self):
+        client = self._client()
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_FakeAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+            patch.object(
+                backend_server.search_scope_repo,
+                "complete_search_request",
+                side_effect=RuntimeError("disk full"),
+            ),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-complete-mark-raises",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertFalse(any(event.get("type") == "complete" for event in events))
+        self.assertEqual(events[-1].get("type"), "request_status")
+        self.assertEqual(events[-1].get("request_status"), "SEARCH_REQUEST_STORE_UNAVAILABLE")
+
+    def test_fail_mark_failure_after_validation_returns_store_unavailable(self):
+        client = self._client()
+        with (
+            patch("backend_server._build_analyzer") as build_analyzer,
+            patch.object(
+                backend_server.search_scope_repo,
+                "fail_search_request",
+                return_value=False,
+            ),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "../Chief_Engineer",
+                    "search_request_id": "request-fail-mark-false",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_STORE_UNAVAILABLE")
+        build_analyzer.assert_not_called()
+
+    def test_fail_mark_exception_after_validation_returns_store_unavailable(self):
+        client = self._client()
+        with (
+            patch("backend_server._build_analyzer") as build_analyzer,
+            patch.object(
+                backend_server.search_scope_repo,
+                "fail_search_request",
+                side_effect=RuntimeError("db unavailable"),
+            ),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "../Chief_Engineer",
+                    "search_request_id": "request-fail-mark-raises",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_STORE_UNAVAILABLE")
+        build_analyzer.assert_not_called()
+
+    def test_claim_store_unavailable_returns_retryable_request_status(self):
+        client = self._client()
+        with (
+            patch.object(
+                backend_server.search_scope_repo,
+                "claim_search_request",
+                side_effect=RuntimeError("db unavailable"),
+            ),
+            patch("backend_server._build_analyzer") as build_analyzer,
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-claim-raises",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_STORE_UNAVAILABLE")
+        self.assertTrue(events[0].get("retryable"))
+        build_analyzer.assert_not_called()
+
+    def test_abandoned_stream_marks_request_failed(self):
+        client = self._client()
+
+        class _StreamingAnalyzer(_FakeAnalyzer):
+            def run_analysis_stream(self, *args, **kwargs):
+                yield {"type": "status", "message": "started"}
+                yield from super().run_analysis_stream(*args, **kwargs)
+
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_StreamingAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-abandoned",
+                },
+                buffered=False,
+            )
+            first_chunk = next(response.response)
+            if isinstance(first_chunk, bytes):
+                first_chunk = first_chunk.decode("utf-8")
+            self.assertIn('"type": "status"', first_chunk)
+            response.close()
+
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            replay = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-abandoned",
+                },
+            )
+
+        events = _sse_events(replay)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_ALREADY_FAILED")
+        self.assertEqual(events[0].get("error_code"), "AI_SEARCH_REQUEST_ABANDONED")
+        build_analyzer.assert_not_called()
+
+    def test_reused_search_request_id_with_different_content_is_rejected(self):
+        client = self._client()
+        fingerprint = backend_server._ai_search_request_fingerprint(
+            prompt="has valid passport",
+            rank_folder="Chief_Engineer",
+        )
+        backend_server.search_scope_repo.claim_search_request(
+            search_request_id="request-conflict",
+            actor_user_id="local:test-recruiter",
+            request_fingerprint=fingerprint,
+            search_session_id="existing-search-session",
+            request={"prompt": "has valid passport", "rank_folder": "Chief_Engineer"},
+        )
+
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has tanker experience",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-conflict",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "error")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_ID_CONFLICT")
+        self.assertEqual(events[0].get("error_code"), "SEARCH_REQUEST_ID_CONFLICT")
+        build_analyzer.assert_not_called()
+
+    def test_cross_actor_search_request_id_reuse_is_rejected(self):
+        fingerprint = backend_server._ai_search_request_fingerprint(
+            prompt="has valid passport",
+            rank_folder="Chief_Engineer",
+        )
+        backend_server.search_scope_repo.claim_search_request(
+            search_request_id="request-cross-actor",
+            actor_user_id="local:first-actor",
+            request_fingerprint=fingerprint,
+            search_session_id="existing-search-session",
+            request={"prompt": "has valid passport", "rank_folder": "Chief_Engineer"},
+        )
+        client = self._client(username="other", user_id="local:second-actor")
+
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-cross-actor",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "error")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_ID_CONFLICT")
+        build_analyzer.assert_not_called()
+
+    def test_refinement_request_fingerprint_ignores_matching_client_context(self):
+        self._save_parent_scope()
+        client = self._client()
+        fingerprint = backend_server._ai_search_request_fingerprint(
+            prompt="strong leadership under pressure",
+            parent_search_session_id="parent-search",
+        )
+        backend_server.search_scope_repo.claim_search_request(
+            search_request_id="request-refinement-running",
+            actor_user_id="local:test-recruiter",
+            request_fingerprint=fingerprint,
+            search_session_id="existing-refinement-session",
+            request={
+                "prompt": "strong leadership under pressure",
+                "parent_search_session_id": "parent-search",
+            },
+        )
+
+        with patch("backend_server._build_analyzer") as build_analyzer:
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "strong leadership under pressure",
+                    "parent_search_session_id": "parent-search",
+                    "rank_folder": "Chief_Engineer",
+                    "applied_ship_type": "Bulk Carrier",
+                    "experienced_ship_type": "Tanker",
+                    "search_request_id": "request-refinement-running",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual(events[0].get("type"), "request_status")
+        self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_IN_PROGRESS")
+        build_analyzer.assert_not_called()
 
     def test_missing_parent_scope_request_does_not_fall_back_to_root_search(self):
         client = self._client()
@@ -369,6 +702,29 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED",
             )
 
+            failed_request_ack_response = client.post(
+                "/ai_search/refinement_scope/changed_content_acknowledgements",
+                json={
+                    "parent_search_session_id": "parent-search",
+                    "search_request_id": "request-1",
+                    "changed_content_set_fingerprint": fingerprint,
+                },
+            )
+            failed_request_acknowledgement_id = failed_request_ack_response.get_json()["acknowledgement_id"]
+            failed_retry_with_ack = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "strong leadership",
+                    "parent_search_session_id": "parent-search",
+                    "search_request_id": "request-1",
+                    "changed_content_acknowledgement_id": failed_request_acknowledgement_id,
+                },
+            )
+            self.assertEqual(
+                _sse_events(failed_retry_with_ack)[0]["request_status"],
+                "SEARCH_REQUEST_ALREADY_FAILED",
+            )
+
             ack_response = client.post(
                 "/ai_search/refinement_scope/changed_content_acknowledgements",
                 json={
@@ -399,8 +755,8 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 },
             )
             self.assertEqual(
-                _sse_events(replayed)[0]["error_code"],
-                "REFINEMENT_CHANGED_CONTENT_ACK_REQUIRED",
+                _sse_events(replayed)[0]["request_status"],
+                "SEARCH_REQUEST_ALREADY_COMPLETE",
             )
 
     def test_refinement_requires_acknowledgement_when_parent_hash_was_legacy_empty(self):

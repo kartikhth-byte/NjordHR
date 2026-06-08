@@ -33,12 +33,13 @@ def prompt_hash(prompt: Any) -> str:
 class SQLiteSearchScopeRepository:
     """Local authoritative scope store for AI Search refinement sessions."""
 
-    DB_VERSION = 2
+    DB_VERSION = 3
     MEMBERSHIP_RETENTION_DAYS = 30
     LINEAGE_RETENTION_DAYS = 365
     ACKNOWLEDGEMENT_TTL_MINUTES = 5
     RECOVERY_DRAFT_TTL_HOURS = 24
     RECOVERY_DRAFT_LIMIT = 3
+    REQUEST_CLAIM_RETENTION_DAYS = 7
 
     def __init__(self, db_path: str):
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
@@ -154,7 +155,227 @@ class SQLiteSearchScopeRepository:
                 "CREATE INDEX IF NOT EXISTS idx_ai_search_recovery_actor_saved "
                 "ON ai_search_recovery_draft(actor_user_id, saved_at DESC)"
             )
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_search_request_claim (
+                    search_request_id TEXT PRIMARY KEY,
+                    actor_user_id TEXT NOT NULL,
+                    request_fingerprint TEXT NOT NULL,
+                    request_json TEXT NOT NULL DEFAULT '{}',
+                    search_session_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    failed_at TEXT,
+                    error_code TEXT NOT NULL DEFAULT '',
+                    error_message TEXT NOT NULL DEFAULT '',
+                    summary_json TEXT NOT NULL DEFAULT '{}'
+                )
+            """)
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ai_search_request_actor "
+                "ON ai_search_request_claim(actor_user_id, created_at DESC)"
+            )
             self.conn.commit()
+
+    @staticmethod
+    def _request_claim_response(
+        row: Mapping[str, Any],
+        *,
+        actor_user_id: str,
+        request_fingerprint: str,
+    ) -> dict[str, Any]:
+        data = dict(row)
+        search_request_id = str(data.get("search_request_id") or "").strip()
+        search_session_id = str(data.get("search_session_id") or "").strip()
+        if (
+            str(data.get("actor_user_id") or "").strip() != actor_user_id
+            or str(data.get("request_fingerprint") or "").strip() != request_fingerprint
+        ):
+            return {
+                "claimed": False,
+                "request_status": "SEARCH_REQUEST_ID_CONFLICT",
+                "error_code": "SEARCH_REQUEST_ID_CONFLICT",
+                "retryable": False,
+                "search_request_id": search_request_id,
+                "message": "This AI Search request identifier was already used. Start a new search to continue.",
+            }
+
+        status = str(data.get("status") or "started").strip().lower()
+        if status == "complete":
+            try:
+                summary = json.loads(data.get("summary_json") or "{}")
+            except Exception:
+                summary = {}
+            return {
+                "claimed": False,
+                "request_status": "SEARCH_REQUEST_ALREADY_COMPLETE",
+                "retryable": False,
+                "search_request_id": search_request_id,
+                "search_session_id": search_session_id,
+                "summary": summary,
+                "message": "This AI Search request already completed. Start a new search to run again.",
+            }
+        if status == "failed":
+            return {
+                "claimed": False,
+                "request_status": "SEARCH_REQUEST_ALREADY_FAILED",
+                "retryable": False,
+                "search_request_id": search_request_id,
+                "search_session_id": search_session_id,
+                "error_code": str(data.get("error_code") or "AI_SEARCH_REQUEST_FAILED"),
+                "message": str(data.get("error_message") or "This AI Search request already failed. Start a new search to retry."),
+            }
+        return {
+            "claimed": False,
+            "request_status": "SEARCH_REQUEST_IN_PROGRESS",
+            "retryable": True,
+            "retry_after_seconds": 5,
+            "search_request_id": search_request_id,
+            "search_session_id": search_session_id,
+            "message": "This AI Search request is already running. Start a new search to retry.",
+        }
+
+    def claim_search_request(
+        self,
+        *,
+        search_request_id: str,
+        actor_user_id: str,
+        request_fingerprint: str,
+        search_session_id: str,
+        request: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        search_request_id = str(search_request_id or "").strip()
+        actor_user_id = str(actor_user_id or "").strip()
+        request_fingerprint = str(request_fingerprint or "").strip()
+        search_session_id = str(search_session_id or "").strip()
+        if not search_request_id:
+            raise SearchScopeRepositoryError("search_request_id is required")
+        if not actor_user_id:
+            raise SearchScopeRepositoryError("actor_user_id is required")
+        if not request_fingerprint:
+            raise SearchScopeRepositoryError("request_fingerprint is required")
+        if not search_session_id:
+            raise SearchScopeRepositoryError("search_session_id is required")
+
+        now = _iso(_utc_now())
+        with self.lock:
+            try:
+                self.conn.execute("BEGIN IMMEDIATE")
+                existing = self.conn.execute(
+                    "SELECT * FROM ai_search_request_claim WHERE search_request_id=?",
+                    (search_request_id,),
+                ).fetchone()
+                if existing:
+                    self.conn.commit()
+                    return self._request_claim_response(
+                        existing,
+                        actor_user_id=actor_user_id,
+                        request_fingerprint=request_fingerprint,
+                    )
+                self.conn.execute(
+                    """
+                    INSERT INTO ai_search_request_claim (
+                        search_request_id, actor_user_id, request_fingerprint,
+                        request_json, search_session_id, status, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 'started', ?, ?)
+                    """,
+                    (
+                        search_request_id,
+                        actor_user_id,
+                        request_fingerprint,
+                        _json_dumps(dict(request or {})),
+                        search_session_id,
+                        now,
+                        now,
+                    ),
+                )
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
+        return {
+            "claimed": True,
+            "request_status": "started",
+            "search_request_id": search_request_id,
+            "search_session_id": search_session_id,
+        }
+
+    def complete_search_request(
+        self,
+        *,
+        search_request_id: str,
+        actor_user_id: str,
+        request_fingerprint: str,
+        summary: Mapping[str, Any] | None = None,
+    ) -> bool:
+        search_request_id = str(search_request_id or "").strip()
+        actor_user_id = str(actor_user_id or "").strip()
+        request_fingerprint = str(request_fingerprint or "").strip()
+        if not search_request_id or not actor_user_id or not request_fingerprint:
+            return False
+        now = _iso(_utc_now())
+        with self.lock:
+            cursor = self.conn.execute(
+                """
+                UPDATE ai_search_request_claim
+                SET status='complete', updated_at=?, completed_at=?,
+                    error_code='', error_message='', summary_json=?
+                WHERE search_request_id=?
+                  AND actor_user_id=?
+                  AND request_fingerprint=?
+                  AND status='started'
+                """,
+                (
+                    now,
+                    now,
+                    _json_dumps(dict(summary or {})),
+                    search_request_id,
+                    actor_user_id,
+                    request_fingerprint,
+                ),
+            )
+            self.conn.commit()
+        return cursor.rowcount == 1
+
+    def fail_search_request(
+        self,
+        *,
+        search_request_id: str,
+        actor_user_id: str,
+        request_fingerprint: str,
+        error_code: str,
+        error_message: str,
+    ) -> bool:
+        search_request_id = str(search_request_id or "").strip()
+        actor_user_id = str(actor_user_id or "").strip()
+        request_fingerprint = str(request_fingerprint or "").strip()
+        if not search_request_id or not actor_user_id or not request_fingerprint:
+            return False
+        now = _iso(_utc_now())
+        with self.lock:
+            cursor = self.conn.execute(
+                """
+                UPDATE ai_search_request_claim
+                SET status='failed', updated_at=?, failed_at=?,
+                    error_code=?, error_message=?
+                WHERE search_request_id=?
+                  AND actor_user_id=?
+                  AND request_fingerprint=?
+                  AND status='started'
+                """,
+                (
+                    now,
+                    now,
+                    str(error_code or "AI_SEARCH_REQUEST_FAILED"),
+                    str(error_message or "AI Search request failed."),
+                    search_request_id,
+                    actor_user_id,
+                    request_fingerprint,
+                ),
+            )
+            self.conn.commit()
+        return cursor.rowcount == 1
 
     def complete_search_session(
         self,
@@ -665,6 +886,13 @@ class SQLiteSearchScopeRepository:
             self.conn.execute(
                 "DELETE FROM ai_search_recovery_draft WHERE expires_at < ?",
                 (now,),
+            )
+            request_claim_cutoff = _iso(
+                _utc_now() - timedelta(days=self.REQUEST_CLAIM_RETENTION_DAYS)
+            )
+            self.conn.execute(
+                "DELETE FROM ai_search_request_claim WHERE updated_at < ?",
+                (request_claim_cutoff,),
             )
             self.conn.commit()
 
