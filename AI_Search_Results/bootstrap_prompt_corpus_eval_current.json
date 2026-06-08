@@ -1,0 +1,3712 @@
+{
+  "success": true,
+  "corpus_status": "non_production_bootstrap",
+  "corpus_date": "2026-04-08",
+  "overall_actual_primary_family_counts": {
+    "mixed_supported": 68,
+    "age_range": 1,
+    "us_visa": 2,
+    "rank_match": 34,
+    "coc_document_gate": 5,
+    "stcw_basic": 4,
+    "parsing_notes_only": 1
+  },
+  "threshold_status": {
+    "age_range": {
+      "bootstrap_prompt_count": 20,
+      "meets_20_prompt_gate": true,
+      "primary_family_match_ratio": 0.05,
+      "expected_family_present_ratio": 1.0
+    },
+    "us_visa": {
+      "bootstrap_prompt_count": 20,
+      "meets_20_prompt_gate": true,
+      "primary_family_match_ratio": 0.1,
+      "expected_family_present_ratio": 1.0
+    },
+    "rank_match": {
+      "bootstrap_prompt_count": 20,
+      "meets_20_prompt_gate": true,
+      "primary_family_match_ratio": 1.0,
+      "expected_family_present_ratio": 1.0
+    },
+    "coc_document_gate": {
+      "bootstrap_prompt_count": 20,
+      "meets_20_prompt_gate": true,
+      "primary_family_match_ratio": 0.25,
+      "expected_family_present_ratio": 1.0
+    },
+    "stcw_basic": {
+      "bootstrap_prompt_count": 20,
+      "meets_20_prompt_gate": true,
+      "primary_family_match_ratio": 0.2,
+      "expected_family_present_ratio": 1.0
+    }
+  },
+  "family_summaries": {
+    "age_range": {
+      "prompt_count": 20,
+      "primary_match_count": 1,
+      "primary_match_ratio": 0.05,
+      "expected_family_present_count": 20,
+      "expected_family_present_ratio": 1.0,
+      "rows": [
+        {
+          "prompt": "2nd engineer between 30 and 45 years old",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 30,
+                "max_age": 45
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief officer between the ages of 35 and 50",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 35,
+                "max_age": 50
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master within the ages of 40 and 55",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 40,
+                "max_age": 55
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for chief engineer within the age of 38 and 52",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 38,
+                "max_age": 52
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need 3rd officer with in the age of 25 and 35",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 25,
+                "max_age": 35
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "4th engineer age range of 28 and 38",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 28,
+                "max_age": 38
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "electrical officer age range of 30-42",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 30,
+                "max_age": 42
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "electrical_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "fitter age of 26 and 40 years old",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 26,
+                "max_age": 40
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "fitter"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "deck cadet ages 21 and 27",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 21,
+                "max_age": 27
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "deck_cadet"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for officers aged 30-40",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "age_range",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 30,
+                "max_age": 40
+              }
+            },
+            "applied_constraints": [
+              "age_range"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master 30 to 45 years old",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 30,
+                "max_age": 45
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief officer at least 35 years old",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 35,
+                "max_age": null
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "2nd engineer older than 32",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 32,
+                "max_age": null
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "3rd engineer over 29",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 30,
+                "max_age": null
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief cook above 30",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 31,
+                "max_age": null
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_cook"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "oiler minimum age of 24",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": 24,
+                "max_age": null
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "oiler"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "bosun up to 48 years old",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": null,
+                "max_age": 48
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "bosun"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need eTO younger than 40",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": null,
+                "max_age": 40
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "electro_technical_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "junior engineer under 28",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": null,
+                "max_age": 27
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "junior_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "pumpman maximum age of 50",
+          "expected_primary_family": "age_range",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "age_years": {
+                "min_age": null,
+                "max_age": 50
+              },
+              "rank": {
+                "applied_rank_normalized": [
+                  "pumpman"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "age_range",
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        }
+      ]
+    },
+    "us_visa": {
+      "prompt_count": 20,
+      "primary_match_count": 2,
+      "primary_match_ratio": 0.1,
+      "expected_family_present_count": 20,
+      "expected_family_present_ratio": 1.0,
+      "rows": [
+        {
+          "prompt": "having valid US visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "us_visa",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "having a valid US visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "us_visa",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need chief officer with valid US visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master with current US visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "2nd engineer has a valid US visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for captain with american visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief engineer with US work authorization",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "ETO with C1/D visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electro_technical_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "C1/D (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need fitter with valid C1/D",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "fitter"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "C1/D (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for 3rd officer with C1 visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1 (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "C1 (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need oiler with valid C1 visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "oiler"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1 (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "C1 (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "D visa required for this 4th engineer search",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "D (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "D (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "pumpman with valid D visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "pumpman"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "D (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "D (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master with B1/B2 visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "B1/B2 (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "B1/B2 (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief cook with valid B1/B2",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_cook"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "B1/B2 (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "B1/B2 (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "find chief officer having US visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "2nd officer with current American visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "3rd engineer with usa visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "US Visa (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need captain with valid c1d",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "C1/D (USA)"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for eTO who has valid us visa",
+          "expected_primary_family": "us_visa",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electro_technical_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "us_visa": {
+                "required": true,
+                "must_be_valid": true,
+                "accepted_types": [
+                  "C1/D (USA)",
+                  "B1/B2 (USA)",
+                  "C1 (USA)",
+                  "D (USA)",
+                  "US Visa (USA)"
+                ],
+                "visa_group": "usa",
+                "requested_label": "valid US visa"
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "us_visa"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        }
+      ]
+    },
+    "rank_match": {
+      "prompt_count": 20,
+      "primary_match_count": 20,
+      "primary_match_ratio": 1.0,
+      "expected_family_present_count": 20,
+      "expected_family_present_ratio": 1.0,
+      "rows": [
+        {
+          "prompt": "2nd engineer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief engineer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief officer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "captain",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "2nd officer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "third officer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "3rd officer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "fourth engineer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "4th engineer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "junior 4th engineer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "electrical officer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electrical_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "ETO",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electro_technical_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "bosun",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "bosun"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "pumpman",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "pumpman"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "fitter",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "fitter"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "oiler",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "oiler"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief cook",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_cook"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "deck cadet",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "deck_cadet"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "junior engineer",
+          "expected_primary_family": "rank_match",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "junior_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        }
+      ]
+    },
+    "coc_document_gate": {
+      "prompt_count": 20,
+      "primary_match_count": 5,
+      "primary_match_ratio": 0.25,
+      "expected_family_present_count": 20,
+      "expected_family_present_ratio": 1.0,
+      "rows": [
+        {
+          "prompt": "valid COC",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "coc_document_gate",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "COC required",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "coc_document_gate",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need master with valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief officer with coc required",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "2nd engineer with valid certificate of competency",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "certificate of competency required for chief engineer",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "must hold valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "coc_document_gate",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master must hold valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need valid certificate of competency",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "coc_document_gate",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "captain with valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief engineer valid coc required",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for 2nd officer with certificate of competency required",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief officer must hold valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "4th engineer valid certificate of competency",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "junior engineer coc required",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "junior_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need electrical officer with valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electrical_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "certificate of competency required for eto",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electro_technical_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "must hold valid certificate of competency",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "coc_document_gate",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for chief officer valid coc",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master with certificate of competency required",
+          "expected_primary_family": "coc_document_gate",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "coc_required": true,
+                "coc_valid_required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "coc_document_gate"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        }
+      ]
+    },
+    "stcw_basic": {
+      "prompt_count": 20,
+      "primary_match_count": 4,
+      "primary_match_ratio": 0.2,
+      "expected_family_present_count": 20,
+      "expected_family_present_ratio": 1.0,
+      "rows": [
+        {
+          "prompt": "with valid STCW basic safety",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "stcw_basic",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "stcw_basic",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "must hold all basic stcw certificates",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "stcw_basic",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "valid stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "stcw_basic",
+          "primary_family_matched": true,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need chief officer with valid stcw basic",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master with stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "looking for 2nd engineer with valid stcw basic safety",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief cook must hold all basic stcw certificates",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_cook"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "deck cadet valid stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "deck_cadet"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need bosun with stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "bosun"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "pumpman with valid stcw basic",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "pumpman"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "4th engineer valid stcw basic safety",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "junior engineer with valid stcw basic",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "junior_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need eTO stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "electro_technical_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "oiler with valid stcw basic safety",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "oiler"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief engineer must hold all basic stcw certificates",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "captain valid stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "2nd officer with valid stcw basic",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "fitter with stcw basic required",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "fitter"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master valid stcw basic safety",
+          "expected_primary_family": "stcw_basic",
+          "actual_primary_family": "mixed_supported",
+          "primary_family_matched": false,
+          "expected_family_present": true,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "stcw_basic": {
+                "required": true
+              }
+            },
+            "applied_constraints": [
+              "rank_match",
+              "stcw_basic"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        }
+      ]
+    },
+    "unsupported_or_diagnostic": {
+      "prompt_count": 15,
+      "primary_match_count": 1,
+      "primary_match_ratio": 0.0667,
+      "expected_family_present_count": 0,
+      "expected_family_present_ratio": 0.0,
+      "rows": [
+        {
+          "prompt": "2nd engineer with 7+ years sea service",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "sea_service": {
+                "min_total_months": 84,
+                "display_value": "7+ years",
+                "operator": "gte"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "min_sea_service"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief officer on bulk carrier",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "vessel_type": {
+                "required": [
+                  "bulk carrier"
+                ],
+                "display_value": "bulk carrier",
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "vessel_type"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "master available immediately",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "availability": {
+                "value_type": "status",
+                "status": "immediately",
+                "display_value": "available immediately"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "availability"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief engineer tanker endorsement",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "vessel_type": {
+                "required": [
+                  "tanker"
+                ],
+                "display_value": "tanker",
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "vessel_type"
+            ],
+            "parsing_notes": [
+              "tanker endorsement"
+            ]
+          }
+        },
+        {
+          "prompt": "2nd engineer DPO required",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "2nd_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "endorsements_required": [
+                  "dp_operational"
+                ],
+                "endorsement_display_value": "DPO"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "stcw_endorsement"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need captain DP2",
+          "expected_primary_family": "parsing_notes_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": [
+              "DP2"
+            ]
+          }
+        },
+        {
+          "prompt": "chief officer VLCC-ish but not exactly",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "gas tanker endorsement for chief officer",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "vessel_type": {
+                "required": [
+                  "tanker"
+                ],
+                "display_value": "tanker",
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "endorsements_required": [
+                  "tanker_gas"
+                ],
+                "endorsement_display_value": "gas tanker endorsement"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "vessel_type",
+              "stcw_endorsement"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chemical tanker endorsement for master",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "master"
+                ],
+                "operator": "contains_any"
+              },
+              "vessel_type": {
+                "required": [
+                  "tanker"
+                ],
+                "display_value": "tanker",
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "endorsements_required": [
+                  "tanker_chemical"
+                ],
+                "endorsement_display_value": "chemical tanker endorsement"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "vessel_type",
+              "stcw_endorsement"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need bosun join immediately",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "bosun"
+                ],
+                "operator": "contains_any"
+              },
+              "availability": {
+                "value_type": "status",
+                "status": "immediately",
+                "display_value": "join immediately"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "availability"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "4th engineer available from January 15",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "4th_engineer"
+                ],
+                "operator": "contains_any"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "pumpman joinable in 30 days",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "pumpman"
+                ],
+                "operator": "contains_any"
+              },
+              "availability": {
+                "value_type": "relative_phrase",
+                "relative_display_value": "in 30 days",
+                "display_value": "joinable in 30 days"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "availability"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "need 3rd officer with 36 months sea service",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "3rd_officer"
+                ],
+                "operator": "contains_any"
+              },
+              "sea_service": {
+                "min_total_months": 36,
+                "display_value": "36 months",
+                "operator": "gte"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "min_sea_service"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "chief engineer with GMDSS",
+          "expected_primary_family": "unsupported_only",
+          "actual_primary_family": "rank_match",
+          "primary_family_matched": false,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {
+              "rank": {
+                "applied_rank_normalized": [
+                  "chief_engineer"
+                ],
+                "operator": "contains_any"
+              },
+              "certifications": {
+                "endorsements_required": [
+                  "gmdss"
+                ],
+                "endorsement_display_value": "GMDSS"
+              }
+            },
+            "applied_constraints": [
+              "rank_match"
+            ],
+            "unapplied_constraints": [
+              "stcw_endorsement"
+            ],
+            "parsing_notes": []
+          }
+        },
+        {
+          "prompt": "random fuzzy thing not really a filter",
+          "expected_primary_family": "parsing_notes_only",
+          "actual_primary_family": "parsing_notes_only",
+          "primary_family_matched": true,
+          "expected_family_present": false,
+          "parser_view": {
+            "rank": "",
+            "hard_constraints": {},
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "parsing_notes": [
+              "random fuzzy thing not really a filter"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "mismatch_count": 15,
+  "mismatches": [
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "2nd engineer with 7+ years sea service",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "2nd_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "sea_service": {
+            "min_total_months": 84,
+            "display_value": "7+ years",
+            "operator": "gte"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "min_sea_service"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "chief officer on bulk carrier",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_officer"
+            ],
+            "operator": "contains_any"
+          },
+          "vessel_type": {
+            "required": [
+              "bulk carrier"
+            ],
+            "display_value": "bulk carrier",
+            "operator": "contains_any"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "vessel_type"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "master available immediately",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          },
+          "availability": {
+            "value_type": "status",
+            "status": "immediately",
+            "display_value": "available immediately"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "availability"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "chief engineer tanker endorsement",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "vessel_type": {
+            "required": [
+              "tanker"
+            ],
+            "display_value": "tanker",
+            "operator": "contains_any"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "vessel_type"
+        ],
+        "parsing_notes": [
+          "tanker endorsement"
+        ]
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "2nd engineer DPO required",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "2nd_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "certifications": {
+            "endorsements_required": [
+              "dp_operational"
+            ],
+            "endorsement_display_value": "DPO"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "stcw_endorsement"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "need captain DP2",
+      "expected_primary_family": "parsing_notes_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [],
+        "parsing_notes": [
+          "DP2"
+        ]
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "chief officer VLCC-ish but not exactly",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_officer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "gas tanker endorsement for chief officer",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_officer"
+            ],
+            "operator": "contains_any"
+          },
+          "vessel_type": {
+            "required": [
+              "tanker"
+            ],
+            "display_value": "tanker",
+            "operator": "contains_any"
+          },
+          "certifications": {
+            "endorsements_required": [
+              "tanker_gas"
+            ],
+            "endorsement_display_value": "gas tanker endorsement"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "vessel_type",
+          "stcw_endorsement"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "chemical tanker endorsement for master",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          },
+          "vessel_type": {
+            "required": [
+              "tanker"
+            ],
+            "display_value": "tanker",
+            "operator": "contains_any"
+          },
+          "certifications": {
+            "endorsements_required": [
+              "tanker_chemical"
+            ],
+            "endorsement_display_value": "chemical tanker endorsement"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "vessel_type",
+          "stcw_endorsement"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "need bosun join immediately",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "bosun"
+            ],
+            "operator": "contains_any"
+          },
+          "availability": {
+            "value_type": "status",
+            "status": "immediately",
+            "display_value": "join immediately"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "availability"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "4th engineer available from January 15",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "4th_engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "pumpman joinable in 30 days",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "pumpman"
+            ],
+            "operator": "contains_any"
+          },
+          "availability": {
+            "value_type": "relative_phrase",
+            "relative_display_value": "in 30 days",
+            "display_value": "joinable in 30 days"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "availability"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "need 3rd officer with 36 months sea service",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "3rd_officer"
+            ],
+            "operator": "contains_any"
+          },
+          "sea_service": {
+            "min_total_months": 36,
+            "display_value": "36 months",
+            "operator": "gte"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "min_sea_service"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "chief engineer with GMDSS",
+      "expected_primary_family": "unsupported_only",
+      "actual_primary_family": "rank_match",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "certifications": {
+            "endorsements_required": [
+              "gmdss"
+            ],
+            "endorsement_display_value": "GMDSS"
+          }
+        },
+        "applied_constraints": [
+          "rank_match"
+        ],
+        "unapplied_constraints": [
+          "stcw_endorsement"
+        ],
+        "parsing_notes": []
+      }
+    },
+    {
+      "family_name": "unsupported_or_diagnostic",
+      "prompt": "random fuzzy thing not really a filter",
+      "expected_primary_family": "parsing_notes_only",
+      "actual_primary_family": "parsing_notes_only",
+      "parser_view": {
+        "rank": "",
+        "hard_constraints": {},
+        "applied_constraints": [],
+        "unapplied_constraints": [],
+        "parsing_notes": [
+          "random fuzzy thing not really a filter"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Starting NjordHR</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f7f9fc 0%, #eef3fb 100%);
+      color: #132033;
+    }
+    .shell {
+      padding: 32px;
+    }
+    .brand {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .subhead {
+      color: #56627a;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .panel {
+      background: white;
+      border: 1px solid #d9e2ef;
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+      padding: 20px 22px;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .hint {
+      font-size: 14px;
+      color: #5c677a;
+      line-height: 1.5;
+      margin-bottom: 18px;
+    }
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #e4ecf8;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 -30%;
+      width: 30%;
+      background: linear-gradient(90deg, #4e8cff, #245ef5);
+      animation: travel 1.2s linear infinite;
+    }
+    @keyframes travel {
+      0% { left: -30%; }
+      100% { left: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="brand">NjordHR</div>
+    <div class="subhead">Preparing your desktop workspace.</div>
+    <div class="panel">
+      <div class="title">Starting NjordHR</div>
+      <div class="hint">Launching local services and opening the app window.</div>
+      <div class="bar"></div>
+    </div>
+  </div>
+</body>
+</html>

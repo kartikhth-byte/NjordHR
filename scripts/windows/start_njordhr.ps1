@@ -10,7 +10,7 @@ $RuntimeDir = Join-Path $AppDataDir "runtime"
 $VenvDir = Join-Path $RuntimeDir "venv"
 $ConfigPath = Join-Path $AppDataDir "config.ini"
 $DefaultRuntimeEnvPath = Join-Path $ProjectDir "default_runtime.env"
-$DefaultDownloadDir = Join-Path $env:USERPROFILE "Downloads\NjordHR"
+$DefaultDownloadDir = Join-Path $env:USERPROFILE "Downloads\NjordHR\Downloaded_Resumes"
 $DefaultVerifiedDir = Join-Path $AppDataDir "Verified_Resumes"
 $DefaultLogDir = Join-Path $AppDataDir "logs"
 New-Item -Path $RuntimeDir -ItemType Directory -Force | Out-Null
@@ -114,6 +114,55 @@ function Wait-Http([string]$url, [int]$retries = 40) {
     return $false
 }
 
+function Start-AgentSettingsSync([string]$AgentUrl, [string]$BackendUrl) {
+    $syncScript = @"
+try {
+    for (`$i = 0; `$i -lt 60; `$i++) {
+        try {
+            Invoke-WebRequest -Uri "$AgentUrl/health" -Method GET -TimeoutSec 2 -UseBasicParsing | Out-Null
+            break
+        } catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    `$payload = @{ api_base_url = "$BackendUrl"; cloud_sync_enabled = `$true } | ConvertTo-Json
+    Invoke-RestMethod -Method Put -Uri "$AgentUrl/settings" -ContentType "application/json" -Body `$payload | Out-Null
+} catch {
+    # best effort
+}
+"@
+    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-WindowStyle", "Hidden",
+        "-Command", $syncScript
+    ) -WindowStyle Hidden | Out-Null
+}
+
+function Get-Json([string]$Url) {
+    try {
+        return Invoke-RestMethod -Uri $Url -Method GET -TimeoutSec 2 -UseBasicParsing
+    } catch {
+        return $null
+    }
+}
+
+function Stop-ProcessesOnPort([int]$Port) {
+    $connections = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    if (-not $connections) { return }
+    $owningPids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($procId in $owningPids) {
+        if ($procId -and $procId -ne 0) {
+            try {
+                Stop-Process -Id $procId -Force -ErrorAction Stop
+                Write-Log "Stopped process ${procId} on port ${Port}"
+            } catch {
+                Write-Log "Failed to stop process ${procId} on port ${Port}: $($_.Exception.Message)"
+            }
+        }
+    }
+}
+
 function Get-PythonInvocation {
     $py = Get-Command py -ErrorAction SilentlyContinue
     if ($py) {
@@ -170,7 +219,7 @@ import configparser
 import os
 import sys
 
-cfg_path, download_dir, verified_dir, log_dir = sys.argv[1:5]
+cfg_path, project_dir, download_dir, verified_dir, log_dir = sys.argv[1:6]
 cfg = configparser.ConfigParser()
 cfg.read(cfg_path)
 
@@ -184,20 +233,43 @@ if "Advanced" not in cfg:
 def normalize(v):
     return os.path.abspath(os.path.expanduser((v or "").strip()))
 
+def is_windows_unsafe_path(value):
+    raw = (value or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower()
+    if "/absolute/path/" in lowered:
+        return True
+    # Reject Unix/macOS-style absolute paths copied from another machine.
+    if raw.startswith("/") or raw.startswith("~/"):
+        return True
+    # Reject explicit /Users/... style paths even if a caller omitted the leading slash.
+    if lowered.startswith("users/") or lowered.startswith("/users/"):
+        return True
+    return False
+
 download_dir = normalize(download_dir)
 verified_dir = normalize(verified_dir)
 log_dir = normalize(log_dir)
+project_dir = normalize(project_dir)
+legacy_download_root = normalize(os.path.dirname(download_dir))
 
 download_raw = cfg["Settings"].get("Default_Download_Folder", "")
-if (not download_raw.strip()) or "/absolute/path/" in download_raw:
+download_norm = normalize(download_raw) if download_raw.strip() else ""
+if (
+    (not download_raw.strip())
+    or is_windows_unsafe_path(download_raw)
+    or download_norm == project_dir
+    or download_norm == legacy_download_root
+):
     cfg["Settings"]["Default_Download_Folder"] = download_dir
 
 verified_raw = cfg["Settings"].get("Additional_Local_Folder", "")
-if (not verified_raw.strip()) or "/absolute/path/" in verified_raw:
+if (not verified_raw.strip()) or is_windows_unsafe_path(verified_raw):
     cfg["Settings"]["Additional_Local_Folder"] = verified_dir
 
 log_raw = cfg["Advanced"].get("log_dir", "")
-if (not log_raw.strip()) or "/absolute/path/" in log_raw:
+if (not log_raw.strip()) or is_windows_unsafe_path(log_raw):
     cfg["Advanced"]["log_dir"] = log_dir
 
 with open(cfg_path, "w", encoding="utf-8") as fh:
@@ -206,7 +278,7 @@ with open(cfg_path, "w", encoding="utf-8") as fh:
     $tmpScript = Join-Path $RuntimeDir "ensure_config.py"
     Set-Content -Path $tmpScript -Value $script -Encoding UTF8
     try {
-        Invoke-Python $Py @($tmpScript, $ConfigPath, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
+        Invoke-Python $Py @($tmpScript, $ConfigPath, $ProjectDir, $DefaultDownloadDir, $DefaultVerifiedDir, $DefaultLogDir) | Out-Null
     } finally {
         Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
     }
@@ -276,6 +348,7 @@ try {
 
     $backendUrl = "http://127.0.0.1:$backendPort"
     $agentUrl = "http://127.0.0.1:$agentPort"
+    $browserUrl = "http://localhost:$backendPort"
     $pythonLauncherForCmd = ('"' + $venvPython + '"').Trim()
     $provisionedEnv = Read-EnvFile $DefaultRuntimeEnvPath
     if ($provisionedEnv.Count -gt 0) {
@@ -325,9 +398,32 @@ try {
     $agentOut = Join-Path $RuntimeDir "agent.out"
     $agentErr = Join-Path $RuntimeDir "agent.err"
 
+    $restartBackend = $false
+    $backendRuntime = $null
     if (Wait-Http "$backendUrl/config/runtime" 1) {
-        Write-Log "Backend already running at $backendUrl"
-    } else {
+        $backendRuntime = Get-Json "$backendUrl/config/runtime"
+        $existingProjectDir = [string]($backendRuntime.process_identity.project_dir)
+        $existingConfigPath = [string]($backendRuntime.process_identity.config_path)
+        $backendIdentityMismatch =
+            [string]::IsNullOrWhiteSpace($existingProjectDir) -or
+            [string]::IsNullOrWhiteSpace($existingConfigPath) -or
+            ($existingProjectDir -ne $ProjectDir) -or
+            ($existingConfigPath -ne $ConfigPath)
+        if ($backendIdentityMismatch) {
+            $restartBackend = $true
+            Write-Log "Backend identity mismatch detected; restarting backend and agent."
+        } else {
+            Write-Log "Backend already running at $backendUrl"
+        }
+    }
+
+    if ($restartBackend) {
+        Stop-ProcessesOnPort $backendPort
+        Stop-ProcessesOnPort $agentPort
+        Start-Sleep -Milliseconds 500
+    }
+
+    if (-not (Wait-Http "$backendUrl/config/runtime" 1)) {
         Write-Log "Starting backend at $backendUrl"
         $backendVars = @{}
         foreach ($k in $runtimeVars.Keys) {
@@ -355,24 +451,17 @@ try {
         $agentPrefix = Build-CmdEnvPrefix $agentVars
         $agentCmd = "$agentPrefix&& $pythonLauncherForCmd agent_server.py"
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c $agentCmd" -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $agentOut -RedirectStandardError $agentErr | Out-Null
-        if (-not (Wait-Http "$agentUrl/health" 100)) {
-            throw "Agent failed to start. Check $agentErr"
-        }
     }
 
-    try {
-        $payload = @{ api_base_url = $backendUrl; cloud_sync_enabled = $true } | ConvertTo-Json
-        Invoke-RestMethod -Method Put -Uri "$agentUrl/settings" -ContentType "application/json" -Body $payload | Out-Null
-    } catch {
-        # best effort
-    }
+    Start-AgentSettingsSync -AgentUrl $agentUrl -BackendUrl $backendUrl
 
     if (-not $NoOpen) {
-        Start-Process $backendUrl | Out-Null
+        Start-Process $browserUrl | Out-Null
     }
 
     Write-Log "Ready."
     Write-Log "Backend: $backendUrl"
+    Write-Log "Browser: $browserUrl"
     Write-Log "Agent: $agentUrl"
     Write-Log "Config: $ConfigPath"
     Write-Log "Logs: $RuntimeDir"

@@ -7,6 +7,7 @@ from repositories.supabase_candidate_event_repo import (
     can_enable_supabase_repo,
     resolve_supabase_api_key,
 )
+from runtime_env import config_value, normalize_env_value, normalized_url
 
 
 def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url="http://127.0.0.1:5000"):
@@ -25,15 +26,18 @@ def build_candidate_event_repo(flags, base_folder="Verified_Resumes", server_url
         raise RuntimeError(msg)
 
     supabase_api_key = resolve_supabase_api_key()
-    if os.getenv("SUPABASE_SECRET_KEY", "").strip():
+    if normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", "")):
         print("[CONFIG] Supabase auth: using SUPABASE_SECRET_KEY.")
     else:
         print("[CONFIG] Supabase auth: using legacy SUPABASE_SERVICE_ROLE_KEY.")
 
     supabase_repo = SupabaseCandidateEventRepo(
-        supabase_url=os.getenv("SUPABASE_URL", ""),
+        supabase_url=normalized_url(config_value("Advanced", "supabase_url", "") or os.getenv("SUPABASE_URL", "")),
         service_role_key=supabase_api_key,
-        server_url=server_url
+        server_url=server_url,
+        audit_base_folder=base_folder,
+        # Mirror writes stay cloud-canonical by default; local fallback is opt-in only.
+        allow_local_resume_url_fallback=False,
     )
 
     if getattr(flags, "use_dual_write", False):

@@ -1,22 +1,28 @@
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pandas as pd
 import requests
 
+from csv_manager import CSVManager
 from repositories.candidate_event_repo import CandidateEventRepo
+from runtime_env import config_value, normalize_env_value, normalized_url
 
 
 def resolve_supabase_api_key():
     """Prefer modern Supabase secret key, fallback to legacy service role key."""
     return (
-        os.getenv("SUPABASE_SECRET_KEY", "").strip()
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        config_value("Credentials", "Supabase_Secret_Key", "")
+        or config_value("Credentials", "Supabase_Service_Role_Key", "")
+        or normalize_env_value(os.getenv("SUPABASE_SECRET_KEY", ""))
+        or normalize_env_value(os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""))
     )
 
 
 class SupabaseCandidateEventRepo(CandidateEventRepo):
     """Supabase REST-backed candidate event repository."""
+
+    PAGE_SIZE = 1000
 
     COLUMNS = [
         'Candidate_ID',
@@ -37,10 +43,20 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         'Mobile_No'
     ]
 
-    def __init__(self, supabase_url, service_role_key, server_url='http://127.0.0.1:5000', timeout_seconds=20):
-        self.supabase_url = supabase_url.rstrip('/')
+    def __init__(
+        self,
+        supabase_url,
+        service_role_key,
+        server_url='http://127.0.0.1:5000',
+        timeout_seconds=20,
+        audit_base_folder='Verified_Resumes',
+        allow_local_resume_url_fallback=False,
+    ):
+        self.supabase_url = normalized_url(supabase_url)
         self.server_url = server_url
         self.timeout_seconds = timeout_seconds
+        self.allow_local_resume_url_fallback = bool(allow_local_resume_url_fallback)
+        self._audit_manager = CSVManager(base_folder=audit_base_folder, server_url=server_url)
         self.headers = {
             "apikey": service_role_key,
             "Authorization": f"Bearer {service_role_key}",
@@ -72,7 +88,9 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
     def _event_to_csv_row(self, row):
         rank = row.get("rank_applied_for", "") or ""
         filename = row.get("filename", "") or ""
-        resume_url = row.get("resume_url") or f"{self.server_url}/get_resume/{rank}/{filename}"
+        resume_url = str(row.get("resume_url") or "").strip()
+        if not resume_url and self.allow_local_resume_url_fallback:
+            resume_url = f"{self.server_url}/get_resume/{rank}/{filename}"
         return {
             "Candidate_ID": str(row.get("candidate_external_id", "") or ""),
             "Filename": filename,
@@ -96,7 +114,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         body = [{
             "candidate_external_id": str(candidate_external_id),
             **payload,
-            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         }]
         self._request(
             "POST",
@@ -115,14 +133,30 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         )
 
     def _fetch_events(self, filters=None, order_desc=True):
-        params = {
+        return self._fetch_all_events(filters=filters, order_desc=order_desc)
+
+    def _fetch_all_events(self, filters=None, order_desc=True):
+        rows = []
+        offset = 0
+        base_params = {
             "select": "candidate_external_id,filename,resume_url,event_type,status,notes,rank_applied_for,"
                       "search_ship_type,ai_search_prompt,ai_match_reason,name,present_rank,email,country,mobile_no,created_at",
             "order": f"created_at.{ 'desc' if order_desc else 'asc' }",
         }
         if filters:
-            params.update(filters)
-        return self._request("GET", "/rest/v1/candidate_events", params=params)
+            base_params.update(filters)
+        page_size = max(1, int(self.PAGE_SIZE))
+        while True:
+            params = dict(base_params)
+            params["limit"] = page_size
+            params["offset"] = offset
+            batch = self._request("GET", "/rest/v1/candidate_events", params=params)
+            batch = batch or []
+            rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+        return rows
 
     def log_event(self, candidate_id, filename, event_type, status='New', notes='',
                   rank_applied_for='', search_ship_type='', ai_prompt='',
@@ -130,7 +164,9 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         try:
             extracted_data = extracted_data or {}
             candidate_external_id = str(candidate_id)
-            resolved_resume_url = str(resume_url or "").strip() or f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
+            resolved_resume_url = str(resume_url or "").strip()
+            if not resolved_resume_url and self.allow_local_resume_url_fallback:
+                resolved_resume_url = f"{self.server_url}/get_resume/{rank_applied_for}/{filename}"
 
             self._upsert_candidate(
                 candidate_external_id,
@@ -193,7 +229,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
 
     def get_candidate_history(self, candidate_id):
         try:
-            events = self._fetch_events(
+            events = self._fetch_all_events(
                 filters={"candidate_external_id": f"eq.{str(candidate_id)}"},
                 order_desc=False
             )
@@ -273,11 +309,7 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
         latest = self.get_latest_status_per_candidate()
         total_rows = 0
         try:
-            rows = self._request(
-                "GET",
-                "/rest/v1/candidate_events",
-                params={"select": "id"},
-            )
+            rows = self._fetch_all_events(filters={}, order_desc=True)
             total_rows = len(rows)
         except Exception:
             total_rows = 0
@@ -288,6 +320,12 @@ class SupabaseCandidateEventRepo(CandidateEventRepo):
             "rank_breakdown": self.get_rank_counts(),
         }
 
+    def log_ai_search_audit(self, *args, **kwargs):
+        return self._audit_manager.log_ai_search_audit(*args, **kwargs)
+
+    def get_ai_search_audit_rows(self, *args, **kwargs):
+        return self._audit_manager.get_ai_search_audit_rows(*args, **kwargs)
+
 
 def can_enable_supabase_repo():
-    return bool(os.getenv("SUPABASE_URL") and resolve_supabase_api_key())
+    return bool(normalized_url(config_value("Advanced", "supabase_url", "") or os.getenv("SUPABASE_URL", "")) and resolve_supabase_api_key())

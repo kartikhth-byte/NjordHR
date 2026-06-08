@@ -28,3 +28,9 @@ class CSVCandidateEventRepo(CandidateEventRepo):
 
     def get_csv_stats(self, *args, **kwargs):
         return self._manager.get_csv_stats(*args, **kwargs)
+
+    def log_ai_search_audit(self, *args, **kwargs):
+        return self._manager.log_ai_search_audit(*args, **kwargs)
+
+    def get_ai_search_audit_rows(self, *args, **kwargs):
+        return self._manager.get_ai_search_audit_rows(*args, **kwargs)

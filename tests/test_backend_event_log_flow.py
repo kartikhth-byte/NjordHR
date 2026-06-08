@@ -1,4 +1,6 @@
 import io
+import hashlib
+import json
 import os
 import sys
 import types
@@ -50,6 +52,8 @@ def _stub_external_modules():
 
 
 _stub_external_modules()
+_prev_use_supabase_db = os.environ.get("USE_SUPABASE_DB")
+os.environ["USE_SUPABASE_DB"] = "false"
 import backend_server  # noqa: E402
 from csv_manager import CSVManager  # noqa: E402
 
@@ -60,6 +64,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.base = Path(self.temp_dir.name)
         self.download_root = self.base / "Source"
         self.verified_root = self.base / "Verified_Resumes"
+        self.candidate_facts_cache_root = self.base / "candidate-facts-cache"
         self.rank = "Chief_Officer"
         self.rank_dir = self.download_root / self.rank
         self.rank_dir.mkdir(parents=True, exist_ok=True)
@@ -95,10 +100,13 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.prev_admin_token = os.environ.get("NJORDHR_ADMIN_TOKEN")
         os.environ["NJORDHR_ADMIN_TOKEN"] = "test-admin-token"
         self.prev_config_path = os.environ.get("NJORDHR_CONFIG_PATH")
+        self.prev_candidate_facts_cache_dir = os.environ.get("NJORDHR_CANDIDATE_FACTS_CACHE_DIR")
+        os.environ["NJORDHR_CANDIDATE_FACTS_CACHE_DIR"] = str(self.candidate_facts_cache_root)
         self.temp_config_path = str(self.base / "config.test.ini")
         with open(self.temp_config_path, "w", encoding="utf-8") as fh:
             backend_server.config.write(fh)
         os.environ["NJORDHR_CONFIG_PATH"] = self.temp_config_path
+        backend_server.candidate_facts_repo = None
         self.client = backend_server.app.test_client()
         with self.client.session_transaction() as sess:
             sess["username"] = "admin"
@@ -116,6 +124,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
             os.environ.pop("NJORDHR_CONFIG_PATH", None)
         else:
             os.environ["NJORDHR_CONFIG_PATH"] = self.prev_config_path
+        if self.prev_candidate_facts_cache_dir is None:
+            os.environ.pop("NJORDHR_CANDIDATE_FACTS_CACHE_DIR", None)
+        else:
+            os.environ["NJORDHR_CANDIDATE_FACTS_CACHE_DIR"] = self.prev_candidate_facts_cache_dir
+        backend_server.candidate_facts_repo = None
         self.temp_dir.cleanup()
         backend_server.cloud_auth_state_cache.update({"ts": 0, "mode": "local", "reason": "not_checked"})
 
@@ -128,6 +141,83 @@ class BackendEventLogFlowTests(unittest.TestCase):
         master = self.verified_root / "verified_resumes.csv"
         self.assertTrue(master.exists(), "Master CSV should exist")
         return pd.read_csv(master, keep_default_na=False)
+
+    def _agent_settings_response(self, download_folder):
+        class DummyResponse:
+            status_code = 200
+
+            def json(self_inner):
+                return {"success": True, "settings": {"download_folder": str(download_folder)}}
+
+        return DummyResponse()
+
+    def _agent_json_response(self, payload, status_code=200):
+        class DummyResponse:
+            def __init__(self, body, code):
+                self._body = body
+                self.status_code = code
+
+            def json(self_inner):
+                return self_inner._body
+
+        return DummyResponse(payload, status_code)
+
+    def _candidate_facts_payload(self):
+        return {
+            "schema_version": "candidate_facts.v1",
+            "source": {
+                "resume_id": "candidate-resume-1",
+                "candidate_id": "candidate-1",
+                "source_origin": "manual_upload",
+                "detected_layout": "unknown",
+                "file_name": "resume.pdf",
+                "content_hash": "abc123",
+            },
+            "identity": {
+                "candidate_name": {
+                    "value": "Jane Doe",
+                    "presence": "observed_true",
+                    "confidence": "high",
+                    "evidence_ids": ["ev-1"],
+                },
+            },
+            "rank": {
+                "value": "2nd_engineer",
+                "presence": "observed_true",
+                "confidence": "high",
+                "evidence_ids": ["ev-1"],
+            },
+            "documents": [],
+            "certificates": [],
+            "endorsements": [],
+            "courses": [],
+            "contracts": [],
+            "rank_experience": [],
+            "engine_experience": [],
+            "vessel_experience": [],
+            "application": {"applied_ship_types": []},
+            "derived": {},
+            "evidence": [
+                {
+                    "evidence_id": "ev-1",
+                    "source_kind": "raw_text_chunk",
+                    "source_id": "resume-1/chunk-1",
+                }
+            ],
+            "extraction": {
+                "parser_version": "generic_pdf.v1",
+                "status": "partial",
+                "minimums_satisfied": [],
+                "minimums_missing": [],
+                "provenance": {
+                    "mode": "semantic_chunk",
+                    "raw_text_version": "v1",
+                    "chunk_index_version": "v1",
+                    "fallback_reason": "generic_fallback",
+                },
+                "warnings": ["generic_candidate_facts_fallback"],
+            },
+        }
 
     def test_initial_verification_logs_events_without_file_copy(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -161,6 +251,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(set(df["Candidate_ID"].astype(str).tolist()), {"1001", "1002", "1003"})
 
         self.assertFalse((self.verified_root / self.rank).exists(), "No physical verified resume folder should be created")
+
+    def test_ui_vendor_assets_route_serves_local_runtime_js(self):
+        resp = self.client.get("/ui_vendor/react.development.js")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"ReactVersion", resp.data)
 
     def test_status_and_notes_append_new_events(self):
         self._write_fake_resume("Chief_Officer_2001.pdf")
@@ -301,6 +396,42 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("inactivity", str(body.get("message", "")).lower())
         self.assertTrue(fake_scraper.quit_called)
         self.assertIsNone(backend_server.scraper_session)
+
+    def test_session_health_skips_idle_disconnect_for_local_agent(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        backend_server.scraper_session = object()
+        backend_server.seajobs_last_activity_at = time.time() - 360
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "success": True,
+                    "health": {
+                        "active": True,
+                        "valid": True,
+                        "otp_pending": False,
+                        "otp_expired": False,
+                        "reason": "Session valid",
+                    },
+                }
+
+        try:
+            with patch.object(backend_server, "_disconnect_seajobs_best_effort") as disconnect_mock, \
+                patch("backend_server.requests.request", return_value=DummyResponse()) as request_mock:
+                resp = self.client.get("/session_health")
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+            backend_server.scraper_session = None
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body.get("success"))
+        self.assertTrue(body.get("connected"))
+        disconnect_mock.assert_not_called()
+        request_mock.assert_called_once()
 
     def test_logout_disconnects_seajobs_session(self):
         class FakeScraper:
@@ -459,7 +590,47 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(data["health"]["otp_expired"])
 
     def test_runtime_config_reports_backend_mode(self):
-        resp = self.client.get("/config/runtime")
+        fake_health = {
+            "success": True,
+            "status": "ok",
+            "sync": {
+                "pending": 1,
+                "queue_path": "/tmp/pending_sync_queue.json",
+                "reconnect_wakeup_pending": False,
+                "last_resume_upload": {
+                    "upload_status": "uploaded",
+                    "resume_source": "cloud_synced",
+                    "resume_upload_status": "uploaded",
+                    "resume_storage_path": "storage://resumes/Chief_Officer/1001/resume.pdf",
+                    "resume_checksum_sha256": "abc123",
+                    "duplicate": False,
+                    "message": "",
+                },
+            },
+        }
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self):
+                return fake_health
+
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        try:
+            with patch("backend_server.requests.get", return_value=DummyResponse()) as mock_get:
+                old_base = os.environ.get("NJORDHR_AGENT_BASE_URL")
+                os.environ["NJORDHR_AGENT_BASE_URL"] = "http://127.0.0.1:5053"
+                try:
+                    resp = self.client.get("/config/runtime")
+                finally:
+                    if old_base is None:
+                        os.environ.pop("NJORDHR_AGENT_BASE_URL", None)
+                    else:
+                        os.environ["NJORDHR_AGENT_BASE_URL"] = old_base
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertTrue(data["success"])
@@ -467,6 +638,162 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("feature_flags", data)
         self.assertIn("use_supabase_db", data["feature_flags"])
         self.assertIn("use_supabase_reads", data["feature_flags"])
+        self.assertIn("cloud_api", data)
+        self.assertIn("ready", data["cloud_api"])
+        self.assertEqual(data["cloud_api"]["service_name"], "njordhr-cloud-api")
+        self.assertIn("local_agent", data)
+        self.assertEqual(data["local_agent"]["base_url"], "http://127.0.0.1:5053")
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["resume_storage_path"], "storage://resumes/Chief_Officer/1001/resume.pdf")
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["upload_status"], "uploaded")
+        mock_get.assert_called_once()
+
+    def test_runtime_config_exposes_local_agent_summary_without_session(self):
+        fake_health = {
+            "success": True,
+            "status": "ok",
+            "sync": {
+                "pending": 0,
+                "queue_path": "/tmp/pending_sync_queue.json",
+                "reconnect_wakeup_pending": False,
+                "last_resume_upload": {
+                    "upload_status": "uploaded",
+                    "resume_source": "cloud_synced",
+                    "resume_upload_status": "uploaded",
+                    "resume_storage_path": "storage://resumes/Chief_Officer/9002/live_upload_check_2.pdf",
+                    "resume_checksum_sha256": "e3bec64fb8669f3ae7970c1672b9b1f368133a7c8fcf5d1e518f27e5386f892b",
+                    "duplicate": False,
+                    "message": "",
+                },
+            },
+        }
+
+        class DummyResponse:
+            status_code = 200
+
+            def json(self):
+                return fake_health
+
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        try:
+            with self.client.session_transaction() as sess:
+                sess.clear()
+            with patch("backend_server.requests.get", return_value=DummyResponse()) as mock_get:
+                resp = self.client.get("/config/runtime")
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["success"])
+        self.assertIn("local_agent", data)
+        self.assertTrue(data["local_agent"]["configured"])
+        self.assertTrue(data["local_agent"]["reachable"])
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["resume_storage_path"], "storage://resumes/Chief_Officer/9002/live_upload_check_2.pdf")
+        self.assertEqual(data["local_agent"]["last_resume_upload"]["upload_status"], "uploaded")
+        self.assertIn("cloud_api", data)
+        self.assertTrue(data["cloud_api"]["ready"])
+        mock_get.assert_called_once()
+
+    def test_build_analyzer_threads_feature_flags_into_analyzer(self):
+        captured = {}
+
+        class DummyAnalyzer:
+            def __init__(self, config, *, feature_flags=None, store_bundle=None):
+                captured["feature_flags"] = feature_flags
+                captured["store_bundle"] = store_bundle
+                captured["settings_folder"] = config.get("Settings", "Default_Download_Folder")
+
+        original_analyzer = backend_server.Analyzer
+        original_active_download_root = backend_server._active_download_root
+        try:
+            backend_server.Analyzer = DummyAnalyzer
+            backend_server._active_download_root = lambda: self.download_root.as_posix()
+            built = backend_server._build_analyzer()
+            self.assertIsInstance(built, DummyAnalyzer)
+            self.assertIs(captured["feature_flags"], backend_server.feature_flags)
+            self.assertIsNone(captured["store_bundle"])
+            self.assertEqual(captured["settings_folder"], self.download_root.as_posix())
+        finally:
+            backend_server.Analyzer = original_analyzer
+            backend_server._active_download_root = original_active_download_root
+
+    def test_runtime_ready_reports_unauthenticated_backend_identity(self):
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        old_port = os.environ.get("NJORDHR_PORT")
+        old_agent_port = os.environ.get("NJORDHR_AGENT_RUNTIME_PORT")
+        old_runtime_dir = os.environ.get("NJORDHR_RUNTIME_DIR")
+        try:
+            os.environ["NJORDHR_PORT"] = "5057"
+            os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = "5058"
+            os.environ["NJORDHR_RUNTIME_DIR"] = self.temp_dir.name
+
+            resp = self.client.get("/runtime/ready")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data["success"])
+            self.assertTrue(data["backend_ready"])
+            self.assertEqual(data["ports"]["backend_port"], 5057)
+            self.assertEqual(data["ports"]["agent_port"], 5058)
+            self.assertEqual(data["process_identity"]["runtime_dir"], os.path.abspath(self.temp_dir.name))
+            self.assertEqual(data["process_identity"]["config_path"], os.path.abspath(self.temp_config_path))
+            self.assertTrue(data["process_identity"]["project_dir"])
+            self.assertIn("cloud_api", data)
+            self.assertIn("ready_reason", data["cloud_api"])
+        finally:
+            if old_port is None:
+                os.environ.pop("NJORDHR_PORT", None)
+            else:
+                os.environ["NJORDHR_PORT"] = old_port
+            if old_agent_port is None:
+                os.environ.pop("NJORDHR_AGENT_RUNTIME_PORT", None)
+            else:
+                os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = old_agent_port
+            if old_runtime_dir is None:
+                os.environ.pop("NJORDHR_RUNTIME_DIR", None)
+            else:
+                os.environ["NJORDHR_RUNTIME_DIR"] = old_runtime_dir
+
+    def test_runtime_ready_rejects_non_local_requests(self):
+        resp = self.client.get("/runtime/ready", environ_base={"REMOTE_ADDR": "203.0.113.10"})
+        self.assertEqual(resp.status_code, 403)
+        data = resp.get_json()
+        self.assertFalse(data["success"])
+        self.assertEqual(data["error"], "Forbidden")
+
+    def test_local_agent_base_url_prefers_runtime_agent_fallbacks(self):
+        old_base = os.environ.get("NJORDHR_AGENT_BASE_URL")
+        old_url = os.environ.get("NJORDHR_AGENT_URL")
+        old_runtime_port = os.environ.get("NJORDHR_AGENT_RUNTIME_PORT")
+        old_agent_port = os.environ.get("NJORDHR_AGENT_PORT")
+        try:
+            os.environ.pop("NJORDHR_AGENT_BASE_URL", None)
+            os.environ["NJORDHR_AGENT_URL"] = "http://127.0.0.1:5053"
+            os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = "5053"
+            os.environ["NJORDHR_AGENT_PORT"] = "5051"
+            self.assertEqual(backend_server._local_agent_base_url(), "http://127.0.0.1:5053")
+
+            os.environ.pop("NJORDHR_AGENT_URL", None)
+            self.assertEqual(backend_server._local_agent_base_url(), "http://127.0.0.1:5053")
+        finally:
+            if old_base is None:
+                os.environ.pop("NJORDHR_AGENT_BASE_URL", None)
+            else:
+                os.environ["NJORDHR_AGENT_BASE_URL"] = old_base
+            if old_url is None:
+                os.environ.pop("NJORDHR_AGENT_URL", None)
+            else:
+                os.environ["NJORDHR_AGENT_URL"] = old_url
+            if old_runtime_port is None:
+                os.environ.pop("NJORDHR_AGENT_RUNTIME_PORT", None)
+            else:
+                os.environ["NJORDHR_AGENT_RUNTIME_PORT"] = old_runtime_port
+            if old_agent_port is None:
+                os.environ.pop("NJORDHR_AGENT_PORT", None)
+            else:
+                os.environ["NJORDHR_AGENT_PORT"] = old_agent_port
 
     def test_sensitive_endpoints_require_authentication(self):
         with self.client.session_transaction() as sess:
@@ -515,6 +842,554 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn('"type": "complete"', payload)
         self.assertIn('"success": true', payload.lower())
 
+    def test_resume_upload_pipeline_records_checksum_storage_and_status(self):
+        file_bytes = b"%PDF-1.4 uploaded resume bytes"
+        expected_checksum = hashlib.sha256(file_bytes).hexdigest()
+        metadata = {
+            "job_id": "job-123",
+            "candidate_external_id": "1001",
+            "rank_applied_for": "Chief Officer",
+            "device_id": "device-123",
+        }
+
+        captured = {}
+
+        def fake_append(kind, payload):
+            captured["kind"] = kind
+            captured["payload"] = payload
+
+        with patch.object(
+            backend_server,
+            "_supabase_storage_upload",
+            return_value=("storage://resumes/Chief_Officer/1001/Chief_Officer_1001.pdf", ""),
+        ) as upload_mock, patch.object(backend_server, "_append_agent_sync_jsonl", side_effect=fake_append):
+            resp = self.client.post(
+                "/api/agent/resume-upload",
+                data={
+                    "metadata": json.dumps(metadata),
+                    "file": (io.BytesIO(file_bytes), "Chief_Officer_1001.pdf"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["upload_status"], "uploaded")
+        self.assertEqual(body["resume_source"], "cloud_synced")
+        self.assertEqual(body["resume_upload_status"], "uploaded")
+        self.assertEqual(body["resume_storage_path"], "storage://resumes/Chief_Officer/1001/Chief_Officer_1001.pdf")
+        self.assertEqual(body["resume_checksum_sha256"], expected_checksum)
+        upload_mock.assert_called_once()
+        args, _kwargs = upload_mock.call_args
+        self.assertEqual(args[1], "Chief_Officer/1001/Chief_Officer_1001.pdf")
+        self.assertEqual(captured["kind"], "resume_upload")
+        self.assertEqual(captured["payload"]["resume_storage_path"], "storage://resumes/Chief_Officer/1001/Chief_Officer_1001.pdf")
+        self.assertEqual(captured["payload"]["resume_upload_status"], "uploaded")
+        self.assertEqual(captured["payload"]["resume_checksum_sha256"], expected_checksum)
+        self.assertEqual(captured["payload"]["resume_source"], "cloud_synced")
+        self.assertEqual(captured["payload"]["object_path"], "Chief_Officer/1001/Chief_Officer_1001.pdf")
+
+    def test_download_stream_forwards_local_agent_progress_events(self):
+        queued = backend_server._translate_agent_stream_event({
+            "type": "queued",
+            "message": "Job queued",
+            "data": {"stage": "queued", "percent": 0},
+        })
+        running = backend_server._translate_agent_stream_event({
+            "type": "running",
+            "message": "Job started",
+            "data": {"stage": "running", "percent": 5},
+        })
+        progress = backend_server._translate_agent_stream_event({
+            "type": "progress",
+            "message": "Validated session",
+            "data": {"stage": "preflight", "percent": 10},
+        })
+        log_event = backend_server._translate_agent_stream_event({
+            "type": "log",
+            "message": "Downloading for Chief Officer / Bulk Carrier",
+            "data": {"level": "INFO"},
+        })
+        complete = backend_server._translate_agent_stream_event({
+            "type": "complete",
+            "message": "Download done",
+            "data": {"result": {"success": True, "message": "Download done", "saved_files": []}},
+        })
+
+        self.assertEqual(queued["type"], "progress")
+        self.assertEqual(queued["stage"], "queued")
+        self.assertEqual(running["percent"], 5)
+        self.assertEqual(progress["stage"], "preflight")
+        self.assertEqual(log_event["type"], "log")
+        self.assertEqual(log_event["line"], "Downloading for Chief Officer / Bulk Carrier")
+        self.assertEqual(complete["type"], "complete")
+        self.assertTrue(complete["success"])
+
+    def test_get_rank_folder_ship_types_reads_manifest_metadata(self):
+        manifest_path = self.rank_dir / "manifest.json"
+        manifest_path.write_text(json.dumps({
+            "version": 1,
+            "files": {
+                "Chief_Officer_1001.pdf": {
+                    "candidate_id": "1001",
+                    "rank": self.rank,
+                    "applied_ship_types": ["Bulk Carrier", "Tanker"],
+                },
+                "Chief_Officer_1002.pdf": {
+                    "candidate_id": "1002",
+                    "rank": self.rank,
+                    "applied_ship_types": ["Bulk Carrier"],
+                },
+            }
+        }), encoding="utf-8")
+
+        resp = self.client.get(f"/get_rank_folder_ship_types?rank_folder={self.rank}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["ship_types"], ["Bulk Carrier", "Tanker"])
+
+    def test_get_rank_folder_summaries_reports_pdf_counts(self):
+        (self.rank_dir / "Chief_Officer_1001.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "Chief_Officer_1002.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "notes.txt").write_text("ignore me", encoding="utf-8")
+        other_rank = self.download_root / "2nd_Engineer"
+        other_rank.mkdir(parents=True, exist_ok=True)
+        (other_rank / "2nd_Engineer_2001.pdf").write_bytes(b"%PDF-1.4")
+
+        resp = self.client.get("/get_rank_folder_summaries")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        summaries = {row["folder"]: row["pdf_count"] for row in body["folders"]}
+        self.assertEqual(summaries["Chief_Officer"], 2)
+        self.assertEqual(summaries["2nd_Engineer"], 1)
+
+    def test_get_rank_folder_files_returns_sorted_pdfs_only(self):
+        (self.rank_dir / "Chief_Officer_1002.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "Chief_Officer_1001.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "notes.txt").write_text("ignore me", encoding="utf-8")
+
+        resp = self.client.get("/get_rank_folder_files?rank_folder=Chief_Officer")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["files"], ["Chief_Officer_1001.pdf", "Chief_Officer_1002.pdf"])
+
+    def test_rank_folder_endpoints_prefer_local_agent_download_root(self):
+        self._write_fake_resume("EmailResume.pdf")
+
+        folders_resp = self.client.get("/get_rank_folders")
+        files_resp = self.client.get("/get_rank_folder_files?rank_folder=Chief_Officer")
+        summaries_resp = self.client.get("/get_rank_folder_summaries")
+
+        self.assertEqual(folders_resp.status_code, 200)
+        self.assertEqual(files_resp.status_code, 200)
+        self.assertEqual(summaries_resp.status_code, 200)
+
+        self.assertEqual(folders_resp.get_json()["folders"], ["Chief_Officer"])
+        self.assertEqual(files_resp.get_json()["files"], ["EmailResume.pdf"])
+        summaries = {row["folder"]: row["pdf_count"] for row in summaries_resp.get_json()["folders"]}
+        self.assertEqual(summaries, {"Chief_Officer": 1})
+
+    def test_preview_downloaded_resume_proxies_through_agent_when_local_agent_enabled(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = {}
+
+        class DummyResponse:
+            status_code = 200
+            content = b"%PDF-1.4 proxied preview"
+            headers = {"Content-Type": "application/pdf"}
+            text = ""
+
+        def fake_requests_request(method, url, **kwargs):
+            captured["method"] = method
+            captured["url"] = url
+            captured["headers"] = kwargs.get("headers") or {}
+            return DummyResponse()
+
+        with patch.dict(os.environ, {"NJORDHR_AGENT_SYNC_TOKEN": "agent-preview-token"}, clear=False):
+            with patch.object(backend_server.requests, "request", side_effect=fake_requests_request):
+                resp = self.client.get(
+                    "/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf"
+                )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data, b"%PDF-1.4 proxied preview")
+        self.assertEqual(captured["method"], "GET")
+        self.assertIn("/preview_downloaded_resume/Chief_Officer/Chief-Officer_Bulk-Carrier_1001.pdf", captured["url"])
+        self.assertEqual(captured["headers"].get("X-Device-Token"), "agent-preview-token")
+
+    def test_admin_settings_loads_and_saves_mailbox_intake_settings_via_local_agent(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            if method == "GET" and path == "/settings":
+                return self._agent_json_response({
+                    "success": True,
+                    "settings": {
+                        "email_intake_enabled": True,
+                        "email_intake_mailbox": "recruitment@njordships.com",
+                        "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                        "email_intake_processed_folder": "Inbox/NjordHR Processed",
+                        "email_intake_failed_folder": "Inbox/NjordHR Failed",
+                        "email_intake_poll_interval_seconds": 90,
+                        "outlook_client_id": "client-123",
+                        "outlook_tenant_id": "organizations",
+                    },
+                })
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            get_resp = self.client.get("/admin/settings", headers={"X-Admin-Token": "test-admin-token"})
+            post_resp = self.client.post(
+                "/admin/settings",
+                headers={"X-Admin-Token": "test-admin-token"},
+                json={"settings": {
+                    "email_intake_enabled": True,
+                    "email_intake_mailbox": "crewing@example.com",
+                    "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                    "email_intake_poll_interval_seconds": "120",
+                    "outlook_client_id": "client-456",
+                    "outlook_tenant_id": "organizations",
+                }},
+            )
+
+        self.assertEqual(get_resp.status_code, 200)
+        non_secret = get_resp.get_json()["settings"]["non_secret"]
+        self.assertEqual(non_secret["email_intake_mailbox"], "recruitment@njordships.com")
+        self.assertEqual(non_secret["outlook_client_id"], "client-123")
+        self.assertEqual(post_resp.status_code, 200)
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        agent_payload = put_calls[0][2]
+        self.assertEqual(agent_payload["email_intake_mailbox"], "crewing@example.com")
+        self.assertEqual(agent_payload["outlook_client_id"], "client-456")
+
+    def test_admin_settings_propagates_download_folder_to_local_agent(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "default_download_folder": str(self.download_root),
+                        "use_local_agent": True,
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertIn(("PUT", "/settings/download-folder", {"download_folder": str(self.download_root)}), captured)
+
+    def test_admin_settings_prefers_agent_download_folder_when_local_agent_enabled(self):
+        resp = self.client.get(
+            "/admin/settings",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["settings"]["non_secret"]["default_download_folder"], str(self.download_root))
+
+    def test_admin_settings_same_request_can_enable_local_agent_and_mailbox(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=False)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            if method == "GET" and path == "/settings":
+                return self._agent_json_response({
+                    "success": True,
+                    "settings": {
+                        "email_intake_enabled": False,
+                    },
+                })
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "use_local_agent": True,
+                        "email_intake_enabled": True,
+                        "email_intake_mailbox": "crewing@example.com",
+                        "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        self.assertEqual(put_calls[0][2]["email_intake_mailbox"], "crewing@example.com")
+        self.assertEqual(put_calls[0][2]["email_intake_enabled"], True)
+
+    def test_admin_settings_reports_agent_folder_sync_warning_without_failing_backend_save(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            if method == "PUT" and path == "/settings/download-folder":
+                raise OSError("agent unavailable")
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "default_download_folder": str(self.download_root),
+                        "use_local_agent": True,
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertIn("warnings", body)
+        self.assertTrue(body["warnings"])
+        self.assertIn("agent unavailable", body["warnings"][0])
+
+    def test_admin_settings_string_false_does_not_enable_local_agent(self):
+        prev_feature_flags = backend_server.feature_flags
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=False)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        try:
+            with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+                resp = self.client.post(
+                    "/admin/settings",
+                    headers={"X-Admin-Token": "test-admin-token"},
+                    json={"settings": {
+                        "use_local_agent": "false",
+                        "default_download_folder": str(self.download_root),
+                    }},
+                )
+        finally:
+            backend_server.feature_flags = prev_feature_flags
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(captured, [])
+
+    def test_admin_settings_does_not_clear_mailbox_settings_with_blank_form_values(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.post(
+                "/admin/settings",
+                headers={"X-Admin-Token": "test-admin-token"},
+                json={"settings": {
+                    "email_intake_enabled": False,
+                    "email_intake_mailbox": "",
+                    "outlook_client_id": "",
+                    "outlook_tenant_id": "",
+                }},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        agent_payload = put_calls[0][2]
+        self.assertEqual(agent_payload, {"email_intake_enabled": False})
+
+    def test_mailbox_connect_reports_missing_agent_configuration_before_auth_start(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            if method == "GET" and path == "/email-intake/auth/status":
+                return self._agent_json_response({
+                    "success": True,
+                    "auth": {
+                        "mailbox": "",
+                        "client_id_present": False,
+                    },
+                })
+            return self._agent_json_response({"success": True})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.post("/email-intake/auth/start", json={})
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("Mailbox and Outlook Client ID missing", body["message"])
+        self.assertFalse(any(call[0] == "POST" and call[1] == "/email-intake/auth/start" for call in captured))
+
+    def test_get_rank_options_uses_live_agent_folders_when_available(self):
+        agent_root = self.base / "AgentResumes"
+        (agent_root / "OS").mkdir(parents=True, exist_ok=True)
+        (agent_root / "AB").mkdir(parents=True, exist_ok=True)
+        self._write_fake_resume("EmailResume.pdf")
+
+        resp = self.client.get("/get_rank_options")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["source"], "active_download_root")
+        self.assertEqual(body["ranks"], ["Chief_Officer"])
+
+    def test_download_results_summary_uses_live_agent_root_and_separates_manual_review(self):
+        os_rank = self.download_root / "OS"
+        os_rank.mkdir(parents=True, exist_ok=True)
+        (os_rank / "EMAIL_resume.pdf").write_bytes(b"%PDF-1.4")
+        (os_rank / "legacy.pdf").write_bytes(b"%PDF-1.4")
+        manual_review = self.download_root / "_EmailInbox_ManualReview"
+        manual_review.mkdir(parents=True, exist_ok=True)
+        (manual_review / "manual.pdf").write_bytes(b"%PDF-1.4")
+        resp = self.client.get("/get_download_results_summary")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["mailbox"]["successfully_routed"], 1)
+        self.assertEqual(body["mailbox"]["manual_review_count"], 1)
+        self.assertEqual(body["mailbox"]["role_counts"], [{"folder": "OS", "count": 1}])
+        self.assertEqual(body["online"]["total_downloaded"], 1)
+        self.assertEqual(body["online"]["role_counts"], [{"folder": "OS", "count": 1}])
+
+    def test_analyze_stream_forwards_applied_ship_type_to_analyzer(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["prompt"] = prompt
+                captured["applied_ship_type"] = applied_ship_type
+                captured["experienced_ship_type"] = experienced_ship_type
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {"scanned": 0, "passed": 0, "failed": 0, "unknown": 0, "matched": 0},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=show%20candidates&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["prompt"], "show candidates")
+        self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
+        self.assertEqual(captured["experienced_ship_type"], "Tanker")
+
+    def test_analyze_stream_logs_hard_filter_audit_rows(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        self._write_fake_resume("Chief_Officer_1002.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_audit": [
+                        {
+                            "candidate_id": "1001",
+                            "filename": "Chief_Officer_1001.pdf",
+                            "facts_version": "1.1",
+                            "hard_filter_decision": "FAIL",
+                            "hard_filter_reasons": [
+                                {
+                                    "reason_code": "US_VISA_EXPIRED",
+                                    "message": "Visa US Visa (USA) expired on 2023-02-09.",
+                                }
+                            ],
+                            "llm_reached": False,
+                            "llm_promoted": ["us_visa"],
+                            "result_bucket": "excluded",
+                        },
+                        {
+                            "candidate_id": "1002",
+                            "filename": "Chief_Officer_1002.pdf",
+                            "facts_version": "2.0",
+                            "hard_filter_decision": "UNKNOWN",
+                            "hard_filter_reasons": [
+                                {
+                                    "reason_code": "VISA_FILTER_UNSUPPORTED",
+                                    "message": "Requested filter 'valid UK visa' is not yet supported by the deterministic visa parser.",
+                                }
+                            ],
+                            "llm_reached": False,
+                            "result_bucket": "needs_review",
+                        },
+                    ],
+                    "hard_filter_summary": {"scanned": 2, "passed": 0, "failed": 1, "unknown": 1, "matched": 0},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=having%20valid%20UK%20visa&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        audit_rows = backend_server.csv_manager.get_ai_search_audit_rows()
+        self.assertEqual(len(audit_rows), 2)
+        self.assertEqual(audit_rows[0]["Candidate_ID"], "1001")
+        self.assertEqual(audit_rows[0]["Facts_Version"], "1.1")
+        self.assertEqual(audit_rows[0]["Hard_Filter_Decision"], "FAIL")
+        self.assertEqual(audit_rows[0]["Reason_Codes"], "US_VISA_EXPIRED")
+        self.assertEqual(audit_rows[0]["LLM_Promoted_Families"], "us_visa")
+        self.assertEqual(audit_rows[0]["Result_Bucket"], "excluded")
+        self.assertEqual(audit_rows[1]["Facts_Version"], "2.0")
+        self.assertEqual(audit_rows[1]["Hard_Filter_Decision"], "UNKNOWN")
+        self.assertEqual(audit_rows[1]["Reason_Codes"], "VISA_FILTER_UNSUPPORTED")
+        self.assertEqual(audit_rows[1]["Applied_Ship_Type_Filter"], "Bulk Carrier")
+        self.assertEqual(audit_rows[1]["Experienced_Ship_Type_Filter"], "Tanker")
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertNotIn('"hard_filter_audit"', payload)
+
     def test_admin_settings_requires_token(self):
         with self.client.session_transaction() as sess:
             sess.clear()
@@ -560,6 +1435,91 @@ class BackendEventLogFlowTests(unittest.TestCase):
         names = [item["name"] for item in body.get("entries", [])]
         self.assertIn("A", names)
         self.assertIn("B", names)
+
+    def test_admin_folder_browser_exposes_windows_drive_roots(self):
+        with patch.object(backend_server, "_is_windows", return_value=True), \
+             patch.object(
+                 backend_server,
+                 "_list_windows_drive_entries",
+                 return_value=[
+                     {"name": "C:\\", "path": "C:\\"},
+                     {"name": "D:\\", "path": "D:\\"},
+                 ],
+             ):
+            resp = self.client.get(
+                "/admin/fs/list",
+                headers={"X-Admin-Token": "test-admin-token"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        names = [item["name"] for item in body.get("entries", [])]
+        self.assertIn("C:\\", names)
+        self.assertIn("D:\\", names)
+
+    def test_get_rank_folders_excludes_hidden_directories(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        hidden = self.download_root / ".git"
+        hidden.mkdir(parents=True, exist_ok=True)
+        stray = self.download_root / "git"
+        stray.mkdir(parents=True, exist_ok=True)
+
+        resp = self.client.get(
+            "/get_rank_folders",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertIn(self.rank, body["folders"])
+        self.assertNotIn(".git", body["folders"])
+        self.assertNotIn("git", body["folders"])
+
+    def test_analyze_stream_still_completes_when_audit_logging_fails(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
+                yield {
+                    "type": "complete",
+                    "verified_matches": [
+                        {
+                            "filename": "Chief_Officer_1001.pdf",
+                            "reason": "Match found.",
+                            "confidence": 0.91,
+                        }
+                    ],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_audit": [
+                        {
+                            "candidate_id": "1001",
+                            "filename": "Chief_Officer_1001.pdf",
+                            "hard_filter_decision": "PASS",
+                            "hard_filter_reasons": [],
+                            "llm_reached": True,
+                            "result_bucket": "verified_match",
+                        }
+                    ],
+                    "hard_filter_summary": {"scanned": 1, "passed": 1, "failed": 0, "unknown": 0, "matched": 1},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch.object(backend_server.csv_manager, "log_ai_search_audit", side_effect=RuntimeError("disk busy")):
+            resp = self.client.get(
+                "/analyze_stream?rank_folder=Chief_Officer&prompt=having%20valid%20US%20visa"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertIn('"verified_matches"', payload)
 
     def test_admin_settings_rejects_invalid_otp_window(self):
         resp = self.client.post(
@@ -710,6 +1670,527 @@ class BackendEventLogFlowTests(unittest.TestCase):
             body = resp.get_json()
             self.assertFalse(body["success"])
             self.assertIn("no users are configured", body["message"].lower())
+
+    def test_candidate_facts_review_capture_approve_and_promote(self):
+        repo = backend_server._candidate_facts_repository()
+        capture_body = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-1",
+            resume_blob_id="blob-1",
+            candidate_facts=self._candidate_facts_payload(),
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "match",
+                "compared_field_count": 2,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            review_alignment_status="match",
+            review_alignment_mismatch_count=0,
+            review_alignment_mismatches=[],
+        )
+        self.assertEqual(capture_body["review_item"]["review_status"], "pending_review")
+
+        items_resp = self.client.get("/candidate-facts/review/items")
+        self.assertEqual(items_resp.status_code, 200)
+        items = items_resp.get_json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertNotIn("candidate_facts", items[0])
+        self.assertIn("candidate_facts_summary", items[0])
+        item_id = items[0]["id"]
+
+        approve_resp = self.client.post("/candidate-facts/review/approve", json={
+            "id": item_id,
+            "reviewed_by": "reviewer",
+            "review_notes": "looks good",
+        })
+        self.assertEqual(approve_resp.status_code, 200)
+        self.assertEqual(approve_resp.get_json()["review_item"]["review_status"], "approved")
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": item_id})
+        self.assertEqual(promote_resp.status_code, 200)
+        promote_body = promote_resp.get_json()
+        self.assertTrue(promote_body["success"])
+        self.assertTrue(promote_body["persist"]["committed"])
+        self.assertEqual(promote_body["review_item"]["persistence_status"], "persisted")
+
+    def test_candidate_facts_review_promote_surfaces_supabase_sync_warnings(self):
+        class _FailingSupabaseStore:
+            def promote_candidate_resume_facts_row(self, _row):
+                raise RuntimeError("simulated supabase outage")
+
+        repo = backend_server._candidate_facts_repository()
+        repo.supabase_store = _FailingSupabaseStore()
+        backend_server.candidate_facts_repo = repo
+
+        capture_body = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-1b",
+            resume_blob_id="blob-1b",
+            candidate_facts=self._candidate_facts_payload(),
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "match",
+                "compared_field_count": 2,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            review_alignment_status="match",
+            review_alignment_mismatch_count=0,
+            review_alignment_mismatches=[],
+        )
+        item_id = capture_body["review_item"]["id"]
+        self.assertEqual(
+            self.client.post("/candidate-facts/review/approve", json={
+                "id": item_id,
+                "reviewed_by": "reviewer",
+            }).status_code,
+            200,
+        )
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": item_id})
+        self.assertEqual(promote_resp.status_code, 200)
+        body = promote_resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertTrue(body["persist"]["committed"])
+        self.assertFalse(body["supabase_synced"])
+        self.assertGreater(len(body.get("warnings") or []), 0)
+        self.assertEqual(body["review_item"]["supabase_persistence_status"], "failed")
+        self.assertFalse(body["review_item"]["supabase_synced"])
+        self.assertIn("supabase outage", body["warnings"][0].lower())
+
+    def test_candidate_facts_review_promote_rejects_client_override_of_acceptance_policy(self):
+        repo = backend_server._candidate_facts_repository()
+        capture_body = repo.capture_normalized_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-2",
+            resume_blob_id="blob-2",
+            candidate_facts={
+                **self._candidate_facts_payload(),
+                "extraction": {
+                    **self._candidate_facts_payload()["extraction"],
+                    "status": "failed",
+                },
+            },
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "match",
+                "compared_field_count": 2,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            review_alignment_status="match",
+            review_alignment_mismatch_count=0,
+            review_alignment_mismatches=[],
+        )
+        item_id = capture_body["review_item"]["id"]
+        self.assertEqual(
+            self.client.post("/candidate-facts/review/approve", json={
+                "id": item_id,
+                "reviewed_by": "reviewer",
+            }).status_code,
+            200,
+        )
+
+        promote_resp = self.client.post(
+            "/candidate-facts/review/promote",
+            json={
+                "id": item_id,
+                "acceptable_extraction_statuses": ["failed"],
+            },
+        )
+        self.assertEqual(promote_resp.status_code, 409)
+        body = promote_resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertFalse(body["persist"]["committed"])
+        self.assertEqual(body["review_item"]["persistence_status"], "persisted_non_current")
+
+    def test_candidate_facts_review_and_telemetry_are_admin_only_without_token(self):
+        with self.client.session_transaction() as sess:
+            sess["username"] = "recruiter"
+            sess["role"] = "recruiter"
+
+        review_items_resp = self.client.get(
+            "/candidate-facts/review/items",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(review_items_resp.status_code, 403)
+        self.assertFalse(review_items_resp.get_json()["success"])
+
+        review_capture_resp = self.client.post("/candidate-facts/review/capture", json={
+            "candidate_resume_id": "candidate-resume-3",
+            "resume_blob_id": "blob-3",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": self._candidate_facts_payload(),
+        }, headers={"X-Admin-Token": "test-admin-token"})
+        self.assertEqual(review_capture_resp.status_code, 403)
+        self.assertFalse(review_capture_resp.get_json()["success"])
+
+        telemetry_resp = self.client.get(
+            "/admin/telemetry_logs",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(telemetry_resp.status_code, 403)
+        self.assertFalse(telemetry_resp.get_json()["success"])
+
+        telemetry_summary_resp = self.client.get(
+            "/admin/telemetry_summary",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(telemetry_summary_resp.status_code, 403)
+        self.assertFalse(telemetry_summary_resp.get_json()["success"])
+
+    def test_candidate_facts_review_promote_blocks_when_alignment_report_missing(self):
+        payload = {
+            "candidate_resume_id": "candidate-resume-3b",
+            "resume_blob_id": "blob-3b",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "candidate_facts": self._candidate_facts_payload(),
+        }
+
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        item = capture_resp.get_json()["review_item"]
+        self.assertEqual(item["review_alignment_status"], "not_checked")
+        self.assertFalse(item["review_alignment_checked"])
+
+        approve_resp = self.client.post("/candidate-facts/review/approve", json={
+            "id": item["id"],
+            "reviewed_by": "reviewer",
+        })
+        self.assertEqual(approve_resp.status_code, 200)
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": item["id"]})
+        self.assertEqual(promote_resp.status_code, 409)
+        body = promote_resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("explicit alignment report", body["message"])
+
+    def test_candidate_facts_review_capture_ignores_client_supplied_alignment_state(self):
+        payload = {
+            "candidate_resume_id": "candidate-resume-3c",
+            "resume_blob_id": "blob-3c",
+            "parser_version": "generic_pdf.v1",
+            "facts_revision": "rev-1",
+            "review_alignment_report": {
+                "status": "match",
+                "compared_field_count": 99,
+                "mismatch_count": 0,
+                "mismatches": [],
+            },
+            "review_alignment_status": "match",
+            "review_alignment_mismatch_count": 0,
+            "review_alignment_mismatches": [],
+            "candidate_facts": self._candidate_facts_payload(),
+        }
+
+        capture_resp = self.client.post("/candidate-facts/review/capture", json=payload)
+        self.assertEqual(capture_resp.status_code, 200)
+        item = capture_resp.get_json()["review_item"]
+        self.assertEqual(item["review_alignment_status"], "not_checked")
+        self.assertFalse(item["review_alignment_checked"])
+
+    def test_candidate_facts_promotion_blocks_when_review_alignment_mismatches(self):
+        repo = backend_server._candidate_facts_repository()
+        record = repo.validation_cache.capture_candidate_facts_for_review(
+            candidate_resume_id="candidate-resume-4",
+            resume_blob_id="blob-4",
+            candidate_facts=self._candidate_facts_payload(),
+            parser_version="generic_pdf.v1",
+            facts_revision="rev-1",
+            review_alignment_report={
+                "status": "mismatch",
+                "compared_field_count": 1,
+                "mismatch_count": 1,
+                "mismatches": [{
+                    "field_path": "logistics.passport_expiry_date",
+                    "reason": "missing_review_fact",
+                }],
+            },
+            review_alignment_status="mismatch",
+            review_alignment_mismatch_count=1,
+            review_alignment_mismatches=[{
+                "field_path": "logistics.passport_expiry_date",
+                "reason": "missing_review_fact",
+            }],
+        )
+        self.assertEqual(record["review_alignment_status"], "mismatch")
+
+        approve_resp = self.client.post("/candidate-facts/review/approve", json={
+            "id": record["id"],
+            "reviewed_by": "reviewer",
+        })
+        self.assertEqual(approve_resp.status_code, 200)
+
+        promote_resp = self.client.post("/candidate-facts/review/promote", json={"id": record["id"]})
+        self.assertEqual(promote_resp.status_code, 409)
+        body = promote_resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("diverges from live search facts", body["message"])
+
+    def test_admin_telemetry_summary_reports_prompt_audit_counts(self):
+        class _FakeTelemetryStore:
+            table_name = "njordhr_telemetry_logs"
+
+            def list_prompt_audit_summaries(self, *, limit=100, offset=0):
+                self.limit = limit
+                self.offset = offset
+                return [
+                    {
+                        "prompt_hash": "hash-1",
+                        "total_count": 12,
+                        "issue_count": 2,
+                        "ok_count": 10,
+                        "disabled_count": 0,
+                        "first_seen_at": "2025-05-01T00:00:00Z",
+                        "last_seen_at": "2025-05-25T00:00:00Z",
+                    },
+                    {
+                        "prompt_hash": "hash-2",
+                        "total_count": 4,
+                        "issue_count": 0,
+                        "ok_count": 4,
+                        "disabled_count": 0,
+                        "first_seen_at": "2025-05-02T00:00:00Z",
+                        "last_seen_at": "2025-05-23T00:00:00Z",
+                    },
+                ]
+
+            def get_prompt_audit_totals(self):
+                return {
+                    "total_count": 16,
+                    "issue_count": 2,
+                    "ok_count": 12,
+                    "disabled_count": 2,
+                    "prompt_hash_count": 2,
+                }
+
+            def list_events(self, *, limit=100, telemetry_kind=None, category=None, status=None):
+                return [
+                    {
+                        "id": "evt-1",
+                        "telemetry_kind": "system_log",
+                        "category": "ai_search",
+                        "status": "error",
+                        "summary": "something went wrong",
+                    }
+                ]
+
+        with patch.object(backend_server, "_supabase_telemetry_store", return_value=_FakeTelemetryStore()):
+            resp = self.client.get("/admin/telemetry_summary?threshold=10")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["summary"]["prompt_audit_count"], 16)
+        self.assertEqual(body["summary"]["prompt_audit_issue_count"], 2)
+        self.assertEqual(body["summary"]["prompt_audit_hash_count"], 2)
+        self.assertEqual(body["summary"]["prompt_audit_ok_count"], 12)
+        self.assertEqual(body["summary"]["prompt_audit_disabled_count"], 2)
+        self.assertEqual(body["summary"]["prompt_audit_over_threshold_count"], 1)
+        self.assertFalse(body["summary"]["prompt_audit_over_threshold_is_partial"])
+        self.assertEqual(body["summary"]["system_error_count"], 1)
+        self.assertEqual(body["prompt_audit_over_threshold"][0]["prompt_hash"], "hash-1")
+
+    def test_admin_telemetry_summary_counts_prompt_audit_threshold_exactly_across_pages(self):
+        class _FakeTelemetryStore:
+            table_name = "njordhr_telemetry_logs"
+
+            def __init__(self):
+                self.rows = [
+                    {"prompt_hash": "hash-1", "total_count": 12, "issue_count": 2, "ok_count": 10, "disabled_count": 0, "first_seen_at": "2025-05-01T00:00:00Z", "last_seen_at": "2025-05-25T00:00:00Z"},
+                    {"prompt_hash": "hash-2", "total_count": 4, "issue_count": 0, "ok_count": 4, "disabled_count": 0, "first_seen_at": "2025-05-02T00:00:00Z", "last_seen_at": "2025-05-23T00:00:00Z"},
+                    {"prompt_hash": "hash-3", "total_count": 15, "issue_count": 1, "ok_count": 14, "disabled_count": 0, "first_seen_at": "2025-05-03T00:00:00Z", "last_seen_at": "2025-05-24T00:00:00Z"},
+                ]
+
+            def list_prompt_audit_summaries(self, *, limit=100, offset=0):
+                batch = self.rows[offset:offset + limit]
+                return batch
+
+            def get_prompt_audit_totals(self):
+                return {
+                    "total_count": 31,
+                    "issue_count": 3,
+                    "ok_count": 28,
+                    "disabled_count": 0,
+                    "prompt_hash_count": 3,
+                }
+
+            def list_events(self, *, limit=100, telemetry_kind=None, category=None, status=None):
+                return []
+
+        with patch.object(backend_server, "_supabase_telemetry_store", return_value=_FakeTelemetryStore()):
+            resp = self.client.get("/admin/telemetry_summary?limit=2&threshold=10")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["summary"]["prompt_audit_over_threshold_count"], 2)
+        self.assertTrue(body["summary"]["prompt_audit_over_threshold_is_partial"])
+        self.assertEqual(len(body["prompt_audit_summaries"]), 2)
+        self.assertEqual(len(body["prompt_audit_over_threshold"]), 2)
+
+    def test_prompt_audit_logging_redacts_raw_prompt_and_flags_issues(self):
+        fake_shadow_audit = {
+            "prompt_id": "prompt-1",
+            "prompt": "2nd engineer with valid passport",
+            "shadow_mode": "enabled",
+            "shadow_wiring": {
+                "feature_flag_enabled": True,
+                "llm_plan_provider_attached": True,
+                "llm_plan_requested": True,
+                "llm_plan_source": "llm",
+                "llm_plan_fallback_used": False,
+                "failure_reason": None,
+            },
+            "legacy_plan": {"normalizer": {"name": "legacy"}},
+            "llm_plan": {"normalizer": {"name": "llm"}},
+            "legacy_comparison_records": [
+                {
+                    "family": "passport",
+                    "source_text": "passport 123456",
+                }
+            ],
+            "comparison_results": [
+                {
+                    "comparison_outcome": "equivalent",
+                    "legacy_record": {"source_text": "2nd engineer with valid passport"},
+                    "llm_record": {"source_text": "2nd engineer with valid passport"},
+                },
+                {
+                    "comparison_outcome": "regression",
+                    "legacy_record": {"source_text": "passport 123456"},
+                    "llm_record": {"source_text": "passport number"},
+                },
+            ],
+            "comparison_outcomes": ["equivalent", "regression"],
+            "validation_status": "valid",
+            "candidate_facts_audit": {},
+        }
+
+        captured = {}
+
+        def fake_record(**kwargs):
+            captured.update(kwargs)
+            return {"success": True}
+
+        with patch.dict(os.environ, {"NJORDHR_TELEMETRY_STORE_RAW_PROMPTS": "false"}, clear=False), patch.object(
+            backend_server, "build_shadow_audit_entry", return_value=fake_shadow_audit
+        ), patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record):
+            backend_server._log_search_prompt_audit(
+                analyzer=object(),
+                prompt="2nd engineer with valid passport",
+                rank_folder="Chief_Officer",
+                search_session_id="session-1",
+                actor_role="recruiter",
+                actor_username="demo",
+            )
+
+        self.assertEqual(captured["telemetry_kind"], "prompt_audit")
+        self.assertEqual(captured["status"], "issue")
+        self.assertEqual(captured["prompt_text"], "")
+        self.assertNotIn("prompt", captured["payload"])
+        self.assertNotIn("legacy_plan", captured["payload"])
+        self.assertNotIn("llm_plan", captured["payload"])
+        self.assertNotIn("source_text", json.dumps(captured["payload"]))
+
+    def test_prompt_audit_logging_can_store_raw_prompt_when_explicitly_enabled(self):
+        fake_shadow_audit = {
+            "prompt_id": "prompt-1",
+            "prompt": "2nd engineer with valid passport",
+            "shadow_mode": "enabled",
+            "shadow_wiring": {
+                "feature_flag_enabled": True,
+                "llm_plan_provider_attached": True,
+                "llm_plan_requested": True,
+                "llm_plan_source": "llm",
+                "llm_plan_fallback_used": False,
+                "failure_reason": None,
+            },
+            "legacy_plan": {"normalizer": {"name": "legacy"}},
+            "llm_plan": {"normalizer": {"name": "llm"}},
+            "comparison_results": [{"comparison_outcome": "equivalent"}],
+            "comparison_outcomes": ["equivalent"],
+            "validation_status": "valid",
+            "candidate_facts_audit": {},
+        }
+
+        captured = {}
+
+        def fake_record(**kwargs):
+            captured.update(kwargs)
+            return {"success": True}
+
+        with patch.dict(os.environ, {"NJORDHR_TELEMETRY_STORE_RAW_PROMPTS": "true"}, clear=False), patch.object(
+            backend_server, "build_shadow_audit_entry", return_value=fake_shadow_audit
+        ), patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record):
+            backend_server._log_search_prompt_audit(
+                analyzer=object(),
+                prompt="2nd engineer with valid passport",
+                rank_folder="Chief_Officer",
+                search_session_id="session-1",
+                actor_role="recruiter",
+                actor_username="demo",
+            )
+
+        self.assertEqual(captured["prompt_text"], "2nd engineer with valid passport")
+        self.assertNotIn("prompt", captured["payload"])
+
+    def test_prompt_audit_is_scheduled_in_background(self):
+        observed = {}
+
+        class _FakeThread:
+            def __init__(self, *, target, name, daemon):
+                observed["name"] = name
+                observed["daemon"] = daemon
+                observed["target"] = target
+
+            def start(self):
+                observed["started"] = True
+                observed["target"]()
+
+        with patch.object(backend_server.threading, "Thread", _FakeThread), patch.object(
+            backend_server, "_build_analyzer", return_value=object()
+        ), patch.object(backend_server, "_log_search_prompt_audit", return_value={"shadow_mode": "enabled"}
+        ) as mocked:
+            thread = backend_server._schedule_search_prompt_audit(
+                analyzer=object(),
+                prompt="2nd engineer with valid passport",
+                rank_folder="Chief_Officer",
+                search_session_id="session-1",
+                actor_role="recruiter",
+                actor_username="demo",
+            )
+
+        self.assertTrue(observed["daemon"])
+        self.assertTrue(observed["started"])
+        self.assertIsNotNone(thread)
+        mocked.assert_called_once()
+
+    def test_candidate_facts_repository_rebuilds_when_supabase_runtime_changes(self):
+        backend_server.candidate_facts_repo = None
+        backend_server.feature_flags = replace(
+            backend_server.feature_flags,
+            use_supabase_db=False,
+        )
+        repo_local = backend_server._candidate_facts_repository()
+        self.assertIsNone(getattr(repo_local, "supabase_store", None))
+
+        backend_server.feature_flags = replace(
+            backend_server.feature_flags,
+            use_supabase_db=True,
+        )
+        with patch.object(backend_server, "_supabase_url", return_value="https://example.supabase.co"), patch.object(
+            backend_server,
+            "resolve_supabase_api_key",
+            return_value="service-role-key",
+        ):
+            repo_remote = backend_server._candidate_facts_repository()
+
+        self.assertIsNot(repo_local, repo_remote)
+        self.assertIsNotNone(repo_remote.supabase_store)
+        self.assertEqual(repo_remote.supabase_url, "https://example.supabase.co")
+        self.assertEqual(repo_remote.supabase_service_role_key, "service-role-key")
 
 
 if __name__ == "__main__":

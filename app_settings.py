@@ -10,6 +10,14 @@ def _env_bool(name, default=False):
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _config_bool(parser, section, key, default=False):
+    if parser.has_option(section, key):
+        raw = str(parser.get(section, key, fallback="")).strip()
+        if raw:
+            return raw.lower() in {"1", "true", "yes", "on"}
+    return default
+
+
 @dataclass(frozen=True)
 class FeatureFlags:
     use_supabase_db: bool
@@ -40,11 +48,11 @@ def load_app_settings():
         )
 
     flags = FeatureFlags(
-        use_supabase_db=_env_bool("USE_SUPABASE_DB", default=False),
-        use_dual_write=_env_bool("USE_DUAL_WRITE", default=False),
-        use_supabase_reads=_env_bool("USE_SUPABASE_READS", default=False),
-        use_local_agent=_env_bool("USE_LOCAL_AGENT", default=False),
-        use_cloud_export=_env_bool("USE_CLOUD_EXPORT", default=False),
+        use_supabase_db=_config_bool(parser, "Advanced", "use_supabase_db", default=_env_bool("USE_SUPABASE_DB", default=False)),
+        use_dual_write=_config_bool(parser, "Advanced", "use_dual_write", default=_env_bool("USE_DUAL_WRITE", default=False)),
+        use_supabase_reads=_config_bool(parser, "Advanced", "use_supabase_reads", default=_env_bool("USE_SUPABASE_READS", default=False)),
+        use_local_agent=_config_bool(parser, "Advanced", "use_local_agent", default=_env_bool("USE_LOCAL_AGENT", default=False)),
+        use_cloud_export=_config_bool(parser, "Advanced", "use_cloud_export", default=_env_bool("USE_CLOUD_EXPORT", default=False)),
     )
 
     server_url = os.getenv("NJORDHR_SERVER_URL", "http://127.0.0.1:5000")

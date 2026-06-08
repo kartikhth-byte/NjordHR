@@ -33,3 +33,4 @@ NjordHR.bbprojectd/
 
 # Historical local backups
 Backup_*/
+.playwright-mcp/

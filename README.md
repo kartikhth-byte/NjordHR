@@ -40,6 +40,25 @@ Windows startup behavior:
 - Updates agent `api_base_url` to active backend URL.
 - Opens browser to active backend URL (unless `-NoOpen` is passed).
 
+## Electron Desktop Shell Prototype (E0)
+An initial Electron shell scaffold now exists under:
+- `electron/`
+
+Developer run:
+```bash
+cd electron
+npm install
+npm run dev
+```
+
+Notes:
+- The Electron shell starts or reuses the Python backend and opens NjordHR in an Electron window.
+- For development, you can override the Python executable with:
+  - `NJORDHR_ELECTRON_PYTHON=/path/to/python3`
+- In packaged mode, the shell is designed to launch a bundled Python runtime from app resources.
+- Backend readiness for the shell uses:
+  - `GET /runtime/ready`
+
 ## Windows Auto-Start on Login (Task Scheduler)
 Install:
 ```powershell
@@ -68,6 +87,13 @@ This repo now includes installer build scaffolding for both platforms.
 Optional toggle (dev-only, no embedded runtime):
 ```bash
 NJORDHR_EMBED_RUNTIME=false ./scripts/packaging/macos/build_app_bundle.sh
+```
+
+Optional bundled converter for DOC/DOCX customer builds:
+```bash
+NJORDHR_BUNDLED_CONVERTER_SOURCE=/absolute/path/to/libreoffice-payload \
+NJORDHR_REQUIRE_BUNDLED_CONVERTER=true \
+./scripts/packaging/macos/build_app_bundle.sh
 ```
 
 Outputs:
@@ -101,8 +127,20 @@ Inno installer (requires `iscc.exe`):
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\build_inno_installer.ps1
 ```
 
+Bundled converter staging for Electron/Windows release builds:
+```bash
+cd electron
+NJORDHR_BUNDLED_CONVERTER_SOURCE=/absolute/path/to/libreoffice-payload \
+NJORDHR_REQUIRE_BUNDLED_CONVERTER=true \
+npm run dist:win
+```
+
+The current Windows Electron NSIS installer build and GitHub Release upload flow has a dedicated operator runbook:
+- [Windows Electron installer build and upload runbook](docs/windows-electron-installer-release-runbook.md)
+
 Outputs under:
-- `build/windows/`
+- portable ZIP and Inno Setup artifacts: `build/windows/`
+- Electron NSIS installer: `build/electron/`
 
 Install desktop/start menu shortcuts on Windows:
 ```powershell
@@ -112,6 +150,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\install_sh
 ### Notes
 - Current installers are **unsigned** (development phase).
 - macOS app bundle is self-contained by default (`NJORDHR_EMBED_RUNTIME=true`) and ships Python runtime + dependencies.
+- The packaged runtime will export `NJORDHR_BUNDLED_CONVERTER_DIR` to the agent when a converter payload is staged under app resources.
+- If no bundled converter is staged, DOC/DOCX conversion falls back to system LibreOffice for developer validation only.
 - Next production step is code signing + notarization:
   - macOS: signed/notarized pkg
   - Windows: signed installer executable
@@ -121,6 +161,12 @@ After building platform installers, create a distribution-ready release bundle:
 
 ```bash
 ./scripts/packaging/create_release_bundle.sh
+```
+
+Windows packaging hosts can use the PowerShell equivalent:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\packaging\windows\create_release_bundle.ps1
 ```
 
 Optional version override:
@@ -197,7 +243,7 @@ Agent OS-specific config/state:
 - Windows state queue: `%APPDATA%\NjordHR\state\pending_sync_queue.json`
 
 Resume/download folders:
-- Default agent download folder: `~/Downloads/NjordHR` (macOS/Linux), `%USERPROFILE%\Downloads\NjordHR` (Windows)
+- Default agent download folder: `~/Library/Application Support/NjordHR/Resumes` (macOS), `%APPDATA%\NjordHR\Resumes` (Windows), `~/.config/njordhr/Resumes` (Linux)
 - Admin can override download folder in Settings.
 - Verified resumes folder is configurable in Admin Settings (`verified_resumes_folder`).
 
@@ -206,14 +252,29 @@ Copy `.env.example` to `.env` (or set env vars in your runtime) to control migra
 - `USE_SUPABASE_DB` (default `false`)
 - `USE_LOCAL_AGENT` (default `false`)
 - `USE_CLOUD_EXPORT` (default `false`)
-- `NJORDHR_SERVER_URL` (default `http://127.0.0.1:5000`)
-- `NJORDHR_ADMIN_TOKEN` (required for Admin Settings API/UI access)
+- `NJORDHR_SERVER_URL` (bootstrap/runtime wiring; default `http://127.0.0.1:5000`)
+- `NJORDHR_ADMIN_TOKEN` (bootstrap fallback for admin settings access; persisted `[Advanced].admin_token` wins when present)
 
 Setup Wizard installer URL overrides (optional):
 - `NJORDHR_MACOS_FULL_INSTALLER_URL`
 - `NJORDHR_MACOS_AGENT_INSTALLER_URL`
 - `NJORDHR_WINDOWS_FULL_INSTALLER_URL`
 - `NJORDHR_WINDOWS_AGENT_INSTALLER_URL`
+
+## AI Search Query-Understanding Review Pack
+Use this when you want one local artifact that combines the bootstrap corpus eval, stored prompt-corpus review, and disabled shadow-audit output:
+
+```bash
+python3 scripts/query_understanding_review_pack.py
+```
+
+Output:
+- `AI_Search_Results/query_understanding_review_pack_current.json`
+
+Related helper scripts:
+- `scripts/bootstrap_prompt_corpus_eval.py`
+- `scripts/prompt_corpus_review_report.py`
+- `scripts/query_understanding_shadow_audit.py`
 
 ## Supabase Migrations (Scaffold)
 - SQL migrations are under:
@@ -225,6 +286,19 @@ Setup Wizard installer URL overrides (optional):
 - Current runtime remains CSV by default.
 - Set `USE_SUPABASE_DB=true` and provide `SUPABASE_URL` + `SUPABASE_SECRET_KEY` (preferred) to enable Supabase repository.
 - Legacy fallback: `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Electron Shell Runtime Defaults
+For the Electron desktop shell, distinguish between two cases:
+- Provisioned packaged runtime:
+  - the shell should honor provisioned Supabase and auth settings when the required runtime values are present
+- Unprovisioned local/dev runtime:
+  - the shell falls back to `USE_LOCAL_AGENT=true` and `NJORDHR_AUTH_MODE=local`
+  - if `USE_SUPABASE_DB=true` is requested but `SUPABASE_URL` plus a Supabase secret key are missing, the shell forces:
+    - `USE_SUPABASE_DB=false`
+    - `USE_SUPABASE_READS=false`
+    - `USE_DUAL_WRITE=false`
+
+This fallback exists to prevent a startup crash in the Electron shell when Supabase mode is requested without the credentials needed to initialize the backend repository layer. It is a safe local-shell fallback, not the intended packaged production default.
 
 ## Migration Runbook
 Use the migration helper to convert legacy CSV layouts into the single master event-log CSV.
@@ -339,11 +413,10 @@ Required env vars:
 
 Credential sources:
 - Admin username/password:
-  - `NJORDHR_ADMIN_USERNAME` / `NJORDHR_ADMIN_PASSWORD`, or
-  - `[Auth] admin_username` / `admin_password`, fallback to `NJORDHR_ADMIN_TOKEN`/`[Advanced].admin_token` for password.
+  - `[Auth] admin_username` / `admin_password` when configured, with `NJORDHR_ADMIN_USERNAME` / `NJORDHR_ADMIN_PASSWORD` as bootstrap or compatibility fallbacks
+  - Settings password uses `[Advanced] admin_token` as the persisted source of truth, with `NJORDHR_ADMIN_TOKEN` as a bootstrap fallback
 - Recruiter username/password:
-  - `NJORDHR_RECRUITER_USERNAME` / `NJORDHR_RECRUITER_PASSWORD`, or
-  - `[Auth] recruiter_username` / `recruiter_password`
+  - `[Auth] recruiter_username` / `recruiter_password` when configured, with `NJORDHR_RECRUITER_USERNAME` / `NJORDHR_RECRUITER_PASSWORD` as bootstrap or compatibility fallbacks
 - `GET /jobs/<job_id>`
 - `GET /jobs/<job_id>/stream`
 - `GET /diagnostics`

@@ -3,13 +3,28 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build/macos"
-APP_BUNDLE="$BUILD_DIR/NjordHR.app"
+APP_BUNDLE="${NJORDHR_APP_BUNDLE_PATH:-$BUILD_DIR/NjordHR.app}"
 PKG_IDENTIFIER="${NJORDHR_PKG_IDENTIFIER:-com.njordhr.desktop.appbundle}"
 PKG_VERSION="${NJORDHR_PKG_VERSION:-$(date +%Y.%m.%d.%H%M)}"
 PKG_PATH_VERSIONED="$BUILD_DIR/NjordHR-${PKG_VERSION}-unsigned.pkg"
 PKG_PATH_LATEST="$BUILD_DIR/NjordHR-unsigned.pkg"
-PKG_ROOT="$BUILD_DIR/pkgroot"
+PKG_ROOT="${NJORDHR_PKG_ROOT:-$BUILD_DIR/pkgroot}"
 COMPONENT_PLIST="$BUILD_DIR/component.plist"
+
+detect_embedded_runtime_root() {
+  local bundle_path="$1"
+  local candidate
+  for candidate in \
+    "$bundle_path/Contents/Resources/runtime" \
+    "$bundle_path/Contents/Resources/python"
+  do
+    if [[ -x "$candidate/bin/python3" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 
 command -v pkgbuild >/dev/null 2>&1 || { echo "pkgbuild not found."; exit 1; }
 command -v pkgutil >/dev/null 2>&1 || { echo "pkgutil not found."; exit 1; }
@@ -21,30 +36,34 @@ if [[ ! -d "$APP_BUNDLE" ]]; then
 fi
 
 if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
-  if [[ ! -x "$APP_BUNDLE/Contents/Resources/runtime/bin/python3" ]]; then
+  RUNTIME_ROOT="$(detect_embedded_runtime_root "$APP_BUNDLE" || true)"
+  if [[ -z "${RUNTIME_ROOT:-}" ]]; then
     echo "[NjordHR] ERROR: Embedded runtime missing in app bundle:"
-    echo "  $APP_BUNDLE/Contents/Resources/runtime/bin/python3"
+    echo "  expected one of:"
+    echo "    $APP_BUNDLE/Contents/Resources/runtime/bin/python3"
+    echo "    $APP_BUNDLE/Contents/Resources/python/bin/python3"
     echo "[NjordHR] Rebuild app bundle with a usable build Python first."
     exit 1
   fi
   PY_DEP="$(
-    otool -L "$APP_BUNDLE/Contents/Resources/runtime/bin/python3" 2>/dev/null \
+    otool -L "$RUNTIME_ROOT/bin/python3" 2>/dev/null \
       | tail -n +2 \
       | awk '{print $1}' \
       | grep -E 'Python\.framework/Versions/.*/Python' \
-      | head -n 1
+      | head -n 1 || true
   )"
-  if [[ -n "${PY_DEP:-}" && ! -d "$APP_BUNDLE/Contents/Resources/runtime/Frameworks/Python.framework" ]]; then
+  framework_dir="$RUNTIME_ROOT/Frameworks/Python.framework"
+  if [[ -n "${PY_DEP:-}" && ! -d "$framework_dir" ]]; then
     echo "[NjordHR] ERROR: Embedded python depends on Python.framework but it was not bundled."
     echo "  dependency: $PY_DEP"
-    echo "  missing: $APP_BUNDLE/Contents/Resources/runtime/Frameworks/Python.framework"
+    echo "  missing: $framework_dir"
     echo "[NjordHR] Rebuild app bundle and verify framework bundling before packaging."
     exit 1
   fi
 
   # Hard fail if app bundle still contains absolute host links.
   BUNDLE_BAD_REFS="$(
-    find "$APP_BUNDLE/Contents/Resources/runtime" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
+    find "$RUNTIME_ROOT" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
       | while IFS= read -r exe; do
           if otool -L "$exe" 2>/dev/null | awk '{print $1}' | grep -qE '^((/opt/homebrew|/usr/local)/(opt|Cellar)/|/Library/Frameworks/Python\.framework/)'; then
             echo "$exe"
@@ -91,7 +110,13 @@ if ! find "$TMP_EXPAND_DIR" -maxdepth 8 -name "NjordHR.app" | grep -q "NjordHR.a
 fi
 
 if [[ "${NJORDHR_EMBED_RUNTIME:-true}" == "true" ]]; then
-  PKG_RUNTIME_DIR="$TMP_EXPAND_DIR/Payload/Applications/NjordHR.app/Contents/Resources/runtime"
+  PKG_RUNTIME_DIR="$(
+    detect_embedded_runtime_root "$TMP_EXPAND_DIR/Payload/Applications/NjordHR.app" || true
+  )"
+  if [[ -z "${PKG_RUNTIME_DIR:-}" ]]; then
+    echo "[NjordHR] ERROR: Package payload missing embedded runtime."
+    exit 1
+  fi
   PKG_BAD_REFS="$(
     find "$PKG_RUNTIME_DIR" -type f \( -perm -111 -o -name "*.so" -o -name "*.dylib" \) 2>/dev/null \
       | while IFS= read -r exe; do

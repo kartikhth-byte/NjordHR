@@ -1,30 +1,77 @@
 import io
 import json
 import os
-import re
 import threading
 import time
-import uuid
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
+import requests
 
 from app_settings import load_app_settings
-from logger_config import setup_logger
 from scraper_engine import Scraper
 
 from .cloud_sync import CloudSyncClient
 from .config_store import AgentConfigStore
 from .filesystem import ensure_writable_folder
-from .job_queue import AgentJobQueue
+from .email_intake import OutlookEmailIntakeManager
+from .outlook_auth import OutlookAuthManager
+from .runtime import AgentRuntime
 from .updater import AgentUpdater
+
+
+def _env_bool(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_value(name):
+    return str(os.getenv(name, "") or "").strip()
+
+
+def _load_runtime_secrets_from_cloud():
+    if not _env_bool("USE_SUPABASE_DB", default=False):
+        return
+    supabase_url = _env_value("SUPABASE_URL").rstrip("/")
+    supabase_key = _env_value("SUPABASE_SECRET_KEY") or _env_value("SUPABASE_SERVICE_ROLE_KEY")
+    if not supabase_url or not supabase_key:
+        return
+    response = requests.get(
+        f"{supabase_url}/rest/v1/app_runtime_config",
+        params={"select": "key,value"},
+        headers={"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"},
+        timeout=12,
+    )
+    if response.status_code >= 400:
+        return
+    rows = response.json() if response.content else []
+    if not isinstance(rows, list):
+        return
+    mapping = {
+        "seajob_username": "SEAJOB_USERNAME",
+        "seajob_password": "SEAJOB_PASSWORD",
+    }
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        env_name = mapping.get(str(row.get("key", "")).strip())
+        value = str(row.get("value", "") or "").strip()
+        if env_name and value:
+            os.environ[env_name] = value
 
 
 def create_agent_app():
     app = Flask(__name__)
     CORS(app)
+
+    try:
+        _load_runtime_secrets_from_cloud()
+    except Exception:
+        pass
 
     app_settings = load_app_settings()
     creds = app_settings.credentials
@@ -33,7 +80,8 @@ def create_agent_app():
     sync_client = CloudSyncClient(settings_store, os.path.join(settings_store.base_dir, "state"))
     sync_client.start()
     updater = AgentUpdater(settings_store, agent_version=os.getenv("NJORDHR_AGENT_VERSION", "0.1.0"))
-
+    outlook_auth = OutlookAuthManager(settings_store)
+    email_intake = OutlookEmailIntakeManager(settings_store, outlook_auth, parser)
     session_lock = threading.RLock()
     scraper_session = {"scraper": None}
 
@@ -44,8 +92,40 @@ def create_agent_app():
             return {"active": False, "valid": False, "reason": "No active session"}
         return scraper.get_session_health()
 
-    def _rank_slug(rank):
-        return str(rank or "").replace(" ", "_").replace("/", "-")
+    def _preview_auth_token():
+        return os.getenv("NJORDHR_AGENT_SYNC_TOKEN", "").strip()
+
+    def _require_preview_auth():
+        expected = _preview_auth_token()
+        if not expected:
+            return True, ""
+        auth = request.headers.get("Authorization", "").strip()
+        bearer = ""
+        if auth.lower().startswith("bearer "):
+            bearer = auth.split(" ", 1)[1].strip()
+        device_token = request.headers.get("X-Device-Token", "").strip()
+        if bearer == expected or device_token == expected:
+            return True, ""
+        return False, "Unauthorized preview token."
+
+    def _resolved_download_root():
+        cfg = settings_store.get()
+        return os.path.abspath(os.path.expanduser(str(cfg.get("download_folder", "")).strip()))
+
+    def _resolve_downloaded_resume_path(rank_folder, filename):
+        base_dir = os.path.realpath(_resolved_download_root())
+        safe_rank = str(rank_folder or "").strip()
+        safe_name = str(filename or "").strip()
+        if not base_dir or not safe_name:
+            raise FileNotFoundError("Missing resume path")
+
+        full_path = os.path.realpath(os.path.join(base_dir, safe_rank, safe_name))
+        if os.path.commonpath([base_dir, full_path]) != base_dir:
+            raise ValueError("Access denied")
+
+        if not os.path.isfile(full_path):
+            raise FileNotFoundError("File not found")
+        return full_path
 
     def _build_scraper():
         cfg = settings_store.get()
@@ -60,131 +140,51 @@ def create_agent_app():
             dashboard_url=parser.get("Advanced", "seajob_dashboard_url", fallback="http://seajob.net/company/dashboard.php"),
         )
 
-    def _extract_saved_files(log_lines):
-        rows = []
-        for line in log_lines or []:
-            m = re.search(r"Saved:\s+(.+\.pdf)$", str(line))
-            if m:
-                rows.append(m.group(1).strip())
-        return rows
+    def _seajob_credentials():
+        username = _env_value("SEAJOB_USERNAME") or str(creds.get("Username", "") or "").strip()
+        password = _env_value("SEAJOB_PASSWORD") or str(creds.get("Password", "") or "").strip()
+        return username, password
 
-    def _run_download_job(job_id, payload, emit):
-        rank = str(payload.get("rank", "")).strip()
-        ship_type = str(payload.get("ship_type", "")).strip()
-        force = bool(payload.get("force_redownload", False))
-        if not rank or not ship_type:
-            return {"success": False, "message": "rank and ship_type are required"}
-
-        with session_lock:
-            scraper = scraper_session["scraper"]
-        if not scraper:
-            return {"success": False, "message": "No active session. Start and verify OTP first."}
-
-        health = scraper.get_session_health()
-        if not health.get("valid"):
-            return {"success": False, "message": f"Session invalid: {health.get('reason', 'unknown')}"}
-
-        settings = settings_store.get()
-        logs_dir = os.path.join(settings_store.base_dir, "logs")
-        logger, log_path = setup_logger(str(uuid.uuid4()), logs_dir=logs_dir)
-
-        # Stream live logs to SSE + cloud sync.
-        import logging
-        class _QueueLogHandler(logging.Handler):
-            def emit(self, record):
-                message = self.format(record)
-                emit(job_id, "log", message, {"level": record.levelname})
-                sync_client.push_job_log({
-                    "job_id": job_id,
-                    "level": record.levelname,
-                    "line": message,
-                    "device_id": settings.get("device_id", ""),
-                })
-
-        qh = _QueueLogHandler()
-        qh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logger.addHandler(qh)
-
-        started_payload = {
-            "job_id": job_id,
-            "device_id": settings.get("device_id", ""),
-            "rank": rank,
-            "ship_type": ship_type,
-            "status": "running",
-            "started_at": datetime.utcnow().isoformat() + "Z",
-        }
-        sync_client.push_job_state(started_payload)
-
-        try:
-            result = scraper.download_resumes(rank, ship_type, force, logger)
-        finally:
-            logger.removeHandler(qh)
-            qh.close()
-
-        saved_files = _extract_saved_files(result.get("log", []))
-        rank_folder = _rank_slug(rank)
-        download_folder = settings.get("download_folder", "")
-        upload_rows = []
-        for filename in saved_files:
-            abs_path = os.path.join(download_folder, rank_folder, filename)
-            upload = sync_client.upload_resume(abs_path, {
-                "job_id": job_id,
-                "rank_applied_for": rank_folder,
-                "device_id": settings.get("device_id", ""),
-                "candidate_external_id": (
-                    re.search(r"_(\d+)(?:_|\.)", filename).group(1)
-                    if re.search(r"_(\d+)(?:_|\.)", filename)
-                    else ""
-                ),
-            })
-            upload_rows.append({"filename": filename, **upload})
-            sync_client.push_candidate_event({
-                "job_id": job_id,
-                "filename": filename,
-                "rank_applied_for": rank_folder,
-                "event_type": "resume_downloaded",
-                "resume_source": upload.get("resume_source", "local_only"),
-                "resume_upload_status": upload.get("resume_upload_status", "skipped"),
-                "resume_storage_path": upload.get("resume_storage_path", ""),
-                "resume_checksum_sha256": upload.get("resume_checksum_sha256", ""),
-                "device_id": settings.get("device_id", ""),
-            })
-
-        sync_client.push_job_state({
-            "job_id": job_id,
-            "device_id": settings.get("device_id", ""),
-            "rank": rank,
-            "ship_type": ship_type,
-            "status": "success" if result.get("success") else "failed",
-            "ended_at": datetime.utcnow().isoformat() + "Z",
-            "message": result.get("message", ""),
-            "saved_files": len(saved_files),
-        })
-
-        return {
-            "success": bool(result.get("success")),
-            "message": result.get("message", ""),
-            "log_file": log_path,
-            "saved_files": saved_files,
-            "uploads": upload_rows,
-        }
-
-    job_queue = AgentJobQueue(_run_download_job)
-
-    @app.route("/health", methods=["GET"])
-    def health():
+    def _diagnostics_payload():
         cfg = settings_store.get()
-        ok, msg, _ = ensure_writable_folder(cfg.get("download_folder", ""))
-        return jsonify({
+        download_folder_ok, download_folder_message, normalized_download_folder = ensure_writable_folder(
+            cfg.get("download_folder", "")
+        )
+        sync_stats = sync_client.stats()
+        update_state = {}
+        try:
+            update_state_path = os.path.join(settings_store.base_dir, "updates", "update_state.json")
+            if os.path.isfile(update_state_path):
+                with open(update_state_path, "r", encoding="utf-8") as fh:
+                    update_state = json.load(fh)
+        except Exception:
+            update_state = {}
+        return {
             "success": True,
             "status": "ok",
             "agent_version": updater.agent_version,
             "device_id": cfg.get("device_id", ""),
-            "download_folder_ok": ok,
-            "download_folder_message": msg,
+            "download_folder_ok": download_folder_ok,
+            "download_folder_message": download_folder_message,
+            "download_folder": normalized_download_folder,
             "session_health": _session_health(),
-            "sync": sync_client.stats(),
-        })
+            "sync": sync_stats,
+            "email_intake": email_intake.health_summary(),
+            "settings_path": settings_store.path,
+            "base_dir": settings_store.base_dir,
+            "update_state": update_state,
+        }
+    runtime = AgentRuntime(
+        settings_store=settings_store,
+        session_getter=lambda: scraper_session["scraper"],
+        session_health_getter=_session_health,
+        email_intake=email_intake,
+        sync_client=sync_client,
+    )
+
+    @app.route("/health", methods=["GET"])
+    def health():
+        return jsonify(_diagnostics_payload())
 
     @app.route("/settings", methods=["GET"])
     def get_settings():
@@ -199,7 +199,13 @@ def create_agent_app():
             if not ok:
                 return jsonify({"success": False, "message": msg}), 400
             candidate["download_folder"] = normalized
+        if "email_intake_poll_interval_seconds" in candidate:
+            try:
+                candidate["email_intake_poll_interval_seconds"] = int(candidate["email_intake_poll_interval_seconds"])
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "email_intake_poll_interval_seconds must be an integer"}), 400
         updated = settings_store.update(candidate)
+        sync_client.signal_reconnect()
         return jsonify({"success": True, "settings": updated})
 
     @app.route("/settings/download-folder", methods=["PUT"])
@@ -210,6 +216,7 @@ def create_agent_app():
         if not ok:
             return jsonify({"success": False, "message": msg}), 400
         updated = settings_store.update({"download_folder": normalized})
+        sync_client.signal_reconnect()
         return jsonify({"success": True, "settings": updated})
 
     @app.route("/session/start", methods=["POST"])
@@ -218,15 +225,38 @@ def create_agent_app():
         mobile = str(payload.get("mobile_number", "")).strip()
         if not mobile:
             return jsonify({"success": False, "message": "mobile_number is required"}), 400
+        username, password = _seajob_credentials()
+        if not username or not password:
+            return jsonify({
+                "success": False,
+                "message": "SeaJobs username/password are missing. Save them in Settings > Operational Settings.",
+            }), 400
+        scraper = None
         try:
             with session_lock:
                 if scraper_session["scraper"]:
                     scraper_session["scraper"].quit()
                 scraper = _build_scraper()
                 scraper_session["scraper"] = scraper
-            result = scraper.start_session(creds["Username"], creds["Password"], mobile)
+            result = scraper.start_session(username, password, mobile)
+            if not isinstance(result, dict) or not result.get("success"):
+                with session_lock:
+                    if scraper_session.get("scraper") is scraper:
+                        scraper_session["scraper"] = None
+                try:
+                    scraper.quit()
+                except Exception:
+                    pass
             return jsonify(result)
         except Exception as exc:
+            if scraper is not None:
+                with session_lock:
+                    if scraper_session.get("scraper") is scraper:
+                        scraper_session["scraper"] = None
+                try:
+                    scraper.quit()
+                except Exception:
+                    pass
             return jsonify({"success": False, "message": str(exc)}), 500
 
     @app.route("/session/verify-otp", methods=["POST"])
@@ -239,7 +269,16 @@ def create_agent_app():
             scraper = scraper_session["scraper"]
         if not scraper:
             return jsonify({"success": False, "message": "No active session"}), 400
-        return jsonify(scraper.verify_otp(otp))
+        result = scraper.verify_otp(otp)
+        if result.get("success"):
+            try:
+                ranks_str = parser.get("Ranks", "rank_options", fallback="").strip()
+                ship_types_str = parser.get("ShipTypes", "ship_type_options", fallback="").strip()
+                result["ranks"] = [r.strip() for r in ranks_str.split("\n") if r.strip()]
+                result["ship_types"] = [s.strip() for s in ship_types_str.split("\n") if s.strip()]
+            except Exception as exc:
+                return jsonify({"success": False, "message": f"Error in config.ini: {exc}"}), 500
+        return jsonify(result)
 
     @app.route("/session/disconnect", methods=["POST"])
     def session_disconnect():
@@ -254,6 +293,19 @@ def create_agent_app():
     def session_health():
         return jsonify({"success": True, "health": _session_health()})
 
+    @app.route("/preview_downloaded_resume/<path:rank_folder>/<path:filename>", methods=["GET"])
+    def preview_downloaded_resume(rank_folder, filename):
+        ok, reason = _require_preview_auth()
+        if not ok:
+            return jsonify({"success": False, "message": reason}), 403
+        try:
+            full_path = _resolve_downloaded_resume_path(rank_folder, filename)
+            return send_file(full_path, as_attachment=False)
+        except ValueError:
+            return "Access denied.", 403
+        except FileNotFoundError:
+            return "File not found", 404
+
     @app.route("/jobs/download", methods=["POST"])
     def jobs_download():
         payload = request.json or {}
@@ -261,16 +313,12 @@ def create_agent_app():
         ship_type = str(payload.get("ship_type", "")).strip()
         if not rank or not ship_type:
             return jsonify({"success": False, "message": "rank and ship_type are required"}), 400
-        job_id = job_queue.submit({
-            "rank": rank,
-            "ship_type": ship_type,
-            "force_redownload": bool(payload.get("force_redownload", False)),
-        })
+        job_id = runtime.submit_download_job(rank, ship_type, bool(payload.get("force_redownload", False)))
         return jsonify({"success": True, "job_id": job_id, "status": "queued"})
 
     @app.route("/jobs/<job_id>", methods=["GET"])
     def jobs_get(job_id):
-        job = job_queue.get_job(job_id)
+        job = runtime.get_job(job_id)
         if not job:
             return jsonify({"success": False, "message": "Job not found"}), 404
         return jsonify({"success": True, "job": job})
@@ -280,7 +328,7 @@ def create_agent_app():
         def generate():
             last_seq = 0
             while True:
-                events = job_queue.wait_for_events(job_id, last_seq, timeout=15)
+                events = runtime.wait_for_events(job_id, last_seq, timeout=15)
                 if not events:
                     yield ": keepalive\n\n"
                     continue
@@ -293,25 +341,123 @@ def create_agent_app():
 
     @app.route("/diagnostics", methods=["GET"])
     def diagnostics():
-        return jsonify({
-            "success": True,
-            "session_health": _session_health(),
-            "sync": sync_client.stats(),
-            "settings_path": settings_store.path,
-            "base_dir": settings_store.base_dir,
-        })
+        return jsonify(_diagnostics_payload())
+
+    @app.route("/email-intake/auth/status", methods=["GET"])
+    def email_intake_auth_status():
+        return jsonify({"success": True, "auth": outlook_auth.status()})
+
+    @app.route("/email-intake/auth/start", methods=["POST"])
+    def email_intake_auth_start():
+        payload = request.json or {}
+        result = outlook_auth.start_auth_flow(open_browser=bool(payload.get("open_browser", False)))
+        return jsonify(result), (200 if result.get("success") else 400)
+
+    @app.route("/email-intake/auth/disconnect", methods=["POST"])
+    def email_intake_auth_disconnect():
+        return jsonify(outlook_auth.disconnect())
+
+    @app.route("/email-intake/fetch", methods=["POST"])
+    def email_intake_fetch():
+        status = outlook_auth.status()
+        mailbox = str(status.get("mailbox", "")).strip()
+        connected_account = str(status.get("connected_account", "")).strip()
+        if not mailbox:
+            return jsonify({"success": False, "message": "email_intake_mailbox is not configured."}), 400
+        if not status.get("connected"):
+            return jsonify({"success": False, "message": "Outlook mailbox is not connected."}), 400
+        if mailbox.lower() != connected_account.lower():
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Connected Outlook account {connected_account or '(none)'} does not match "
+                    f"configured mailbox {mailbox}. Disconnect and connect the correct mailbox."
+                ),
+            }), 400
+        job_id = runtime.submit_email_intake_job()
+        return jsonify({"success": True, "job_id": job_id, "status": "queued"})
+
+    @app.route("/email-intake/manual-review/summary", methods=["GET"])
+    def email_intake_manual_review_summary():
+        try:
+            return jsonify({"success": True, "summary": email_intake.manual_review_summary()})
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/items", methods=["GET"])
+    def email_intake_manual_review_items():
+        try:
+            return jsonify({"success": True, "items": email_intake.list_manual_review_items()})
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/item", methods=["GET"])
+    def email_intake_manual_review_item():
+        item_id = str(request.args.get("id", "")).strip()
+        if not item_id:
+            return jsonify({"success": False, "message": "id is required"}), 400
+        try:
+            return jsonify({"success": True, "item": email_intake.get_manual_review_item(item_id)})
+        except RuntimeError as exc:
+            return jsonify({"success": False, "message": str(exc)}), 404
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/move", methods=["POST"])
+    def email_intake_manual_review_move():
+        payload = request.json or {}
+        item_id = str(payload.get("id", "")).strip()
+        selected_role = str(payload.get("selected_role", "")).strip()
+        if not item_id:
+            return jsonify({"success": False, "message": "id is required"}), 400
+        if not selected_role:
+            return jsonify({"success": False, "message": "selected_role is required"}), 400
+        try:
+            return jsonify(email_intake.move_manual_review_item(item_id, selected_role))
+        except RuntimeError as exc:
+            message = str(exc)
+            if "allowlist" in message or "selected_role is required" in message:
+                return jsonify({"success": False, "message": message}), 400
+            return jsonify({"success": False, "message": message}), 404
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
+
+    @app.route("/email-intake/manual-review/open", methods=["POST"])
+    def email_intake_manual_review_open():
+        payload = request.json or {}
+        item_id = str(payload.get("id", "")).strip()
+        if not item_id:
+            return jsonify({"success": False, "message": "id is required"}), 400
+        try:
+            return jsonify(email_intake.open_manual_review_item(item_id))
+        except RuntimeError as exc:
+            return jsonify({"success": False, "message": str(exc)}), 404
+        except Exception as exc:
+            return jsonify({"success": False, "message": str(exc)}), 500
 
     @app.route("/diagnostics/log-bundle", methods=["GET"])
     def diagnostics_log_bundle():
         base = settings_store.base_dir
         logs_dir = os.path.join(base, "logs")
         state_dir = os.path.join(base, "state")
-        stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        updates_dir = os.path.join(base, "updates")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        manifest = _diagnostics_payload()
         mem = io.BytesIO()
         with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zf:
             if os.path.exists(settings_store.path):
                 zf.write(settings_store.path, arcname="agent/agent.json")
-            for path, arc_prefix in [(logs_dir, "agent/logs"), (state_dir, "agent/state")]:
+            if os.path.exists(settings_store.path):
+                try:
+                    manifest["settings_path"] = "agent/agent.json"
+                except Exception:
+                    pass
+            zf.writestr("agent/diagnostics.json", json.dumps(manifest, indent=2, sort_keys=True))
+            for path, arc_prefix in [
+                (logs_dir, "agent/logs"),
+                (state_dir, "agent/state"),
+                (updates_dir, "agent/updates"),
+            ]:
                 if not os.path.isdir(path):
                     continue
                 for root, _, files in os.walk(path):
@@ -353,8 +499,9 @@ def create_agent_app():
 
     @app.route("/shutdown", methods=["POST"])
     def shutdown():
+        runtime.shutdown()
         sync_client.stop()
-        job_queue.shutdown()
+        outlook_auth.shutdown()
         with session_lock:
             scraper = scraper_session["scraper"]
             scraper_session["scraper"] = None

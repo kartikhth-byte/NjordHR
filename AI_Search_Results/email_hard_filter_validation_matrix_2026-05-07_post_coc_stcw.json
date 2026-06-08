@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-05-07",
+  "scope": "Email-downloaded resumes under live rank folders",
+  "question": "Have all hard-filter families been tested across ranks for email resumes?",
+  "short_answer": "Yes for the active hard-filter families in Phase 1: age/DOB, passport/visa, rank support data, STCW basic, and COC document gate now all have broad email-corpus validation artifacts, though some still carry documented residual mixed misses.",
+  "active_or_relevant_families": [
+    {
+      "family_id": "age_range",
+      "status": "validated_broad_email_pass",
+      "email_cross_rank_validation": true,
+      "notes": "Folder-first fix on 2nd_Officer plus broader email-vs-non-email eval and horizontal DOB rollup.",
+      "evidence_artifacts": [
+        "AI_Search_Results/2nd_officer_dob_age_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/2nd_officer_dob_age_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/ai_analyzer_dob_rollup_2026-05-07.json",
+        "AI_Search_Results/email_vs_seajobs_ai_analyzer_eval_2026-05-07_post_dob_patch.json"
+      ]
+    },
+    {
+      "family_id": "us_visa",
+      "status": "validated_broad_email_pass",
+      "email_cross_rank_validation": true,
+      "notes": "Folder-first fixes on 2nd_Officer, Chief_Cook, and Steward, then broader horizontal passport/visa rollups.",
+      "evidence_artifacts": [
+        "AI_Search_Results/2nd_officer_passport_visa_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/2nd_officer_passport_visa_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/chief_cook_passport_visa_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/chief_cook_passport_visa_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/steward_passport_visa_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/steward_passport_visa_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/ai_analyzer_passport_visa_rollup_2026-05-07_post_steward_patch.json"
+      ]
+    },
+    {
+      "family_id": "rank_match",
+      "status": "validated_broad_email_pass_with_residuals",
+      "email_cross_rank_validation": true,
+      "notes": "Current-rank/applied-rank extraction for email resumes materially improved via applied-rank and header-layout passes. Residual misses are now mixed rather than one clean repeated pattern.",
+      "evidence_artifacts": [
+        "AI_Search_Results/os_current_rank_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/os_current_rank_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/ab_current_rank_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/2nd_engineer_current_rank_diagnostic_2026-05-07_pre_header_patch.json",
+        "AI_Search_Results/2nd_engineer_current_rank_diagnostic_2026-05-07_post_header_patch.json",
+        "AI_Search_Results/ai_analyzer_current_rank_rollup_2026-05-07_post_header_patch.json"
+      ]
+    },
+    {
+      "family_id": "coc_document_gate",
+      "status": "validated_broad_email_pass_with_residuals",
+      "email_cross_rank_validation": true,
+      "notes": "Folder-first fix on 2nd_Engineer and Chief_Officer plus broader horizontal COC rollup. Residual misses are now mostly offshore/general-profile resumes or one-off unsupported formats rather than a repeated email-side row shape.",
+      "evidence_artifacts": [
+        "AI_Search_Results/2nd_engineer_coc_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/2nd_engineer_coc_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/chief_officer_coc_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/chief_officer_coc_diagnostic_2026-05-07_post_patch.json",
+        "AI_Search_Results/ai_analyzer_coc_rollup_2026-05-07_pre_patch.json",
+        "AI_Search_Results/ai_analyzer_coc_rollup_2026-05-07_post_patch.json"
+      ]
+    },
+    {
+      "family_id": "stcw_basic",
+      "status": "validated_broad_email_pass_with_residuals",
+      "email_cross_rank_validation": true,
+      "notes": "Folder-first fix on OS plus broader horizontal STCW rollup. Residual misses are now mixed and often reflect incomplete source text rather than one repeated parser gap.",
+      "evidence_artifacts": [
+        "AI_Search_Results/os_stcw_diagnostic_2026-05-07_pre_patch.json",
+        "AI_Search_Results/os_stcw_diagnostic_2026-05-07_post_patch_v2.json",
+        "AI_Search_Results/ai_analyzer_stcw_rollup_2026-05-07_pre_patch.json",
+        "AI_Search_Results/ai_analyzer_stcw_rollup_2026-05-07_post_patch_v2.json"
+      ]
+    }
+  ],
+  "parsed_but_not_currently_broad_email_hard_filter_validated": [
+    {
+      "family_id": "min_sea_service",
+      "status": "not_validated_in_this_email_matrix",
+      "reason": "Constraint family exists in architecture/prompt parsing context, but no email-only all-ranks hard-filter validation artifact was assembled in this round."
+    },
+    {
+      "family_id": "applied_ship_type",
+      "status": "not_validated_in_this_email_matrix",
+      "reason": "Ship-type related evaluation exists, but this round did not run an email-only cross-rank hard-filter validation pass."
+    },
+    {
+      "family_id": "experience_ship_type",
+      "status": "not_validated_in_this_email_matrix",
+      "reason": "Experience ship-type evaluation exists, but this round did not run an email-only cross-rank hard-filter validation pass."
+    },
+    {
+      "family_id": "availability",
+      "status": "not_validated_in_this_email_matrix",
+      "reason": "Parsed as informational/unapplied family in current Phase 1 context; no email-only hard-filter validation pass was run."
+    },
+    {
+      "family_id": "stcw_endorsement",
+      "status": "not_validated_in_this_email_matrix",
+      "reason": "Parsed as recognized-but-unapplied family in current Phase 1 context; no email-only hard-filter validation pass was run."
+    }
+  ],
+  "recommended_next_family": "stcw_basic",
+  "recommended_next_step": "Run an email-only STCW coverage matrix by rank, then take the highest-signal single folder for a folder-first extractor pass if a repeated missed-positive pattern exists."
+}

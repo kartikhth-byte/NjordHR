@@ -1,0 +1,2 @@
+8c1bf0f297cca8d65c4664b43db67dcbaf4559e05059dddada9da4bb36968564  NjordHR-2026.04.14.1100-unsigned.pkg
+8c1bf0f297cca8d65c4664b43db67dcbaf4559e05059dddada9da4bb36968564  NjordHR-unsigned.pkg

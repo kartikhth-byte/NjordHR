@@ -2,6 +2,7 @@ import time
 import base64
 import re
 import json
+import logging
 import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -32,6 +33,22 @@ DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH = "//*[self::th or self::td][contains(t
 NEXT_PAGE_BUTTON_XPATH = "//a[contains(., 'Next')]"
 DEFAULT_DASHBOARD_URL = "http://seajob.net/company/dashboard.php"
 DEFAULT_LOGIN_URL = "http://seajob.net/seajob_login.php"
+LOGGER = logging.getLogger(__name__)
+
+
+def _env_bool(name, default=False):
+    raw = os.getenv(name, "").strip().lower()
+    if raw in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if raw in {"0", "false", "no", "off", "disabled"}:
+        return False
+    return bool(default)
+
+
+def _should_run_chrome_headless():
+    if os.getenv("NJORDHR_SELENIUM_HEADLESS", "").strip():
+        return _env_bool("NJORDHR_SELENIUM_HEADLESS", default=True)
+    return True
 
 
 class Scraper:
@@ -48,28 +65,60 @@ class Scraper:
     def _setup_driver(self):
         options = webdriver.ChromeOptions()
         options.add_argument("start-maximized")
+        options.add_argument("--window-size=1365,900")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_argument('--headless')
+        if _should_run_chrome_headless():
+            options.add_argument("--headless=new")
         service = Service(ChromeDriverManager().install())
         self.driver = webdriver.Chrome(service=service, options=options)
         self.wait = WebDriverWait(self.driver, 30)
+
+    def _set_input_value(self, element, value):
+        element.click()
+        element.send_keys(Keys.CONTROL, "a")
+        element.send_keys(Keys.BACKSPACE)
+        element.send_keys(value)
+        self.driver.execute_script(
+            """
+            const input = arguments[0];
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.blur();
+            """,
+            element,
+        )
+
+    def _click_send_otp(self, button):
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+        try:
+            button.click()
+            return "native"
+        except WebDriverException as exc:
+            LOGGER.warning("Native SeaJobs send OTP click failed; falling back to JS click: %s", exc)
+            self.driver.execute_script("arguments[0].click();", button)
+            return "javascript"
 
     def start_session(self, username, password, mobile_number):
         self._setup_driver()
         self.driver.get(self.login_url)
         self.wait.until(EC.element_to_be_clickable((By.XPATH, COMPANY_RADIO_BUTTON_XPATH))).click()
-        self.driver.find_element(By.ID, USERNAME_INPUT_ID).send_keys(username)
-        self.driver.find_element(By.XPATH, PASSWORD_INPUT_XPATH).send_keys(password)
-        self.driver.find_element(By.XPATH, MOBILE_NUMBER_INPUT_XPATH).send_keys(mobile_number)
-        self.driver.find_element(By.XPATH, SEND_OTP_BUTTON_XPATH).click()
+        self._set_input_value(self.driver.find_element(By.ID, USERNAME_INPUT_ID), username)
+        self._set_input_value(self.driver.find_element(By.XPATH, PASSWORD_INPUT_XPATH), password)
+        mobile_input = self.wait.until(EC.element_to_be_clickable((By.XPATH, MOBILE_NUMBER_INPUT_XPATH)))
+        mobile_value = str(mobile_number or "").strip()
+        self._set_input_value(mobile_input, mobile_value)
+        send_otp_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, SEND_OTP_BUTTON_XPATH)))
+        self._click_send_otp(send_otp_button)
         try:
             WebDriverWait(self.driver, 10).until(EC.alert_is_present())
             alert = self.driver.switch_to.alert
             alert_text = alert.text
             alert.accept()
+            LOGGER.info("SeaJobs OTP alert: %s", alert_text)
             if "Not Registered" in alert_text:
                 self.quit()
                 return {"success": False, "message": f"Login failed: {alert_text}"}
+            WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, OTP_INPUT_XPATH)))
             self.otp_sent_at = time.time()
             self.otp_pending = True
             return {
@@ -203,6 +252,52 @@ class Scraper:
             return True
         except Exception: return False
 
+    def _rank_manifest_path(self, target_folder):
+        return os.path.join(target_folder, "manifest.json")
+
+    def _load_rank_manifest(self, target_folder):
+        manifest_path = self._rank_manifest_path(target_folder)
+        if not os.path.exists(manifest_path):
+            return {"version": 1, "files": {}}
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                return {"version": 1, "files": {}}
+            if not isinstance(data.get("files"), dict):
+                data["files"] = {}
+            data.setdefault("version", 1)
+            return data
+        except Exception:
+            return {"version": 1, "files": {}}
+
+    def _save_rank_manifest(self, target_folder, manifest):
+        os.makedirs(target_folder, exist_ok=True)
+        manifest_path = self._rank_manifest_path(target_folder)
+        temp_path = f"{manifest_path}.tmp"
+        with open(temp_path, "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, indent=2, sort_keys=True)
+        os.replace(temp_path, manifest_path)
+
+    def _record_download_metadata(self, target_folder, filename, rank, ship_type, candidate_id):
+        manifest = self._load_rank_manifest(target_folder)
+        files = manifest.setdefault("files", {})
+        entry = files.get(filename) or {}
+        ship_types = entry.get("applied_ship_types")
+        if not isinstance(ship_types, list):
+            ship_types = []
+        normalized_ship_type = str(ship_type or "").strip()
+        if normalized_ship_type and normalized_ship_type not in ship_types:
+            ship_types.append(normalized_ship_type)
+            ship_types.sort()
+        entry.update({
+            "candidate_id": str(candidate_id or "").strip(),
+            "rank": str(rank or "").strip(),
+            "applied_ship_types": ship_types,
+        })
+        files[filename] = entry
+        self._save_rank_manifest(target_folder, manifest)
+
     def _candidate_file_exists(self, target_folder, rank, ship_type, candidate_id):
         """
         Detect existing resume files for a candidate across both naming schemes:
@@ -293,6 +388,7 @@ class Scraper:
                 pdf_filename = f"{rank_slug}_{candidate_id}.pdf"
                 if not force_redownload and self._candidate_file_exists(target_folder, rank, ship_type, candidate_id):
                     logger.info(f"Skipping {candidate_id} - file exists (use force to update)")
+                    self._record_download_metadata(target_folder, pdf_filename, rank, ship_type, candidate_id)
                     existing_ids.add(candidate_id)
                     continue
 
@@ -311,6 +407,7 @@ class Scraper:
                     self.driver.switch_to.window(new_window)
                     self.wait.until(EC.visibility_of_element_located((By.XPATH, DOWNLOAD_PAGE_CONTENT_VERIFICATION_XPATH)))
                     if self._save_page_as_pdf(target_folder, pdf_filename):
+                        self._record_download_metadata(target_folder, pdf_filename, rank, ship_type, candidate_id)
                         logger.info(f"  -> Saved: {pdf_filename}")
                         existing_ids.add(candidate_id)
                 except Exception as e:

@@ -1,0 +1,688 @@
+import sys
+import types
+import unittest
+from datetime import date
+
+
+def _stub_ai_dependencies():
+    if "fitz" not in sys.modules:
+        sys.modules["fitz"] = types.ModuleType("fitz")
+
+    if "PIL" not in sys.modules:
+        pil_module = types.ModuleType("PIL")
+        image_module = types.ModuleType("PIL.Image")
+        pil_module.Image = image_module
+        sys.modules["PIL"] = pil_module
+        sys.modules["PIL.Image"] = image_module
+
+    if "pinecone" not in sys.modules:
+        pinecone_module = types.ModuleType("pinecone")
+
+        class DummyPinecone:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+        class DummyServerlessSpec:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+        pinecone_module.Pinecone = DummyPinecone
+        pinecone_module.ServerlessSpec = DummyServerlessSpec
+        sys.modules["pinecone"] = pinecone_module
+
+
+_stub_ai_dependencies()
+from ai_analyzer import AIResumeAnalyzer  # noqa: E402
+from candidate_facts.extractors import seajobs  # noqa: E402
+
+
+class AIAnalyzerLogisticsTests(unittest.TestCase):
+    def setUp(self):
+        self.analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
+        self.reference_date = date(2026, 4, 6)
+
+    def test_extract_logistics_valid_visa(self):
+        fact = self.analyzer._extract_logistics_from_text(
+            "Visa: Schengen visa Expiry: 04-May-2028",
+            reference_date=self.reference_date,
+        )
+        self.assertTrue(fact["us_visa_valid"])
+        self.assertEqual(fact["us_visa_status"], "Schengen")
+        self.assertEqual(fact["us_visa_expiry_date"], date(2028, 5, 4))
+
+    def test_extract_logistics_expired_visa(self):
+        fact = self.analyzer._extract_logistics_from_text(
+            "Visa: Schengen visa Expiry: 04-May-2020",
+            reference_date=self.reference_date,
+        )
+        self.assertFalse(fact["us_visa_valid"])
+        self.assertEqual(fact["us_visa_status"], "Schengen")
+        self.assertIsNone(fact["us_visa_expiry_date"])
+
+    def test_extract_logistics_visa_absent(self):
+        fact = self.analyzer._extract_logistics_from_text(
+            "Passport Details only. No visa listed.",
+            reference_date=self.reference_date,
+        )
+        self.assertIsNone(fact["us_visa_valid"])
+        self.assertIsNone(fact["us_visa_status"])
+
+    def test_extract_logistics_passport_expiry_variants(self):
+        cases = [
+            ("Passport Expiry: 2029-11-04", date(2029, 11, 4)),
+            ("Passport expiry 04-Nov-2029", date(2029, 11, 4)),
+            ("Passport Expiry: November 4, 2029", date(2029, 11, 4)),
+        ]
+        for raw_text, expected_date in cases:
+            with self.subTest(raw_text=raw_text):
+                fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+                self.assertEqual(fact["passport_expiry_date"], expected_date)
+                self.assertEqual(fact["passport_expiry_status"], "PARSED")
+                self.assertTrue(fact["passport_valid"])
+
+    def test_extract_logistics_passport_absent(self):
+        fact = self.analyzer._extract_logistics_from_text(
+            "No passport details on file.",
+            reference_date=self.reference_date,
+        )
+        self.assertIsNone(fact["passport_expiry_date"])
+        self.assertEqual(fact["passport_expiry_status"], "MISSING")
+        self.assertIsNone(fact["passport_valid"])
+
+    def test_extract_logistics_passport_table_uses_second_date_as_expiry(self):
+        raw_text = (
+            "Document Number Place of Issue Date of Issue Validity "
+            "Passport Z8030880 Mumbai 07/10/2024 06/10/2034 "
+            "US VISA 20220566560005 Mumbai 01/03/2021 24/02/2027"
+        )
+        fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["passport_expiry_date"], date(2034, 10, 6))
+        self.assertEqual(fact["passport_expiry_status"], "PARSED")
+        self.assertTrue(fact["passport_valid"])
+
+    def test_extract_logistics_visa_table_uses_second_date_as_expiry(self):
+        raw_text = (
+            "PASSPORT ZA282236 31/10/2025 MUMBAI 30/10/2035 "
+            "US VISA 20223044630023 13/12/2022 MUMBAI 11/12/2027 "
+            "COC IF36205 20/02/2017 MUMBAI 10/03/2031"
+        )
+        fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertTrue(fact["us_visa_valid"])
+        self.assertEqual(fact["us_visa_status"], "US Visa (USA)")
+        self.assertEqual(fact["us_visa_expiry_date"], date(2027, 12, 11))
+
+    def test_extract_logistics_availability_window_marks_immediate_when_today_inside(self):
+        raw_text = (
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer "
+            "From date - Till date 30-Mar-2026 - 30-Apr-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["availability_date"], date(2026, 3, 30))
+        self.assertEqual(fact["availability_end_date"], date(2026, 4, 30))
+        self.assertEqual(fact["availability_status"], "immediately")
+
+    def test_extract_logistics_availability_window_parses_future_range(self):
+        raw_text = (
+            "Availability Details Applied For Rank Chief Officer Present Rank Chief Officer "
+            "From date - Till date 15-May-2026 - 15-Jun-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["availability_date"], date(2026, 5, 15))
+        self.assertEqual(fact["availability_end_date"], date(2026, 6, 15))
+        self.assertEqual(fact["availability_status"], "PARSED")
+
+    def test_extract_logistics_availability_window_single_date_keeps_immediate_and_threshold_confidence(self):
+        raw_text = (
+            "Availability Details Applied For Rank Chief Officer Present Rank Chief Officer "
+            "From date - Till date 30-Mar-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_availability_fact_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(fact["availability_date"], date(2026, 3, 30))
+        self.assertIsNone(fact["availability_end_date"])
+        self.assertEqual(fact["availability_status"], "immediately")
+        self.assertEqual(fact["confidence"], 0.85)
+
+    def test_extract_last_sign_off_fact_handles_multiline_split_seajobs_dates(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd SNP Shipmanagement Pvt. Ltd. / Bulk 24-May-\n"
+            "1 43158 MAN & B&W 29-Oct-2025\n"
+            "Engineer Carrier 2025\n"
+            "01-Jul-\n"
+            "2 3rd Engineer Synergy Maritime Ltd. / Bulk Carrier 32837 MAN & B&W 06-Jan-2025\n"
+            "2024\n"
+        )
+        fact = self.analyzer._extract_last_sign_off_fact_from_text(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_349740.pdf",
+            reference_date=self.reference_date,
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["last_sign_off_date"], date(2025, 10, 29))
+        self.assertEqual(fact["last_sign_off_months_ago"], 5)
+
+    def test_extract_ordered_date_tokens_from_seajobs_row_rebuilds_split_dates(self):
+        row_lines = [
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-",
+            "1 45000",
+            "Engineer Tanker SMC 2024 2024",
+        ]
+        tokens = self.analyzer._extract_ordered_date_tokens_from_seajobs_row(row_lines)
+        self.assertEqual(tokens, ["14-Sep-2024", "06-Dec-2024"])
+
+    def test_extract_seajobs_experience_rows_parses_rank_and_dates_from_multiline_window(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+            "2nd HMS maritime services pvt Ltd / Crude Oil MAN B&W 04-Oct- 20-Dec-\n"
+            "2 30000\n"
+            "Engineer Tanker SMC 2023 2023\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 9, 14))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2024, 12, 6))
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+
+    def test_extract_row_ship_types_from_seajobs_row_uses_real_container_shape(self):
+        row_lines = [
+            "2nd MAN B&W 03-Mar-",
+            "4 ALTITUDE MARINE / Container Vessel 12000 06-Jun-2024",
+            "Engineer SMC 2024",
+        ]
+        self.assertEqual(
+            self.analyzer._extract_row_ship_types_from_seajobs_row(row_lines),
+            ["container"],
+        )
+
+    def test_extract_row_ship_types_from_seajobs_row_handles_fragmented_bulk_carrier(self):
+        row_lines = [
+            "Chief dockendale ship management / Bulk Electronic Eng 05-Oct- 31-Mar-",
+            "1 34657 Engineer Carrier B&W 2024 2025",
+        ]
+        self.assertEqual(
+            self.analyzer._extract_row_ship_types_from_seajobs_row(row_lines),
+            ["bulk carrier"],
+        )
+
+    def test_build_candidate_facts_extracts_seajobs_candidate_name(self):
+        source_text = (
+            "https://www .seajob.net\n"
+            "Download by Njorships Management India Pvt Ltd\n"
+            "Availability Details\n"
+            "Applied For Rank Electrical Of ficer\n"
+            "Present Rank Electrical Engineer\n"
+            "Personal & Contact Details\n"
+            "Name Ashish Kumar\n"
+            "Email Address aditi.ashish30@gmail.com\n"
+            "Date Of Birth 26-Oct-1983\n"
+        )
+        facts = self.analyzer._build_candidate_facts(
+            "resume-test",
+            "Electrical Officer",
+            [{"metadata": {"raw_text": source_text}}],
+            original_path="/tmp/resume-test.pdf",
+            text_cache={"/tmp/resume-test.pdf": source_text},
+            folder_metadata={},
+        )
+        self.assertEqual(facts["identity"]["full_name"], "Ashish Kumar")
+        self.assertEqual(facts["identity"]["full_name_snippet"], "Name Ashish Kumar")
+
+        payload = seajobs.build_candidate_facts_v1(
+            self.analyzer,
+            "resume-test",
+            "Electrical Officer",
+            [{"metadata": {"raw_text": source_text}}],
+            original_path="/tmp/resume-test.pdf",
+            text_cache={"/tmp/resume-test.pdf": source_text},
+            folder_metadata={},
+        )
+        self.assertEqual(payload["identity"]["candidate_name"]["value"], "Ashish Kumar")
+        self.assertEqual(payload["identity"]["candidate_name"]["snippet"], "Name Ashish Kumar")
+        self.assertIn("vessel_types", payload["experience"])
+
+    def test_extract_seajobs_experience_rows_includes_engine_types(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 2nd Engineer Synergy Maritime / Oil Tanker 35973 Dual Fuel (X-DF) ENGINE 09-Jan-2024 03-Apr-2024\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["rows"][0]["engine_types"], ["wingd_x_df", "dual_fuel"])
+
+    def test_extract_email_experience_rows_parses_date_complete_table_rows(self):
+        raw_text = (
+            "SEA EXPERIENCE\n"
+            "VESSEL TYPE OF GRT ENGINE ENGINE COMPANY RANK FROM TO\n"
+            "NAME VESSEL TYPE BHP\n"
+            "MT OCEAN OIL 61,653 B&W 19,150 NORTHPOLE 2EO 06.11.2024 25.04.2025\n"
+            "FAYE TANKER 7S60MC MARINE\n"
+            "MT DESH OIL 61,978 B&W 14,640 THE SCI LTD 2EO 26.08.2022 29.06.2023\n"
+            "GAURAV TANKER 6S60MC\n"
+            "DOCUMENTS\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["source_label"], "email_resume")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 11, 6))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 4, 25))
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+
+    def test_extract_email_experience_rows_uses_continuation_lines_for_ship_type(self):
+        raw_text = (
+            "SEA EXPERIENCE:\n"
+            "VesselName Company Name Vessel Type DWT Rank SignOn SignOff\n"
+            "MT SCYLLA PRODUCT 03.09.2023 01.03.2024\n"
+            "MARSHAL SHIPMANAGEMENT 74401 2O\n"
+            "TANKER\n"
+            "MV TAMILNADU SCI BULK CARRIER 45792 TNOC 12.03.2011 28.10.2011\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_officer")
+        self.assertEqual(fact["rows"][1]["vessel_types"], ["bulk carrier"])
+
+    def test_extract_email_experience_rows_parses_service_record_two_digit_years(self):
+        raw_text = (
+            "SEA SERVICE RECORD:\n"
+            "SHIP NAME COMPANY IMO TYPE GRT SIGN ON SIGN OFF RANK\n"
+            "M.V. MAHA FIVE STAR SHIPPING 9231004 BULK 38731 24.04.19 31.12.19 CADET\n"
+            "ROOS COMPANY PVT LTD\n"
+            "M.V. MAHA FIVE STAR SHIPPING 9525613 BULK 45999 12.06.24 21.07.24 2ND\n"
+            "YAYA COMPANY PVT LTD OFFICER\n"
+            "DOCUMENT DETAILS\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2019, 4, 24))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2019, 12, 31))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "deck_cadet")
+        self.assertEqual(fact["rows"][1]["rank_normalized"], "2nd_officer")
+
+    def test_extract_email_experience_rows_parses_split_date_range_rows(self):
+        raw_text = (
+            "Seamen Experience Details\n"
+            "18/04/2025 - Norse ship management\n"
+            "04/08/2025 2nd Engineer\n"
+            "Raffles pride / Oil/Chem Tanker 8539GT MAN & B&W\n"
+            "21/09/2024 - fleet management\n"
+            "14/11/2024 2nd Engineer\n"
+            "MT GISELE / Product Tanker 40953 MAN & B&W\n"
+            "Academic Details\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2025, 4, 18))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 8, 4))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+
+    def test_extract_email_experience_rows_parses_to_delimited_table_rows(self):
+        raw_text = (
+            "Sea Service Details\n"
+            "Vessel GRT/\n"
+            "Company Vessel Rank Sea Time Sign Off Reason\n"
+            "Type DWT\n"
+            "Chellaram 26/01/2024\n"
+            "M.V. Darya Bulk 35035 t/ Second\n"
+            "Shipping Private To Finished Contract\n"
+            "Rama Carrier 61212 t Officer\n"
+            "Limited 11/08/2024\n"
+            "M.V. LONG 04/08/2025\n"
+            "54675 t/ Second\n"
+            "PG Maritime BEACH Container To Finished Contract\n"
+            "68618 t Officer\n"
+            "EXPRESS 06/02/2026\n"
+            "Documents Held\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 2)
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 1, 26))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2024, 8, 11))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_officer")
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["bulk carrier"])
+        self.assertEqual(fact["rows"][1]["sign_in_date"], date(2025, 8, 4))
+        self.assertEqual(fact["rows"][1]["sign_out_date"], date(2026, 2, 6))
+        self.assertEqual(fact["rows"][1]["vessel_types"], ["container"])
+
+    def test_extract_email_experience_rows_rebuilds_indexed_day_month_year_fragments(self):
+        raw_text = (
+            "Sea service Experience Details\n"
+            "Sign Sign\n"
+            "Company\n"
+            "# Rank Tonnage Engine In Out\n"
+            "Name / Ship\n"
+            "/BHP Date Date\n"
+            "Type & Name\n"
+            "1 Holy angel Marine 81396/18 MAN 17-\n"
+            "2nd Engineer 01-\n"
+            "services/Crude oil 660kw B&W MC-CApr-2025\n"
+            "Oct-202\n"
+            "Tanker/MT LILIANA\n"
+            "5\n"
+            "Chief 12-\n"
+            "SCI / 18-Jul-\n"
+            "2 Engineer 427/2X6 Yanmar Feb-\n"
+            "Passenger 2023\n"
+            ",SCI 62 KW 2024\n"
+            "Ship/MV RANI\n"
+            "CHANGA\n"
+            "Academic Details\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["rows"][0]["sign_in_date"], date(2025, 4, 17))
+        self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 10, 1))
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
+        self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+        self.assertEqual(fact["rows"][1]["sign_in_date"], date(2023, 7, 18))
+        self.assertEqual(fact["rows"][1]["sign_out_date"], date(2024, 2, 12))
+        self.assertEqual(fact["rows"][1]["rank_normalized"], "chief_engineer")
+
+    def test_extract_rank_from_seajobs_row_window_handles_anchor_line_with_row_index(self):
+        row_lines = [
+            "02-Nov-",
+            "1 2nd Officer Sygnius / Bulk Carrier 18-Jan-2025",
+            "2024",
+        ]
+        fact = self.analyzer._extract_rank_from_seajobs_row_window(row_lines)
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["canonical_id"], "2nd_officer")
+
+    def test_extract_rank_from_seajobs_row_window_handles_ocr_split_engine_rank(self):
+        row_lines = [
+            "1 2nd",
+            "Engineer",
+            "FLEET MANAGEMENT LTD /",
+            "Oil/Chem Tanker 29256 Electronic Eng",
+            "B&W",
+            "27-Oct-",
+            "2024",
+            "21-Apr-",
+            "2025",
+        ]
+        fact = self.analyzer._extract_rank_from_seajobs_row_window(row_lines)
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["canonical_id"], "2nd_engineer")
+
+    def test_extract_rank_from_seajobs_row_window_rejects_trainee_context(self):
+        row_lines = [
+            "4 Trainee Electrical Officer",
+            "FLEET MANAGEMENT LTD /",
+            "Oil/Chem Tanker 29256 Electronic Eng",
+            "B&W",
+            "27-Oct-",
+            "2024",
+            "21-Apr-",
+            "2025",
+        ]
+        fact = self.analyzer._extract_rank_from_seajobs_row_window(row_lines)
+        self.assertEqual(fact["status"], "MISSING")
+        self.assertIsNone(fact["canonical_id"])
+
+    def test_extract_current_rank_months_fact_sums_matching_seajobs_rows(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+            "2nd HMS maritime services pvt Ltd / Crude Oil MAN B&W 04-Oct- 20-Dec-\n"
+            "2 30000\n"
+            "Engineer Tanker SMC 2023 2023\n"
+            "3rd Quadrant Maritime pvt Ltd / Container 04-Mar-\n"
+            "3 1204\n"
+            "Engineer 2011 08-Apr-2011\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 2)
+        self.assertEqual(fact["months_total"], 4)
+
+    def test_extract_current_rank_months_fact_ignores_trainee_rows(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "4 Trainee Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 27-Oct- 2024 21-Apr- 2025\n"
+            "5 Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 22-Apr- 2025 21-Oct- 2025\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 1)
+        self.assertEqual(fact["months_total"], 6)
+        self.assertEqual(fact["source"], "service_rows")
+
+    def test_extract_current_rank_months_fact_ignores_pre_sea_training_context(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "4 Pre Sea Training Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 27-Oct- 2024 21-Apr- 2025\n"
+            "5 Electrical Officer FLEET MANAGEMENT LTD / Oil/Chem Tanker 29256 Electronic Eng B&W 22-Apr- 2025 21-Oct- 2025\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 1)
+        self.assertEqual(fact["months_total"], 6)
+        self.assertEqual(fact["source"], "service_rows")
+
+    def test_extract_seajobs_total_experience_rows_skips_placeholder_rank_durations(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Total Experience\n"
+            "Rank 2nd Engineer\n"
+            "Experience YY Year 8 Month 22 Days\n"
+            "Rank 4th Engineer\n"
+            "Experience 2 Year 0 Month 22 Days\n"
+            "Rank 5th Engineer\n"
+            "Experience Year 7 Month 13 Days\n"
+        )
+        fact = self.analyzer._extract_seajobs_total_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_315781.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(len(fact["rows"]), 1)
+        self.assertEqual(fact["rows"][0]["rank_normalized"], "4th_engineer")
+        self.assertEqual(fact["rows"][0]["months_total"], 24)
+        self.assertEqual(fact["rows"][0]["days"], 22)
+
+    def test_extract_current_rank_months_fact_keeps_service_row_sum_with_total_experience(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Chief Officer Present Rank Chief Officer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 Chief Officer Sygnius / Bulk Carrier 18000 01-Jan-2025 31-Jan-2025\n"
+            "Total Experience\n"
+            "Rank Chief Officer\n"
+            "Experience 04 Year 6 Month 20 Days\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Chief-Officer_11617.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["months_total"], 1)
+        self.assertEqual(fact["extraction_method"], "seajobs_service_history_rank_duration_sum")
+
+    def test_extract_seajobs_total_experience_rows_and_current_rank_months_from_rank_history(self):
+        raw_text = (
+            "Download by : R Aditya (NJORSHIPS MANAGEMENT INDIA PVT LTD)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Total Experience\n"
+            "Rank Electrical Engineer\n"
+            "Experience 15 Year 1 Month Days\n"
+            "Rank Electrical Officer\n"
+            "Experience Year 6 Month Days\n"
+            "Rank Electrical Officer\n"
+            "Experience Year 12 Month Days\n"
+        )
+        total_fact = self.analyzer._extract_seajobs_total_experience_rows(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(total_fact["status"], "PARSED")
+        self.assertEqual(len(total_fact["rows"]), 2)
+        self.assertEqual(total_fact["rows"][0]["rank_normalized"], "electrical_officer")
+        self.assertEqual(total_fact["rows"][0]["months_total"], 6)
+        self.assertEqual(total_fact["rows"][1]["months_total"], 12)
+
+        months_fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+            experience_rows_fact={
+                "rows": [],
+                "status": "MISSING",
+                "source_label": "seajobs_resume",
+            },
+            rank_duration_rows_fact=total_fact,
+        )
+        self.assertEqual(months_fact["status"], "PARSED")
+        self.assertEqual(months_fact["months_total"], 18)
+        self.assertEqual(months_fact["matched_rows"], 2)
+        self.assertEqual(months_fact["source"], "rank_duration_rows")
+        self.assertEqual(months_fact["extraction_method"], "seajobs_total_experience_rank_duration_sum")
+
+    def test_extract_current_rank_months_fact_ignores_pre_sea_total_experience_rows(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank Electrical Officer Present Rank Electrical Officer\n"
+            "Seamen Experience Details\n"
+            "Total Experience\n"
+            "Rank Pre Sea Training Electrical Officer\n"
+            "Experience 04 Year 6 Month 20 Days\n"
+            "Rank Electrical Officer\n"
+            "Experience 01 Year 0 Month 00 Days\n"
+        )
+        fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/Electrical_Officer_Resume.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["matched_rows"], 1)
+        self.assertEqual(fact["months_total"], 12)
+        self.assertEqual(fact["source"], "rank_duration_rows")
+
+    def test_extract_contract_gap_fact_flags_gap_over_six_months(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd HMS maritime services pvt Ltd / Crude Oil MAN B&W 04-Oct- 20-Dec-\n"
+            "2 30000\n"
+            "Engineer Tanker SMC 2023 2023\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+        )
+        fact = self.analyzer._extract_contract_gap_fact_from_text(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertTrue(fact["has_gap_over_6_months"])
+        self.assertGreater(fact["max_gap_days"], 183)
+
+    def test_default_insight_facts_exclude_email_resumes(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "2nd Jubilant Ship management pvt L / Oil/Chem MAN B&W 14-Sep- 06-Dec-\n"
+            "1 45000\n"
+            "Engineer Tanker SMC 2024 2024\n"
+        )
+        months_fact = self.analyzer._extract_current_rank_months_fact_from_text(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        gap_fact = self.analyzer._extract_contract_gap_fact_from_text(
+            raw_text,
+            original_path="/tmp/EMAIL_20260512_resume.pdf",
+        )
+        self.assertEqual(months_fact["status"], "SOURCE_EXCLUDED")
+        self.assertEqual(gap_fact["status"], "SOURCE_EXCLUDED")
+
+
+if __name__ == "__main__":
+    unittest.main()

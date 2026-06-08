@@ -1,6 +1,7 @@
 import json
 import os
 import platform
+import shutil
 import threading
 import uuid
 from copy import deepcopy
@@ -16,11 +17,50 @@ DEFAULTS = {
     "cloud_upload_resumes": False,
     "update_manifest_url": "",
     "log_level": "INFO",
+    "email_intake_enabled": False,
+    "email_intake_mailbox": "",
+    "email_intake_monitored_folder": "Inbox/NjordHR Resumes",
+    "email_intake_processed_folder": "Inbox/NjordHR Processed",
+    "email_intake_failed_folder": "Inbox/NjordHR Failed",
+    "email_intake_poll_interval_seconds": 60,
+    "outlook_client_id": "",
+    "outlook_tenant_id": "organizations",
+    "outlook_connected_account": "",
+    "outlook_last_auth_error": "",
 }
 
 
-def _default_download_folder():
-    return os.path.abspath(os.path.expanduser("~/Downloads/NjordHR"))
+def _agent_data_dir(home=None, system=None):
+    home_dir = os.path.abspath(os.path.expanduser(home or "~"))
+    system_name = (system or platform.system()).lower()
+    if system_name == "darwin":
+        return os.path.join(home_dir, "Library", "Application Support", "NjordHR")
+    if system_name == "windows":
+        appdata = os.getenv("APPDATA", home_dir)
+        return os.path.join(appdata, "NjordHR")
+    return os.path.join(home_dir, ".config", "njordhr")
+
+
+def _default_download_folder(home=None, system=None):
+    return os.path.join(_agent_data_dir(home=home, system=system), "Resumes")
+
+
+def _legacy_download_folder(home=None):
+    home_dir = os.path.abspath(os.path.expanduser(home or "~"))
+    return os.path.join(home_dir, "Downloads", "NjordHR")
+
+
+def _legacy_temp_download_folder(home=None):
+    home_dir = os.path.abspath(os.path.expanduser(home or "~"))
+    return os.path.join(home_dir, "temp12")
+
+
+def _coerce_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def agent_config_path():
@@ -28,15 +68,7 @@ def agent_config_path():
     if override:
         return os.path.abspath(os.path.expanduser(override))
 
-    home = os.path.expanduser("~")
-    system = platform.system().lower()
-    if system == "darwin":
-        base = os.path.join(home, "Library", "Application Support", "NjordHR")
-    elif system == "windows":
-        appdata = os.getenv("APPDATA", home)
-        base = os.path.join(appdata, "NjordHR")
-    else:
-        base = os.path.join(home, ".config", "njordhr")
+    base = _agent_data_dir()
     return os.path.join(base, "agent.json")
 
 
@@ -60,6 +92,7 @@ class AgentConfigStore:
             else:
                 raw = {}
             self._config = self._merge_defaults(raw)
+            self._config = self._apply_download_folder_migration(self._config, raw)
             self.save()
 
     def _merge_defaults(self, raw):
@@ -70,7 +103,107 @@ class AgentConfigStore:
         if not str(cfg.get("download_folder", "")).strip():
             cfg["download_folder"] = _default_download_folder()
         cfg["download_folder"] = os.path.abspath(os.path.expanduser(cfg["download_folder"]))
+        cfg["api_base_url"] = str(cfg.get("api_base_url", "")).strip().rstrip("/")
+        cfg["device_token"] = str(cfg.get("device_token", "")).strip()
+        cfg["update_manifest_url"] = str(cfg.get("update_manifest_url", "")).strip()
+        cfg["auto_start"] = _coerce_bool(cfg.get("auto_start", DEFAULTS["auto_start"]), DEFAULTS["auto_start"])
+        cfg["cloud_sync_enabled"] = _coerce_bool(
+            cfg.get("cloud_sync_enabled", DEFAULTS["cloud_sync_enabled"]),
+            DEFAULTS["cloud_sync_enabled"],
+        )
+        cfg["cloud_upload_resumes"] = _coerce_bool(
+            cfg.get("cloud_upload_resumes", DEFAULTS["cloud_upload_resumes"]),
+            DEFAULTS["cloud_upload_resumes"],
+        )
+        cfg["log_level"] = str(cfg.get("log_level", DEFAULTS["log_level"])).strip() or DEFAULTS["log_level"]
+        cfg["email_intake_mailbox"] = str(cfg.get("email_intake_mailbox", "")).strip()
+        cfg["email_intake_monitored_folder"] = str(
+            cfg.get("email_intake_monitored_folder", DEFAULTS["email_intake_monitored_folder"])
+        ).strip() or DEFAULTS["email_intake_monitored_folder"]
+        cfg["email_intake_processed_folder"] = str(
+            cfg.get("email_intake_processed_folder", DEFAULTS["email_intake_processed_folder"])
+        ).strip() or DEFAULTS["email_intake_processed_folder"]
+        cfg["email_intake_failed_folder"] = str(
+            cfg.get("email_intake_failed_folder", DEFAULTS["email_intake_failed_folder"])
+        ).strip() or DEFAULTS["email_intake_failed_folder"]
+        cfg["outlook_client_id"] = str(cfg.get("outlook_client_id", "")).strip()
+        cfg["outlook_tenant_id"] = str(
+            cfg.get("outlook_tenant_id", DEFAULTS["outlook_tenant_id"])
+        ).strip() or DEFAULTS["outlook_tenant_id"]
+        cfg["outlook_connected_account"] = str(cfg.get("outlook_connected_account", "")).strip()
+        cfg["outlook_last_auth_error"] = str(cfg.get("outlook_last_auth_error", "")).strip()
+        try:
+            poll_interval = int(cfg.get("email_intake_poll_interval_seconds", DEFAULTS["email_intake_poll_interval_seconds"]))
+        except (TypeError, ValueError):
+            poll_interval = DEFAULTS["email_intake_poll_interval_seconds"]
+        cfg["email_intake_poll_interval_seconds"] = max(15, min(poll_interval, 3600))
         return cfg
+
+    def _apply_download_folder_migration(self, cfg, raw):
+        migrated = deepcopy(cfg)
+        current_folder = os.path.abspath(os.path.expanduser(str(migrated.get("download_folder", "")).strip()))
+        target_folder = os.path.abspath(os.path.expanduser(_default_download_folder()))
+        legacy_folder = os.path.abspath(os.path.expanduser(_legacy_download_folder()))
+        legacy_temp_folder = os.path.abspath(os.path.expanduser(_legacy_temp_download_folder()))
+        raw_download_folder = os.path.abspath(os.path.expanduser(str((raw or {}).get("download_folder", "")).strip()))
+
+        should_migrate = (
+            current_folder in {legacy_folder, legacy_temp_folder}
+            or raw_download_folder in {legacy_folder, legacy_temp_folder}
+        )
+        if not should_migrate:
+            return migrated
+
+        try:
+            migrated["download_folder"] = self._migrate_download_folder(current_folder, target_folder)
+        except Exception:
+            migrated["download_folder"] = current_folder
+        return migrated
+
+    def _migrate_download_folder(self, source_folder, target_folder):
+        source_path = os.path.abspath(os.path.expanduser(source_folder))
+        target_path = os.path.abspath(os.path.expanduser(target_folder))
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+        if source_path == target_path:
+            os.makedirs(target_path, exist_ok=True)
+            return target_path
+
+        if not os.path.exists(source_path):
+            os.makedirs(target_path, exist_ok=True)
+            return target_path
+
+        if not os.path.exists(target_path):
+            shutil.move(source_path, target_path)
+            return target_path
+
+        self._merge_directory_contents(source_path, target_path)
+        try:
+            if os.path.isdir(source_path) and not os.listdir(source_path):
+                os.rmdir(source_path)
+        except OSError:
+            pass
+        return target_path
+
+    def _merge_directory_contents(self, source_folder, target_folder):
+        os.makedirs(target_folder, exist_ok=True)
+        for child_name in os.listdir(source_folder):
+            source_path = os.path.join(source_folder, child_name)
+            target_path = self._next_available_path(os.path.join(target_folder, child_name))
+            shutil.move(source_path, target_path)
+
+    def _next_available_path(self, path):
+        if not os.path.exists(path):
+            return path
+        root, ext = os.path.splitext(path)
+        if os.path.isdir(path):
+            root, ext = path, ""
+        counter = 1
+        while True:
+            candidate = f"{root}_{counter}{ext}"
+            if not os.path.exists(candidate):
+                return candidate
+            counter += 1
 
     def get(self):
         with self._lock:

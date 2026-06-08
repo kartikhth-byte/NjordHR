@@ -1,0 +1,19 @@
+{
+  "version": "2026.04.14.1100",
+  "created_at_utc": "2026-04-14T06:12:24+00:00",
+  "artifact_count": 2,
+  "artifacts": [
+    {
+      "name": "NjordHR-2026.04.14.1100-unsigned.pkg",
+      "size_bytes": 297534639,
+      "sha256": "8c1bf0f297cca8d65c4664b43db67dcbaf4559e05059dddada9da4bb36968564",
+      "signature": ""
+    },
+    {
+      "name": "NjordHR-unsigned.pkg",
+      "size_bytes": 297534639,
+      "sha256": "8c1bf0f297cca8d65c4664b43db67dcbaf4559e05059dddada9da4bb36968564",
+      "signature": ""
+    }
+  ]
+}

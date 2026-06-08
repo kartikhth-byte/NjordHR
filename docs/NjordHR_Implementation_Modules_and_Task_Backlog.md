@@ -9,8 +9,8 @@
 - `M0` Program setup and guardrails
 - `M1` Cloud foundation (Supabase + API scaffolding)
 - `M2` Data layer migration (CSV/SQLite -> Supabase)
-- `M3` Local Agent (scraping + local folder download)
-- `M4` Frontend integration (cloud + local agent modes)
+- `M3` Local Agent (scraping + local folder download) - complete
+- `M4` Frontend Integration (Cloud + Local Agent Modes) - complete
 - `M5` Installer + auto-update + signing
 - `M6` Cutover, hardening, and deprecation
 
@@ -27,7 +27,9 @@
   - `USE_CLOUD_EXPORT`
 - `M0-T3` Create branch/PR template with required checks.
 - `M0-T4` Create test matrix and smoke checklist baseline.
+  - Deliverable: [NjordHR_M0_Test_Matrix_and_Smoke_Checklist.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_M0_Test_Matrix_and_Smoke_Checklist.md)
 - `M0-T5` Define rollback playbook per module.
+  - Deliverable: [NjordHR_Module_Rollback_Playbook.md](/Users/kartikraghavan/Tools/NjordHR/docs/NjordHR_Module_Rollback_Playbook.md)
 
 ### Exit criteria
 - Rules published and agreed.
@@ -49,8 +51,11 @@
 - `M1-T3` Add indexes for candidate/event/job query paths.
 - `M1-T4` Implement RLS policies and service-role usage boundaries.
 - `M1-T5` Create cloud API service skeleton (container runtime).
+  - Deliverable: `cloud_api/` package with `create_app()`, `/health`, `/runtime/ready`, and auth guard scaffold.
 - `M1-T6` Add auth middleware and environment secret loading.
+  - Deliverable: `python3 -m cloud_api` entrypoint plus shared cloud runtime settings helper.
 - `M1-T7` Add health and readiness endpoints.
+  - Deliverable: cloud API health check runbook in `docs/cloud_api_health_check_runbook.md`.
 
 ### Exit criteria
 - Supabase schema + RLS applied in dev.
@@ -66,15 +71,22 @@
   - `CandidateEventRepo`
   - `FeedbackRepo`
   - `RegistryRepo`
+  - Deliverable: abstract contracts for candidate events, feedback, and file-registry stores plus analyzer implementations wired to them.
 - `M2-T2` Implement CSV-backed adapters (existing behavior).
+  - Deliverable: `CSVFileRegistry` and `CSVFeedbackStore` adapters in `repositories/` with analyzer wired to them.
 - `M2-T3` Implement Supabase-backed adapters.
+  - Deliverable: `SupabaseFileRegistry` and `SupabaseFeedbackStore` adapters in `repositories/` with analyzer wired to them.
 - `M2-T4` Wire feature-flagged dependency injection for repo selection.
+  - Deliverable: `build_ai_store_bundle(...)` plus analyzer/backend startup paths that receive injected feature flags and store bundles.
 - `M2-T5` Build one-time migration scripts:
   - `verified_resumes.csv -> candidate_events/candidates`
   - `feedback.db -> analysis_feedback`
   - `registry.db -> registry table`
+  - Deliverable: `scripts/migrate_local_state_to_supabase.py` orchestration plus reusable helper functions for each migration target.
 - `M2-T6` Add dual-write mode (CSV + Supabase) with idempotency keys.
+  - Deliverable: dual-write registry/feedback adapters with idempotency tracking, feature-flagged bundle selection, and coverage for repeated-write deduplication plus primary-read fallback.
 - `M2-T7` Build parity report script (CSV vs Supabase counts and spot-checks).
+  - Deliverable: `scripts/ai_store_parity_report.py` with count comparisons, sampled field checks, and missing-row detection for registry and feedback stores.
 - `M2-T8` Switch read paths to Supabase under flag:
   - dashboard, history, status, notes, rank counts, export metadata.
 
@@ -90,14 +102,18 @@
 
 ### Tasks
 - `M3-T1` Create `agent/` service package with process entrypoint.
+  - Deliverable: `agent/__main__.py` plus launcher wiring so the local agent can start via `python -m agent` and `scripts/run_agent.sh`.
 - `M3-T2` Move scraper endpoints from monolith into local agent API:
   - `session/start`, `session/verify-otp`, `jobs/download`, `session/disconnect`.
+  - Deliverable: canonical local-agent route stubs plus backend proxy coverage so session and download flows can run through the agent when `USE_LOCAL_AGENT=true`.
 - `M3-T3` Add local settings store:
   - download folder
   - cloud API URL
   - device token
   - sync toggles.
+  - Deliverable: normalized agent config store with persisted download folder, cloud API URL, device token, and sync flags plus tests for round-trip defaults and updates.
 - `M3-T4` Implement folder validation and writability checks.
+  - Deliverable: folder normalization plus actual write-probe validation in the agent filesystem helper and health/settings routes.
 - `M3-T5` Add job queue and worker in agent runtime.
 - `M3-T6` Add job progress and log streaming (`/jobs/:id/stream`).
 - `M3-T7` Add cloud sync client:
@@ -120,10 +136,20 @@
 - Cloud receives job/event updates from agent.
 - Cloud resume uploads are idempotent and recover after restart/network loss.
 
+### Status
+- Complete as of 2026-05-24.
+- Remaining active work has moved to `M5` Installer + auto-update + signing.
+
 ---
 
 ## M4. Frontend Integration (Cloud + Local Agent Modes)
 **Goal:** keep UX unified while routing to correct runtime.
+
+**Current module under review:** `M4` Frontend Integration (Cloud + Local Agent Modes) - complete
+
+### Status
+- Complete as of 2026-05-24.
+- `M4-T1` through `M4-T10` are now all implemented and committed.
 
 ### Tasks
 - `M4-T1` Replace hardcoded API URL with env-based config.
@@ -146,6 +172,10 @@
   - `Sync pending`
   - `Synced`
   - `Sync failed`.
+- `M4-T10` Refresh the Settings UX and warning surfacing:
+  - split backend save vs local-agent sync feedback more clearly
+  - surface partial-success warnings with actionable detail
+  - reduce full-form coupling so mailbox and folder updates are easier to observe and debug.
 
 ### Exit criteria
 - User can choose local download folder in Settings.
@@ -223,7 +253,7 @@
 
 ## 3. Parallel work lanes
 - Lane A (Backend/Data): `M1`, `M2`
-- Lane B (Agent): `M3`
+- Lane B (Agent): `M3` complete
 - Lane C (Frontend): `M4`
 - Lane D (DevOps/Release): `M5`
 
@@ -259,6 +289,31 @@ Suggested overlap:
 - `P1` High. Needed for production-ready workflow.
 - `P2` Medium. Hardening and rollout polish.
 
+### 6.2 Current AI Search Phase 1 follow-up focus
+- `P0` Pinecone false-empty rerun issue is resolved:
+  - root cause was the namespace existence probe
+  - the old zero-vector cosine query was unreliable
+  - the fix uses Pinecone `list(namespace=..., limit=1)` with bounded retry and query fallback only when `list()` is unavailable
+- `P1` Keep STCW extractor conservative for now:
+  - do not add a broader `UNKNOWN -> PASS` heuristic yet
+  - do not reduce the `Needs Review` bucket unless the same missed-positive pattern repeats across multiple folders
+- `P1` Continue manual quality review of current AI Search output:
+  - spot-check verified matches
+  - spot-check fails
+  - spot-check needs-review samples
+- `P1` If further STCW work is needed, prioritize false `FAIL` / false `expired` corrections over promoting more `UNKNOWN` cases to `PASS`
+- `P1` Treat the current rank / COC / DOB / visa extraction round as validated unless new repeated corpus evidence appears:
+  - full diagnostic sweep has been run across the currently implemented extraction areas
+  - rank extraction is materially improved across the validated folders
+  - COC extraction is materially improved across the validated deck and engineer folders
+  - DOB / age and visa / passport extraction appear broadly stable in the current corpus
+  - remaining small residual buckets should not trigger broad parser expansion by default
+- `P1` If future extraction tuning resumes:
+  - start again with a folder-level diagnostic
+  - save the artifact
+  - patch only the repeated observed pattern
+  - rerun the same-folder diagnostic before any broader validation
+
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).
 - `M1-T1` Create Supabase environments (`dev`, `staging`, `prod`).
@@ -287,7 +342,7 @@ Suggested overlap:
 - `M5-*` Installer, signing, and auto-update.
 - `M6-*` Cutover, deprecation, DR drills, and full hardening.
 
-### 6.5 First 10 tasks to execute (strict order)
+### 6.5 First 10 tasks to execute (historical rollout order)
 1. `M0-T2` Feature flags and defaults.
 2. `M1-T1` Supabase project/environment setup.
 3. `M1-T2` DB schema migrations.
@@ -314,3 +369,109 @@ Suggested overlap:
   - `M4`
 - Release/DevOps owner:
   - `M5`, `M6`
+
+### 6.8 Newly noted pending UX tasks (not yet implemented)
+- `M5-T7` Ensure Njord logo is consistently shown in the app header across supported builds/platforms.
+- `M5-T8` Windows first-run bootstrap UX:
+  - move install/dependency bootstrap to background (no visible terminal window),
+  - add first-run progress UI with status text + progress indicator while runtime/dependencies are prepared.
+- `M5-T9` Add password generator action in `User Password` page:
+  - provide one-click strong password generation when creating/updating user credentials.
+- `M5-T10` Add branded Windows application icon parity with macOS:
+  - use orange background + navy anchor icon for Windows app/start-menu/taskbar assets.
+
+---
+
+## 7. Current Tactical Workstream: Deterministic AI Search Filters
+
+**Reason:** AI Search produced incorrect results for age-range prompts because structured constraints were still effectively being interpreted by LLM reasoning instead of being enforced deterministically.
+
+### 7.1 Immediate objective
+- Build a deterministic hard-filter layer in AI Search before LLM reasoning.
+- Start with age derived from DOB.
+- Keep LLM usage for semantic explanation/ranking only after hard-filter pass.
+
+### 7.2 Current status
+- In progress in:
+  - `/Users/kartikraghavan/Tools/NjordHR/ai_analyzer.py`
+  - `/Users/kartikraghavan/Tools/NjordHR/frontend.html`
+- Implemented in source:
+  - minimal `JobConstraints` extraction for age
+  - minimal `CandidateFacts` extraction for DOB
+  - evaluation-time age computation
+  - hard-filter result states:
+    - `PASS`
+    - `FAIL`
+    - `UNKNOWN`
+  - AI Search summary counters:
+    - scanned
+    - passed hard filters
+    - needs review
+    - matched
+  - `UNKNOWN` candidates rendered as `Needs Review`
+- Packaged mac app validation completed successfully for the tested age-only flow.
+- Root cause of the final mismatch was fixed in DOB parsing:
+  - support for resume DOB format `DD-Mon-YYYY`
+  - removal of unsafe fallback that could pick unrelated dates
+- Structured-only age prompts now evaluate the full selected rank folder before LLM reasoning.
+
+### 7.2.1 Current DOB parsing contract
+- DOB is only parsed when it appears next to an explicit DOB label such as `Date of Birth`, `DOB`, or `D.O.B`.
+- Supported unambiguous DOB formats:
+  - `DD-Mon-YYYY` and equivalent month-name separator variants such as `DD Mon YYYY`, `DD/Mon/YYYY`
+  - `Mon DD YYYY` / `Month DD YYYY`
+  - ISO-style `YYYY-MM-DD`
+- Ambiguous numeric formats must be treated as `UNKNOWN`, not guessed:
+  - examples: `04/11/1989`, `03-02-1974`, `11.04.89`
+- Unlabeled dates elsewhere in the resume must not be used as DOB fallbacks.
+
+### 7.3 Next tasks in this workstream
+- `AI-T1` Completed in current implementation:
+  - regression coverage exists for age range prompts, DOB parsing edge cases, and the exact birthday boundary in age computation
+- `AI-T2` Completed in current implementation:
+  - deterministic `FAIL` / `UNKNOWN` candidates are kept out of LLM reasoning and this behavior is covered by the current test suite
+- `AI-T3` Completed in current implementation:
+  - `UNKNOWN` candidates are rendered in a separate `Needs Review` bucket
+  - no inclusion toggle is currently implemented or required for the validated Phase 1 flow
+- `AI-T4` Completed in current implementation:
+  - deterministic ship-type extraction/evaluation is wired for both applied ship type and experienced ship type
+  - backend, UI controls, and regression coverage are present
+  - follow-up still open:
+    - prompt-side ship-type normalization is currently broader-bucket oriented and does not yet align to the full configured `ShipTypes.ship_type_options` catalog in `config.ini`
+    - treat config-aligned ship-type prompt recognition as a separate narrow implementation unit rather than mixing it into unrelated parser work
+- `AI-T5` Completed in current implementation:
+  - deterministic/audit logging for hard-filter outcomes is emitted, persisted, and surfaced in the current flow
+- `AI-T6` Retrieval chunking upgrade is partially completed in current implementation:
+  - completed:
+    - the main indexed chunker no longer uses only fixed whitespace-only token windows
+    - paragraph/blank-line boundaries are preferred where feasible
+    - short table-like multiline blocks are preserved more carefully
+    - direct chunking regressions now exist
+  - deferred / optional follow-up:
+    - keyword-fallback pseudo-chunking can be improved later if fallback retrieval quality becomes a practical concern
+  - keep any further retrieval-quality work out of the deterministic Phase 1 change set so retrieval changes do not get mixed with hard-filter correctness work
+
+### 7.3.1 Extraction-quality status after diagnostics
+- Completed validation work:
+  - diagnostic-first tuning and validation has now been run for:
+    - STCW
+    - rank normalization
+    - COC extraction
+    - DOB / age extraction
+    - visa / passport extraction
+- Current quality judgment:
+  - STCW remains intentionally conservative and still has the largest unresolved unknown bucket
+  - rank extraction is in a materially better state for the current corpus family
+  - COC extraction is in a materially better state for the current corpus family
+  - remaining COC misses are now mostly incomplete-source or narrower folder-specific issues rather than one broad missing alias family
+  - DOB / age and visa / passport extraction do not currently need broadening work
+- Recommended next-step posture:
+  - do not continue broad extractor expansion by default
+  - use the saved diagnostic artifacts as the baseline for future regressions
+  - only reopen extractor tuning when a new repeated pattern appears in diagnostics or manual review
+
+### 7.4 Acceptance criteria
+- Prompt `between 30 and 50 years old` excludes candidates older than 50 or younger than 30.
+- Candidates with missing/ambiguous DOB are not shown as verified matches.
+- UI clearly distinguishes deterministic pass/fail/unknown behavior from LLM confidence.
+- Real resume DOB formats observed in the corpus are covered by regression tests.

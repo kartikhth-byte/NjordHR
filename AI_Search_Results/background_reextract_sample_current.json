@@ -1,0 +1,110 @@
+{
+  "all_processed_rows_idempotent": true,
+  "all_processed_rows_v2_0": true,
+  "note": "This is an offline evidence harness around the same v2.0 fact-building path used by synchronous re-extraction. It does not prove a separate background job scheduler or Pinecone/Gemini ingestion path.",
+  "processed_count": 11,
+  "rank_folder": "Verified_Resumes/Chief_Officer",
+  "rows": [
+    {
+      "digest_first": "6ab66894952e600530345547e048f6f2e8edf175d1415335069033cb38894d75",
+      "digest_second": "6ab66894952e600530345547e048f6f2e8edf175d1415335069033cb38894d75",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_180473_2025-09-05_11-47-44.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "4896ca53aed1336dd38216bd704c67e1c05f8b8907ce16525cf87163fdc497d8",
+      "digest_second": "4896ca53aed1336dd38216bd704c67e1c05f8b8907ce16525cf87163fdc497d8",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_22836_2025-09-05_11-48-21.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "772aed5f274b3723183d354e49c27b010d6891c748f960d9731f1382bde6d234",
+      "digest_second": "772aed5f274b3723183d354e49c27b010d6891c748f960d9731f1382bde6d234",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_27054_2025-09-05_11-49-06.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "07bc3b40fd9d3bc1d17c2f8d6110503e98c8147e7285c526ef58a47b9928bfab",
+      "digest_second": "07bc3b40fd9d3bc1d17c2f8d6110503e98c8147e7285c526ef58a47b9928bfab",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_371241_2025-09-05_11-49-17.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "ded7b57665f124a3052bff8fb9704785b54a75305e332fe4366ee1eed207871e",
+      "digest_second": "ded7b57665f124a3052bff8fb9704785b54a75305e332fe4366ee1eed207871e",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_54615_2025-09-05_11-48-49.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "d3a97784e2e6113c61ce3942adc9d02d291dc51654f6510b7ff7a5af6ca5437d",
+      "digest_second": "d3a97784e2e6113c61ce3942adc9d02d291dc51654f6510b7ff7a5af6ca5437d",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_55409_2025-09-05_11-48-40.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "a34e46a5a007a78e388fb6935f79d1e4692340a57347bdc947f6b7b5801c3f50",
+      "digest_second": "a34e46a5a007a78e388fb6935f79d1e4692340a57347bdc947f6b7b5801c3f50",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_56129_2025-09-05_11-49-22.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "bf4263034a2f2bbf0b8c40429bc1d73a535e200cf840e0f868a1ba35f5675ce3",
+      "digest_second": "bf4263034a2f2bbf0b8c40429bc1d73a535e200cf840e0f868a1ba35f5675ce3",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_59436_2025-09-05_11-49-20.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "5b77f75b3e7f3849f86d78bd9a44ea1f05628bac42c2f40791876e0d4cb876c3",
+      "digest_second": "5b77f75b3e7f3849f86d78bd9a44ea1f05628bac42c2f40791876e0d4cb876c3",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_60056_2025-09-05_11-47-24.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "79e7a649a6b2f4315d37d67f122ca0dfc810b2927d0c764273755c121ee105aa",
+      "digest_second": "79e7a649a6b2f4315d37d67f122ca0dfc810b2927d0c764273755c121ee105aa",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_62065_2025-09-05_11-47-54.pdf",
+      "idempotent": true,
+      "status": "processed"
+    },
+    {
+      "digest_first": "7d11eb64728c85fd68d67976e534c637077d3f17bbc9183d43d51544fc2a6ba2",
+      "digest_second": "7d11eb64728c85fd68d67976e534c637077d3f17bbc9183d43d51544fc2a6ba2",
+      "facts_version_first": "2.0",
+      "facts_version_second": "2.0",
+      "filename": "Chief-Officer_Bulk-Carrier_89946_2025-09-05_11-48-30.pdf",
+      "idempotent": true,
+      "status": "processed"
+    }
+  ],
+  "sample_limit": 11,
+  "skipped_count": 0
+}
