@@ -89,6 +89,73 @@ Rebuilding v0.1 wholesale is not the recommended approach. Instead:
    `NEEDS_HUMAN_REVIEW` flag on individual rows works, but the convention
    decisions themselves belong here so the next loss can't take them.
 
+## v0.2 revalidation evidence
+
+The rebuilt v0.2 corpus is **new evidence**, not a byte-for-byte replacement for
+v0.1. A family may be called promote-ready on v0.2 only after all promotion
+gates have an explicit disposition:
+
+| Gate | What the v0.2 eval provides | What must be recorded manually |
+| --- | --- | --- |
+| Eval gate | `scripts/tail_set_score.py` rescue rate per family, with default pass threshold `>= 0.8` | Per-family verdict and any follow-up rows |
+| Confidence gate | Count of shadow-normalizer rows emitted with `confidence == "high"` vs lower confidence | Per-family confidence summary |
+| Value-correctness review | Score output marks rescued rows as `value_match: NEEDS_HUMAN_REVIEW` | Accept/reject/re-test disposition for every rescued row |
+| Per-family feature flag | Nothing; this is operational, not corpus evidence | Keep `Settings.LLM_Promotion_Stage` at `0` until the first three gates are recorded |
+
+### Row-level scoring notes
+
+After each eval run, value-review outcomes must be written back into the
+canonical corpus rows, not left only in chat, terminal output, or transient
+score JSON. Use a `scoring_notes` object on the row:
+
+```json
+"scoring_notes": {
+  "eval_date": "2026-06-08",
+  "llm_family_rescued": true,
+  "llm_confidence": "high",
+  "value_review": "accepted",
+  "reviewer": "manual",
+  "review_note": "LLM extracted max_age=49 for 'in their 40s', matching corpus convention."
+}
+```
+
+Allowed `value_review` values:
+
+- `accepted` — family and normalized values match the corpus convention.
+- `rejected` — family was rescued but values are wrong or unsafe.
+- `retest` — row needs another eval run because the LLM response or harness
+  output was inconclusive.
+- `follow_up` — row exposed a convention or implementation gap that needs a
+  separate issue or code change.
+
+Every rescued row needs a disposition before the family can be used as
+promotion evidence. This matters even when the automatic eval gate passes,
+because the scorer only judges family rescue automatically; value correctness
+is a human review gate.
+
+### Family verdict format
+
+Each completed v0.2 eval should add a dated verdict summary to this README or
+to a linked calibration document under `docs/`:
+
+```text
+Cycle-3 v0.2 revalidation (YYYY-MM-DD)
+- eval gate: 5 / 6 families pass rescue_rate >= 0.8
+- confidence gate: N high-confidence rows, M lower-confidence rows, summarized per family
+- value-correctness review: K accepted, J rejected/follow_up/retest
+- solved-set regressions: 0
+- control violations: 0
+- comparison to v0.1 preserved scoreboard:
+  - age_range: v0.1 26/26, v0.2 22/22, margin unchanged
+  - us_visa: v0.1 22/22, v0.2 18/22, gate passed with reduced margin
+- verdict: families that remain promote-candidates on v0.2 evidence
+```
+
+If a family clears the `0.8` threshold but drops below the v0.1 preserved
+scoreboard, record the reduced margin explicitly. Do not collapse that into a
+plain `promote_candidate=true`; the drop may mean v0.2 is harder, the normalizer
+has drifted, or both.
+
 ## Process rule (enforced by `.gitignore`)
 
 `AI_Search_Results/` remains gitignored as a default for one-off diagnostic
