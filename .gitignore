@@ -12,7 +12,7 @@ __pycache__/
 
 # Runtime outputs
 logs/
-AI_Search_Results/
+AI_Search_Results/*
 Verified_Resumes/
 
 # Local databases/state
@@ -35,3 +35,8 @@ electron/node_modules/
 # Historical local backups
 Backup_*/
 .playwright-mcp/
+
+# AI_Search_Results corpus exceptions — load-bearing labeled corpus and its
+# README must remain tracked. Diagnostic dumps stay ignored.
+!AI_Search_Results/README.md
+!AI_Search_Results/seajobs_tail_set_v*.json
