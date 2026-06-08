@@ -1,0 +1,351 @@
+{
+  "schema_version": "tail_set.v0.2",
+  "notes": "Starter v0.2 — passport_validity rescue rows (cycle 3 focus) + controls bucket covering family-adjacent figurative and polarity-inversion patterns for all six in-scope families (passport_validity, age_range, us_visa, stcw_basic, certificate_requirement, rank_match). Once these labels and patterns are validated against the legacy parser on main (commit 81f6a2f), the other five families' rescue rows can be added incrementally in the same PR.",
+  "families": {
+    "passport_validity": [
+      {
+        "prompt": "8 months remaining on passport",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 8
+          }
+        },
+        "current_parser": "miss",
+        "note": "Number-first word order with 'remaining'; legacy window_patterns require 'passport valid(ity)' adjacency."
+      },
+      {
+        "prompt": "passport with 6 months left",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "miss",
+        "note": "'months left' phrasing absent from legacy patterns."
+      },
+      {
+        "prompt": "passport valid for at least 1 year",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy catches boolean passport validity but drops the year-unit minimum. Convention: 1 year -> 12 months."
+      },
+      {
+        "prompt": "passport valid for 2 years",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 24
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy catches boolean passport validity but drops the year-unit minimum. Convention: 2 years -> 24 months."
+      },
+      {
+        "prompt": "passport expiring within 3 months should be rejected",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 3
+          }
+        },
+        "current_parser": "miss",
+        "note": "'Expiring within X months' is an inverse phrasing the LLM should interpret as 'must have X+ months remaining'. Convention call: human review the boundary."
+      },
+      {
+        "prompt": "freshly renewed passport",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Renewed/fresh implies valid; no explicit 'valid' keyword."
+      },
+      {
+        "prompt": "newly issued passport",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Newly issued implies valid; no explicit 'valid' keyword."
+      },
+      {
+        "prompt": "passport not expired",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Negation of expiry == validity intent. Distinguish from polarity-inversion controls like 'expired passport OK'."
+      },
+      {
+        "prompt": "ensure passport is current",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy fallback may fire due to 'current' context word but with no 'passport ... valid' adjacency the requested_label may be wrong. Manually verify."
+      },
+      {
+        "prompt": "passport must have minimum 6 months validity remaining",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy may catch boolean validity but not the months value due to 'minimum' interspersed with 'validity remaining' phrasing."
+      },
+      {
+        "prompt": "candidate should hold a passport that doesn't expire in the next year",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "miss",
+        "note": "Conditional expiry phrasing. Convention: 'in the next year' -> 12 months minimum remaining."
+      },
+      {
+        "prompt": "passport remaining validity of 9 months",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 9
+          }
+        },
+        "current_parser": "miss",
+        "note": "'remaining validity' phrasing absent from legacy patterns."
+      },
+      {
+        "prompt": "valid US visa and passport",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Compound prompt: legacy us_visa parser may catch 'US visa' but passport_validity expression is parsed weakly because 'valid' is shared. Multi-family expected; LLM should emit both."
+      },
+      {
+        "prompt": "needs a fresh passport for joining vessel",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'Fresh passport' as informal validity. Joining-vessel context shouldn't change family."
+      },
+      {
+        "prompt": "passport should be valid through end of 2028",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Date-based expiry. Legacy fallback may fire from 'valid' context but cannot compute months remaining (depends on evaluation date). Convention: drop minimum_months_remaining for date-based prompts and surface as date-based hard filter when supported."
+      },
+      {
+        "prompt": "the candidate carries a passport with no validity issues",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Indirect validity expression; no explicit 'valid' adjacent to 'passport'."
+      },
+      {
+        "prompt": "passport validity 12+ months",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "miss",
+        "note": "Compact '12+' notation; legacy patterns expect 'at least' / 'minimum' qualifiers or a months-prefix."
+      },
+      {
+        "prompt": "must have indian passport with valid OCI",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy parses 'must have...valid passport' family but OCI mention is not a separate family (out of catalog). Expected: passport_validity only, OCI as semantic_query material."
+      },
+      {
+        "prompt": "passport with at least six months till expiry",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "miss",
+        "note": "Spelled-out number + 'till expiry' phrasing absent from legacy patterns."
+      },
+      {
+        "prompt": "candidates whose passport has at least 6 months left before it expires",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "miss",
+        "note": "Verbose recruiter phrasing. Same intent as canonical 'passport valid for at least 6 months'."
+      }
+    ],
+    "controls": [
+      {
+        "prompt": "no passport required for this position",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Polarity inversion: explicit 'no passport required'. Legacy currently fires passport_validity; shadow/active normalizer must veto this."
+      },
+      {
+        "prompt": "without passport restrictions",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Figurative 'without passport restrictions' — does not assert passport requirement."
+      },
+      {
+        "prompt": "expired passport OK for ratings",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Polarity inversion: opposite of must_be_valid intent."
+      },
+      {
+        "prompt": "passport-sized photo required with application",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Wrong sense — 'passport' refers to photo format, not the document. Legacy currently fires passport_validity; shadow/active normalizer must require document-validity context."
+      },
+      {
+        "prompt": "visa-free Schengen entry",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Polarity inversion for us_visa: 'visa-free' is the opposite of visa-required. Legacy currently fires us_visa; shadow/active normalizer must veto this."
+      },
+      {
+        "prompt": "no US visa needed",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Explicit visa polarity inversion. Legacy currently fires us_visa; shadow/active normalizer must veto this."
+      },
+      {
+        "prompt": "middle-aged officer with stable record",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Figurative age expression — must NOT fire age_range. _AGE_FIGURATIVE_PATTERNS covers 'middle-aged'."
+      },
+      {
+        "prompt": "senior officer with strong leadership",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "'Senior officer' is a rank descriptor, not a numeric age constraint. Should not fire age_range."
+      },
+      {
+        "prompt": "any safety training will do",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Generic 'safety training' without STCW/BST/basic cues — must not fire stcw_basic. _STCW_BASIC_CONTEXT_CUES requires explicit anchor."
+      },
+      {
+        "prompt": "MV vessel prefix experience",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "'MV' as vessel prefix, NOT a Maritime Crew Visa reference. Should not fire us_visa with visa_group=australia."
+      },
+      {
+        "prompt": "good candidate with stable sea service",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Qualitative recruiter prompt; should map to semantic_query only, no hard-filter family."
+      },
+      {
+        "prompt": "experienced senior captain who is youthful in approach",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Two figurative age expressions ('senior captain', 'youthful') — must not fire age_range."
+      },
+      {
+        "prompt": "any certificate works",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Generic 'certificate' without specific named certificate — must not fire certificate_requirement with empty or invented list."
+      },
+      {
+        "prompt": "candidate must be flexible about rank",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Anti-constraint on rank — must not fire rank_match. Convention: ignore figurative rank phrasings."
+      },
+      {
+        "prompt": "documents required at joining",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Bare 'documents' without 'passport' keyword — must not fall through legacy passport fallback. Tests the anchor strictness."
+      }
+    ]
+  }
+}
