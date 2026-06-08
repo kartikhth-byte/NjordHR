@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Mapping
@@ -195,7 +196,10 @@ def build_shadow_llm_prompt(
 def _config_value(config: Any, attr: str, fallback: Any = None) -> Any:
     if config is None:
         return fallback
-    value = getattr(config, attr, fallback)
+    try:
+        value = getattr(config, attr, fallback)
+    except Exception:
+        return fallback
     return fallback if value is None else value
 
 
@@ -262,6 +266,10 @@ def _resolve_gemini_api_key(analyzer: Any) -> str | None:
     legacy_key = _first_string(_config_value(config, "gemini_api_key"), _config_value(config, "Gemini_API_Key"))
     if legacy_key:
         return legacy_key
+
+    env_key = _first_string(os.environ.get("GEMINI_API_KEY"), os.environ.get("GOOGLE_API_KEY"))
+    if env_key:
+        return env_key
 
     return None
 

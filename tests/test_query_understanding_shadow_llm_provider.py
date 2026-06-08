@@ -167,6 +167,65 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertEqual(plan["normalizer"]["model"], "gemini-config-model")
         self.assertIn("/models/gemini-config-model:generateContent", post.call_args.args[0])
 
+    def test_build_shadow_llm_query_plan_uses_env_key_when_config_missing(self):
+        config = configparser.ConfigParser()
+        self.analyzer.config = config
+
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "valid passport",
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true", "GEMINI_API_KEY": "env-key"}, clear=False):
+            with mock.patch(
+                "query_understanding.shadow_llm_provider.requests.post",
+                return_value=_DummyResponse({"candidates": [{"content": {"parts": [{"text": json.dumps(plan_payload)}]}}]}),
+            ) as post:
+                result = build_shadow_llm_query_plan(
+                    self.analyzer,
+                    prompt="valid passport",
+                    rank="2nd Engineer",
+                    prompt_id="prompt-shadow",
+                    legacy_plan=self.legacy_plan,
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["plan"]["normalizer"]["model"], "gemini-3.1-flash-lite")
+        self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"], "env-key")
+
+    def test_build_shadow_llm_query_plan_reports_missing_key_with_sparse_config(self):
+        self.analyzer.config = configparser.ConfigParser()
+
+        with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=True):
+            result = build_shadow_llm_query_plan(
+                self.analyzer,
+                prompt="valid passport",
+                rank="2nd Engineer",
+                prompt_id="prompt-shadow",
+                legacy_plan=self.legacy_plan,
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["plan"], self.legacy_plan)
+        self.assertEqual(result["diagnostics"]["status"], "fallback")
+        self.assertEqual(result["diagnostics"]["reason"], "missing_api_credentials")
+
     def test_age_bounds_from_text_handles_inversion_and_shorthand(self):
         cases = {
             "not below 30": (30, None),
