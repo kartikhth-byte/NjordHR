@@ -1,0 +1,1730 @@
+{
+  "schema_version": "tail_set.v0.2",
+  "notes": "v0.2 — reconstructed AI Search tail set with passport_validity cycle-3 starter rows, five promoted-family revalidation rows, and cross-family controls. Rebuilt after v0.1 loss documented in AI_Search_Results/README.md.",
+  "families": {
+    "passport_validity": [
+      {
+        "prompt": "8 months remaining on passport",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 8
+          }
+        },
+        "current_parser": "miss",
+        "note": "Number-first word order with 'remaining'; legacy window_patterns require 'passport valid(ity)' adjacency."
+      },
+      {
+        "prompt": "passport with 6 months left",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "miss",
+        "note": "'months left' phrasing absent from legacy patterns."
+      },
+      {
+        "prompt": "passport valid for at least 1 year",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy catches boolean passport validity but drops the year-unit minimum. Convention: 1 year -> 12 months."
+      },
+      {
+        "prompt": "passport valid for 2 years",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 24
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy catches boolean passport validity but drops the year-unit minimum. Convention: 2 years -> 24 months."
+      },
+      {
+        "prompt": "passport expiring within 3 months should be rejected",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 3
+          }
+        },
+        "current_parser": "miss",
+        "note": "'Expiring within X months' is an inverse phrasing the LLM should interpret as 'must have X+ months remaining'. Convention call: human review the boundary."
+      },
+      {
+        "prompt": "freshly renewed passport",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Renewed/fresh implies valid; no explicit 'valid' keyword."
+      },
+      {
+        "prompt": "newly issued passport",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Newly issued implies valid; no explicit 'valid' keyword."
+      },
+      {
+        "prompt": "passport not expired",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Negation of expiry == validity intent. Distinguish from polarity-inversion controls like 'expired passport OK'."
+      },
+      {
+        "prompt": "ensure passport is current",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy fallback may fire due to 'current' context word but with no 'passport ... valid' adjacency the requested_label may be wrong. Manually verify."
+      },
+      {
+        "prompt": "passport must have minimum 6 months validity remaining",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy may catch boolean validity but not the months value due to 'minimum' interspersed with 'validity remaining' phrasing."
+      },
+      {
+        "prompt": "candidate should hold a passport that doesn't expire in the next year",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "miss",
+        "note": "Conditional expiry phrasing. Convention: 'in the next year' -> 12 months minimum remaining."
+      },
+      {
+        "prompt": "passport remaining validity of 9 months",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 9
+          }
+        },
+        "current_parser": "miss",
+        "note": "'remaining validity' phrasing absent from legacy patterns."
+      },
+      {
+        "prompt": "valid US visa and passport",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Compound prompt: legacy us_visa parser may catch 'US visa' but passport_validity expression is parsed weakly because 'valid' is shared. Multi-family expected; LLM should emit both."
+      },
+      {
+        "prompt": "needs a fresh passport for joining vessel",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'Fresh passport' as informal validity. Joining-vessel context shouldn't change family."
+      },
+      {
+        "prompt": "passport should be valid through end of 2028",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Date-based expiry. Legacy fallback may fire from 'valid' context but cannot compute months remaining (depends on evaluation date). Convention: drop minimum_months_remaining for date-based prompts and surface as date-based hard filter when supported."
+      },
+      {
+        "prompt": "the candidate carries a passport with no validity issues",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Indirect validity expression; no explicit 'valid' adjacent to 'passport'."
+      },
+      {
+        "prompt": "passport validity 12+ months",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "miss",
+        "note": "Compact '12+' notation; legacy patterns expect 'at least' / 'minimum' qualifiers or a months-prefix."
+      },
+      {
+        "prompt": "must have indian passport with valid OCI",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy parses 'must have...valid passport' family but OCI mention is not a separate family (out of catalog). Expected: passport_validity only, OCI as semantic_query material."
+      },
+      {
+        "prompt": "passport with at least six months till expiry",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "miss",
+        "note": "Spelled-out number + 'till expiry' phrasing absent from legacy patterns."
+      },
+      {
+        "prompt": "candidates whose passport has at least 6 months left before it expires",
+        "expected_primary_family": "passport_validity",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "miss",
+        "note": "Verbose recruiter phrasing. Same intent as canonical 'passport valid for at least 6 months'."
+      }
+    ],
+    "age_range": [
+      {
+        "prompt": "officers in their 40s with tanker experience",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 40,
+            "max_age": 49
+          }
+        },
+        "current_parser": "miss",
+        "note": "Decade-span ('in their 40s') absent from legacy patterns. Convention: in their 40s -> [40, 49]."
+      },
+      {
+        "prompt": "candidates in their thirties",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 30,
+            "max_age": 39
+          }
+        },
+        "current_parser": "miss",
+        "note": "Spelled-out decade. Legacy requires digit age_token; 'thirties' has no digits."
+      },
+      {
+        "prompt": "officer in mid 40s preferred",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 43,
+            "max_age": 47
+          }
+        },
+        "current_parser": "miss",
+        "note": "Mid-decade. Convention: mid 40s -> [43, 47]."
+      },
+      {
+        "prompt": "looking for engineers in their late twenties",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 27,
+            "max_age": 29
+          }
+        },
+        "current_parser": "miss",
+        "note": "Late-decade, spelled. Convention: late twenties -> [27, 29]."
+      },
+      {
+        "prompt": "candidates in early 50s",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 50,
+            "max_age": 52
+          }
+        },
+        "current_parser": "miss",
+        "note": "Early-decade. Convention: early 50s -> [50, 52]."
+      },
+      {
+        "prompt": "candidates aged around 45",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 43,
+            "max_age": 47
+          }
+        },
+        "current_parser": "miss",
+        "note": "Approximate age. Convention: around N -> [N-2, N+2]."
+      },
+      {
+        "prompt": "approximately 35 years of age",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 33,
+            "max_age": 37
+          }
+        },
+        "current_parser": "miss",
+        "note": "Approximate age. Legacy does not parse this phrasing. Convention: around/approximately N -> [N-2, N+2]."
+      },
+      {
+        "prompt": "no candidate above the age of 60 please",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "max_age": 60
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy max_patterns include 'above the age of'; verify polarity."
+      },
+      {
+        "prompt": "must be at least 25 and no more than 55",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 25,
+            "max_age": 55
+          }
+        },
+        "current_parser": "miss",
+        "note": "Compound min+max without explicit age anchor. Legacy does not parse either side as age."
+      },
+      {
+        "prompt": "officers older than 30 and younger than 50",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 31,
+            "max_age": 49
+          }
+        },
+        "current_parser": "partial",
+        "note": "Compound strict. Convention: strict older/younger -> exclusive."
+      },
+      {
+        "prompt": "young professionals under 35",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "max_age": 34
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy 'under N' fires max_age=35 (legacy treats as inclusive). Convention: under N -> max_age = N-1 (strict)."
+      },
+      {
+        "prompt": "experienced officers between 35-50 years",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 35,
+            "max_age": 50
+          }
+        },
+        "current_parser": "miss",
+        "note": "Hyphen range without 'years old'/'aged' anchor; legacy does not parse this as age."
+      },
+      {
+        "prompt": "candidates older than 25 but younger than 50",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 26,
+            "max_age": 49
+          }
+        },
+        "current_parser": "partial",
+        "note": "Compound strict on both."
+      },
+      {
+        "prompt": "officer with age 40 plus",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 40
+          }
+        },
+        "current_parser": "miss",
+        "note": "'N plus' notation; not in legacy min_patterns."
+      },
+      {
+        "prompt": "should be in the 30 to 45 age bracket",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 30,
+            "max_age": 45
+          }
+        },
+        "current_parser": "partial",
+        "note": "Generic age-context fallback should catch via 'age' + two plausible numbers."
+      },
+      {
+        "prompt": "experienced officers, age 50+",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 50
+          }
+        },
+        "current_parser": "miss",
+        "note": "'N+' compact notation."
+      },
+      {
+        "prompt": "candidates born after 1985",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "max_age": 41
+          }
+        },
+        "current_parser": "miss",
+        "note": "Birth-year phrasing — implies max age = current_year - birth_year. As of 2026: born after 1985 -> max_age 41. Convention call: corpus uses 2026 reference."
+      },
+      {
+        "prompt": "candidates born before 1980",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 46
+          }
+        },
+        "current_parser": "miss",
+        "note": "Inverse birth-year: born before 1980 -> min_age 46 (2026 ref)."
+      },
+      {
+        "prompt": "officers around the age of 40 to 45",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 40,
+            "max_age": 45
+          }
+        },
+        "current_parser": "partial",
+        "note": "Generic age-context fallback should catch the 40 and 45 numbers; 'around' modifier may make it broader."
+      },
+      {
+        "prompt": "minimum experience 5 years and age over 30",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 30
+          }
+        },
+        "current_parser": "partial",
+        "note": "Compound prompt — sea_service + age. Legacy 'over N' catches age side; sea_service is separate unapplied family."
+      },
+      {
+        "prompt": "officers aged 25 to 45 years preferred",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "min_age": 25,
+            "max_age": 45
+          }
+        },
+        "current_parser": "partial",
+        "note": "'aged N to N years' — range_patterns should catch via 'aged' anchor."
+      },
+      {
+        "prompt": "candidates not above 50",
+        "expected_primary_family": "age_range",
+        "expected_constraint": {
+          "age_years": {
+            "max_age": 50
+          }
+        },
+        "current_parser": "partial",
+        "note": "Negation phrasing 'not above N'. Legacy misreads this as min_age=51; expected is max_age=50."
+      }
+    ],
+    "us_visa": [
+      {
+        "prompt": "candidate holding H-1B",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "h-1b"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Class name without 'visa' keyword."
+      },
+      {
+        "prompt": "must have B one slash B two stamped",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "b1/b2"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Spelled-out B1/B2 class without visa keyword; legacy does not map this to US visa."
+      },
+      {
+        "prompt": "American visa required",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          }
+        },
+        "current_parser": "partial",
+        "note": "'American visa' uses adjective; _SUPPORTED_VISA_CONTEXT_CUES includes 'american'."
+      },
+      {
+        "prompt": "should have an Aussie visa",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "australia"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Informal 'Aussie' not in cues (only 'australian'/'mcv'). LLM rescue should map to australia."
+      },
+      {
+        "prompt": "maritime crew permit for Australia",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "australia"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Maritime Crew Visa intent without the MCV/visa token; legacy does not map this to Australia visa."
+      },
+      {
+        "prompt": "Schengen visa preferred",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "schengen"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy may catch via window patterns; verify visa_group resolution."
+      },
+      {
+        "prompt": "needs valid C1-D",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "c1/d"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy fires us_visa but normalizes C1-D as C1, dropping the intended C1/D class."
+      },
+      {
+        "prompt": "either US or Schengen visa is fine",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Multi-group prompt. Convention: take first stated group; alternative in semantic_query."
+      },
+      {
+        "prompt": "candidate has L-1 visa",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "l-1"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "L-1 class is not in legacy visa type definitions, even with the visa keyword."
+      },
+      {
+        "prompt": "visa for travel to Europe ready",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "schengen"
+          }
+        },
+        "current_parser": "miss",
+        "note": "'Europe' implies Schengen but cues use 'European'."
+      },
+      {
+        "prompt": "Maritime Crew Visa for Australia",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "australia"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Full phrase is in cues; should fire australia group."
+      },
+      {
+        "prompt": "B1B2 valid for 6 months",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "minimum_months_remaining": 6,
+            "accepted_types": [
+              "b1/b2"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "Numeric duration with class shorthand."
+      },
+      {
+        "prompt": "EU travel visa with 1 year validity",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "schengen",
+            "minimum_months_remaining": 12
+          }
+        },
+        "current_parser": "miss",
+        "note": "EU + visa, year unit. Convention: 1 year -> 12 months."
+      },
+      {
+        "prompt": "must carry F-1 or O-1",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Class shorthand only; no 'visa' word. F-1/O-1 are in cues."
+      },
+      {
+        "prompt": "U.S. visa with 10+ months validity",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "minimum_months_remaining": 10
+          }
+        },
+        "current_parser": "miss",
+        "note": "Compact U.S. spelling and 10+ month notation are not parsed by legacy visa patterns."
+      },
+      {
+        "prompt": "USA work permit needed",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          }
+        },
+        "current_parser": "miss",
+        "note": "'Work permit' is non-canonical for visa; legacy expects 'visa'. LLM should interpret as USA visa requirement."
+      },
+      {
+        "prompt": "European entry permit holder for crew",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "schengen"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Schengen/Europe travel authorization intent without 'visa' or Schengen keyword; legacy does not map this to Schengen."
+      },
+      {
+        "prompt": "C1/D and US visa both required",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "c1/d"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "Compound mention of C1/D + US visa; legacy may fire on either, accepted_types should include C1/D."
+      },
+      {
+        "prompt": "C1D with 8 months left",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "minimum_months_remaining": 8,
+            "accepted_types": [
+              "c1/d"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy fires C1/D as US visa but drops the 8-month remaining-validity requirement."
+      },
+      {
+        "prompt": "USA H1B holder with 18 months validity",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "minimum_months_remaining": 18,
+            "accepted_types": [
+              "h-1b"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Class without hyphen + duration."
+      },
+      {
+        "prompt": "Schengen long-stay valid",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "schengen"
+          }
+        },
+        "current_parser": "partial",
+        "note": "'Schengen' in cues; 'long-stay' qualifier shouldn't change family."
+      },
+      {
+        "prompt": "MV applicants need Maritime Crew Visa",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "australia"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Critical disambiguation test: 'MV applicants' = vessel prefix, but 'Maritime Crew Visa' explicit. Australia group should fire."
+      }
+    ],
+    "stcw_basic": [
+      {
+        "prompt": "candidate completed PSSR, PST, FPFF and EFA",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy has lookahead with all four acronyms (line 1879). Should HIT; if so, move to solved-set."
+      },
+      {
+        "prompt": "holds PSSR, PST, fire prevention and first aid",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Spelled component names instead of FPFF/EFA acronyms."
+      },
+      {
+        "prompt": "all four basic modules current",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'basic modules' not in patterns (legacy has 'basic courses', 'basic certificates')."
+      },
+      {
+        "prompt": "candidate holds STCW certificate set",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "wrong_family",
+        "note": "'STCW certificate set' is ambiguous — could include advanced. Default unsupported per blueprint §9.3."
+      },
+      {
+        "prompt": "BST done in 2024",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy '\\bbst\\b' fires (line 1864). If solved, move to solved-set."
+      },
+      {
+        "prompt": "basic safety training completed last month",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "'basic safety training' is in patterns. Verify."
+      },
+      {
+        "prompt": "valid A-VI/1 endorsement on board",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "A-VI/1 STCW basic code is not parsed by legacy stcw_basic patterns."
+      },
+      {
+        "prompt": "Personal Survival, Fire Fighting, First Aid, PSSR all valid",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Spelled component list — lookahead needs acronyms."
+      },
+      {
+        "prompt": "needs STCW BST",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy '\\bbst\\b' fires."
+      },
+      {
+        "prompt": "STCW basic refresher pending",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "wrong_family",
+        "note": "Legacy 'stcw basic refresher current' fires but 'pending' inverts intent."
+      },
+      {
+        "prompt": "candidate did STCW course recently",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "wrong_family",
+        "note": "'STCW course' too broad — could be advanced. Default unsupported."
+      },
+      {
+        "prompt": "valid PSSR and PST only",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "wrong_family",
+        "note": "Two of four components. Should NOT fire stcw_basic (requires all four)."
+      },
+      {
+        "prompt": "must hold all basic STCW certificates valid",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy pattern fires (line 1884)."
+      },
+      {
+        "prompt": "all four basic STCW with original certs",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy 'all four basic stcw' fires (line 1874)."
+      },
+      {
+        "prompt": "PST FPFF EFA PSSR completed",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Re-ordered component list; lookahead is order-independent."
+      },
+      {
+        "prompt": "all four basic complete and valid",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'all four basic complete' without 'certificates'/'courses' anchor."
+      },
+      {
+        "prompt": "BST refresher in date",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy '\\bbst\\b' fires regardless of 'refresher in date'; verify polarity."
+      },
+      {
+        "prompt": "STCW 2010 basic compliant",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'STCW 2010 basic' versioned reference; legacy patterns need direct 'STCW basic safety' or 'basic STCW' adjacency."
+      },
+      {
+        "prompt": "valid STCW (basic)",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "Parenthetical basic phrasing is not parsed by legacy stcw_basic patterns."
+      },
+      {
+        "prompt": "basic STCW four-pack complete",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'four-pack' is informal; legacy patterns expect 'four basic' phrasing."
+      },
+      {
+        "prompt": "STCW basic redoed in 2025",
+        "expected_primary_family": "stcw_basic",
+        "expected_constraint": {
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "miss",
+        "note": "'redoed' (refresher synonym). Convention: implies validity reset, fires stcw_basic."
+      },
+      {
+        "prompt": "AFF and advanced FA only — no basic",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "wrong_family",
+        "note": "Advanced certs explicitly + 'no basic' negation. Should NOT fire stcw_basic. LLM rescue critical here."
+      }
+    ],
+    "certificate_requirement": [
+      {
+        "prompt": "must hold AFF certificate",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "aff"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Advanced Fire Fighting. Separate from stcw_basic."
+      },
+      {
+        "prompt": "needs MFA and AFF both",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "mfa",
+              "aff"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Compound advanced certs."
+      },
+      {
+        "prompt": "advanced firefighting and medical care",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "aff",
+              "mfa"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Spelled out. Convention: 'medical care' -> MFA per catalog."
+      },
+      {
+        "prompt": "AFA mandatory for this rank",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "afa"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Advanced First Aid."
+      },
+      {
+        "prompt": "IGF code certificate required",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "igf_code"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "IGF Code — LNG/gas-fueled vessel cert."
+      },
+      {
+        "prompt": "tanker familiarization needed",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "tanker_familiarization"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Entry-level tanker endorsement."
+      },
+      {
+        "prompt": "should have DCE",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "dce"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Dangerous Cargo Endorsement."
+      },
+      {
+        "prompt": "Advanced DCE for tanker work",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "advanced_dce"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Advanced DCE distinct from base DCE."
+      },
+      {
+        "prompt": "GMDSS certificate holder",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "gmdss"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Global Maritime Distress and Safety System."
+      },
+      {
+        "prompt": "ECDIS course done",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "ecdis"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Electronic Chart Display."
+      },
+      {
+        "prompt": "AFF MFA AFA all current",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "aff",
+              "mfa",
+              "afa"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Triple advanced acronyms. Distinguish from stcw_basic."
+      },
+      {
+        "prompt": "candidate has CCM",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "ccm"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Crowd Crisis Management — passenger ship."
+      },
+      {
+        "prompt": "Bridge Resource Management training needed",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "brm"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "BRM."
+      },
+      {
+        "prompt": "advanced firefighting alone is enough",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "aff"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Single advanced cert. Tests veto: must NOT classify as stcw_basic."
+      },
+      {
+        "prompt": "valid ERM endorsement",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "erm"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Engine Room Resource Management."
+      },
+      {
+        "prompt": "PSCRB certificate current",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "pscrb"
+            ]
+          }
+        },
+        "current_parser": "wrong_family",
+        "note": "Proficiency in Survival Craft and Rescue Boats."
+      },
+      {
+        "prompt": "ROC or GOC required",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "roc",
+              "goc"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "GMDSS Restricted/General Operator's Certificate."
+      },
+      {
+        "prompt": "Tanker Familiarization (oil) cert needed",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "tanker_familiarization_oil"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Oil-specific tanker familiarization. Convention: cargo-specialized cert."
+      },
+      {
+        "prompt": "PFSO certified",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "pfso"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "Port Facility Security Officer."
+      },
+      {
+        "prompt": "Leadership and Managerial Skills (LMS) completed",
+        "expected_primary_family": "certificate_requirement",
+        "expected_constraint": {
+          "certifications": {
+            "certificates_required": [
+              "lms"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "LMS — STCW Reg II/2 management-level requirement."
+      }
+    ],
+    "rank_match": [
+      {
+        "prompt": "currently sailing as 2/E",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "2nd_engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "'2/E' slash. Legacy normalize converts to '2 E'; alias must include this."
+      },
+      {
+        "prompt": "applied for the position of Chief Engineer",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Standard alias fires."
+      },
+      {
+        "prompt": "CO with tanker background",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_officer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "'CO' abbreviation may not be in alias table."
+      },
+      {
+        "prompt": "ship's Master with five contracts",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "'Master' alias common."
+      },
+      {
+        "prompt": "3rd Off currently onboard",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "3rd_officer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "'3rd Off' shorthand."
+      },
+      {
+        "prompt": "officer in rank ETO",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "eto"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "ETO alias common."
+      },
+      {
+        "prompt": "applied for 4/E or junior 4/E role",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "4th_engineer",
+              "junior_4th_engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Multi-rank prompt."
+      },
+      {
+        "prompt": "Bosun position",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "bosun"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Boatswain alias."
+      },
+      {
+        "prompt": "needs Cook with reefer experience",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "cook"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Legacy rank alias table does not match bare Cook in this phrasing; reefer remains semantic/vessel context."
+      },
+      {
+        "prompt": "OS or AB preferred",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "ordinary_seaman",
+              "able_seaman"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Two ratings ranks."
+      },
+      {
+        "prompt": "captain or master rank",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Captain/Master synonymous. Convention: collapse to master."
+      },
+      {
+        "prompt": "3/O looking for promotion",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "3rd_officer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Slash notation."
+      },
+      {
+        "prompt": "Trainee Engineer slot",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "trainee_engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Junior-most engineering slot."
+      },
+      {
+        "prompt": "chief galley cook for cruise vessel",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "chief_cook"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Galley-cook phrasing implies chief_cook but legacy rank aliases do not match it."
+      },
+      {
+        "prompt": "applied as pump man on tanker",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "pumpman"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Separated 'pump man' phrasing implies pumpman but legacy rank aliases do not match it; tanker may still parse as vessel_type."
+      },
+      {
+        "prompt": "DPO role requirement",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "dpo"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Dynamic Positioning Officer — specialty role."
+      },
+      {
+        "prompt": "junior engineer slot open",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "junior_engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Generic junior engineer; may map to specific 4E or stay as junior."
+      },
+      {
+        "prompt": "deck cadet trainee preferred",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "deck_cadet"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Cadet rank."
+      },
+      {
+        "prompt": "engine cadet experience required",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "engine_cadet"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "Legacy rank alias table does not match engine_cadet in this phrasing."
+      },
+      {
+        "prompt": "AB Special endorsement required",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "able_seaman"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "AB Special (AB(S)) — rated AB. Maps to able_seaman canonical."
+      },
+      {
+        "prompt": "motorman / fitter position",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "motorman",
+              "fitter"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "partial",
+        "note": "Legacy catches fitter but not motorman in this slash phrasing; expected normalized ranks include both."
+      },
+      {
+        "prompt": "GP rating required",
+        "expected_primary_family": "rank_match",
+        "expected_constraint": {
+          "rank": {
+            "applied_rank_normalized": [
+              "general_purpose_rating"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "current_parser": "miss",
+        "note": "General Purpose rating."
+      }
+    ],
+    "controls": [
+      {
+        "prompt": "no passport required for this position",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Polarity inversion: explicit 'no passport required'. Legacy currently fires passport_validity; shadow/active normalizer must veto this."
+      },
+      {
+        "prompt": "without passport restrictions",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Figurative 'without passport restrictions' — does not assert passport requirement."
+      },
+      {
+        "prompt": "expired passport OK for ratings",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Polarity inversion: opposite of must_be_valid intent."
+      },
+      {
+        "prompt": "passport-sized photo required with application",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Wrong sense — 'passport' refers to photo format, not the document. Legacy currently fires passport_validity; shadow/active normalizer must require document-validity context."
+      },
+      {
+        "prompt": "visa-free Schengen entry",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Polarity inversion for us_visa: 'visa-free' is the opposite of visa-required. Legacy currently fires us_visa; shadow/active normalizer must veto this."
+      },
+      {
+        "prompt": "no US visa needed",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Explicit visa polarity inversion. Legacy currently fires us_visa; shadow/active normalizer must veto this."
+      },
+      {
+        "prompt": "middle-aged officer with stable record",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Figurative age expression — must NOT fire age_range. _AGE_FIGURATIVE_PATTERNS covers 'middle-aged'."
+      },
+      {
+        "prompt": "senior officer with strong leadership",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "'Senior officer' is a rank descriptor, not a numeric age constraint. Should not fire age_range."
+      },
+      {
+        "prompt": "any safety training will do",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Generic 'safety training' without STCW/BST/basic cues — must not fire stcw_basic. _STCW_BASIC_CONTEXT_CUES requires explicit anchor."
+      },
+      {
+        "prompt": "MV vessel prefix experience",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "'MV' as vessel prefix, NOT a Maritime Crew Visa reference. Should not fire us_visa with visa_group=australia."
+      },
+      {
+        "prompt": "good candidate with stable sea service",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Qualitative recruiter prompt; should map to semantic_query only, no hard-filter family."
+      },
+      {
+        "prompt": "experienced senior captain who is youthful in approach",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Two figurative age expressions ('senior captain', 'youthful') — must not fire age_range."
+      },
+      {
+        "prompt": "any certificate works",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Generic 'certificate' without specific named certificate — must not fire certificate_requirement with empty or invented list."
+      },
+      {
+        "prompt": "candidate must be flexible about rank",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Anti-constraint on rank — must not fire rank_match. Convention: ignore figurative rank phrasings."
+      },
+      {
+        "prompt": "documents required at joining",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "Bare 'documents' without 'passport' keyword — must not fall through legacy passport fallback. Tests the anchor strictness."
+      }
+    ]
+  }
+}
