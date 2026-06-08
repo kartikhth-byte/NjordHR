@@ -449,6 +449,7 @@
             const [downloadCompleted, setDownloadCompleted] = useState(false);
 
             const [rankFolders, setRankFolders] = useState([]);
+            const [rankFolderRecords, setRankFolderRecords] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
             const [downloadFolderSummaries, setDownloadFolderSummaries] = useState([]);
             const [downloadResultsSummary, setDownloadResultsSummary] = useState({
@@ -1352,9 +1353,23 @@
                 };
             }, [downloadFolderBrowser.open, manualReviewModal.open, pendingRefinementConfirmation]);
 
+            const rankFolderRecordFor = (folder) => {
+                const target = String(folder || '').trim();
+                return (rankFolderRecords || []).find(record => (
+                    String(record?.folder || record?.legacy_rank_folder || '').trim() === target
+                )) || null;
+            };
+
+            const rankFolderIdFor = (folder) => (
+                String(rankFolderRecordFor(folder)?.rank_folder_id || '').trim()
+            );
+
+            const selectedRankFolderId = () => rankFolderIdFor(selectedRankFolder);
+
             const fetchRankFolders = async (currentUser = authUser) => {
                 if (!currentUser) {
                     setRankFolders([]);
+                    setRankFolderRecords([]);
                     setDownloadFolderSummaries([]);
                     setSelectedRankFolder('');
                     return;
@@ -1363,9 +1378,17 @@
                     const response = await fetch(`${getCloudApiBaseUrl()}/get_rank_folders`);
                     const data = await response.json();
                     if (data.success) {
-                        setRankFolders(data.folders);
-                        if (data.folders.length > 0 && !selectedRankFolder) {
-                            setSelectedRankFolder(data.folders[0]);
+                        const folders = data.folders || [];
+                        setRankFolders(folders);
+                        setRankFolderRecords(data.rank_folder_options || folders.map(folder => ({
+                            folder,
+                            legacy_rank_folder: folder,
+                            display_name: String(folder || '').replace(/_/g, ' '),
+                            rank_folder_id: '',
+                            download_root_id: '',
+                        })));
+                        if (folders.length > 0 && !selectedRankFolder) {
+                            setSelectedRankFolder(folders[0]);
                         }
                     }
                 } catch (error) {
@@ -1799,7 +1822,12 @@
                     loading: true,
                 });
                 try {
-                    const response = await fetch(`${getCloudApiBaseUrl()}/get_rank_folder_files?rank_folder=${encodeURIComponent(targetRankFolder)}`);
+                    const params = new URLSearchParams({ rank_folder: targetRankFolder });
+                    const targetRankFolderId = rankFolderIdFor(targetRankFolder);
+                    if (targetRankFolderId) {
+                        params.set('rank_folder_id', targetRankFolderId);
+                    }
+                    const response = await fetch(`${getCloudApiBaseUrl()}/get_rank_folder_files?${params.toString()}`);
                     const data = await response.json();
                     if (!data.success) {
                         handleSendMessage('error', data.message || 'Failed to load downloaded resumes.');
@@ -1903,7 +1931,12 @@
                     return;
                 }
                 try {
-                    const response = await fetch(`${getCloudApiBaseUrl()}/get_rank_folder_ship_types?rank_folder=${encodeURIComponent(currentRankFolder)}`);
+                    const params = new URLSearchParams({ rank_folder: currentRankFolder });
+                    const currentRankFolderId = rankFolderIdFor(currentRankFolder);
+                    if (currentRankFolderId) {
+                        params.set('rank_folder_id', currentRankFolderId);
+                    }
+                    const response = await fetch(`${getCloudApiBaseUrl()}/get_rank_folder_ship_types?${params.toString()}`);
                     const data = await response.json();
                     if (data.success) {
                         const nextShipTypes = data.ship_types || [];
@@ -3574,6 +3607,10 @@
                             params.set('changed_content_acknowledgement_id', acknowledgementId);
                         }
                     } else {
+                        const selectedId = selectedRankFolderId();
+                        if (selectedId) {
+                            params.set('rank_folder_id', selectedId);
+                        }
                         params.set('rank_folder', selectedRankFolder);
                         params.set('applied_ship_type', selectedSearchShipType);
                         params.set('experienced_ship_type', selectedExperienceShipType);
@@ -7190,7 +7227,10 @@
                                                 disabled={rankFolders.length === 0 || refinementMode}
                                             >
                                                 {rankFolders.length > 0 ? (
-                                                    rankFolders.map(folder => <option key={folder} value={folder}>{folder.replace(/_/g, ' ')}</option>)
+                                                    rankFolders.map(folder => {
+                                                        const record = rankFolderRecordFor(folder);
+                                                        return <option key={folder} value={folder}>{record?.display_name || folder.replace(/_/g, ' ')}</option>;
+                                                    })
                                                 ) : (
                                                     <option>No downloaded resume folders found</option>
                                                 )}
