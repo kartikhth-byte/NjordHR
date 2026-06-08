@@ -9,6 +9,7 @@ search behavior.
 import argparse
 import configparser
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -35,7 +36,8 @@ class _RegistryStub:
 
 def _build_analyzer():
     parser = configparser.ConfigParser()
-    parser.read(PROJECT_ROOT / "config.ini")
+    config_path = os.environ.get("NJORDHR_CONFIG_PATH")
+    parser.read(Path(config_path).expanduser() if config_path else PROJECT_ROOT / "config.ini")
     analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
     analyzer.config = ConfigManager(parser)
     analyzer.registry = _RegistryStub()
