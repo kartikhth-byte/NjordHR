@@ -846,12 +846,13 @@ def _download_root_catalog_record(base_folder=None):
     root_path = str(base_folder or _active_download_root() or "").strip()
     if not root_path or not os.path.isdir(root_path):
         return None
-    identity = _catalog_stat_parts(root_path)
+    try:
+        identity = _catalog_stat_parts(root_path)
+    except Exception:
+        return None
     download_root_id = _opaque_catalog_id(
         "dr",
         identity["norm_path"],
-        identity["device"],
-        identity["inode"],
     )
     return {
         "download_root_id": download_root_id,
@@ -878,8 +879,6 @@ def _rank_folder_catalog_record(base_folder, folder):
         root_record["download_root_id"],
         folder,
         identity["norm_path"],
-        identity["device"],
-        identity["inode"],
     )
     return {
         "download_root_id": root_record["download_root_id"],
@@ -4944,6 +4943,7 @@ def analyze_stream():
             candidate_scope_ids = None
             candidate_scope_memberships = None
             parent_scope = {}
+            target_record = None
 
             if parent_search_session_id:
                 try:
@@ -5063,6 +5063,7 @@ def analyze_stream():
                 effective_rank_folder = rank_record["folder"]
                 effective_rank_folder_id = rank_record["rank_folder_id"]
                 effective_download_root_id = rank_record["download_root_id"]
+                target_record = rank_record
 
             if not effective_rank_folder:
                 yield _error_sse(
@@ -5080,19 +5081,20 @@ def analyze_stream():
                 )
                 return
 
-            resolved_target = _resolve_rank_folder_reference(
-                rank_folder_id=effective_rank_folder_id,
-                rank_folder=effective_rank_folder,
-            )
-            if not resolved_target.get("success"):
-                error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "RANK_FOLDER_NOT_FOUND"
-                yield _error_sse(
-                    resolved_target.get("message") or ("Rank folder not found: " + effective_rank_folder),
-                    error_code=error_code,
-                    retryable=False,
+            if target_record is None:
+                resolved_target = _resolve_rank_folder_reference(
+                    rank_folder_id=effective_rank_folder_id,
+                    rank_folder=effective_rank_folder,
                 )
-                return
-            target_record = resolved_target["record"]
+                if not resolved_target.get("success"):
+                    error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "RANK_FOLDER_NOT_FOUND"
+                    yield _error_sse(
+                        resolved_target.get("message") or ("Rank folder not found: " + effective_rank_folder),
+                        error_code=error_code,
+                        retryable=False,
+                    )
+                    return
+                target_record = resolved_target["record"]
             target_folder = target_record["_resolved_path"]
             effective_rank_folder = target_record["folder"]
             effective_rank_folder_id = target_record["rank_folder_id"]

@@ -1008,6 +1008,33 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertNotIn("_resolved_path", option)
         self.assertNotIn(str(self.download_root), json.dumps(body))
 
+    def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        original_record = backend_server._rank_folder_catalog_record(
+            str(self.download_root),
+            "Chief_Officer",
+        )
+        original_stat_parts = backend_server._catalog_stat_parts
+
+        def remounted_stat_parts(path):
+            parts = dict(original_stat_parts(path))
+            parts["device"] = "remounted-device"
+            parts["inode"] = "remounted-inode"
+            return parts
+
+        with patch.object(backend_server, "_catalog_stat_parts", side_effect=remounted_stat_parts):
+            remounted_record = backend_server._rank_folder_catalog_record(
+                str(self.download_root),
+                "Chief_Officer",
+            )
+
+        self.assertEqual(remounted_record["download_root_id"], original_record["download_root_id"])
+        self.assertEqual(remounted_record["rank_folder_id"], original_record["rank_folder_id"])
+
+    def test_download_root_catalog_record_handles_stat_race(self):
+        with patch.object(backend_server, "_catalog_stat_parts", side_effect=FileNotFoundError("gone")):
+            self.assertIsNone(backend_server._download_root_catalog_record(str(self.download_root)))
+
     def test_rank_folder_files_accepts_opaque_rank_folder_id(self):
         (self.rank_dir / "Chief_Officer_1002.pdf").write_bytes(b"%PDF-1.4")
         (self.rank_dir / "Chief_Officer_1001.pdf").write_bytes(b"%PDF-1.4")
