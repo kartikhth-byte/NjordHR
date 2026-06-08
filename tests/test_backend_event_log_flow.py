@@ -1345,6 +1345,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                                 }
                             ],
                             "llm_reached": False,
+                            "llm_promoted": ["us_visa"],
                             "result_bucket": "excluded",
                         },
                         {
@@ -1378,6 +1379,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(audit_rows[0]["Facts_Version"], "1.1")
         self.assertEqual(audit_rows[0]["Hard_Filter_Decision"], "FAIL")
         self.assertEqual(audit_rows[0]["Reason_Codes"], "US_VISA_EXPIRED")
+        self.assertEqual(audit_rows[0]["LLM_Promoted_Families"], "us_visa")
         self.assertEqual(audit_rows[0]["Result_Bucket"], "excluded")
         self.assertEqual(audit_rows[1]["Facts_Version"], "2.0")
         self.assertEqual(audit_rows[1]["Hard_Filter_Decision"], "UNKNOWN")
@@ -1751,8 +1753,10 @@ class BackendEventLogFlowTests(unittest.TestCase):
         body = promote_resp.get_json()
         self.assertTrue(body["success"])
         self.assertTrue(body["persist"]["committed"])
+        self.assertFalse(body["supabase_synced"])
         self.assertGreater(len(body.get("warnings") or []), 0)
         self.assertEqual(body["review_item"]["supabase_persistence_status"], "failed")
+        self.assertFalse(body["review_item"]["supabase_synced"])
         self.assertIn("supabase outage", body["warnings"][0].lower())
 
     def test_candidate_facts_review_promote_rejects_client_override_of_acceptance_policy(self):

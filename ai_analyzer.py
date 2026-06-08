@@ -46,9 +46,9 @@ from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS, SUPPOR
 _PROMOTION_STAGE_FAMILIES = [
     "certificate_requirement",
     "rank_match",
-    "age_range",
     "stcw_basic",
     "us_visa",
+    "age_range",
 ]
 _MAX_PROMOTION_STAGE = 5
 _DEFAULT_PROMOTION_STAGE = 0  # opt-in only — existing installs unchanged on upgrade
@@ -3241,7 +3241,12 @@ class AIResumeAnalyzer:
             if stage <= 0:
                 return set()
             return set(_PROMOTION_STAGE_FAMILIES[:stage])
-        return {family.strip() for family in raw.split(",") if family.strip()}
+        requested = {family.strip() for family in raw.split(",") if family.strip()}
+        known = set(_PROMOTION_STAGE_FAMILIES)
+        unknown = sorted(requested - known)
+        if unknown:
+            print(f"[promotion] Ignoring unknown LLM promotion family id(s): {', '.join(unknown)}")
+        return requested & known
 
     def _llm_promotion_stage(self) -> int:
         """Configured LLM promotion stage from settings, clamped to the supported range."""
@@ -10615,6 +10620,7 @@ Examples of GOOD responses:
                 hard_filter_started_at = time.perf_counter()
                 hard_filter_result = self._evaluate_hard_filters(candidate_facts, job_constraints)
                 self._record_perf_timing(perf_state, "hard_filter_evaluation", time.perf_counter() - hard_filter_started_at)
+                llm_promoted_families = list(job_constraints.get("llm_promoted") or [])
                 age_constraint = ((job_constraints.get("hard_constraints") or {}).get("age_years"))
                 age_value = ((candidate_facts.get("derived") or {}).get("age_years"))
                 dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
@@ -10628,6 +10634,7 @@ Examples of GOOD responses:
                     "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                     "facts_version": hard_filter_result.get("facts_version"),
                     "llm_reached": False,
+                    "llm_promoted": llm_promoted_families,
                     "result_bucket": "excluded",
                     "sync_reextract": reextract_meta,
                 }
@@ -10683,6 +10690,7 @@ Examples of GOOD responses:
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
                         "hard_filter_decision": "UNKNOWN",
                         "hard_filter_reasons": hard_filter_result["results"],
+                        "llm_promoted": llm_promoted_families,
                         "unknown_reason_types": unknown_reason_types,
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
@@ -10746,6 +10754,7 @@ Examples of GOOD responses:
                         "confidence": 1.0,
                         "hard_filter_decision": hard_filter_result["decision"],
                         "hard_filter_reasons": hard_filter_result["results"],
+                        "llm_promoted": llm_promoted_families,
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
@@ -10785,6 +10794,7 @@ Examples of GOOD responses:
                             "confidence": llm_result.get('confidence', 0.5),
                             "hard_filter_decision": hard_filter_result["decision"],
                             "hard_filter_reasons": hard_filter_result["results"],
+                            "llm_promoted": llm_promoted_families,
                             "computed_age": age_value,
                             "dob": dob_value.isoformat() if dob_value else None,
                             "applied_ship_types": applied_ship_types,

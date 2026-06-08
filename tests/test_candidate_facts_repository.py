@@ -36,6 +36,15 @@ _stub_ai_dependencies()
 from candidate_facts.repository import CandidateFactsRepository  # noqa: E402
 
 
+MATCH_ALIGNMENT_REPORT = {
+    "schema_version": "candidate_facts_review_alignment.v1",
+    "status": "match",
+    "compared_field_count": 1,
+    "mismatch_count": 0,
+    "mismatches": [],
+}
+
+
 class _FakeAnalyzer:
     def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
         return {
@@ -143,6 +152,8 @@ class CandidateFactsRepositoryTests(unittest.TestCase):
                 folder_metadata={},
                 source_origin="manual_upload",
                 detected_layout="unknown",
+                review_alignment_report=MATCH_ALIGNMENT_REPORT,
+                review_alignment_status="match",
             )
             self.assertEqual(capture["review_item"]["review_status"], "pending_review")
             self.assertEqual(len(repo.list_candidate_facts_review_items()), 1)
@@ -170,6 +181,8 @@ class CandidateFactsRepositoryTests(unittest.TestCase):
                 folder_metadata={},
                 source_origin="manual_upload",
                 detected_layout="unknown",
+                review_alignment_report=MATCH_ALIGNMENT_REPORT,
+                review_alignment_status="match",
             )
             review_id = capture["review_item"]["id"]
             repo.approve_candidate_facts_review_item(review_id, reviewed_by="reviewer")
@@ -214,13 +227,17 @@ class CandidateFactsRepositoryTests(unittest.TestCase):
                 folder_metadata={},
                 source_origin="manual_upload",
                 detected_layout="unknown",
+                review_alignment_report=MATCH_ALIGNMENT_REPORT,
+                review_alignment_status="match",
             )
             repo.approve_candidate_facts_review_item(capture["review_item"]["id"], reviewed_by="reviewer")
             promoted = repo.promote_candidate_facts_review_item(capture["review_item"]["id"])
             self.assertTrue(promoted["persist"]["committed"])
             self.assertEqual(promoted["supabase"]["status"], "persisted")
+            self.assertTrue(promoted["supabase_synced"])
             self.assertFalse(promoted["warnings"])
             self.assertEqual(promoted["review_item"]["supabase_persistence_status"], "persisted")
+            self.assertTrue(promoted["review_item"]["supabase_synced"])
             self.assertEqual(promoted["review_item"]["supabase_row_id"], promoted["persist"]["row"]["id"])
             self.assertEqual(len(repo.supabase_store.calls), 1)
 

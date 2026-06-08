@@ -162,6 +162,10 @@ class CandidateFactsRepository:
         folder_metadata: Mapping[str, Any] | None = None,
         source_origin: str | None = None,
         detected_layout: str | None = None,
+        review_alignment_report: Mapping[str, Any] | None = None,
+        review_alignment_status: str | None = None,
+        review_alignment_mismatch_count: int | None = None,
+        review_alignment_mismatches: Sequence[Mapping[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         candidate_facts = self.build_candidate_facts(
             analyzer,
@@ -180,6 +184,10 @@ class CandidateFactsRepository:
             candidate_facts=candidate_facts,
             parser_version=parser_version,
             facts_revision=facts_revision,
+            review_alignment_report=review_alignment_report,
+            review_alignment_status=review_alignment_status,
+            review_alignment_mismatch_count=review_alignment_mismatch_count,
+            review_alignment_mismatches=review_alignment_mismatches,
         )["review_item"]
         return {
             "candidate_facts": candidate_facts,
@@ -357,12 +365,14 @@ class CandidateFactsRepository:
                     "supabase_persistence_status": str(supabase_result.get("status") or "not_configured"),
                     "supabase_row_id": str(supabase_result.get("row_id") or ""),
                     "supabase_error": str(supabase_result.get("error") or ""),
+                    "supabase_synced": str(supabase_result.get("status") or "") == "persisted",
                 },
             )
             return {
                 "review_item": updated_review_item,
                 "persist": persist_result,
                 "supabase": supabase_result,
+                "supabase_synced": str(supabase_result.get("status") or "") == "persisted",
                 "warnings": warnings,
             }
 

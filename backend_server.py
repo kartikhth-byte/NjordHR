@@ -160,6 +160,11 @@ def _ai_search_request_fingerprint(
         "applied_ship_type": "" if is_refinement else str(applied_ship_type or "").strip(),
         "experienced_ship_type": "" if is_refinement else str(experienced_ship_type or "").strip(),
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
+        "changed_content_acknowledgement_id": (
+            str(changed_content_acknowledgement_id or "").strip()
+            if is_refinement
+            else ""
+        ),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8", "ignore")).hexdigest()
@@ -181,6 +186,9 @@ def _request_status_event(claim_result):
         payload["error_code"] = claim_result.get("error_code")
     if claim_result.get("summary"):
         payload["summary"] = claim_result.get("summary")
+        if request_status == "SEARCH_REQUEST_ALREADY_COMPLETE":
+            payload["delivery_mode"] = "metadata_only"
+            payload["replay_available"] = False
     return payload
 
 
@@ -3021,7 +3029,13 @@ def promote_candidate_facts_review_item():
                 "review_item": result["review_item"],
                 "persist": result["persist"],
             }), 409
-        response = {"success": True, "review_item": result["review_item"], "persist": result["persist"]}
+        response = {
+            "success": True,
+            "review_item": result["review_item"],
+            "persist": result["persist"],
+            "supabase": result.get("supabase") or {},
+            "supabase_synced": bool(result.get("supabase_synced", False)),
+        }
         warnings = [warning for warning in (result.get("warnings") or []) if warning]
         review_item = result.get("review_item") or {}
         supabase_status = str(review_item.get("supabase_persistence_status") or "").strip()
@@ -4606,6 +4620,14 @@ def analyze_stream():
                 for reason in reasons
                 if str(reason.get("message", "")).strip()
             )
+            llm_promoted = row.get("llm_promoted") or []
+            if not isinstance(llm_promoted, (list, tuple, set)):
+                llm_promoted = [llm_promoted]
+            llm_promoted_families = ";".join(
+                str(family).strip()
+                for family in llm_promoted
+                if str(family).strip()
+            )
             csv_manager.log_ai_search_audit(
                 search_session_id=search_session_id,
                 candidate_id=candidate_id,
@@ -4620,6 +4642,7 @@ def analyze_stream():
                 reason_messages=reason_messages,
                 llm_reached=bool(row.get("llm_reached", False)),
                 result_bucket=str(row.get("result_bucket", "")).strip(),
+                llm_promoted_families=llm_promoted_families,
             )
 
     def generate():
@@ -4629,6 +4652,8 @@ def analyze_stream():
         def _mark_request_failed(error_code, message):
             nonlocal claim_terminal_recorded
             if not request_claim_started:
+                return True
+            if claim_terminal_recorded:
                 return True
             try:
                 marked = bool(search_scope_repo.fail_search_request(
@@ -4648,6 +4673,8 @@ def analyze_stream():
         def _mark_request_complete(summary):
             nonlocal claim_terminal_recorded
             if not request_claim_started:
+                return True
+            if claim_terminal_recorded:
                 return True
             try:
                 marked = bool(search_scope_repo.complete_search_request(
@@ -5018,6 +5045,9 @@ def analyze_stream():
                         session_id=search_session_id,
                     )
                 if event_to_client.get("type") in {"complete", "graceful_failure"}:
+                    # Analyzer streams are expected to produce one terminal event.
+                    # Treat any duplicate terminal event as already recorded so a
+                    # producer regression cannot mask the original search result.
                     terminal_refinement = event_to_client.get("refinement") or {}
                     terminal_marked = _mark_request_complete({
                         "search_session_id": search_session_id,

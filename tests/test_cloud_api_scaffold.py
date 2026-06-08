@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -18,7 +19,12 @@ class CloudApiScaffoldTests(unittest.TestCase):
             "SUPABASE_SERVICE_ROLE_KEY",
             "NJORDHR_API_TOKEN",
             "NJORDHR_ADMIN_TOKEN",
+            "NJORDHR_CONFIG_PATH",
         ]}
+        os.environ["NJORDHR_CONFIG_PATH"] = os.path.join(
+            tempfile.gettempdir(),
+            "njordhr-cloud-api-scaffold-test-missing.ini",
+        )
 
     def tearDown(self):
         for key, value in self._env.items():

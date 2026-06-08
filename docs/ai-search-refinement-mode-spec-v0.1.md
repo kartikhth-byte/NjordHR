@@ -1590,11 +1590,13 @@ Repeated requests with the same globally unique `search_request_id` must not sta
 Exact duplicate behavior:
 
 - original status `started`: emit a terminal `request_status` SSE event with `SEARCH_REQUEST_IN_PROGRESS`, the existing search-session ID, and a recommended retry delay;
-- original status `complete`: emit a terminal `request_status` SSE event with `SEARCH_REQUEST_ALREADY_COMPLETE`, the existing search-session ID, canonical summary, and refinement availability, but do not replay result cards;
+- original status `complete`: emit a terminal `request_status` SSE event with `SEARCH_REQUEST_ALREADY_COMPLETE`, the existing search-session ID, canonical summary, `delivery_mode="metadata_only"`, `replay_available=false`, and refinement availability, but do not replay result cards;
 - original status `failed`: emit a terminal `request_status` SSE event with `SEARCH_REQUEST_ALREADY_FAILED`, the existing search-session ID, and recorded non-sensitive failure code; and
 - different actor or different canonical request fingerprint: emit a terminal generic `error` event with `SEARCH_REQUEST_ID_CONFLICT` without revealing whether the request ID exists, its actor, status, prompt, or context.
 
 The backend stores a canonical request fingerprint with the idempotency row. The actor is part of conflict validation but not part of the unique key. A user who intentionally reruns a completed or failed search must create a new `search_request_id`.
+
+If the claim store becomes unavailable while recording an error or terminal completion, the backend emits `SEARCH_REQUEST_STORE_UNAVAILABLE` instead of the original domain error. This intentionally favors idempotency safety over preserving the earlier error code because the client cannot safely retry or reuse a request ID whose terminal state was not durably recorded.
 
 Delivery-status semantics are transport-observability states, not proof that the browser rendered or consumed an event:
 

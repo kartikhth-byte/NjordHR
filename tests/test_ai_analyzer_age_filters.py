@@ -39,6 +39,10 @@ _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer, SupabaseFileRegistry  # noqa: E402
 
 
+def _write_fake_pdf(path):
+    path.write_bytes(f"%PDF-1.4\n% {path.name}\n%%EOF\n".encode("utf-8"))
+
+
 REAL_AGE_VALIDATION_SET = [
     {"filename": "2nd_Engineer_120969.pdf", "dob": date(1971, 1, 4), "age": 55, "decision": "FAIL"},
     {"filename": "2nd_Engineer_17698.pdf", "dob": date(1974, 2, 3), "age": 52, "decision": "FAIL"},
@@ -123,7 +127,7 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         fact_by_filename = {spec["filename"]: spec for spec in resume_specs}
 
         for spec in resume_specs:
-            (self.rank_folder / spec["filename"]).write_bytes(b"%PDF-1.4")
+            _write_fake_pdf(self.rank_folder / spec["filename"])
 
         self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
             Path(spec["filename"]).stem: [
@@ -214,7 +218,7 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         fact_by_filename = {spec["filename"]: spec for spec in resume_specs}
 
         for spec in resume_specs:
-            (self.rank_folder / spec["filename"]).write_bytes(b"%PDF-1.4")
+            _write_fake_pdf(self.rank_folder / spec["filename"])
 
         self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
             Path(spec["filename"]).stem: [

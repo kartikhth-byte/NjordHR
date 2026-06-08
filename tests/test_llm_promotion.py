@@ -113,7 +113,7 @@ class LlmPromotionTests(unittest.TestCase):
         cases = [
             (0, set()),
             (1, {"certificate_requirement"}),
-            (3, {"certificate_requirement", "rank_match", "age_range"}),
+            (3, {"certificate_requirement", "rank_match", "stcw_basic"}),
             (5, {"certificate_requirement", "rank_match", "age_range", "stcw_basic", "us_visa"}),
             (-1, set()),
             (7, {"certificate_requirement", "rank_match", "age_range", "stcw_basic", "us_visa"}),
@@ -144,6 +144,17 @@ class LlmPromotionTests(unittest.TestCase):
         self.analyzer.config = self._make_config(stage=5)
         with mock.patch.dict(os.environ, {"NJORDHR_LLM_PROMOTED_FAMILIES": "us_visa"}, clear=False):
             self.assertEqual(self.analyzer._llm_promoted_families(), {"us_visa"})
+
+    def test_promotion_env_var_ignores_unknown_family_ids(self):
+        with mock.patch.dict(
+            os.environ,
+            {"NJORDHR_LLM_PROMOTED_FAMILIES": "us_visa,age-range,certificate_requirement"},
+            clear=False,
+        ):
+            self.assertEqual(
+                self.analyzer._llm_promoted_families(),
+                {"us_visa", "certificate_requirement"},
+            )
 
     def test_promotion_skips_when_legacy_already_applied(self):
         constraints = {

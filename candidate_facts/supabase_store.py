@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Dict, Mapping
 
@@ -21,7 +21,7 @@ class SupabaseCandidateFactsStore:
     """Small Supabase REST adapter for authoritative candidate facts rows."""
 
     supabase_url: str
-    service_role_key: str
+    service_role_key: str = field(repr=False)
     timeout_seconds: int = 20
     table_name: str = "candidate_resume_facts"
 
@@ -65,6 +65,9 @@ class SupabaseCandidateFactsStore:
         candidate_facts_hash = str(row.get("candidate_facts_hash") or "")
         if not candidate_facts_hash and isinstance(facts_json, Mapping):
             candidate_facts_hash = build_candidate_resume_facts_content_hash(facts_json)
+        extraction_warnings = row.get("extraction_warnings") or []
+        if not isinstance(extraction_warnings, list):
+            raise ValueError("candidate facts extraction_warnings must be a list")
         payload = {
             "id": str(row.get("id") or ""),
             "candidate_id": str(row.get("candidate_id") or ""),
@@ -76,7 +79,7 @@ class SupabaseCandidateFactsStore:
             "candidate_facts_hash": candidate_facts_hash,
             "facts_json": facts_json,
             "extraction_status": str(row.get("extraction_status") or "failed"),
-            "extraction_warnings": list(row.get("extraction_warnings") or []),
+            "extraction_warnings": list(extraction_warnings),
             "is_current_for_resume": bool(row.get("is_current_for_resume")),
             "created_at": str(row.get("created_at") or _utc_now_iso()),
             "updated_at": _utc_now_iso(),

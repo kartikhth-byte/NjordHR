@@ -49,6 +49,18 @@ class _FakeAnalyzer:
         }
 
 
+class _DuplicateTerminalAnalyzer(_FakeAnalyzer):
+    def run_analysis_stream(self, *_args, **_kwargs):
+        yield from super().run_analysis_stream(*_args, **_kwargs)
+        yield {
+            "type": "graceful_failure",
+            "verified_matches": [],
+            "uncertain_matches": [],
+            "unknown_matches": [],
+            "message": "duplicate terminal event",
+        }
+
+
 def _sse_events(response):
     payload = response.get_data(as_text=True)
     events = []
@@ -198,10 +210,59 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         events = _sse_events(replay_response)
         self.assertEqual(events[0].get("type"), "request_status")
         self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_ALREADY_COMPLETE")
+        self.assertEqual(events[0].get("delivery_mode"), "metadata_only")
+        self.assertFalse(events[0].get("replay_available"))
         self.assertEqual((events[0].get("summary") or {}).get("verified_count"), 1)
         self.assertTrue((events[0].get("summary") or {}).get("refinement_available"))
         self.assertEqual((events[0].get("summary") or {}).get("candidate_scope_member_count"), 1)
         build_analyzer.assert_not_called()
+
+    def test_refinement_acknowledgement_id_is_part_of_request_fingerprint(self):
+        first = backend_server._ai_search_request_fingerprint(
+            prompt="tighten the previous search",
+            rank_folder="Chief_Engineer",
+            parent_search_session_id="parent-search",
+            changed_content_acknowledgement_id="ack-one",
+        )
+        second = backend_server._ai_search_request_fingerprint(
+            prompt="tighten the previous search",
+            rank_folder="Chief_Engineer",
+            parent_search_session_id="parent-search",
+            changed_content_acknowledgement_id="ack-two",
+        )
+        self.assertNotEqual(first, second)
+
+    def test_duplicate_terminal_event_does_not_mask_completed_request(self):
+        client = self._client()
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_DuplicateTerminalAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "has valid passport",
+                    "rank_folder": "Chief_Engineer",
+                    "search_request_id": "request-duplicate-terminal",
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertEqual([event.get("type") for event in events].count("complete"), 1)
+        self.assertEqual([event.get("type") for event in events].count("graceful_failure"), 1)
+        stored = backend_server.search_scope_repo.claim_search_request(
+            search_request_id="request-duplicate-terminal",
+            actor_user_id="local:test-recruiter",
+            request_fingerprint=backend_server._ai_search_request_fingerprint(
+                prompt="has valid passport",
+                rank_folder="Chief_Engineer",
+            ),
+            search_session_id="new-session",
+            request={"prompt": "has valid passport", "rank_folder": "Chief_Engineer"},
+        )
+        self.assertEqual(stored.get("request_status"), "SEARCH_REQUEST_ALREADY_COMPLETE")
 
     def test_complete_mark_failure_returns_store_unavailable_without_complete_event(self):
         client = self._client()
@@ -722,7 +783,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             )
             self.assertEqual(
                 _sse_events(failed_retry_with_ack)[0]["request_status"],
-                "SEARCH_REQUEST_ALREADY_FAILED",
+                "SEARCH_REQUEST_ID_CONFLICT",
             )
 
             ack_response = client.post(

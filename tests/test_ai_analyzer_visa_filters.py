@@ -37,6 +37,10 @@ _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer  # noqa: E402
 
 
+def _write_fake_pdf(path):
+    path.write_bytes(f"%PDF-1.4\n% {path.name}\n%%EOF\n".encode("utf-8"))
+
+
 class _FakeRegistry:
     def get_resume_id(self, file_path):
         return Path(file_path).stem
@@ -361,7 +365,7 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
         ]
 
         for spec in resume_specs:
-            (self.rank_folder / spec["filename"]).write_bytes(b"%PDF-1.4")
+            _write_fake_pdf(self.rank_folder / spec["filename"])
 
         self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
             Path(spec["filename"]).stem: [
@@ -411,13 +415,13 @@ class AIAnalyzerVisaFilterTests(unittest.TestCase):
         ]
 
         for spec in resume_specs:
-            (self.rank_folder / spec["filename"]).write_bytes(b"%PDF-1.4")
+            _write_fake_pdf(self.rank_folder / spec["filename"])
 
         self.rank = "Chief Officer"
         self.rank_folder = self.download_root / "Chief_Officer"
         self.rank_folder.mkdir(parents=True, exist_ok=True)
         for spec in resume_specs:
-            (self.rank_folder / spec["filename"]).write_bytes(b"%PDF-1.4")
+            _write_fake_pdf(self.rank_folder / spec["filename"])
 
         self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
             Path(spec["filename"]).stem: [

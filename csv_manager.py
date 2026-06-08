@@ -41,6 +41,7 @@ class CSVManager:
         'Reason_Codes',
         'Reason_Messages',
         'LLM_Reached',
+        'LLM_Promoted_Families',
         'Result_Bucket',
     ]
 
@@ -132,6 +133,7 @@ class CSVManager:
         reason_messages='',
         llm_reached=False,
         result_bucket='',
+        llm_promoted_families='',
     ):
         timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         new_row = {
@@ -148,6 +150,7 @@ class CSVManager:
             'Reason_Codes': str(reason_codes or ''),
             'Reason_Messages': str(reason_messages or ''),
             'LLM_Reached': 'true' if llm_reached else 'false',
+            'LLM_Promoted_Families': str(llm_promoted_families or ''),
             'Result_Bucket': str(result_bucket or ''),
         }
         try:

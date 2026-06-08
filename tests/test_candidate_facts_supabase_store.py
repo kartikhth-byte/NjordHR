@@ -69,6 +69,29 @@ class CandidateFactsSupabaseStoreTests(unittest.TestCase):
         self.assertEqual(calls[0]["json"]["p_candidate_resume_id"], "resume-1")
         self.assertEqual(calls[0]["json"]["p_id"], "candidate_resume_facts:123")
 
+    def test_service_role_key_is_hidden_from_repr(self):
+        store = SupabaseCandidateFactsStore(
+            supabase_url="https://example.supabase.co",
+            service_role_key="service-role-key",
+        )
+        self.assertNotIn("service-role-key", repr(store))
+
+    def test_extraction_warnings_must_be_list(self):
+        store = SupabaseCandidateFactsStore(
+            supabase_url="https://example.supabase.co",
+            service_role_key="service-role-key",
+        )
+        with self.assertRaises(ValueError):
+            store._build_payload({
+                "id": "candidate_resume_facts:123",
+                "candidate_id": "candidate-1",
+                "candidate_resume_id": "resume-1",
+                "resume_blob_id": "blob-1",
+                "facts_json": {"schema_version": "candidate_facts.v1"},
+                "extraction_warnings": {"warning": "not a list"},
+                "is_current_for_resume": True,
+            })
+
 
 if __name__ == "__main__":
     unittest.main()
