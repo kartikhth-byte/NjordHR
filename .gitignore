@@ -30,6 +30,7 @@ config.ini
 
 # Local project metadata
 NjordHR.bbprojectd/
+electron/node_modules/
 
 # Historical local backups
 Backup_*/
