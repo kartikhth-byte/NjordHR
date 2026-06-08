@@ -147,6 +147,7 @@ def _payload_bool(payload, key, default=False):
 def _ai_search_request_fingerprint(
     *,
     prompt,
+    rank_folder_id="",
     rank_folder="",
     applied_ship_type="",
     experienced_ship_type="",
@@ -156,6 +157,7 @@ def _ai_search_request_fingerprint(
     is_refinement = bool(str(parent_search_session_id or "").strip())
     payload = {
         "prompt": str(prompt or "").strip(),
+        "rank_folder_id": "" if is_refinement else str(rank_folder_id or "").strip(),
         "rank_folder": "" if is_refinement else str(rank_folder or "").strip(),
         "applied_ship_type": "" if is_refinement else str(applied_ship_type or "").strip(),
         "experienced_ship_type": "" if is_refinement else str(experienced_ship_type or "").strip(),
@@ -823,6 +825,137 @@ def _list_assignable_rank_folders(base_folder):
     return [name for name in _list_visible_rank_folders(base_folder) if not str(name).startswith("_")]
 
 
+def _opaque_catalog_id(prefix, *parts):
+    payload = json.dumps([str(part or "") for part in parts], separators=(",", ":"))
+    digest = hashlib.sha256(payload.encode("utf-8", "ignore")).hexdigest()[:32]
+    return f"{prefix}_{digest}"
+
+
+def _catalog_stat_parts(path):
+    resolved = os.path.realpath(os.path.abspath(path))
+    stat = os.stat(resolved)
+    return {
+        "resolved_path": resolved,
+        "norm_path": os.path.normcase(resolved),
+        "device": str(getattr(stat, "st_dev", "")),
+        "inode": str(getattr(stat, "st_ino", "")),
+    }
+
+
+def _download_root_catalog_record(base_folder=None):
+    root_path = str(base_folder or _active_download_root() or "").strip()
+    if not root_path or not os.path.isdir(root_path):
+        return None
+    try:
+        identity = _catalog_stat_parts(root_path)
+    except Exception:
+        return None
+    download_root_id = _opaque_catalog_id(
+        "dr",
+        identity["norm_path"],
+    )
+    return {
+        "download_root_id": download_root_id,
+        "_resolved_path": identity["resolved_path"],
+    }
+
+
+def _rank_folder_catalog_record(base_folder, folder):
+    folder = str(folder or "").strip()
+    if not folder or not _is_safe_name(folder):
+        return None
+    root_record = _download_root_catalog_record(base_folder)
+    if not root_record:
+        return None
+    try:
+        folder_path = _resolve_within_base(base_folder, folder)
+        if not os.path.isdir(folder_path):
+            return None
+        identity = _catalog_stat_parts(folder_path)
+    except Exception:
+        return None
+    rank_folder_id = _opaque_catalog_id(
+        "rf",
+        root_record["download_root_id"],
+        folder,
+        identity["norm_path"],
+    )
+    return {
+        "download_root_id": root_record["download_root_id"],
+        "rank_folder_id": rank_folder_id,
+        "folder": folder,
+        "legacy_rank_folder": folder,
+        "display_name": folder.replace("_", " "),
+        "_resolved_path": identity["resolved_path"],
+    }
+
+
+def _rank_folder_catalog(base_folder=None):
+    root_path = str(base_folder or _active_download_root() or "").strip()
+    if not root_path or not os.path.isdir(root_path):
+        return []
+    records = []
+    for folder in _list_assignable_rank_folders(root_path):
+        record = _rank_folder_catalog_record(root_path, folder)
+        if record:
+            records.append(record)
+    return records
+
+
+def _public_rank_folder_record(record):
+    return {
+        "download_root_id": record.get("download_root_id", ""),
+        "rank_folder_id": record.get("rank_folder_id", ""),
+        "folder": record.get("folder", ""),
+        "legacy_rank_folder": record.get("legacy_rank_folder", record.get("folder", "")),
+        "display_name": record.get("display_name", record.get("folder", "")),
+    }
+
+
+def _resolve_rank_folder_reference(*, rank_folder_id="", rank_folder="", base_folder=None):
+    catalog = _rank_folder_catalog(base_folder)
+    rank_folder_id = str(rank_folder_id or "").strip()
+    rank_folder = str(rank_folder or "").strip()
+    if rank_folder_id:
+        matches = [record for record in catalog if record.get("rank_folder_id") == rank_folder_id]
+        if len(matches) == 1:
+            return {"success": True, "record": matches[0]}
+        if rank_folder and _is_safe_name(rank_folder):
+            root_path = str(base_folder or _active_download_root() or "").strip()
+            legacy_record = _rank_folder_catalog_record(root_path, rank_folder)
+            if legacy_record and legacy_record.get("rank_folder_id") == rank_folder_id:
+                return {"success": True, "record": legacy_record}
+        return {
+            "success": False,
+            "error_code": "INVALID_RANK_FOLDER_ID",
+            "message": "Selected rank folder is no longer available.",
+        }
+    if rank_folder:
+        if not _is_safe_name(rank_folder):
+            return {
+                "success": False,
+                "error_code": "INVALID_RANK_FOLDER",
+                "message": "Invalid rank folder.",
+            }
+        matches = [record for record in catalog if record.get("folder") == rank_folder]
+        if len(matches) == 1:
+            return {"success": True, "record": matches[0]}
+        root_path = str(base_folder or _active_download_root() or "").strip()
+        legacy_record = _rank_folder_catalog_record(root_path, rank_folder)
+        if legacy_record:
+            return {"success": True, "record": legacy_record}
+        return {
+            "success": False,
+            "error_code": "RANK_FOLDER_NOT_FOUND",
+            "message": "Rank folder not found.",
+        }
+    return {
+        "success": False,
+        "error_code": "RANK_FOLDER_REQUIRED",
+        "message": "Rank folder is required.",
+    }
+
+
 def _configured_rank_options():
     ranks_str = config.get('Ranks', 'rank_options', fallback='').strip()
     return [rank.strip() for rank in ranks_str.split('\n') if rank.strip()]
@@ -1402,7 +1535,13 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
 
     parent_session = parent_scope.get("session") or {}
     rank_folder = str(parent_session.get("rank_folder") or "").strip()
-    if not rank_folder or not _is_safe_name(rank_folder):
+    context = parent_session.get("context") or {}
+    rank_folder_id = str(context.get("rank_folder_id") or "").strip()
+    resolved_rank = _resolve_rank_folder_reference(
+        rank_folder_id=rank_folder_id,
+        rank_folder=rank_folder,
+    )
+    if not resolved_rank.get("success"):
         return {
             "success": False,
             "available": False,
@@ -1410,7 +1549,9 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "message": "The original rank folder is no longer available.",
             "retryable": False,
         }
-    target_folder = _resolve_within_base(_active_download_root(), rank_folder)
+    rank_record = resolved_rank["record"]
+    rank_folder = rank_record["folder"]
+    target_folder = rank_record["_resolved_path"]
     if not os.path.isdir(target_folder):
         return {
             "success": False,
@@ -1450,6 +1591,8 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "search_context": {
             "rank_folder": rank_folder,
+            "rank_folder_id": rank_record["rank_folder_id"],
+            "download_root_id": rank_record["download_root_id"],
             "applied_ship_type": str(parent_session.get("applied_ship_type") or "").strip(),
             "experienced_ship_type": str(parent_session.get("experienced_ship_type") or "").strip(),
         },
@@ -4258,8 +4401,17 @@ def get_rank_folders():
         return jsonify({"success": False, "folders": [], "message": "Download folder not found."})
 
     try:
-        subfolders = _list_assignable_rank_folders(base_folder)
-        return jsonify({"success": True, "folders": subfolders})
+        records = _rank_folder_catalog(base_folder)
+        subfolders = [record["folder"] for record in records]
+        root_record = _download_root_catalog_record(base_folder) or {}
+        return jsonify({
+            "success": True,
+            "folders": subfolders,
+            "rank_folder_options": [_public_rank_folder_record(record) for record in records],
+            "download_root": {
+                "download_root_id": root_record.get("download_root_id", ""),
+            },
+        })
     except Exception as e:
         return jsonify({"success": False, "folders": [], "message": str(e)})
 
@@ -4275,11 +4427,15 @@ def get_rank_folder_summaries():
 
     try:
         summaries = []
-        for folder in _list_assignable_rank_folders(base_folder):
-            folder_path = os.path.join(base_folder, folder)
+        for record in _rank_folder_catalog(base_folder):
+            folder = record["folder"]
+            folder_path = record["_resolved_path"]
             pdf_count = len([name for name in os.listdir(folder_path) if name.lower().endswith('.pdf')])
             summaries.append({
                 "folder": folder,
+                "rank_folder_id": record["rank_folder_id"],
+                "download_root_id": record["download_root_id"],
+                "display_name": record["display_name"],
                 "pdf_count": pdf_count,
             })
         return jsonify({"success": True, "folders": summaries})
@@ -4294,9 +4450,14 @@ def get_rank_options():
         return jsonify({"success": False, "message": reason}), 403
     try:
         base_folder = _active_download_root()
-        live_ranks = _list_assignable_rank_folders(base_folder) if os.path.isdir(base_folder) else []
-        if live_ranks:
-            return jsonify({"success": True, "ranks": live_ranks, "source": "active_download_root"})
+        live_records = _rank_folder_catalog(base_folder) if os.path.isdir(base_folder) else []
+        if live_records:
+            return jsonify({
+                "success": True,
+                "ranks": [record["folder"] for record in live_records],
+                "rank_folder_options": [_public_rank_folder_record(record) for record in live_records],
+                "source": "active_download_root",
+            })
         return jsonify({"success": True, "ranks": _configured_rank_options(), "source": "configured_rank_options"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e), "ranks": []}), 500
@@ -4396,18 +4557,33 @@ def get_rank_folder_files():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
+    rank_folder_id = str(request.args.get('rank_folder_id', '')).strip()
     rank_folder = str(request.args.get('rank_folder', '')).strip()
-    if not rank_folder:
-        return jsonify({"success": False, "message": "Rank folder is required.", "files": []}), 400
-    if not _is_safe_name(rank_folder):
-        return jsonify({"success": False, "message": "Invalid rank folder.", "files": []}), 400
     base_folder = _active_download_root()
     try:
-        folder_path = _resolve_within_base(base_folder, rank_folder)
-        if not os.path.isdir(folder_path):
-            return jsonify({"success": False, "message": "Rank folder not found.", "files": []}), 404
+        resolved = _resolve_rank_folder_reference(
+            rank_folder_id=rank_folder_id,
+            rank_folder=rank_folder,
+            base_folder=base_folder,
+        )
+        if not resolved.get("success"):
+            status = 400 if resolved.get("error_code") in {"INVALID_RANK_FOLDER", "RANK_FOLDER_REQUIRED"} else 404
+            return jsonify({
+                "success": False,
+                "message": resolved.get("message") or "Rank folder not found.",
+                "error_code": resolved.get("error_code", "RANK_FOLDER_NOT_FOUND"),
+                "files": [],
+            }), status
+        record = resolved["record"]
+        folder_path = record["_resolved_path"]
         files = sorted(name for name in os.listdir(folder_path) if name.lower().endswith('.pdf'))
-        return jsonify({"success": True, "files": files})
+        return jsonify({
+            "success": True,
+            "files": files,
+            "rank_folder": record["folder"],
+            "rank_folder_id": record["rank_folder_id"],
+            "download_root_id": record["download_root_id"],
+        })
     except Exception as e:
         return jsonify({"success": False, "message": str(e), "files": []}), 500
 
@@ -4417,12 +4593,23 @@ def get_rank_folder_ship_types():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
+    rank_folder_id = str(request.args.get('rank_folder_id', '')).strip()
     rank_folder = str(request.args.get('rank_folder', '')).strip()
-    if not rank_folder:
+    if not rank_folder and not rank_folder_id:
         return jsonify({"success": True, "ship_types": []})
-    if not _is_safe_name(rank_folder):
-        return jsonify({"success": False, "message": "Invalid rank folder."}), 400
-    files = _rank_manifest_data(rank_folder)
+    resolved = _resolve_rank_folder_reference(
+        rank_folder_id=rank_folder_id,
+        rank_folder=rank_folder,
+    )
+    if not resolved.get("success"):
+        status = 400 if resolved.get("error_code") in {"INVALID_RANK_FOLDER", "RANK_FOLDER_REQUIRED"} else 404
+        return jsonify({
+            "success": False,
+            "message": resolved.get("message") or "Rank folder not found.",
+            "error_code": resolved.get("error_code", "RANK_FOLDER_NOT_FOUND"),
+        }), status
+    record = resolved["record"]
+    files = _rank_manifest_data(record["folder"])
     ship_types = set()
     for entry in files.values():
         if not isinstance(entry, dict):
@@ -4433,7 +4620,13 @@ def get_rank_folder_ship_types():
                 normalized = str(value or "").strip()
                 if normalized:
                     ship_types.add(normalized)
-    return jsonify({"success": True, "ship_types": sorted(ship_types)})
+    return jsonify({
+        "success": True,
+        "ship_types": sorted(ship_types),
+        "rank_folder": record["folder"],
+        "rank_folder_id": record["rank_folder_id"],
+        "download_root_id": record["download_root_id"],
+    })
 
 
 @app.route('/get_config_ship_types', methods=['GET'])
@@ -4573,6 +4766,7 @@ def analyze_stream():
         return Response(denied(), mimetype='text/event-stream')
     prompt = request.args.get('prompt')
     rank_folder = request.args.get('rank_folder')
+    rank_folder_id = request.args.get('rank_folder_id', '').strip()
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
@@ -4583,6 +4777,7 @@ def analyze_stream():
     ).strip()
     request_fingerprint = _ai_search_request_fingerprint(
         prompt=prompt,
+        rank_folder_id=rank_folder_id,
         rank_folder=rank_folder,
         applied_ship_type=applied_ship_type,
         experienced_ship_type=experienced_ship_type,
@@ -4591,6 +4786,7 @@ def analyze_stream():
     )
     request_claim_payload = {
         "prompt": str(prompt or "").strip(),
+        "rank_folder_id": rank_folder_id,
         "rank_folder": str(rank_folder or "").strip(),
         "applied_ship_type": applied_ship_type,
         "experienced_ship_type": experienced_ship_type,
@@ -4737,6 +4933,8 @@ def analyze_stream():
             request_claim_started = True
 
             effective_rank_folder = str(rank_folder or "").strip()
+            effective_rank_folder_id = str(rank_folder_id or "").strip()
+            effective_download_root_id = ""
             effective_applied_ship_type = applied_ship_type
             effective_experienced_ship_type = experienced_ship_type
             search_mode = "root"
@@ -4745,6 +4943,7 @@ def analyze_stream():
             candidate_scope_ids = None
             candidate_scope_memberships = None
             parent_scope = {}
+            target_record = None
 
             if parent_search_session_id:
                 try:
@@ -4812,6 +5011,13 @@ def analyze_stream():
                 effective_rank_folder = parent_rank_folder
                 effective_applied_ship_type = parent_applied_ship_type
                 effective_experienced_ship_type = parent_experienced_ship_type
+                authoritative_context = authoritative_preflight.get("search_context") or {}
+                effective_rank_folder_id = str(
+                    authoritative_context.get("rank_folder_id") or ""
+                ).strip()
+                effective_download_root_id = str(
+                    authoritative_context.get("download_root_id") or ""
+                ).strip()
                 search_mode = "refinement"
                 root_search_session_id = str(
                     parent_session.get("root_search_session_id") or parent_search_session_id
@@ -4840,6 +5046,25 @@ def analyze_stream():
                         )
                         return
 
+            if search_mode == "root":
+                resolved_rank = _resolve_rank_folder_reference(
+                    rank_folder_id=effective_rank_folder_id,
+                    rank_folder=effective_rank_folder,
+                )
+                if not resolved_rank.get("success"):
+                    error_code = resolved_rank.get("error_code", "RANK_FOLDER_NOT_FOUND")
+                    yield _error_sse(
+                        resolved_rank.get("message") or "Rank folder not found.",
+                        error_code=error_code,
+                        retryable=False,
+                    )
+                    return
+                rank_record = resolved_rank["record"]
+                effective_rank_folder = rank_record["folder"]
+                effective_rank_folder_id = rank_record["rank_folder_id"]
+                effective_download_root_id = rank_record["download_root_id"]
+                target_record = rank_record
+
             if not effective_rank_folder:
                 yield _error_sse(
                     "Missing required data",
@@ -4856,15 +5081,24 @@ def analyze_stream():
                 )
                 return
 
-            target_folder = _resolve_within_base(_active_download_root(), effective_rank_folder)
-            if not os.path.isdir(target_folder):
-                error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "RANK_FOLDER_NOT_FOUND"
-                yield _error_sse(
-                    "Rank folder not found: " + effective_rank_folder,
-                    error_code=error_code,
-                    retryable=False,
+            if target_record is None:
+                resolved_target = _resolve_rank_folder_reference(
+                    rank_folder_id=effective_rank_folder_id,
+                    rank_folder=effective_rank_folder,
                 )
-                return
+                if not resolved_target.get("success"):
+                    error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "RANK_FOLDER_NOT_FOUND"
+                    yield _error_sse(
+                        resolved_target.get("message") or ("Rank folder not found: " + effective_rank_folder),
+                        error_code=error_code,
+                        retryable=False,
+                    )
+                    return
+                target_record = resolved_target["record"]
+            target_folder = target_record["_resolved_path"]
+            effective_rank_folder = target_record["folder"]
+            effective_rank_folder_id = target_record["rank_folder_id"]
+            effective_download_root_id = target_record["download_root_id"]
             
             # Create analyzer and run streaming analysis
             analyzer = _build_analyzer()
@@ -4875,6 +5109,8 @@ def analyze_stream():
                 summary=f"Streaming AI search started for rank={effective_rank_folder}.",
                 payload={
                     "rank_folder": effective_rank_folder,
+                    "rank_folder_id": effective_rank_folder_id,
+                    "download_root_id": effective_download_root_id,
                     "applied_ship_type": effective_applied_ship_type,
                     "experienced_ship_type": effective_experienced_ship_type,
                     "search_session_id": search_session_id,
@@ -4985,6 +5221,8 @@ def analyze_stream():
                             refinement_depth=refinement_depth,
                             context={
                                 "rank_folder": effective_rank_folder,
+                                "rank_folder_id": effective_rank_folder_id,
+                                "download_root_id": effective_download_root_id,
                                 "applied_ship_type": effective_applied_ship_type,
                                 "experienced_ship_type": effective_experienced_ship_type,
                             },
@@ -5020,6 +5258,8 @@ def analyze_stream():
                     }
                     event_to_client["search_context"] = {
                         "rank_folder": effective_rank_folder,
+                        "rank_folder_id": effective_rank_folder_id,
+                        "download_root_id": effective_download_root_id,
                         "applied_ship_type": effective_applied_ship_type,
                         "experienced_ship_type": effective_experienced_ship_type,
                     }

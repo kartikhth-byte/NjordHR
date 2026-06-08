@@ -58,6 +58,17 @@ import backend_server  # noqa: E402
 from csv_manager import CSVManager  # noqa: E402
 
 
+def _sse_events(response):
+    payload = response.get_data(as_text=True)
+    events = []
+    for block in payload.split("\n\n"):
+        block = block.strip()
+        if not block.startswith("data: "):
+            continue
+        events.append(json.loads(block[len("data: "):]))
+    return events
+
+
 class BackendEventLogFlowTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -977,6 +988,80 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(body["success"])
         self.assertEqual(body["files"], ["Chief_Officer_1001.pdf", "Chief_Officer_1002.pdf"])
 
+    def test_rank_folder_discovery_returns_opaque_ids_without_paths(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        resp = self.client.get("/get_rank_folders")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+
+        self.assertTrue(body["success"])
+        self.assertEqual(body["folders"], ["Chief_Officer"])
+        options = body.get("rank_folder_options") or []
+        self.assertEqual(len(options), 1)
+        option = options[0]
+        self.assertEqual(option["folder"], "Chief_Officer")
+        self.assertEqual(option["display_name"], "Chief Officer")
+        self.assertTrue(str(option["rank_folder_id"]).startswith("rf_"))
+        self.assertTrue(str(option["download_root_id"]).startswith("dr_"))
+        self.assertNotEqual(option["rank_folder_id"], "Chief_Officer")
+        self.assertNotIn("_resolved_path", option)
+        self.assertNotIn(str(self.download_root), json.dumps(body))
+
+    def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        original_record = backend_server._rank_folder_catalog_record(
+            str(self.download_root),
+            "Chief_Officer",
+        )
+        original_stat_parts = backend_server._catalog_stat_parts
+
+        def remounted_stat_parts(path):
+            parts = dict(original_stat_parts(path))
+            parts["device"] = "remounted-device"
+            parts["inode"] = "remounted-inode"
+            return parts
+
+        with patch.object(backend_server, "_catalog_stat_parts", side_effect=remounted_stat_parts):
+            remounted_record = backend_server._rank_folder_catalog_record(
+                str(self.download_root),
+                "Chief_Officer",
+            )
+
+        self.assertEqual(remounted_record["download_root_id"], original_record["download_root_id"])
+        self.assertEqual(remounted_record["rank_folder_id"], original_record["rank_folder_id"])
+
+    def test_download_root_catalog_record_handles_stat_race(self):
+        with patch.object(backend_server, "_catalog_stat_parts", side_effect=FileNotFoundError("gone")):
+            self.assertIsNone(backend_server._download_root_catalog_record(str(self.download_root)))
+
+    def test_rank_folder_files_accepts_opaque_rank_folder_id(self):
+        (self.rank_dir / "Chief_Officer_1002.pdf").write_bytes(b"%PDF-1.4")
+        (self.rank_dir / "Chief_Officer_1001.pdf").write_bytes(b"%PDF-1.4")
+        discovery = self.client.get("/get_rank_folders").get_json()
+        rank_folder_id = discovery["rank_folder_options"][0]["rank_folder_id"]
+
+        resp = self.client.get(f"/get_rank_folder_files?rank_folder_id={rank_folder_id}")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+
+        self.assertTrue(body["success"])
+        self.assertEqual(body["rank_folder"], "Chief_Officer")
+        self.assertEqual(body["rank_folder_id"], rank_folder_id)
+        self.assertEqual(body["files"], ["Chief_Officer_1001.pdf", "Chief_Officer_1002.pdf"])
+
+    def test_unknown_rank_folder_id_is_rejected_without_name_fallback(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        resp = self.client.get(
+            "/get_rank_folder_files?rank_folder_id=rf_missing&rank_folder=Chief_Officer"
+        )
+
+        self.assertEqual(resp.status_code, 404)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertEqual(body["error_code"], "INVALID_RANK_FOLDER_ID")
+
     def test_rank_folder_endpoints_prefer_local_agent_download_root(self):
         self._write_fake_resume("EmailResume.pdf")
 
@@ -1317,6 +1402,56 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(captured["prompt"], "show candidates")
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
         self.assertEqual(captured["experienced_ship_type"], "Tanker")
+
+    def test_analyze_stream_accepts_opaque_rank_folder_id(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        rank_folder_id = self.client.get("/get_rank_folders").get_json()["rank_folder_options"][0]["rank_folder_id"]
+        captured = {}
+        request_id = f"request-rank-id-{time.time_ns()}"
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, **_kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["prompt"] = prompt
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {"scanned": 0, "passed": 0, "failed": 0, "unknown": 0, "matched": 0},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                f"/analyze_stream?rank_folder_id={rank_folder_id}&prompt=show%20candidates&search_request_id={request_id}"
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        events = _sse_events(resp)
+        complete = next(event for event in events if event.get("type") == "complete")
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["prompt"], "show candidates")
+        self.assertEqual(complete["search_context"]["rank_folder"], "Chief_Officer")
+        self.assertEqual(complete["search_context"]["rank_folder_id"], rank_folder_id)
+        self.assertTrue(complete["search_context"]["download_root_id"].startswith("dr_"))
+
+    def test_analyze_stream_rejects_unknown_rank_folder_id_before_analyzer(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        request_id = f"request-rank-id-missing-{time.time_ns()}"
+
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.get(
+                f"/analyze_stream?rank_folder_id=rf_missing&rank_folder=Chief_Officer&prompt=show%20candidates&search_request_id={request_id}"
+            )
+
+        events = _sse_events(resp)
+        self.assertEqual(events[0]["type"], "error")
+        self.assertEqual(events[0]["error_code"], "INVALID_RANK_FOLDER_ID")
+        analyzer.assert_not_called()
 
     def test_analyze_stream_logs_hard_filter_audit_rows(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

@@ -42,6 +42,7 @@ MATCH_ALIGNMENT_REPORT = {
     "compared_field_count": 1,
     "mismatch_count": 0,
     "mismatches": [],
+    "match_affecting_mismatches": [],
 }
 
 
