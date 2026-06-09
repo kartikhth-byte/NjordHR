@@ -7,6 +7,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class SupabaseMigrationTests(unittest.TestCase):
+    def test_supabase_migration_filenames_sort_by_version(self):
+        migration_dir = REPO_ROOT / "supabase" / "migrations"
+        versions_by_filename = [
+            path.name.split("_", 1)[0]
+            for path in sorted(migration_dir.glob("*.sql"))
+        ]
+
+        self.assertEqual(sorted(versions_by_filename), versions_by_filename)
+
     def test_supabase_migration_versions_are_unique(self):
         migration_dir = REPO_ROOT / "supabase" / "migrations"
         versions = [
