@@ -28,6 +28,16 @@ class SupabaseMigrationTests(unittest.TestCase):
 
         self.assertEqual([], duplicates)
 
+    def test_supabase_migration_versions_are_numeric(self):
+        migration_dir = REPO_ROOT / "supabase" / "migrations"
+        invalid_versions = [
+            path.name
+            for path in migration_dir.glob("*.sql")
+            if not path.name.split("_", 1)[0].isdigit()
+        ]
+
+        self.assertEqual([], sorted(invalid_versions))
+
     def test_candidate_facts_promotion_rpc_serializes_current_row_flip(self):
         sql = (
             REPO_ROOT
