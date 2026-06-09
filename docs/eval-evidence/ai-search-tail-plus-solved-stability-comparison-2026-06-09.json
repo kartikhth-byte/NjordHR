@@ -1,0 +1,178 @@
+{
+  "comparison_outcome_deltas": [],
+  "date": "2026-06-09",
+  "llm_payload_deltas": [],
+  "normalized_prompt_match": {
+    "common": 315,
+    "missing_in_run_1": [],
+    "missing_in_run_2": []
+  },
+  "purpose": "Issue #19 calibration evidence: compare two full LLM shadow eval runs before any LLM_Promotion_Stage > 0 rollout.",
+  "run_1": {
+    "eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
+    "integrity": {
+      "all_llm_ok": true,
+      "prompt_count": 315,
+      "row_count": 315,
+      "states": [
+        {
+          "count": 315,
+          "failure_reason": "ok",
+          "fallback_used": false,
+          "llm_plan_source": "llm",
+          "shadow_mode": "enabled"
+        }
+      ]
+    },
+    "score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json"
+  },
+  "run_1_score_projection": {
+    "controls": {
+      "cases": [],
+      "total": 12,
+      "violations": 0
+    },
+    "promote_candidates": [
+      "age_range",
+      "certificate_requirement",
+      "passport_validity",
+      "rank_match",
+      "stcw_basic",
+      "stcw_endorsement",
+      "us_visa"
+    ],
+    "rescue_by_family": {
+      "age_range": {
+        "rescue_rate": 1.0,
+        "rescued": 22,
+        "total": 22
+      },
+      "certificate_requirement": {
+        "rescue_rate": 1.0,
+        "rescued": 15,
+        "total": 15
+      },
+      "passport_validity": {
+        "rescue_rate": 1.0,
+        "rescued": 20,
+        "total": 20
+      },
+      "rank_match": {
+        "rescue_rate": 1.0,
+        "rescued": 21,
+        "total": 21
+      },
+      "stcw_basic": {
+        "rescue_rate": 1.0,
+        "rescued": 17,
+        "total": 17
+      },
+      "stcw_endorsement": {
+        "rescue_rate": 1.0,
+        "rescued": 6,
+        "total": 6
+      },
+      "unsupported": {
+        "rescue_rate": 0.0,
+        "rescued": 0,
+        "total": 5
+      },
+      "us_visa": {
+        "rescue_rate": 1.0,
+        "rescued": 22,
+        "total": 22
+      }
+    },
+    "solved_set": {
+      "not_evaluated_llm_disabled": [],
+      "not_found": [],
+      "regressions": 0,
+      "total": 59
+    }
+  },
+  "run_2": {
+    "eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-stability-2-2026-06-09.json",
+    "integrity": {
+      "all_llm_ok": true,
+      "prompt_count": 315,
+      "row_count": 315,
+      "states": [
+        {
+          "count": 315,
+          "failure_reason": "ok",
+          "fallback_used": false,
+          "llm_plan_source": "llm",
+          "shadow_mode": "enabled"
+        }
+      ]
+    },
+    "score": "docs/eval-evidence/ai-search-tail-plus-solved-score-stability-2-2026-06-09.json"
+  },
+  "run_2_score_projection": {
+    "controls": {
+      "cases": [],
+      "total": 12,
+      "violations": 0
+    },
+    "promote_candidates": [
+      "age_range",
+      "certificate_requirement",
+      "passport_validity",
+      "rank_match",
+      "stcw_basic",
+      "stcw_endorsement",
+      "us_visa"
+    ],
+    "rescue_by_family": {
+      "age_range": {
+        "rescue_rate": 1.0,
+        "rescued": 22,
+        "total": 22
+      },
+      "certificate_requirement": {
+        "rescue_rate": 1.0,
+        "rescued": 15,
+        "total": 15
+      },
+      "passport_validity": {
+        "rescue_rate": 1.0,
+        "rescued": 20,
+        "total": 20
+      },
+      "rank_match": {
+        "rescue_rate": 1.0,
+        "rescued": 21,
+        "total": 21
+      },
+      "stcw_basic": {
+        "rescue_rate": 1.0,
+        "rescued": 17,
+        "total": 17
+      },
+      "stcw_endorsement": {
+        "rescue_rate": 1.0,
+        "rescued": 6,
+        "total": 6
+      },
+      "unsupported": {
+        "rescue_rate": 0.0,
+        "rescued": 0,
+        "total": 5
+      },
+      "us_visa": {
+        "rescue_rate": 1.0,
+        "rescued": 22,
+        "total": 22
+      }
+    },
+    "solved_set": {
+      "not_evaluated_llm_disabled": [],
+      "not_found": [],
+      "regressions": 0,
+      "total": 59
+    }
+  },
+  "score_projection_match": true,
+  "status": "stability_rerun_complete",
+  "verdict": "stable_match"
+}

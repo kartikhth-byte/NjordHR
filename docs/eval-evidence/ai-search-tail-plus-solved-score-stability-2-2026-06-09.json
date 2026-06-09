@@ -1,6 +1,6 @@
 {
   "tail_set": "AI_Search_Results/seajobs_tail_set_v0.2.json",
-  "eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
+  "eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-stability-2-2026-06-09.json",
   "solved_set_report": "docs/eval-evidence/ai-search-bootstrap-solved-report-2026-06-09.json",
   "promote_threshold": 0.8,
   "llm_run_detected": true,

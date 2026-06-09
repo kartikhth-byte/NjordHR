@@ -164,6 +164,11 @@ Evidence artifacts:
 Final combined evidence artifacts:
 `docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json` and
 `docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json`.
+Stability re-run artifacts:
+`docs/eval-evidence/ai-search-tail-plus-solved-eval-stability-2-2026-06-09.json`,
+`docs/eval-evidence/ai-search-tail-plus-solved-score-stability-2-2026-06-09.json`,
+and
+`docs/eval-evidence/ai-search-tail-plus-solved-stability-comparison-2026-06-09.json`.
 Value-review artifact:
 `docs/eval-evidence/ai-search-tail-set-v0.2-value-review-2026-06-09.json`.
 Solved-set inputs:
@@ -172,13 +177,18 @@ Solved-set inputs:
 
 - eval gate: 7 / 7 scored families pass rescue_rate >= 0.8:
   `age_range` 22/22, `certificate_requirement` 15/15,
-  `passport_validity` 19/19, `rank_match` 21/21, `stcw_basic` 17/17,
-  `stcw_endorsement` 6/6, `us_visa` 23/23.
+  `passport_validity` 20/20, `rank_match` 21/21, `stcw_basic` 17/17,
+  `stcw_endorsement` 6/6, `us_visa` 22/22.
 - control violations: 0 / 12.
 - LLM run integrity: final combined artifact has 315 rows evaluated, 0 legacy
   fallbacks, all rows sourced from `llm`. A transient `ReadTimeout` on
   `rank_match:30` (`3rd officer`) was refreshed from a targeted retry row with
   HTTP 200 before final scoring.
+- stability re-run: a second full shadow eval over the same 315 prompts also
+  produced 315 `llm` rows, 0 fallbacks, and failure_reason=`ok` for every row.
+  The run-1/run-2 score projection matched exactly, with 315 normalized prompts
+  compared, 0 comparison-outcome deltas, and 0 LLM payload deltas. The comparison
+  artifact verdict is `stable_match`.
 - solved-set regressions: 0 / 59.
 - value-correctness review: 123 rescued rows reviewed; 123 accepted,
   0 `retest`, 0 `rejected`, 0 `follow_up`. Row-level `scoring_notes` were
