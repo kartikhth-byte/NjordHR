@@ -5578,6 +5578,17 @@
                                             <p className="mt-1 text-xs">
                                                 Stage 0 disables LLM rescue. Stage 1 enables `certificate_requirement`. Stage 2 adds `rank_match`. Stage 3 adds `age_range`. Stage 4 adds `stcw_basic`. Stage 5 adds `us_visa`.
                                             </p>
+                                            <p className="mt-2 text-xs">
+                                                Stability evidence:{' '}
+                                                <a
+                                                    className="font-semibold underline"
+                                                    href="https://github.com/kartikhth-byte/NjordHR/blob/main/docs/eval-evidence/ai-search-tail-plus-solved-stability-comparison-2026-06-09.json"
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                >
+                                                    v0.2 two-run comparison artifact
+                                                </a>
+                                            </p>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
@@ -5590,7 +5601,7 @@
                                                     value={settingsForm.LLM_Promotion_Stage}
                                                     onChange={e => setField('LLM_Promotion_Stage', e.target.value)}
                                                     className="w-full p-2 border border-gray-300 rounded-md"
-                                                    title="Stage 0 disables LLM rescue. Stage 1 enables certificate_requirement. Stage 2 adds rank_match. Stage 3 adds age_range. Stage 4 adds stcw_basic. Stage 5 adds us_visa."
+                                                    title="Stage 0 disables LLM rescue. Stage 1 enables certificate_requirement. Stage 2 adds rank_match. Stage 3 adds age_range. Stage 4 adds stcw_basic. Stage 5 adds us_visa. Stability evidence: docs/eval-evidence/ai-search-tail-plus-solved-stability-comparison-2026-06-09.json"
                                                 />
                                                 <p className="mt-1 text-xs text-gray-500">
                                                     0 disables all promoted families; 5 enables all five eval-cleared families. The env var `NJORDHR_LLM_PROMOTED_FAMILIES` still acts as an emergency override.
