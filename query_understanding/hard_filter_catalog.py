@@ -161,9 +161,11 @@ CANONICAL_RANKS: FrozenSet[str] = frozenset(
         "3rd_engineer",
         "4th_engineer",
         "deck_cadet",
+        "engine_cadet",
         "junior_engineer",
         "electrical_officer",
         "electro_technical_officer",
+        "general_purpose_rating",
         "bosun",
         "os",
         "ab",
@@ -222,6 +224,8 @@ CANONICAL_CERTIFICATES: FrozenSet[str] = frozenset(
         "cert_medical_care",
         "cert_sso",
         "cert_ecdis",
+        "cert_ccm",
+        "cert_lms",
     }
 )
 

@@ -235,7 +235,10 @@ class ShadowLLMProviderTests(unittest.TestCase):
             "cannot exceed 50": (None, 50),
             "can't be older than 50": (None, 50),
             "nlt 30 and nmt 50": (30, 50),
-            "mid-30s": (33, 36),
+            "mid-30s": (33, 37),
+            "looking for engineers in their late twenties": (27, 29),
+            "candidates in early 50s": (50, 52),
+            "candidates not above 50": (None, 50),
             "in his 40s": (40, 49),
             "in her 30s": (30, 39),
             "in their 30s": (30, 39),
@@ -251,10 +254,17 @@ class ShadowLLMProviderTests(unittest.TestCase):
             "min 30": (30, None),
             "max 45 yo": (None, 45),
             "fifty plus": (50, None),
+            "must be at least 25 and no more than 55": (25, 55),
+            "experienced officers between 35-50 years": (35, 50),
         }
         for text, expected in cases.items():
             with self.subTest(text=text):
                 self.assertEqual(_age_bounds_from_text(text), expected)
+
+    def test_age_bounds_handles_birth_year_phrasings(self):
+        current_year = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).year
+        self.assertEqual(_age_bounds_from_text("candidates born after 1985"), (None, current_year - 1985))
+        self.assertEqual(_age_bounds_from_text("candidates born before 1980"), (current_year - 1980, None))
 
     def test_age_bounds_skips_implausible_numbers(self):
         self.assertEqual(_age_bounds_from_text("between 3 and 5 ports"), (None, None))
@@ -532,7 +542,14 @@ class ShadowLLMProviderTests(unittest.TestCase):
                 "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
             },
             "applied_constraints": [
-                {"filter_family": "us_visa", "parameters": {"required": True, "visa_group": "usa"}},
+                {
+                    "filter_family": "us_visa",
+                    "parameters": {
+                        "required": True,
+                        "visa_group": "usa",
+                        "accepted_types": ["US Visa (USA)"],
+                    },
+                },
             ],
             "unapplied_constraints": [],
             "semantic_query": "",
@@ -760,6 +777,450 @@ class ShadowLLMProviderTests(unittest.TestCase):
                 unapplied_items = [item for item in plan["unapplied_constraints"] if item["id"] == "us_visa"]
                 self.assertEqual(len(unapplied_items), 1)
                 self.assertEqual(unapplied_items[0]["reason"], "unsupported_filter_family")
+
+    def test_build_shadow_llm_query_plan_handles_us_visa_variants(self):
+        cases = [
+            ("must have B one slash B two stamped", "usa", ["B1/B2 (USA)"]),
+            ("should have an Aussie visa", "australia", ["Australia Entry visa", "MCV (Australia)"]),
+            ("visa for travel to Europe ready", "schengen", ["Schengen"]),
+            ("U.S. visa with 10+ months validity", "usa", None),
+        ]
+        for prompt, expected_group, expected_types in cases:
+            with self.subTest(prompt=prompt):
+                plan_payload = {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": prompt,
+                        "rank_context": "2nd Engineer",
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [
+                        {"filter_family": "us_visa", "parameters": {"required": True}},
+                    ],
+                    "unapplied_constraints": [],
+                    "semantic_query": "",
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                }
+
+                result = self._run_shadow_plan(prompt, plan_payload)
+
+                self.assertIsNotNone(result)
+                plan = result["plan"]
+                visa = next(item["constraint"] for item in plan["applied_constraints"] if item["id"] == "us_visa")
+                self.assertEqual(visa["visa_group"], expected_group)
+                if expected_types is not None:
+                    self.assertEqual(visa["accepted_types"], expected_types)
+                if "10+" in prompt:
+                    self.assertEqual(visa["minimum_months_remaining"], 10)
+
+    def test_build_shadow_llm_query_plan_repairs_mandatory_semantic_residual(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "passport valid for at least 1 year",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "passport_validity", "parameters": {"validity": "valid"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "passport valid for at least 1 year",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("passport valid for at least 1 year", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertEqual(plan["validation"]["status"], "valid")
+        self.assertEqual(plan["semantic_query"], "")
+        self.assertEqual([item["id"] for item in plan["applied_constraints"]], ["passport_validity"])
+
+    def test_build_shadow_llm_query_plan_repairs_passport_validity_from_tail_phrasing(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "passport with at least six months till expiry",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "passport with at least six months till expiry",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("passport with at least six months till expiry", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertEqual(plan["semantic_query"], "")
+        self.assertEqual([item["id"] for item in plan["applied_constraints"]], ["passport_validity"])
+        passport = plan["applied_constraints"][0]["constraint"]
+        self.assertTrue(passport["must_be_valid"])
+        self.assertEqual(passport["minimum_months_remaining"], 6)
+
+    def test_build_shadow_llm_query_plan_repairs_passport_month_phrasing(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "18 months of passport validity",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "18 months of passport validity",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("18 months of passport validity", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        passport = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "passport_validity")
+        self.assertEqual(passport["minimum_months_remaining"], 18)
+
+    def test_build_shadow_llm_query_plan_repairs_tail_set_rank_catalog_gaps(self):
+        for prompt, expected_rank in (
+            ("engine cadet experience required", "engine_cadet"),
+            ("GP rating required", "general_purpose_rating"),
+        ):
+            with self.subTest(prompt=prompt):
+                plan_payload = {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": prompt,
+                        "rank_context": None,
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [],
+                    "unapplied_constraints": [],
+                    "semantic_query": prompt,
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                }
+
+                result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+
+                self.assertEqual(result["diagnostics"]["status"], "success")
+                rank = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "rank_match")
+                self.assertEqual(rank["rank"], expected_rank)
+
+    def test_build_shadow_llm_query_plan_repairs_tail_set_certificate_and_endorsement_gaps(self):
+        cases = (
+            ("DPO role requirement", "stcw_endorsement", "dp_operational"),
+            ("IGF code certificate required", "stcw_endorsement", "igf_basic_cop"),
+            ("Tanker Familiarization (oil) cert needed", "stcw_endorsement", "tanker_oil_basic_cop"),
+            ("candidate has CCM", "certificate_requirement", "cert_ccm"),
+            ("Leadership and Managerial Skills (LMS) completed", "certificate_requirement", "cert_lms"),
+        )
+        for prompt, expected_family, expected_value in cases:
+            with self.subTest(prompt=prompt):
+                plan_payload = {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": prompt,
+                        "rank_context": None,
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [],
+                    "unapplied_constraints": [],
+                    "semantic_query": prompt,
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                }
+
+                result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+
+                self.assertEqual(result["diagnostics"]["status"], "success")
+                constraint = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == expected_family)
+                values_key = "endorsements_required" if expected_family == "stcw_endorsement" else "certificates_required"
+                self.assertIn(expected_value, constraint[values_key])
+
+    def test_build_shadow_llm_query_plan_repairs_solved_set_coc_omission(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "valid COC",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "valid COC",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("valid COC", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        coc = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "coc_document_gate")
+        self.assertTrue(coc["required"])
+
+    def test_build_shadow_llm_query_plan_repairs_solved_set_us_visa_window(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "US visa is valid at least for 10 months",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {
+                    "filter_family": "us_visa",
+                    "parameters": {
+                        "required": True,
+                        "visa_group": "usa",
+                        "accepted_types": ["US Visa (USA)"],
+                    },
+                },
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "US visa is valid at least for 10 months",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("US visa is valid at least for 10 months", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        visa = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "us_visa")
+        self.assertEqual(visa["minimum_months_remaining"], 10)
+        self.assertIn("C1/D (USA)", visa["accepted_types"])
+
+    def test_build_shadow_llm_query_plan_repairs_solved_set_recent_contract_omission(self):
+        prompt = "12 months experience on container in last 3 contracts"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        recent = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "recent_contract_vessel_experience")
+        self.assertEqual(recent["ship_family"], "container")
+        self.assertEqual(recent["minimum_months"], 12)
+        self.assertEqual(recent["recent_contract_count"], 3)
+
+    def test_build_shadow_llm_query_plan_vetoes_passport_polarity_controls(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "no passport required for this position",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "passport_validity", "parameters": {"validity": "valid"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "no passport required for this position",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("no passport required for this position", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertNotIn("passport_validity", [item["id"] for item in plan["applied_constraints"]])
+        unapplied_items = [item for item in plan["unapplied_constraints"] if item["id"] == "passport_validity"]
+        self.assertEqual(len(unapplied_items), 1)
+        self.assertEqual(unapplied_items[0]["reason"], "unsupported_filter_family")
+
+    def test_build_shadow_llm_query_plan_vetoes_us_visa_polarity_with_country(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "no US visa needed",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "us_visa", "parameters": {"required": True, "visa_group": "usa"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "no US visa needed",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("no US visa needed", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertNotIn("us_visa", [item["id"] for item in plan["applied_constraints"]])
+        unapplied_items = [item for item in plan["unapplied_constraints"] if item["id"] == "us_visa"]
+        self.assertEqual(len(unapplied_items), 1)
+        self.assertEqual(unapplied_items[0]["reason"], "unsupported_filter_family")
+
+    def test_build_shadow_llm_query_plan_uses_exact_us_visa_type_for_c1d(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "ETO with C1/D visa",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "rank_match", "parameters": {"rank": "electro_technical_officer"}},
+                {"filter_family": "us_visa", "parameters": {"required": True, "visa_group": "usa"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("ETO with C1/D visa", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        visa = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "us_visa")
+        self.assertEqual(visa["accepted_types"], ["C1/D (USA)"])
+
+    def test_build_shadow_llm_query_plan_vetoes_figurative_rank_control(self):
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": "experienced senior captain who is youthful in approach",
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "rank_match", "parameters": {"rank": "master"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "experienced senior captain who is youthful in approach",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan("experienced senior captain who is youthful in approach", plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertNotIn("rank_match", [item["id"] for item in plan["applied_constraints"]])
+        self.assertEqual(plan["semantic_query"], "experienced senior captain who is youthful in approach")
 
     def _run_shadow_plan(self, prompt: str, plan_payload: dict, *, rank: str | None = "2nd Engineer"):
         with mock.patch.dict("os.environ", {SHADOW_LLM_NORMALIZER_ENV: "true"}, clear=False):

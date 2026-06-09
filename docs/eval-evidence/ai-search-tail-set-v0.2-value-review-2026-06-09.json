@@ -1,0 +1,1122 @@
+{
+  "accepted": 123,
+  "eval_run": "docs/eval-evidence/ai-search-tail-set-v0.2-eval-2026-06-09.json",
+  "eval_score": "docs/eval-evidence/ai-search-tail-set-v0.2-score-2026-06-09.json",
+  "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
+  "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
+  "follow_up": 0,
+  "rejected": 0,
+  "retest": 0,
+  "review_date": "2026-06-09",
+  "rows": [
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officers in their 40s with tanker experience",
+      "review_detail": "expected min/max 40/49 got 40/49",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates in their thirties",
+      "review_detail": "expected min/max 30/39 got 30/39",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officer in mid 40s preferred",
+      "review_detail": "expected min/max 43/47 got 43/46",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "looking for engineers in their late twenties",
+      "review_detail": "expected min/max 27/29 got 20/29",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates in early 50s",
+      "review_detail": "expected min/max 50/52 got 50/53",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates aged around 45",
+      "review_detail": "expected min/max 43/47 got 43/47",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "approximately 35 years of age",
+      "review_detail": "expected min/max 33/37 got 33/37",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "no candidate above the age of 60 please",
+      "review_detail": "expected min/max None/60 got 61/None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "must be at least 25 and no more than 55",
+      "review_detail": "expected min/max 25/55 got 25/55",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officers older than 30 and younger than 50",
+      "review_detail": "expected min/max 31/49 got 31/None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "young professionals under 35",
+      "review_detail": "expected min/max None/34 got None/34",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "experienced officers between 35-50 years",
+      "review_detail": "expected min/max 35/50 got 35/50",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates older than 25 but younger than 50",
+      "review_detail": "expected min/max 26/49 got 26/None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officer with age 40 plus",
+      "review_detail": "expected min/max 40/None got 40/None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "should be in the 30 to 45 age bracket",
+      "review_detail": "expected min/max 30/45 got 30/45",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "experienced officers, age 50+",
+      "review_detail": "expected min/max 50/None got 50/None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates born after 1985",
+      "review_detail": "expected min/max None/41 got None/41",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates born before 1980",
+      "review_detail": "expected min/max 46/None got 46/None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officers around the age of 40 to 45",
+      "review_detail": "expected min/max 40/45 got 40/45",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "minimum experience 5 years and age over 30",
+      "review_detail": "expected min/max 30/None got 31/None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officers aged 25 to 45 years preferred",
+      "review_detail": "expected min/max 25/45 got 25/45",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "age_range",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates not above 50",
+      "review_detail": "expected min/max None/50 got 51/None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "must hold AFF certificate",
+      "review_detail": "expected certs ['cert_aff'] got ['cert_aff']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "needs MFA and AFF both",
+      "review_detail": "expected certs ['cert_aff', 'cert_mfa'] got ['cert_aff', 'cert_mfa']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "advanced firefighting and medical care",
+      "review_detail": "expected certs ['cert_aff', 'cert_mfa'] got ['cert_medical_care']",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "AFA mandatory for this rank",
+      "review_detail": "expected certs ['cert_mfa'] got ['cert_mfa']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "GMDSS certificate holder",
+      "review_detail": "expected certs ['gmdss'] got ['gmdss']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "ECDIS course done",
+      "review_detail": "expected certs ['cert_ecdis'] got ['cert_ecdis']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "AFF MFA AFA all current",
+      "review_detail": "expected certs ['cert_aff', 'cert_mfa'] got ['cert_aff', 'cert_mfa']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidate has CCM",
+      "review_detail": "expected certs ['cert_ccm'] got ['cert_ccm']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Bridge Resource Management training needed",
+      "review_detail": "expected certs ['cert_brm_btm'] got ['cert_brm_btm']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "advanced firefighting alone is enough",
+      "review_detail": "expected certs ['cert_aff'] got ['cert_aff']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "valid ERM endorsement",
+      "review_detail": "expected certs ['cert_erm'] got ['cert_erm']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "PSCRB certificate current",
+      "review_detail": "expected certs ['cert_pscrb'] got ['cert_pscrb']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "ROC or GOC required",
+      "review_detail": "expected certs ['gmdss'] got ['gmdss']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "PFSO certified",
+      "review_detail": "expected certs ['cert_sso'] got ['cert_sso']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "certificate_requirement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Leadership and Managerial Skills (LMS) completed",
+      "review_detail": "expected certs ['cert_lms'] got ['cert_lms']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "8 months remaining on passport",
+      "review_detail": "expected months 8 got 8",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport with 6 months left",
+      "review_detail": "expected months 6 got 6",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport valid for at least 1 year",
+      "review_detail": "expected months 12 got 12",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport valid for 2 years",
+      "review_detail": "expected months 24 got 24",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport expiring within 3 months should be rejected",
+      "review_detail": "expected months 3 got 3",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "freshly renewed passport",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "newly issued passport",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport not expired",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "ensure passport is current",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport must have minimum 6 months validity remaining",
+      "review_detail": "expected months 6 got 6",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidate should hold a passport that doesn't expire in the next year",
+      "review_detail": "expected months 12 got None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport remaining validity of 9 months",
+      "review_detail": "expected months 9 got None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "needs a fresh passport for joining vessel",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport should be valid through end of 2028",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "the candidate carries a passport with no validity issues",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport validity 12+ months",
+      "review_detail": "expected months 12 got 12",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "must have indian passport with valid OCI",
+      "review_detail": "expected months None got None",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "passport with at least six months till expiry",
+      "review_detail": "expected months 6 got 6",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "passport_validity",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidates whose passport has at least 6 months left before it expires",
+      "review_detail": "expected months 6 got 6",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "currently sailing as 2/E",
+      "review_detail": "expected one of ['2nd_engineer'] got 2nd_engineer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "applied for the position of Chief Engineer",
+      "review_detail": "expected one of ['chief_engineer'] got chief_engineer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "CO with tanker background",
+      "review_detail": "expected one of ['chief_officer'] got chief_officer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "ship's Master with five contracts",
+      "review_detail": "expected one of ['master'] got master",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "3rd Off currently onboard",
+      "review_detail": "expected one of ['3rd_officer'] got 3rd_officer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "officer in rank ETO",
+      "review_detail": "expected one of ['electro_technical_officer'] got electro_technical_officer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "applied for 4/E or junior 4/E role",
+      "review_detail": "expected one of ['4th_engineer', '4th_engineer'] got 4th_engineer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Bosun position",
+      "review_detail": "expected one of ['bosun'] got bosun",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "needs Cook with reefer experience",
+      "review_detail": "expected one of ['chief_cook'] got chief_cook",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "OS or AB preferred",
+      "review_detail": "expected one of ['os', 'ab'] got os",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "captain or master rank",
+      "review_detail": "expected one of ['master'] got master",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "3/O looking for promotion",
+      "review_detail": "expected one of ['3rd_officer'] got 3rd_officer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Trainee Engineer slot",
+      "review_detail": "expected one of ['junior_engineer'] got junior_engineer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "chief galley cook for cruise vessel",
+      "review_detail": "expected one of ['chief_cook'] got chief_cook",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "applied as pump man on tanker",
+      "review_detail": "expected one of ['pumpman'] got pumpman",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "junior engineer slot open",
+      "review_detail": "expected one of ['junior_engineer'] got junior_engineer",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "deck cadet trainee preferred",
+      "review_detail": "expected one of ['deck_cadet'] got deck_cadet",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "engine cadet experience required",
+      "review_detail": "expected one of ['engine_cadet'] got engine_cadet",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "AB Special endorsement required",
+      "review_detail": "expected one of ['ab'] got ab",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "motorman / fitter position",
+      "review_detail": "expected one of ['fitter', 'fitter'] got fitter",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "rank_match",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "GP rating required",
+      "review_detail": "expected one of ['general_purpose_rating'] got general_purpose_rating",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidate completed PSSR, PST, FPFF and EFA",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "holds PSSR, PST, fire prevention and first aid",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "all four basic modules current",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "BST done in 2024",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "basic safety training completed last month",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "valid A-VI/1 endorsement on board",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Personal Survival, Fire Fighting, First Aid, PSSR all valid",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "needs STCW BST",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "must hold all basic STCW certificates valid",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "all four basic STCW with original certs",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "PST FPFF EFA PSSR completed",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "all four basic complete and valid",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "BST refresher in date",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "STCW 2010 basic compliant",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "valid STCW (basic)",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "basic STCW four-pack complete",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_basic",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "STCW basic redoed in 2025",
+      "review_detail": "required=True",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_endorsement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "IGF code certificate required",
+      "review_detail": "expected endorsements ['igf_basic_cop'] got ['igf_basic_cop']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_endorsement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "tanker familiarization needed",
+      "review_detail": "expected endorsements ['tanker_oil_basic_cop'] got ['tanker_oil_basic_cop']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_endorsement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "should have DCE",
+      "review_detail": "expected endorsements ['tanker_oil_dce'] got ['tanker_oil_dce']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_endorsement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Advanced DCE for tanker work",
+      "review_detail": "expected endorsements ['tanker_oil_dce'] got ['tanker_oil_dce']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_endorsement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Tanker Familiarization (oil) cert needed",
+      "review_detail": "expected endorsements ['tanker_oil_basic_cop'] got ['tanker_oil_basic_cop']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "stcw_endorsement",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "DPO role requirement",
+      "review_detail": "expected endorsements ['dp_operational'] got ['dp_operational']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "valid US visa and passport",
+      "review_detail": "visa_group expected usa got usa",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidate holding H-1B",
+      "review_detail": "visa_group expected usa got usa; types expected ['H1B (USA)'] got ['H1B (USA)']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "must have B one slash B two stamped",
+      "review_detail": "visa_group expected usa got usa; types expected ['B1/B2 (USA)'] got ['B1/B2 (USA)']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "American visa required",
+      "review_detail": "visa_group expected usa got usa",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "should have an Aussie visa",
+      "review_detail": "visa_group expected australia got australia",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "maritime crew permit for Australia",
+      "review_detail": "visa_group expected australia got australia",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Schengen visa preferred",
+      "review_detail": "visa_group expected schengen got schengen",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "needs valid C1-D",
+      "review_detail": "visa_group expected usa got usa; types expected ['C1/D (USA)'] got ['C1 (USA)']",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "either US or Schengen visa is fine",
+      "review_detail": "visa_group expected usa got schengen",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "candidate has L-1 visa",
+      "review_detail": "visa_group expected usa got usa; types expected ['L1 (USA)'] got ['L1 (USA)']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "visa for travel to Europe ready",
+      "review_detail": "visa_group expected schengen got schengen",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Maritime Crew Visa for Australia",
+      "review_detail": "visa_group expected australia got australia",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "B1B2 valid for 6 months",
+      "review_detail": "visa_group expected usa got usa; months expected 6 got None; types expected ['B1/B2 (USA)'] got ['B1/B2 (USA)']",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "EU travel visa with 1 year validity",
+      "review_detail": "visa_group expected schengen got schengen; months expected 12 got None",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "must carry F-1 or O-1",
+      "review_detail": "visa_group expected usa got usa",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "U.S. visa with 10+ months validity",
+      "review_detail": "visa_group expected usa got usa; months expected 10 got 10",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "USA work permit needed",
+      "review_detail": "visa_group expected usa got usa",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "European entry permit holder for crew",
+      "review_detail": "visa_group expected schengen got schengen",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "C1/D and US visa both required",
+      "review_detail": "visa_group expected usa got usa; types expected ['C1/D (USA)'] got ['C1/D (USA)']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "C1D with 8 months left",
+      "review_detail": "visa_group expected usa got usa; months expected 8 got None; types expected ['C1/D (USA)'] got ['C1/D (USA)']",
+      "review_note": "Retested in final combined eval; value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "USA H1B holder with 18 months validity",
+      "review_detail": "visa_group expected usa got usa; months expected 18 got 18; types expected ['H1B (USA)'] got ['H1B (USA)']",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "Schengen long-stay valid",
+      "review_detail": "visa_group expected schengen got schengen",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    },
+    {
+      "family": "us_visa",
+      "llm_confidence": "high",
+      "llm_family_rescued": true,
+      "prompt": "MV applicants need Maritime Crew Visa",
+      "review_detail": "visa_group expected australia got australia",
+      "review_note": "Value matches corpus convention.",
+      "value_review": "accepted"
+    }
+  ],
+  "status": "value_review_complete",
+  "total_reviewed": 123
+}

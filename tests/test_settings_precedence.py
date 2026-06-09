@@ -118,37 +118,43 @@ class SettingsPrecedenceTests(unittest.TestCase):
         self.assertTrue(settings.feature_flags.use_dual_write)
 
     def test_refresh_runtime_managers_uses_reloaded_settings_not_env(self):
-        fake_settings = SimpleNamespace(
-            config=configparser.ConfigParser(),
-            credentials=configparser.ConfigParser(),
-            settings=configparser.ConfigParser(),
-            feature_flags=FeatureFlags(False, True, False, True, False),
-            server_url="http://127.0.0.1:5000",
-        )
-        fake_settings.config.add_section("Credentials")
-        fake_settings.config.add_section("Settings")
-        fake_settings.config.add_section("Advanced")
-        fake_settings.credentials = fake_settings.config["Credentials"]
-        fake_settings.settings = fake_settings.config["Settings"]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_settings = SimpleNamespace(
+                config=configparser.ConfigParser(),
+                credentials=configparser.ConfigParser(),
+                settings=configparser.ConfigParser(),
+                feature_flags=FeatureFlags(False, True, False, True, False),
+                server_url="http://127.0.0.1:5000",
+            )
+            fake_settings.config.add_section("Credentials")
+            fake_settings.config.add_section("Settings")
+            fake_settings.config.add_section("Advanced")
+            fake_settings.config.set(
+                "Advanced",
+                "search_scope_db_path",
+                os.path.join(tmp_dir, "scope.db"),
+            )
+            fake_settings.credentials = fake_settings.config["Credentials"]
+            fake_settings.settings = fake_settings.config["Settings"]
 
-        sentinel_repo = Mock(name="candidate_event_repo")
-        with patch.dict(
-            os.environ,
-            {
-                "USE_SUPABASE_DB": "true",
-                "USE_DUAL_WRITE": "false",
-                "USE_SUPABASE_READS": "true",
-                "USE_LOCAL_AGENT": "false",
-                "USE_CLOUD_EXPORT": "true",
-            },
-            clear=False,
-        ):
-            with patch("backend_server.load_app_settings", return_value=fake_settings):
-                with patch("backend_server._load_runtime_secrets_from_cloud", autospec=True) as load_cloud:
-                    with patch("backend_server._resolve_verified_resumes_dir", return_value="/tmp/njordhr-verified"):
-                        with patch("backend_server.os.makedirs", autospec=True) as makedirs:
-                            with patch("backend_server.build_candidate_event_repo", return_value=sentinel_repo) as build_repo:
-                                backend_server._refresh_runtime_managers()
+            sentinel_repo = Mock(name="candidate_event_repo")
+            with patch.dict(
+                os.environ,
+                {
+                    "USE_SUPABASE_DB": "true",
+                    "USE_DUAL_WRITE": "false",
+                    "USE_SUPABASE_READS": "true",
+                    "USE_LOCAL_AGENT": "false",
+                    "USE_CLOUD_EXPORT": "true",
+                },
+                clear=False,
+            ):
+                with patch("backend_server.load_app_settings", return_value=fake_settings):
+                    with patch("backend_server._load_runtime_secrets_from_cloud", autospec=True) as load_cloud:
+                        with patch("backend_server._resolve_verified_resumes_dir", return_value="/tmp/njordhr-verified"):
+                            with patch("backend_server.os.makedirs", autospec=True) as makedirs:
+                                with patch("backend_server.build_candidate_event_repo", return_value=sentinel_repo) as build_repo:
+                                    backend_server._refresh_runtime_managers()
 
         self.assertFalse(backend_server.feature_flags.use_supabase_db)
         self.assertTrue(backend_server.feature_flags.use_dual_write)
@@ -157,7 +163,7 @@ class SettingsPrecedenceTests(unittest.TestCase):
         self.assertFalse(backend_server.feature_flags.use_cloud_export)
         build_repo.assert_called_once()
         load_cloud.assert_called_once()
-        makedirs.assert_called_once_with("/tmp/njordhr-verified", exist_ok=True)
+        makedirs.assert_any_call("/tmp/njordhr-verified", exist_ok=True)
         self.assertIs(backend_server.csv_manager, sentinel_repo)
 
     def test_cloud_api_runtime_prefers_config_auth_mode_over_env(self):

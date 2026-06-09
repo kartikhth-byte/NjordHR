@@ -156,6 +156,51 @@ scoreboard, record the reduced margin explicitly. Do not collapse that into a
 plain `promote_candidate=true`; the drop may mean v0.2 is harder, the normalizer
 has drifted, or both.
 
+### Cycle-3 v0.2 revalidation (2026-06-09)
+
+Evidence artifacts:
+`docs/eval-evidence/ai-search-tail-set-v0.2-eval-2026-06-09.json` and
+`docs/eval-evidence/ai-search-tail-set-v0.2-score-2026-06-09.json`.
+Final combined evidence artifacts:
+`docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json` and
+`docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json`.
+Stability re-run artifacts:
+`docs/eval-evidence/ai-search-tail-plus-solved-eval-stability-2-2026-06-09.json`,
+`docs/eval-evidence/ai-search-tail-plus-solved-score-stability-2-2026-06-09.json`,
+and
+`docs/eval-evidence/ai-search-tail-plus-solved-stability-comparison-2026-06-09.json`.
+Value-review artifact:
+`docs/eval-evidence/ai-search-tail-set-v0.2-value-review-2026-06-09.json`.
+Solved-set inputs:
+`docs/eval-evidence/ai-search-bootstrap-solved-corpus-2026-06-09.json` and
+`docs/eval-evidence/ai-search-bootstrap-solved-report-2026-06-09.json`.
+
+- eval gate: 7 / 7 scored families pass rescue_rate >= 0.8:
+  `age_range` 22/22, `certificate_requirement` 15/15,
+  `passport_validity` 20/20, `rank_match` 21/21, `stcw_basic` 17/17,
+  `stcw_endorsement` 6/6, `us_visa` 22/22.
+- control violations: 0 / 12.
+- LLM run integrity: final combined artifact has 315 rows evaluated, 0 legacy
+  fallbacks, all rows sourced from `llm`. A transient `ReadTimeout` on
+  `rank_match:30` (`3rd officer`) was refreshed from a targeted retry row with
+  HTTP 200 before final scoring.
+- stability re-run: a second full shadow eval over the same 315 prompts also
+  produced 315 `llm` rows, 0 fallbacks, and failure_reason=`ok` for every row.
+  The run-1/run-2 score projection matched exactly, with 315 normalized prompts
+  compared, 0 comparison-outcome deltas, and 0 LLM payload deltas. The comparison
+  artifact verdict is `stable_match`.
+- solved-set regressions: 0 / 59.
+- value-correctness review: 123 rescued rows reviewed; 123 accepted,
+  0 `retest`, 0 `rejected`, 0 `follow_up`. Row-level `scoring_notes` were
+  written to the canonical v0.2 tail-set rows.
+- verdict: `age_range`, `certificate_requirement`, `passport_validity`,
+  `rank_match`, `stcw_basic`, `stcw_endorsement`, and `us_visa` are
+  promote-candidates on v0.2 evidence.
+- convention decisions recorded in v0.2 rows:
+  generic IGF maps to `igf_basic_cop`; generic tanker familiarization maps to
+  `tanker_oil_basic_cop`; generic DCE maps to `tanker_oil_dce`; DPO is modeled
+  as `dp_operational` under `stcw_endorsement`, not as a canonical rank.
+
 ## Process rule (enforced by `.gitignore`)
 
 `AI_Search_Results/` remains gitignored as a default for one-off diagnostic

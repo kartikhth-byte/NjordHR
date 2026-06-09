@@ -81,7 +81,13 @@ def _llm_applied_families(row: dict) -> tuple[set, str]:
 
     evaluation_state is 'evaluated' when the LLM actually ran, else 'not_evaluated'.
     """
-    if str(row.get("shadow_mode")) != "enabled" or row.get("llm_plan") is None:
+    shadow_wiring = row.get("shadow_wiring") if isinstance(row.get("shadow_wiring"), dict) else {}
+    if (
+        str(row.get("shadow_mode")) != "enabled"
+        or row.get("llm_plan") is None
+        or bool(shadow_wiring.get("llm_plan_fallback_used"))
+        or str(shadow_wiring.get("llm_plan_source") or "") == "legacy_fallback"
+    ):
         return set(), "not_evaluated"
     applied = set()
     for result in row.get("comparison_results") or []:

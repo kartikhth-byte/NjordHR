@@ -1,7 +1,7 @@
 {
   "tail_set": "AI_Search_Results/seajobs_tail_set_v0.2.json",
-  "eval": "docs/eval-evidence/ai-search-tail-set-v0.2-eval-2026-06-09.json",
-  "solved_set_report": "",
+  "eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-stability-2-2026-06-09.json",
+  "solved_set_report": "docs/eval-evidence/ai-search-bootstrap-solved-report-2026-06-09.json",
   "promote_threshold": 0.8,
   "llm_run_detected": true,
   "rescue_by_family": {
@@ -11,9 +11,9 @@
       "rescue_rate": 1.0,
       "contributed_control_violation": false,
       "solved_set_regressions": 0,
-      "solved_set_total": 0,
+      "solved_set_total": 1,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
         {
           "prompt": "officers in their 40s with tanker experience",
@@ -26,8 +26,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 40,
-              "max_age": 49
+              "max_age": 49,
+              "min_age": 40
             }
           },
           "llm_payload": {
@@ -50,8 +50,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 30,
-              "max_age": 39
+              "max_age": 39,
+              "min_age": 30
             }
           },
           "llm_payload": {
@@ -74,13 +74,13 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 43,
-              "max_age": 47
+              "max_age": 47,
+              "min_age": 43
             }
           },
           "llm_payload": {
             "age_range": {
-              "maximum_years": 46,
+              "maximum_years": 47,
               "minimum_years": 43,
               "type": "age_range"
             }
@@ -98,14 +98,14 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 27,
-              "max_age": 29
+              "max_age": 29,
+              "min_age": 27
             }
           },
           "llm_payload": {
             "age_range": {
               "maximum_years": 29,
-              "minimum_years": 20,
+              "minimum_years": 27,
               "type": "age_range"
             }
           },
@@ -122,13 +122,13 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 50,
-              "max_age": 52
+              "max_age": 52,
+              "min_age": 50
             }
           },
           "llm_payload": {
             "age_range": {
-              "maximum_years": 53,
+              "maximum_years": 52,
               "minimum_years": 50,
               "type": "age_range"
             }
@@ -146,8 +146,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 43,
-              "max_age": 47
+              "max_age": 47,
+              "min_age": 43
             }
           },
           "llm_payload": {
@@ -170,8 +170,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 33,
-              "max_age": 37
+              "max_age": 37,
+              "min_age": 33
             }
           },
           "llm_payload": {
@@ -217,8 +217,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 25,
-              "max_age": 55
+              "max_age": 55,
+              "min_age": 25
             }
           },
           "llm_payload": {
@@ -241,8 +241,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 31,
-              "max_age": 49
+              "max_age": 49,
+              "min_age": 31
             }
           },
           "llm_payload": {
@@ -288,8 +288,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 35,
-              "max_age": 50
+              "max_age": 50,
+              "min_age": 35
             }
           },
           "llm_payload": {
@@ -312,8 +312,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 26,
-              "max_age": 49
+              "max_age": 49,
+              "min_age": 26
             }
           },
           "llm_payload": {
@@ -359,8 +359,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 30,
-              "max_age": 45
+              "max_age": 45,
+              "min_age": 30
             }
           },
           "llm_payload": {
@@ -452,8 +452,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 40,
-              "max_age": 45
+              "max_age": 45,
+              "min_age": 40
             }
           },
           "llm_payload": {
@@ -499,8 +499,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "age_years": {
-              "min_age": 25,
-              "max_age": 45
+              "max_age": 45,
+              "min_age": 25
             }
           },
           "llm_payload": {
@@ -536,7 +536,24 @@
           "value_match": "NEEDS_HUMAN_REVIEW"
         }
       ],
-      "solved_set_cases": []
+      "solved_set_cases": [
+        {
+          "prompt": "looking for officers aged 30-40",
+          "expected_family": "age_range",
+          "legacy_applied_families": [
+            "age_range"
+          ],
+          "llm_applied_families": [
+            "age_range"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "age_range",
+          "expected_constraint": null
+        }
+      ]
     },
     "certificate_requirement": {
       "rescued": 15,
@@ -546,7 +563,7 @@
       "solved_set_regressions": 0,
       "solved_set_total": 0,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
         {
           "prompt": "must hold AFF certificate",
@@ -949,14 +966,14 @@
       "solved_set_cases": []
     },
     "passport_validity": {
-      "rescued": 19,
-      "total": 19,
+      "rescued": 20,
+      "total": 20,
       "rescue_rate": 1.0,
       "contributed_control_violation": false,
       "solved_set_regressions": 0,
-      "solved_set_total": 0,
+      "solved_set_total": 10,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
         {
           "prompt": "8 months remaining on passport",
@@ -969,8 +986,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 8
+              "minimum_months_remaining": 8,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -993,8 +1010,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 6
+              "minimum_months_remaining": 6,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1017,8 +1034,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 12
+              "minimum_months_remaining": 12,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1041,8 +1058,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 24
+              "minimum_months_remaining": 24,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1065,8 +1082,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 3
+              "minimum_months_remaining": 3,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1181,8 +1198,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 6
+              "minimum_months_remaining": 6,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1205,13 +1222,13 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 12
+              "minimum_months_remaining": 12,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
             "passport_validity": {
-              "minimum_months_remaining": null,
+              "minimum_months_remaining": 12,
               "must_be_valid": true,
               "type": "passport_validity"
             }
@@ -1229,8 +1246,38 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
+              "minimum_months_remaining": 9,
+              "must_be_valid": true
+            }
+          },
+          "llm_payload": {
+            "passport_validity": {
+              "minimum_months_remaining": 9,
               "must_be_valid": true,
-              "minimum_months_remaining": 9
+              "type": "passport_validity"
+            }
+          },
+          "value_match": "NEEDS_HUMAN_REVIEW"
+        },
+        {
+          "prompt": "valid US visa and passport",
+          "expected_families": [
+            "passport_validity",
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "passport_validity",
+            "us_visa"
+          ],
+          "family_rescued": true,
+          "expected_constraint": {
+            "passport_validity": {
+              "must_be_valid": true
+            },
+            "us_visa": {
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -1238,6 +1285,19 @@
               "minimum_months_remaining": null,
               "must_be_valid": true,
               "type": "passport_validity"
+            },
+            "us_visa": {
+              "accepted_types": [
+                "C1/D (USA)",
+                "B1/B2 (USA)",
+                "C1 (USA)",
+                "D (USA)",
+                "US Visa (USA)"
+              ],
+              "minimum_months_remaining": null,
+              "required": true,
+              "type": "us_visa",
+              "visa_group": "usa"
             }
           },
           "value_match": "NEEDS_HUMAN_REVIEW"
@@ -1322,8 +1382,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 12
+              "minimum_months_remaining": 12,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1369,8 +1429,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 6
+              "minimum_months_remaining": 6,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1393,8 +1453,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "passport_validity": {
-              "must_be_valid": true,
-              "minimum_months_remaining": 6
+              "minimum_months_remaining": 6,
+              "must_be_valid": true
             }
           },
           "llm_payload": {
@@ -1407,7 +1467,168 @@
           "value_match": "NEEDS_HUMAN_REVIEW"
         }
       ],
-      "solved_set_cases": []
+      "solved_set_cases": [
+        {
+          "prompt": "passport valid for 18 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "18 months of passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "passport should be valid for at least 18 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 18 months passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "need passport validity 12 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "at least 12 months passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 12 months of passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "passport valid for 10 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "10 months of passport validity required",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "passport should be valid for 24 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        }
+      ]
     },
     "rank_match": {
       "rescued": 21,
@@ -1415,9 +1636,9 @@
       "rescue_rate": 1.0,
       "contributed_control_violation": false,
       "solved_set_regressions": 0,
-      "solved_set_total": 0,
+      "solved_set_total": 20,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
         {
           "prompt": "currently sailing as 2/E",
@@ -1948,7 +2169,328 @@
           "value_match": "NEEDS_HUMAN_REVIEW"
         }
       ],
-      "solved_set_cases": []
+      "solved_set_cases": [
+        {
+          "prompt": "2nd engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "chief engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "chief officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "master",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "captain",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "2nd officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "third officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "3rd officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "fourth engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "4th engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "junior 4th engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "electrical officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "ETO",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "bosun",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "pumpman",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "fitter",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "oiler",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "chief cook",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "deck cadet",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "junior engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        }
+      ]
     },
     "stcw_basic": {
       "rescued": 17,
@@ -1956,9 +2498,9 @@
       "rescue_rate": 1.0,
       "contributed_control_violation": false,
       "solved_set_regressions": 0,
-      "solved_set_total": 0,
+      "solved_set_total": 4,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
         {
           "prompt": "candidate completed PSSR, PST, FPFF and EFA",
@@ -2335,7 +2877,72 @@
           "value_match": "NEEDS_HUMAN_REVIEW"
         }
       ],
-      "solved_set_cases": []
+      "solved_set_cases": [
+        {
+          "prompt": "with valid STCW basic safety",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "stcw basic required",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "must hold all basic stcw certificates",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "valid stcw basic required",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        }
+      ]
     },
     "stcw_endorsement": {
       "rescued": 6,
@@ -2345,7 +2952,7 @@
       "solved_set_regressions": 0,
       "solved_set_total": 0,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
         {
           "prompt": "IGF code certificate required",
@@ -2575,54 +3182,15 @@
       "solved_set_cases": []
     },
     "us_visa": {
-      "rescued": 23,
-      "total": 23,
+      "rescued": 22,
+      "total": 22,
       "rescue_rate": 1.0,
       "contributed_control_violation": false,
       "solved_set_regressions": 0,
-      "solved_set_total": 0,
+      "solved_set_total": 10,
       "solved_set_regression_rate": 0.0,
-      "verdict": "hold",
+      "verdict": "promote_candidate",
       "cases": [
-        {
-          "prompt": "valid US visa and passport",
-          "expected_families": [
-            "us_visa",
-            "passport_validity"
-          ],
-          "llm_applied_families": [
-            "passport_validity",
-            "us_visa"
-          ],
-          "family_rescued": true,
-          "expected_constraint": {
-            "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa"
-            },
-            "passport_validity": {
-              "must_be_valid": true
-            }
-          },
-          "llm_payload": {
-            "us_visa": {
-              "accepted_types": [
-                "US Visa (USA)"
-              ],
-              "minimum_months_remaining": null,
-              "required": true,
-              "type": "us_visa",
-              "visa_group": "usa"
-            },
-            "passport_validity": {
-              "minimum_months_remaining": null,
-              "must_be_valid": true,
-              "type": "passport_validity"
-            }
-          },
-          "value_match": "NEEDS_HUMAN_REVIEW"
-        },
         {
           "prompt": "candidate holding H-1B",
           "expected_families": [
@@ -2634,12 +3202,12 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
               "accepted_types": [
                 "h-1b"
-              ]
+              ],
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -2666,12 +3234,12 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
               "accepted_types": [
                 "b1/b2"
-              ]
+              ],
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -2698,14 +3266,18 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "usa"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
+                "C1/D (USA)",
+                "B1/B2 (USA)",
+                "C1 (USA)",
+                "D (USA)",
                 "US Visa (USA)"
               ],
               "minimum_months_remaining": null,
@@ -2727,14 +3299,15 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "australia"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
+                "Australia Entry visa",
                 "MCV (Australia)"
               ],
               "minimum_months_remaining": null,
@@ -2756,14 +3329,15 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "australia"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
+                "Australia Entry visa",
                 "MCV (Australia)"
               ],
               "minimum_months_remaining": null,
@@ -2785,8 +3359,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "schengen"
             }
           },
@@ -2814,18 +3388,18 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
               "accepted_types": [
                 "c1/d"
-              ]
+              ],
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
-                "C1 (USA)"
+                "C1/D (USA)"
               ],
               "minimum_months_remaining": null,
               "required": true,
@@ -2846,20 +3420,24 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "usa"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
-                "Schengen"
+                "C1/D (USA)",
+                "B1/B2 (USA)",
+                "C1 (USA)",
+                "D (USA)",
+                "US Visa (USA)"
               ],
               "minimum_months_remaining": null,
               "required": true,
               "type": "us_visa",
-              "visa_group": "schengen"
+              "visa_group": "usa"
             }
           },
           "value_match": "NEEDS_HUMAN_REVIEW"
@@ -2875,12 +3453,12 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
               "accepted_types": [
                 "l-1"
-              ]
+              ],
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -2907,8 +3485,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "schengen"
             }
           },
@@ -2936,8 +3514,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "australia"
             }
           },
@@ -2965,13 +3543,13 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
-              "minimum_months_remaining": 6,
               "accepted_types": [
                 "b1/b2"
-              ]
+              ],
+              "minimum_months_remaining": 6,
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -2979,7 +3557,7 @@
               "accepted_types": [
                 "B1/B2 (USA)"
               ],
-              "minimum_months_remaining": null,
+              "minimum_months_remaining": 6,
               "required": true,
               "type": "us_visa",
               "visa_group": "usa"
@@ -2998,10 +3576,10 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
+              "minimum_months_remaining": 12,
               "must_be_valid": true,
-              "visa_group": "schengen",
-              "minimum_months_remaining": 12
+              "required": true,
+              "visa_group": "schengen"
             }
           },
           "llm_payload": {
@@ -3009,7 +3587,7 @@
               "accepted_types": [
                 "Schengen"
               ],
-              "minimum_months_remaining": null,
+              "minimum_months_remaining": 12,
               "required": true,
               "type": "us_visa",
               "visa_group": "schengen"
@@ -3028,8 +3606,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "usa"
             }
           },
@@ -3057,15 +3635,19 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
+              "minimum_months_remaining": 10,
               "must_be_valid": true,
-              "visa_group": "usa",
-              "minimum_months_remaining": 10
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
+                "C1/D (USA)",
+                "B1/B2 (USA)",
+                "C1 (USA)",
+                "D (USA)",
                 "US Visa (USA)"
               ],
               "minimum_months_remaining": 10,
@@ -3087,14 +3669,18 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "usa"
             }
           },
           "llm_payload": {
             "us_visa": {
               "accepted_types": [
+                "C1/D (USA)",
+                "B1/B2 (USA)",
+                "C1 (USA)",
+                "D (USA)",
                 "US Visa (USA)"
               ],
               "minimum_months_remaining": null,
@@ -3116,8 +3702,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "schengen"
             }
           },
@@ -3145,12 +3731,12 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
               "accepted_types": [
                 "c1/d"
-              ]
+              ],
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -3177,13 +3763,13 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
-              "minimum_months_remaining": 8,
               "accepted_types": [
                 "c1/d"
-              ]
+              ],
+              "minimum_months_remaining": 8,
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -3191,7 +3777,7 @@
               "accepted_types": [
                 "C1/D (USA)"
               ],
-              "minimum_months_remaining": null,
+              "minimum_months_remaining": 8,
               "required": true,
               "type": "us_visa",
               "visa_group": "usa"
@@ -3210,13 +3796,13 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
-              "must_be_valid": true,
-              "visa_group": "usa",
-              "minimum_months_remaining": 18,
               "accepted_types": [
                 "h-1b"
-              ]
+              ],
+              "minimum_months_remaining": 18,
+              "must_be_valid": true,
+              "required": true,
+              "visa_group": "usa"
             }
           },
           "llm_payload": {
@@ -3243,8 +3829,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "schengen"
             }
           },
@@ -3272,8 +3858,8 @@
           "family_rescued": true,
           "expected_constraint": {
             "us_visa": {
-              "required": true,
               "must_be_valid": true,
+              "required": true,
               "visa_group": "australia"
             }
           },
@@ -3291,7 +3877,168 @@
           "value_match": "NEEDS_HUMAN_REVIEW"
         }
       ],
-      "solved_set_cases": []
+      "solved_set_cases": [
+        {
+          "prompt": "having valid US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "having a valid US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa is valid at least for 10 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "valid US visa for 10 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 10 months validity on US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa should be valid for 10 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa is valid at least for 12 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "valid US visa for 18 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 18 months validity on US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa should be valid for 24 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        }
+      ]
     }
   },
   "controls": {
@@ -3300,16 +4047,982 @@
     "cases": []
   },
   "solved_set": {
-    "total": 0,
+    "total": 59,
     "regressions": 0,
     "not_found": [],
     "not_evaluated_llm_disabled": [],
-    "cases_by_family": {}
+    "cases_by_family": {
+      "age_range": [
+        {
+          "prompt": "looking for officers aged 30-40",
+          "expected_family": "age_range",
+          "legacy_applied_families": [
+            "age_range"
+          ],
+          "llm_applied_families": [
+            "age_range"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "age_range",
+          "expected_constraint": null
+        }
+      ],
+      "coc_document_gate": [
+        {
+          "prompt": "valid COC",
+          "expected_family": "coc_document_gate",
+          "legacy_applied_families": [
+            "coc_document_gate"
+          ],
+          "llm_applied_families": [
+            "coc_document_gate"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "coc_document_gate",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "COC required",
+          "expected_family": "coc_document_gate",
+          "legacy_applied_families": [
+            "coc_document_gate"
+          ],
+          "llm_applied_families": [
+            "coc_document_gate"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "coc_document_gate",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "must hold valid coc",
+          "expected_family": "coc_document_gate",
+          "legacy_applied_families": [
+            "coc_document_gate"
+          ],
+          "llm_applied_families": [
+            "coc_document_gate"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "coc_document_gate",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "need valid certificate of competency",
+          "expected_family": "coc_document_gate",
+          "legacy_applied_families": [],
+          "llm_applied_families": [
+            "coc_document_gate"
+          ],
+          "comparison_outcomes": [
+            "expected_delta"
+          ],
+          "regression": false,
+          "expected_primary_family": "coc_document_gate",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "junior engineer coc required",
+          "expected_family": "coc_document_gate",
+          "legacy_applied_families": [
+            "coc_document_gate",
+            "coc_grade_match"
+          ],
+          "llm_applied_families": [
+            "coc_document_gate",
+            "coc_grade_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent",
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "coc_document_gate",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "must hold valid certificate of competency",
+          "expected_family": "coc_document_gate",
+          "legacy_applied_families": [],
+          "llm_applied_families": [
+            "coc_document_gate"
+          ],
+          "comparison_outcomes": [
+            "expected_delta"
+          ],
+          "regression": false,
+          "expected_primary_family": "coc_document_gate",
+          "expected_constraint": null
+        }
+      ],
+      "passport_validity": [
+        {
+          "prompt": "passport valid for 18 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "18 months of passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "passport should be valid for at least 18 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 18 months passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "need passport validity 12 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "at least 12 months passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 12 months of passport validity",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "passport valid for 10 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "10 months of passport validity required",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "passport should be valid for 24 months",
+          "expected_family": "passport_validity",
+          "legacy_applied_families": [
+            "passport_validity"
+          ],
+          "llm_applied_families": [
+            "passport_validity"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "passport_validity",
+          "expected_constraint": null
+        }
+      ],
+      "rank_match": [
+        {
+          "prompt": "2nd engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "chief engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "chief officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "master",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "captain",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "2nd officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "third officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "3rd officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "fourth engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "4th engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "junior 4th engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "electrical officer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "ETO",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "bosun",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "pumpman",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "fitter",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "oiler",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "chief cook",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "deck cadet",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "junior engineer",
+          "expected_family": "rank_match",
+          "legacy_applied_families": [
+            "rank_match"
+          ],
+          "llm_applied_families": [
+            "rank_match"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "rank_match",
+          "expected_constraint": null
+        }
+      ],
+      "recent_contract_vessel_experience": [
+        {
+          "prompt": "12 months experience on container in last 3 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "12 months on container in recent 3 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 12 months container experience in last 3 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "at least 12 months on container in last 3 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "container vessel experience for 12 months over last 3 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "10 months experience on container in last 2 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 8 months tanker experience in recent 2 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "14 months on bulk carrier in last 4 contracts",
+          "expected_family": "recent_contract_vessel_experience",
+          "legacy_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "llm_applied_families": [
+            "recent_contract_vessel_experience"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "recent_contract_vessel_experience",
+          "expected_constraint": null
+        }
+      ],
+      "stcw_basic": [
+        {
+          "prompt": "with valid STCW basic safety",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "stcw basic required",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "must hold all basic stcw certificates",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "valid stcw basic required",
+          "expected_family": "stcw_basic",
+          "legacy_applied_families": [
+            "stcw_basic"
+          ],
+          "llm_applied_families": [
+            "stcw_basic"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "stcw_basic",
+          "expected_constraint": null
+        }
+      ],
+      "us_visa": [
+        {
+          "prompt": "having valid US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "having a valid US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa is valid at least for 10 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "valid US visa for 10 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 10 months validity on US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa should be valid for 10 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa is valid at least for 12 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "valid US visa for 18 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "minimum 18 months validity on US visa",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        },
+        {
+          "prompt": "US visa should be valid for 24 months",
+          "expected_family": "us_visa",
+          "legacy_applied_families": [
+            "us_visa"
+          ],
+          "llm_applied_families": [
+            "us_visa"
+          ],
+          "comparison_outcomes": [
+            "equivalent"
+          ],
+          "regression": false,
+          "expected_primary_family": "us_visa",
+          "expected_constraint": null
+        }
+      ]
+    }
   },
-  "promote_candidates": [],
+  "promote_candidates": [
+    "age_range",
+    "certificate_requirement",
+    "passport_validity",
+    "rank_match",
+    "stcw_basic",
+    "stcw_endorsement",
+    "us_visa"
+  ],
   "rows_not_evaluated_llm_disabled": [],
   "rows_not_found_in_eval": [],
-  "solved_set_gate_active": false,
-  "solved_set_gate_reason": "no solved-set report supplied; promotion held",
+  "solved_set_gate_active": true,
+  "solved_set_gate_reason": "enabled",
   "value_match_caveat": "family_rescued is automatic; value correctness is flagged NEEDS_HUMAN_REVIEW."
 }
