@@ -11,6 +11,7 @@ import configparser
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 
@@ -20,7 +21,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ai_analyzer import AIResumeAnalyzer, AdvancedPDFProcessor, ConfigManager
 from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS
-from query_understanding.shadow_audit import build_shadow_audit_rows
+from query_understanding.shadow_audit import build_shadow_audit_entry, build_shadow_audit_rows
 from query_understanding.llm_normalizer import is_enabled
 from query_understanding.shadow_llm_provider import build_shadow_llm_query_plan
 
@@ -161,6 +162,18 @@ def main():
         "Repeatable. Empty = all families. Examples: --family-filter age_range "
         "--family-filter us_visa.",
     )
+    parser.add_argument(
+        "--sleep-seconds",
+        type=float,
+        default=0.0,
+        help="Optional pause between LLM requests. Useful when provider APIs return 429 rate-limit errors.",
+    )
+    parser.add_argument(
+        "--max-prompts",
+        type=int,
+        default=0,
+        help="Optional cap on prompts evaluated from the selected corpus/filter. Useful for rate-limit probes.",
+    )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Path to write the JSON report")
     args = parser.parse_args()
 
@@ -188,17 +201,35 @@ def main():
     analyzer = _build_analyzer()
     family_filter = set(args.family_filter or [])
     prompts = _build_prompts_from_corpora(loaded_corpora, family_filter=family_filter)
+    if args.max_prompts > 0:
+        prompts = prompts[: args.max_prompts]
     print(
         f"[shadow-audit] prompts to evaluate: {len(prompts)}"
         + (f" (filtered to: {sorted(family_filter)})" if family_filter else "")
     )
 
-    rows = build_shadow_audit_rows(
-        analyzer,
-        prompts,
-        expected_delta_families=UNAPPLIED_FAMILY_IDS,
-        llm_plan_provider=build_shadow_llm_query_plan,
-    )
+    if args.sleep_seconds > 0:
+        rows = []
+        for index, prompt_entry in enumerate(prompts, start=1):
+            if index > 1:
+                time.sleep(args.sleep_seconds)
+            print(f"[shadow-audit] evaluating prompt {index}/{len(prompts)}")
+            rows.append(
+                build_shadow_audit_entry(
+                    analyzer,
+                    str(prompt_entry.get("prompt") or ""),
+                    prompt_id=str(prompt_entry.get("prompt_id") or f"prompt-{index}"),
+                    expected_delta_families=UNAPPLIED_FAMILY_IDS,
+                    llm_plan_provider=build_shadow_llm_query_plan,
+                )
+            )
+    else:
+        rows = build_shadow_audit_rows(
+            analyzer,
+            prompts,
+            expected_delta_families=UNAPPLIED_FAMILY_IDS,
+            llm_plan_provider=build_shadow_llm_query_plan,
+        )
     report = {
         "success": True,
         "shadow_mode": "enabled" if is_enabled() else "disabled",

@@ -83,6 +83,31 @@ class LegacyParserAdapterTests(unittest.TestCase):
         self.assertEqual(constraint["ship_family"], "tanker")
         self.assertEqual(constraint["recent_contract_count"], 3)
 
+    def test_adapter_canonicalizes_ship_family_aliases_from_configured_parser(self):
+        legacy = {
+            "rank": "",
+            "hard_constraints": {
+                "recent_contract_vessel_experience": {
+                    "vessel_type": "container vessel",
+                    "min_months": 12,
+                    "lookback_contracts": 3,
+                    "display_value": "container vessel experience for 12 months over last 3 contracts",
+                }
+            },
+            "applied_constraints": ["recent_contract_vessel_experience"],
+            "unapplied_constraints": [],
+            "parsing_notes": [],
+        }
+
+        adapted = self.adapter.from_legacy_constraints(
+            legacy,
+            user_prompt="container vessel experience for 12 months over last 3 contracts",
+        )
+
+        self.assertEqual(adapted["validation"]["status"], "valid")
+        constraint = adapted["applied_constraints"][0]["constraint"]
+        self.assertEqual(constraint["ship_family"], "container")
+
     def test_adapter_preserves_semantic_tail_for_rank_mixed_prompt(self):
         adapted = self.adapter.adapt("2nd engineer with strong leadership", rank="2nd Engineer")
         self.assertIn("strong leadership", adapted["semantic_query"])

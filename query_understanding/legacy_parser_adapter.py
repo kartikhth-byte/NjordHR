@@ -10,6 +10,7 @@ from .hard_filter_catalog import (
     CATALOG_VERSION,
     canonical_certificate_values,
     canonical_endorsement_values,
+    canonical_ship_family_values,
     legacy_applied_constraint_id,
     legacy_hard_constraint_key,
 )
@@ -37,6 +38,37 @@ def _normalize_text(text: Any) -> str:
 
 def _humanize_identifier(identifier: Any) -> str:
     return _normalize_text(str(identifier or "").replace("_", " "))
+
+
+def _canonical_ship_family(analyzer: Any, value: Any) -> str | None:
+    normalized = _normalize_text(str(value or "").lower().replace("_", " "))
+    if not normalized:
+        return None
+    canonical_values = canonical_ship_family_values()
+    if normalized in canonical_values:
+        return normalized
+
+    aliases = getattr(analyzer, "_ship_type_aliases", None)
+    if callable(aliases):
+        try:
+            alias_map = aliases()
+        except Exception:
+            alias_map = {}
+        if isinstance(alias_map, Mapping):
+            for canonical, values in alias_map.items():
+                canonical_text = _normalize_text(str(canonical or "").lower().replace("_", " "))
+                if canonical_text not in canonical_values:
+                    continue
+                alias_values = [_normalize_text(str(item or "").lower().replace("_", " ")) for item in (values or [])]
+                if normalized == canonical_text or normalized in alias_values:
+                    return canonical_text
+
+    for suffix in (" vessel", " ship"):
+        if normalized.endswith(suffix):
+            trimmed = normalized[: -len(suffix)].strip()
+            if trimmed in canonical_values:
+                return trimmed
+    return normalized
 
 
 def _add_fragment(fragments: List[str], fragment: Any) -> None:
@@ -404,6 +436,7 @@ class LegacyParserAdapter:
 
         if "engine_vessel_experience" in hard_constraints:
             payload = hard_constraints.get("engine_vessel_experience") or {}
+            ship_family = _canonical_ship_family(self.analyzer, payload.get("vessel_type"))
             semantic_fragments.extend(_humanize_identifier(payload.get("engine_type")))
             semantic_fragments.extend(_humanize_identifier(payload.get("vessel_type")))
             semantic_fragments.extend(["experience", "with experience", "engine experience", "vessel experience", "experience on", "experience in"])
@@ -420,7 +453,7 @@ class LegacyParserAdapter:
                 {
                     "type": "engine_vessel_experience",
                     "engine_family": payload.get("engine_type"),
-                    "ship_family": payload.get("vessel_type"),
+                    "ship_family": ship_family,
                     "minimum_months": payload.get("min_months"),
                     "recent_contract_count": payload.get("lookback_contracts") or None,
                 },
@@ -431,6 +464,7 @@ class LegacyParserAdapter:
 
         if "recent_contract_vessel_experience" in hard_constraints:
             payload = hard_constraints.get("recent_contract_vessel_experience") or {}
+            ship_family = _canonical_ship_family(self.analyzer, payload.get("vessel_type"))
             semantic_fragments.extend(_humanize_identifier(payload.get("vessel_type")))
             semantic_fragments.extend(["experience", "with experience", "vessel experience", "experience on", "experience in", "recent contract experience"])
             semantic_fragments.extend(_month_fragments(payload.get("min_months")))
@@ -445,7 +479,7 @@ class LegacyParserAdapter:
                 "recent_contract_vessel_experience",
                 {
                     "type": "recent_contract_vessel_experience",
-                    "ship_family": payload.get("vessel_type"),
+                    "ship_family": ship_family,
                     "minimum_months": payload.get("min_months"),
                     "recent_contract_count": payload.get("lookback_contracts"),
                 },
@@ -498,6 +532,7 @@ class LegacyParserAdapter:
 
         if "experience_ship_type" in hard_constraints:
             payload = hard_constraints.get("experience_ship_type") or {}
+            ship_family = _canonical_ship_family(self.analyzer, payload[0] if isinstance(payload, list) and payload else payload)
             if isinstance(payload, list):
                 semantic_fragments.extend(_humanize_identifier(item) for item in payload)
                 semantic_fragments.extend(["experience", "with experience", "ship experience", "experience on", "experience in"])
@@ -505,7 +540,7 @@ class LegacyParserAdapter:
                 "experience_ship_type",
                 {
                     "type": "experience_ship_type",
-                    "ship_family": payload,
+                    "ship_family": ship_family,
                     "minimum_months": None,
                 },
                 user_prompt,

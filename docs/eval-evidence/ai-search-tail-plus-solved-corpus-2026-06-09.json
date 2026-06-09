@@ -1,4 +1,6 @@
 {
+  "date": "combined",
+  "duplicate_prompt_warnings": [],
   "families": {
     "age_range": [
       {
@@ -11,15 +13,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Decade-span ('in their 40s') absent from legacy patterns. Convention: in their 40s -> [40, 49].",
-        "prompt": "officers in their 40s with tanker experience",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officers in their 40s with tanker experience"
       },
       {
         "current_parser": "miss",
@@ -31,15 +25,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Spelled-out decade. Legacy requires digit age_token; 'thirties' has no digits.",
-        "prompt": "candidates in their thirties",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates in their thirties"
       },
       {
         "current_parser": "miss",
@@ -51,17 +37,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Mid-decade. Convention: mid 40s -> [43, 47].",
-        "prompt": "officer in mid 40s preferred",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officer in mid 40s preferred"
       },
       {
         "current_parser": "miss",
@@ -73,17 +49,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Late-decade, spelled. Convention: late twenties -> [27, 29].",
-        "prompt": "looking for engineers in their late twenties",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "looking for engineers in their late twenties"
       },
       {
         "current_parser": "miss",
@@ -95,17 +61,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Early-decade. Convention: early 50s -> [50, 52].",
-        "prompt": "candidates in early 50s",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates in early 50s"
       },
       {
         "current_parser": "miss",
@@ -117,15 +73,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Approximate age. Convention: around N -> [N-2, N+2].",
-        "prompt": "candidates aged around 45",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates aged around 45"
       },
       {
         "current_parser": "miss",
@@ -137,15 +85,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Approximate age. Legacy does not parse this phrasing. Convention: around/approximately N -> [N-2, N+2].",
-        "prompt": "approximately 35 years of age",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "approximately 35 years of age"
       },
       {
         "current_parser": "partial",
@@ -156,17 +96,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Legacy max_patterns include 'above the age of'; verify polarity.",
-        "prompt": "no candidate above the age of 60 please",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "no candidate above the age of 60 please"
       },
       {
         "current_parser": "miss",
@@ -178,15 +108,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Compound min+max without explicit age anchor. Legacy does not parse either side as age.",
-        "prompt": "must be at least 25 and no more than 55",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "must be at least 25 and no more than 55"
       },
       {
         "current_parser": "partial",
@@ -198,17 +120,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Compound strict. Convention: strict older/younger -> exclusive.",
-        "prompt": "officers older than 30 and younger than 50",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officers older than 30 and younger than 50"
       },
       {
         "current_parser": "partial",
@@ -219,15 +131,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Legacy 'under N' fires max_age=35 (legacy treats as inclusive). Convention: under N -> max_age = N-1 (strict).",
-        "prompt": "young professionals under 35",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "young professionals under 35"
       },
       {
         "current_parser": "miss",
@@ -239,15 +143,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Hyphen range without 'years old'/'aged' anchor; legacy does not parse this as age.",
-        "prompt": "experienced officers between 35-50 years",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "experienced officers between 35-50 years"
       },
       {
         "current_parser": "partial",
@@ -259,17 +155,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Compound strict on both.",
-        "prompt": "candidates older than 25 but younger than 50",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates older than 25 but younger than 50"
       },
       {
         "current_parser": "miss",
@@ -280,15 +166,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "'N plus' notation; not in legacy min_patterns.",
-        "prompt": "officer with age 40 plus",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officer with age 40 plus"
       },
       {
         "current_parser": "partial",
@@ -300,15 +178,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Generic age-context fallback should catch via 'age' + two plausible numbers.",
-        "prompt": "should be in the 30 to 45 age bracket",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "should be in the 30 to 45 age bracket"
       },
       {
         "current_parser": "miss",
@@ -319,15 +189,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "'N+' compact notation.",
-        "prompt": "experienced officers, age 50+",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "experienced officers, age 50+"
       },
       {
         "current_parser": "miss",
@@ -338,15 +200,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Birth-year phrasing \u2014 implies max age = current_year - birth_year. As of 2026: born after 1985 -> max_age 41. Convention call: corpus uses 2026 reference.",
-        "prompt": "candidates born after 1985",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates born after 1985"
       },
       {
         "current_parser": "miss",
@@ -357,15 +211,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Inverse birth-year: born before 1980 -> min_age 46 (2026 ref).",
-        "prompt": "candidates born before 1980",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates born before 1980"
       },
       {
         "current_parser": "partial",
@@ -377,15 +223,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Generic age-context fallback should catch the 40 and 45 numbers; 'around' modifier may make it broader.",
-        "prompt": "officers around the age of 40 to 45",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officers around the age of 40 to 45"
       },
       {
         "current_parser": "partial",
@@ -396,17 +234,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "Compound prompt \u2014 sea_service + age. Legacy 'over N' catches age side; sea_service is separate unapplied family.",
-        "prompt": "minimum experience 5 years and age over 30",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "minimum experience 5 years and age over 30"
       },
       {
         "current_parser": "partial",
@@ -418,15 +246,7 @@
         },
         "expected_primary_family": "age_range",
         "note": "'aged N to N years' \u2014 range_patterns should catch via 'aged' anchor.",
-        "prompt": "officers aged 25 to 45 years preferred",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officers aged 25 to 45 years preferred"
       },
       {
         "current_parser": "partial",
@@ -437,17 +257,87 @@
         },
         "expected_primary_family": "age_range",
         "note": "Negation phrasing 'not above N'. Legacy misreads this as min_age=51; expected is max_age=50.",
-        "prompt": "candidates not above 50",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates not above 50"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "2nd engineer between 30 and 45 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "chief officer between the ages of 35 and 50"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "master within the ages of 40 and 55"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "looking for chief engineer within the age of 38 and 52"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "need 3rd officer with in the age of 25 and 35"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "4th engineer age range of 28 and 38"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "electrical officer age range of 30-42"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "fitter age of 26 and 40 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "deck cadet ages 21 and 27"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "looking for officers aged 30-40"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "master 30 to 45 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "chief officer at least 35 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "2nd engineer older than 32"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "3rd engineer over 29"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "chief cook above 30"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "oiler minimum age of 24"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "bosun up to 48 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "need eTO younger than 40"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "junior engineer under 28"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "pumpman maximum age of 50"
       }
     ],
     "certificate_requirement": [
@@ -462,15 +352,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Advanced Fire Fighting. Separate from stcw_basic.",
-        "prompt": "must hold AFF certificate",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "must hold AFF certificate"
       },
       {
         "current_parser": "wrong_family",
@@ -484,15 +366,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Compound advanced certs.",
-        "prompt": "needs MFA and AFF both",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "needs MFA and AFF both"
       },
       {
         "current_parser": "wrong_family",
@@ -506,17 +380,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Spelled out. Convention: 'medical care' -> MFA per catalog.",
-        "prompt": "advanced firefighting and medical care",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "advanced firefighting and medical care"
       },
       {
         "current_parser": "miss",
@@ -529,15 +393,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Advanced First Aid.",
-        "prompt": "AFA mandatory for this rank",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "AFA mandatory for this rank"
       },
       {
         "current_parser": "miss",
@@ -550,15 +406,7 @@
         },
         "expected_primary_family": "stcw_endorsement",
         "note": "IGF Code \u2014 LNG/gas-fueled vessel endorsement. Convention: generic IGF maps to basic IGF CoP unless advanced is explicit.",
-        "prompt": "IGF code certificate required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "IGF code certificate required"
       },
       {
         "current_parser": "miss",
@@ -571,15 +419,7 @@
         },
         "expected_primary_family": "stcw_endorsement",
         "note": "Entry-level tanker endorsement. Convention: generic tanker familiarization uses oil basic CoP pending cargo-specific phrasing.",
-        "prompt": "tanker familiarization needed",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "tanker familiarization needed"
       },
       {
         "current_parser": "miss",
@@ -592,15 +432,7 @@
         },
         "expected_primary_family": "stcw_endorsement",
         "note": "Dangerous Cargo Endorsement. Convention: generic DCE uses oil DCE pending cargo-specific phrasing.",
-        "prompt": "should have DCE",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "should have DCE"
       },
       {
         "current_parser": "miss",
@@ -613,15 +445,7 @@
         },
         "expected_primary_family": "stcw_endorsement",
         "note": "Advanced DCE distinct from base DCE. Convention: generic tanker DCE uses oil DCE pending cargo-specific phrasing.",
-        "prompt": "Advanced DCE for tanker work",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Advanced DCE for tanker work"
       },
       {
         "current_parser": "wrong_family",
@@ -634,15 +458,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Global Maritime Distress and Safety System.",
-        "prompt": "GMDSS certificate holder",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "GMDSS certificate holder"
       },
       {
         "current_parser": "wrong_family",
@@ -655,15 +471,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Electronic Chart Display.",
-        "prompt": "ECDIS course done",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "ECDIS course done"
       },
       {
         "current_parser": "wrong_family",
@@ -678,15 +486,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Triple advanced acronyms. Distinguish from stcw_basic.",
-        "prompt": "AFF MFA AFA all current",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "AFF MFA AFA all current"
       },
       {
         "current_parser": "miss",
@@ -699,15 +499,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Crowd Crisis Management \u2014 passenger ship.",
-        "prompt": "candidate has CCM",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidate has CCM"
       },
       {
         "current_parser": "wrong_family",
@@ -720,15 +512,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "BRM.",
-        "prompt": "Bridge Resource Management training needed",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Bridge Resource Management training needed"
       },
       {
         "current_parser": "miss",
@@ -741,15 +525,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Single advanced cert. Tests veto: must NOT classify as stcw_basic.",
-        "prompt": "advanced firefighting alone is enough",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "advanced firefighting alone is enough"
       },
       {
         "current_parser": "wrong_family",
@@ -762,15 +538,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Engine Room Resource Management.",
-        "prompt": "valid ERM endorsement",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "valid ERM endorsement"
       },
       {
         "current_parser": "wrong_family",
@@ -783,15 +551,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Proficiency in Survival Craft and Rescue Boats.",
-        "prompt": "PSCRB certificate current",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "PSCRB certificate current"
       },
       {
         "current_parser": "miss",
@@ -805,15 +565,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "GMDSS Restricted/General Operator's Certificate.",
-        "prompt": "ROC or GOC required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "ROC or GOC required"
       },
       {
         "current_parser": "miss",
@@ -826,15 +578,7 @@
         },
         "expected_primary_family": "stcw_endorsement",
         "note": "Oil-specific tanker familiarization. Convention: cargo-specialized endorsement.",
-        "prompt": "Tanker Familiarization (oil) cert needed",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Tanker Familiarization (oil) cert needed"
       },
       {
         "current_parser": "miss",
@@ -847,15 +591,7 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "Port Facility Security Officer.",
-        "prompt": "PFSO certified",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "PFSO certified"
       },
       {
         "current_parser": "miss",
@@ -868,15 +604,89 @@
         },
         "expected_primary_family": "certificate_requirement",
         "note": "LMS \u2014 STCW Reg II/2 management-level requirement.",
-        "prompt": "Leadership and Managerial Skills (LMS) completed",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Leadership and Managerial Skills (LMS) completed"
+      }
+    ],
+    "coc_document_gate": [
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "valid COC"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "COC required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "need master with valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "chief officer with coc required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "2nd engineer with valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "certificate of competency required for chief engineer"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "must hold valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "master must hold valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "need valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "captain with valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "chief engineer valid coc required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "looking for 2nd officer with certificate of competency required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "chief officer must hold valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "4th engineer valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "junior engineer coc required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "need electrical officer with valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "certificate of competency required for eto"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "must hold valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "looking for chief officer valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "master with certificate of competency required"
       }
     ],
     "controls": [
@@ -976,15 +786,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Number-first word order with 'remaining'; legacy window_patterns require 'passport valid(ity)' adjacency.",
-        "prompt": "8 months remaining on passport",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "8 months remaining on passport"
       },
       {
         "current_parser": "miss",
@@ -996,15 +798,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "'months left' phrasing absent from legacy patterns.",
-        "prompt": "passport with 6 months left",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport with 6 months left"
       },
       {
         "current_parser": "partial",
@@ -1016,15 +810,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Legacy catches boolean passport validity but drops the year-unit minimum. Convention: 1 year -> 12 months.",
-        "prompt": "passport valid for at least 1 year",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport valid for at least 1 year"
       },
       {
         "current_parser": "partial",
@@ -1036,15 +822,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Legacy catches boolean passport validity but drops the year-unit minimum. Convention: 2 years -> 24 months.",
-        "prompt": "passport valid for 2 years",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport valid for 2 years"
       },
       {
         "current_parser": "miss",
@@ -1056,15 +834,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "'Expiring within X months' is an inverse phrasing the LLM should interpret as 'must have X+ months remaining'. Convention call: human review the boundary.",
-        "prompt": "passport expiring within 3 months should be rejected",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport expiring within 3 months should be rejected"
       },
       {
         "current_parser": "miss",
@@ -1075,15 +845,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Renewed/fresh implies valid; no explicit 'valid' keyword.",
-        "prompt": "freshly renewed passport",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "freshly renewed passport"
       },
       {
         "current_parser": "miss",
@@ -1094,15 +856,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Newly issued implies valid; no explicit 'valid' keyword.",
-        "prompt": "newly issued passport",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "newly issued passport"
       },
       {
         "current_parser": "miss",
@@ -1113,15 +867,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Negation of expiry == validity intent. Distinguish from polarity-inversion controls like 'expired passport OK'.",
-        "prompt": "passport not expired",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport not expired"
       },
       {
         "current_parser": "partial",
@@ -1132,15 +878,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Legacy fallback may fire due to 'current' context word but with no 'passport ... valid' adjacency the requested_label may be wrong. Manually verify.",
-        "prompt": "ensure passport is current",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "ensure passport is current"
       },
       {
         "current_parser": "partial",
@@ -1152,15 +890,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Legacy may catch boolean validity but not the months value due to 'minimum' interspersed with 'validity remaining' phrasing.",
-        "prompt": "passport must have minimum 6 months validity remaining",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport must have minimum 6 months validity remaining"
       },
       {
         "current_parser": "miss",
@@ -1172,17 +902,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Conditional expiry phrasing. Convention: 'in the next year' -> 12 months minimum remaining.",
-        "prompt": "candidate should hold a passport that doesn't expire in the next year",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidate should hold a passport that doesn't expire in the next year"
       },
       {
         "current_parser": "miss",
@@ -1194,17 +914,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "'remaining validity' phrasing absent from legacy patterns.",
-        "prompt": "passport remaining validity of 9 months",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport remaining validity of 9 months"
       },
       {
         "current_parser": "partial",
@@ -1220,15 +930,7 @@
         },
         "expected_primary_family": "multi",
         "note": "Compound prompt: legacy us_visa parser may catch 'US visa' but passport_validity expression is parsed weakly because 'valid' is shared. Multi-family expected; LLM should emit both.",
-        "prompt": "valid US visa and passport",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "valid US visa and passport"
       },
       {
         "current_parser": "miss",
@@ -1239,15 +941,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "'Fresh passport' as informal validity. Joining-vessel context shouldn't change family.",
-        "prompt": "needs a fresh passport for joining vessel",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "needs a fresh passport for joining vessel"
       },
       {
         "current_parser": "partial",
@@ -1258,15 +952,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Date-based expiry. Legacy fallback may fire from 'valid' context but cannot compute months remaining (depends on evaluation date). Convention: drop minimum_months_remaining for date-based prompts and surface as date-based hard filter when supported.",
-        "prompt": "passport should be valid through end of 2028",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport should be valid through end of 2028"
       },
       {
         "current_parser": "miss",
@@ -1277,15 +963,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Indirect validity expression; no explicit 'valid' adjacent to 'passport'.",
-        "prompt": "the candidate carries a passport with no validity issues",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "the candidate carries a passport with no validity issues"
       },
       {
         "current_parser": "miss",
@@ -1297,15 +975,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Compact '12+' notation; legacy patterns expect 'at least' / 'minimum' qualifiers or a months-prefix.",
-        "prompt": "passport validity 12+ months",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport validity 12+ months"
       },
       {
         "current_parser": "partial",
@@ -1316,15 +986,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Legacy parses 'must have...valid passport' family but OCI mention is not a separate family (out of catalog). Expected: passport_validity only, OCI as semantic_query material.",
-        "prompt": "must have indian passport with valid OCI",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "must have indian passport with valid OCI"
       },
       {
         "current_parser": "miss",
@@ -1336,15 +998,7 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Spelled-out number + 'till expiry' phrasing absent from legacy patterns.",
-        "prompt": "passport with at least six months till expiry",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "passport with at least six months till expiry"
       },
       {
         "current_parser": "miss",
@@ -1356,15 +1010,87 @@
         },
         "expected_primary_family": "passport_validity",
         "note": "Verbose recruiter phrasing. Same intent as canonical 'passport valid for at least 6 months'.",
-        "prompt": "candidates whose passport has at least 6 months left before it expires",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidates whose passport has at least 6 months left before it expires"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport valid for 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "18 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport should be valid for at least 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "minimum 18 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "need passport validity 12 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "at least 12 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "minimum 12 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport valid for 10 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "10 months of passport validity required"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport should be valid for 24 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "chief officer with passport valid for 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "2nd engineer needs 18 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "master passport should be valid for at least 12 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "3rd officer minimum 10 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "ETO with passport validity 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "need 4th engineer with at least 9 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "captain passport valid for 30 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport should be valid for at least 6 months for bosun"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "chief cook minimum 15 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "junior engineer with 21 months of passport validity"
       }
     ],
     "rank_match": [
@@ -1380,15 +1106,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "'2/E' slash. Legacy normalize converts to '2 E'; alias must include this.",
-        "prompt": "currently sailing as 2/E",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "currently sailing as 2/E"
       },
       {
         "current_parser": "partial",
@@ -1402,15 +1120,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Standard alias fires.",
-        "prompt": "applied for the position of Chief Engineer",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "applied for the position of Chief Engineer"
       },
       {
         "current_parser": "miss",
@@ -1424,15 +1134,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "'CO' abbreviation may not be in alias table.",
-        "prompt": "CO with tanker background",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "CO with tanker background"
       },
       {
         "current_parser": "partial",
@@ -1446,15 +1148,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "'Master' alias common.",
-        "prompt": "ship's Master with five contracts",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "ship's Master with five contracts"
       },
       {
         "current_parser": "miss",
@@ -1468,15 +1162,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "'3rd Off' shorthand.",
-        "prompt": "3rd Off currently onboard",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "3rd Off currently onboard"
       },
       {
         "current_parser": "partial",
@@ -1490,15 +1176,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "ETO alias common.",
-        "prompt": "officer in rank ETO",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "officer in rank ETO"
       },
       {
         "current_parser": "partial",
@@ -1513,15 +1191,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Multi-rank prompt.",
-        "prompt": "applied for 4/E or junior 4/E role",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "applied for 4/E or junior 4/E role"
       },
       {
         "current_parser": "partial",
@@ -1535,15 +1205,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Boatswain alias.",
-        "prompt": "Bosun position",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Bosun position"
       },
       {
         "current_parser": "miss",
@@ -1557,15 +1219,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Legacy rank alias table does not match bare Cook in this phrasing; reefer remains semantic/vessel context.",
-        "prompt": "needs Cook with reefer experience",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "needs Cook with reefer experience"
       },
       {
         "current_parser": "partial",
@@ -1580,15 +1234,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Two ratings ranks.",
-        "prompt": "OS or AB preferred",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "OS or AB preferred"
       },
       {
         "current_parser": "partial",
@@ -1602,15 +1248,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Captain/Master synonymous. Convention: collapse to master.",
-        "prompt": "captain or master rank",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "captain or master rank"
       },
       {
         "current_parser": "partial",
@@ -1624,15 +1262,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Slash notation.",
-        "prompt": "3/O looking for promotion",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "3/O looking for promotion"
       },
       {
         "current_parser": "miss",
@@ -1646,15 +1276,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Junior-most engineering slot.",
-        "prompt": "Trainee Engineer slot",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Trainee Engineer slot"
       },
       {
         "current_parser": "miss",
@@ -1668,15 +1290,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Galley-cook phrasing implies chief_cook but legacy rank aliases do not match it.",
-        "prompt": "chief galley cook for cruise vessel",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "chief galley cook for cruise vessel"
       },
       {
         "current_parser": "miss",
@@ -1690,15 +1304,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Separated 'pump man' phrasing implies pumpman but legacy rank aliases do not match it; tanker may still parse as vessel_type.",
-        "prompt": "applied as pump man on tanker",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "applied as pump man on tanker"
       },
       {
         "current_parser": "miss",
@@ -1711,15 +1317,7 @@
         },
         "expected_primary_family": "stcw_endorsement",
         "note": "Dynamic Positioning Officer \u2014 represented by the DP operational endorsement catalog value, not a canonical rank.",
-        "prompt": "DPO role requirement",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "DPO role requirement"
       },
       {
         "current_parser": "partial",
@@ -1733,15 +1331,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Generic junior engineer; may map to specific 4E or stay as junior.",
-        "prompt": "junior engineer slot open",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "junior engineer slot open"
       },
       {
         "current_parser": "partial",
@@ -1755,15 +1345,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Cadet rank.",
-        "prompt": "deck cadet trainee preferred",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "deck cadet trainee preferred"
       },
       {
         "current_parser": "miss",
@@ -1777,15 +1359,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Legacy rank alias table does not match engine_cadet in this phrasing.",
-        "prompt": "engine cadet experience required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "engine cadet experience required"
       },
       {
         "current_parser": "partial",
@@ -1799,15 +1373,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "AB Special (AB(S)) \u2014 rated AB. Maps to able_seaman canonical.",
-        "prompt": "AB Special endorsement required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "AB Special endorsement required"
       },
       {
         "current_parser": "partial",
@@ -1822,15 +1388,7 @@
         },
         "expected_primary_family": "rank_match",
         "note": "Legacy catches fitter but not motorman in this slash phrasing; expected normalized ranks include both.",
-        "prompt": "motorman / fitter position",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "motorman / fitter position"
       },
       {
         "current_parser": "miss",
@@ -1844,15 +1402,169 @@
         },
         "expected_primary_family": "rank_match",
         "note": "General Purpose rating.",
-        "prompt": "GP rating required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "GP rating required"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "2nd engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "chief engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "chief officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "master"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "captain"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "2nd officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "third officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "3rd officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "fourth engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "4th engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "junior 4th engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "electrical officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "ETO"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "bosun"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "pumpman"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "fitter"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "oiler"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "chief cook"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "deck cadet"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "junior engineer"
+      }
+    ],
+    "recent_contract_vessel_experience": [
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "12 months experience on container in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "12 months on container in recent 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "minimum 12 months container experience in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "at least 12 months on container in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "container vessel experience for 12 months over last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "10 months experience on container in last 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "minimum 8 months tanker experience in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "14 months on bulk carrier in last 4 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "chief officer with 12 months experience on container in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "2nd engineer minimum 10 months container experience in recent 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "master with 18 months on tanker in last 4 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "captain at least 16 months on bulk carrier in recent 4 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "3rd officer 9 months experience on container in last 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "4th engineer 7 months on tanker in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "ETO minimum 12 months reefer container experience in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "bosun 6 months experience on container in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "pumpman at least 11 months on oil tanker in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "chief cook minimum 5 months cruise experience in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "junior engineer 13 months offshore vessel experience in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "deck cadet 4 months container experience in recent 2 contracts"
       }
     ],
     "stcw_basic": [
@@ -1865,15 +1577,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Legacy has lookahead with all four acronyms (line 1879). Should HIT; if so, move to solved-set.",
-        "prompt": "candidate completed PSSR, PST, FPFF and EFA",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidate completed PSSR, PST, FPFF and EFA"
       },
       {
         "current_parser": "miss",
@@ -1884,15 +1588,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Spelled component names instead of FPFF/EFA acronyms.",
-        "prompt": "holds PSSR, PST, fire prevention and first aid",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "holds PSSR, PST, fire prevention and first aid"
       },
       {
         "current_parser": "miss",
@@ -1903,15 +1599,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "'basic modules' not in patterns (legacy has 'basic courses', 'basic certificates').",
-        "prompt": "all four basic modules current",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "all four basic modules current"
       },
       {
         "current_parser": "wrong_family",
@@ -1929,15 +1617,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Legacy '\\bbst\\b' fires (line 1864). If solved, move to solved-set.",
-        "prompt": "BST done in 2024",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "BST done in 2024"
       },
       {
         "current_parser": "partial",
@@ -1948,15 +1628,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "'basic safety training' is in patterns. Verify.",
-        "prompt": "basic safety training completed last month",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "basic safety training completed last month"
       },
       {
         "current_parser": "miss",
@@ -1967,15 +1639,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "A-VI/1 STCW basic code is not parsed by legacy stcw_basic patterns.",
-        "prompt": "valid A-VI/1 endorsement on board",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "valid A-VI/1 endorsement on board"
       },
       {
         "current_parser": "miss",
@@ -1986,15 +1650,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Spelled component list \u2014 lookahead needs acronyms.",
-        "prompt": "Personal Survival, Fire Fighting, First Aid, PSSR all valid",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Personal Survival, Fire Fighting, First Aid, PSSR all valid"
       },
       {
         "current_parser": "partial",
@@ -2005,15 +1661,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Legacy '\\bbst\\b' fires.",
-        "prompt": "needs STCW BST",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "needs STCW BST"
       },
       {
         "current_parser": "wrong_family",
@@ -2045,15 +1693,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Legacy pattern fires (line 1884).",
-        "prompt": "must hold all basic STCW certificates valid",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "must hold all basic STCW certificates valid"
       },
       {
         "current_parser": "partial",
@@ -2064,15 +1704,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Legacy 'all four basic stcw' fires (line 1874).",
-        "prompt": "all four basic STCW with original certs",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "all four basic STCW with original certs"
       },
       {
         "current_parser": "partial",
@@ -2083,15 +1715,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Re-ordered component list; lookahead is order-independent.",
-        "prompt": "PST FPFF EFA PSSR completed",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "PST FPFF EFA PSSR completed"
       },
       {
         "current_parser": "miss",
@@ -2102,15 +1726,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "'all four basic complete' without 'certificates'/'courses' anchor.",
-        "prompt": "all four basic complete and valid",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "all four basic complete and valid"
       },
       {
         "current_parser": "partial",
@@ -2121,15 +1737,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Legacy '\\bbst\\b' fires regardless of 'refresher in date'; verify polarity.",
-        "prompt": "BST refresher in date",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "BST refresher in date"
       },
       {
         "current_parser": "miss",
@@ -2140,15 +1748,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "'STCW 2010 basic' versioned reference; legacy patterns need direct 'STCW basic safety' or 'basic STCW' adjacency.",
-        "prompt": "STCW 2010 basic compliant",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "STCW 2010 basic compliant"
       },
       {
         "current_parser": "miss",
@@ -2159,15 +1759,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "Parenthetical basic phrasing is not parsed by legacy stcw_basic patterns.",
-        "prompt": "valid STCW (basic)",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "valid STCW (basic)"
       },
       {
         "current_parser": "miss",
@@ -2178,15 +1770,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "'four-pack' is informal; legacy patterns expect 'four basic' phrasing.",
-        "prompt": "basic STCW four-pack complete",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "basic STCW four-pack complete"
       },
       {
         "current_parser": "miss",
@@ -2197,15 +1781,7 @@
         },
         "expected_primary_family": "stcw_basic",
         "note": "'redoed' (refresher synonym). Convention: implies validity reset, fires stcw_basic.",
-        "prompt": "STCW basic redoed in 2025",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "STCW basic redoed in 2025"
       },
       {
         "current_parser": "wrong_family",
@@ -2213,6 +1789,148 @@
         "expected_primary_family": "unsupported",
         "note": "Advanced certs explicitly + 'no basic' negation. Should NOT fire stcw_basic. LLM rescue critical here.",
         "prompt": "AFF and advanced FA only \u2014 no basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "with valid STCW basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "must hold all basic stcw certificates"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "valid stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "need chief officer with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "master with stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "looking for 2nd engineer with valid stcw basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "chief cook must hold all basic stcw certificates"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "deck cadet valid stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "need bosun with stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "pumpman with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "4th engineer valid stcw basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "junior engineer with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "need eTO stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "oiler with valid stcw basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "chief engineer must hold all basic stcw certificates"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "captain valid stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "2nd officer with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "fitter with stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "master valid stcw basic safety"
+      }
+    ],
+    "unsupported_or_diagnostic": [
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "2nd engineer with 7+ years sea service"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief officer on bulk carrier"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "master available immediately"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief engineer tanker endorsement"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "2nd engineer DPO required"
+      },
+      {
+        "expected_primary_family": "parsing_notes_only",
+        "prompt": "need captain DP2"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief officer VLCC-ish but not exactly"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "gas tanker endorsement for chief officer"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chemical tanker endorsement for master"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "need bosun join immediately"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "4th engineer available from January 15"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "pumpman joinable in 30 days"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "need 3rd officer with 36 months sea service"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief engineer with GMDSS"
+      },
+      {
+        "expected_primary_family": "parsing_notes_only",
+        "prompt": "random fuzzy thing not really a filter"
       }
     ],
     "us_visa": [
@@ -2230,15 +1948,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Class name without 'visa' keyword.",
-        "prompt": "candidate holding H-1B",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidate holding H-1B"
       },
       {
         "current_parser": "miss",
@@ -2254,15 +1964,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Spelled-out B1/B2 class without visa keyword; legacy does not map this to US visa.",
-        "prompt": "must have B one slash B two stamped",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "must have B one slash B two stamped"
       },
       {
         "current_parser": "partial",
@@ -2275,15 +1977,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "'American visa' uses adjective; _SUPPORTED_VISA_CONTEXT_CUES includes 'american'.",
-        "prompt": "American visa required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "American visa required"
       },
       {
         "current_parser": "miss",
@@ -2296,15 +1990,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Informal 'Aussie' not in cues (only 'australian'/'mcv'). LLM rescue should map to australia.",
-        "prompt": "should have an Aussie visa",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "should have an Aussie visa"
       },
       {
         "current_parser": "miss",
@@ -2317,15 +2003,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Maritime Crew Visa intent without the MCV/visa token; legacy does not map this to Australia visa.",
-        "prompt": "maritime crew permit for Australia",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "maritime crew permit for Australia"
       },
       {
         "current_parser": "partial",
@@ -2338,15 +2016,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Legacy may catch via window patterns; verify visa_group resolution.",
-        "prompt": "Schengen visa preferred",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Schengen visa preferred"
       },
       {
         "current_parser": "partial",
@@ -2362,17 +2032,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Legacy fires us_visa but normalizes C1-D as C1, dropping the intended C1/D class.",
-        "prompt": "needs valid C1-D",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "needs valid C1-D"
       },
       {
         "current_parser": "partial",
@@ -2385,17 +2045,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Multi-group prompt. Convention: take first stated group; alternative in semantic_query.",
-        "prompt": "either US or Schengen visa is fine",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "either US or Schengen visa is fine"
       },
       {
         "current_parser": "miss",
@@ -2411,15 +2061,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "L-1 class is not in legacy visa type definitions, even with the visa keyword.",
-        "prompt": "candidate has L-1 visa",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "candidate has L-1 visa"
       },
       {
         "current_parser": "miss",
@@ -2432,15 +2074,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "'Europe' implies Schengen but cues use 'European'.",
-        "prompt": "visa for travel to Europe ready",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "visa for travel to Europe ready"
       },
       {
         "current_parser": "partial",
@@ -2453,15 +2087,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Full phrase is in cues; should fire australia group.",
-        "prompt": "Maritime Crew Visa for Australia",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Maritime Crew Visa for Australia"
       },
       {
         "current_parser": "partial",
@@ -2478,17 +2104,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Numeric duration with class shorthand.",
-        "prompt": "B1B2 valid for 6 months",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "B1B2 valid for 6 months"
       },
       {
         "current_parser": "miss",
@@ -2502,17 +2118,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "EU + visa, year unit. Convention: 1 year -> 12 months.",
-        "prompt": "EU travel visa with 1 year validity",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "EU travel visa with 1 year validity"
       },
       {
         "current_parser": "miss",
@@ -2525,15 +2131,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Class shorthand only; no 'visa' word. F-1/O-1 are in cues.",
-        "prompt": "must carry F-1 or O-1",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "must carry F-1 or O-1"
       },
       {
         "current_parser": "miss",
@@ -2547,15 +2145,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Compact U.S. spelling and 10+ month notation are not parsed by legacy visa patterns.",
-        "prompt": "U.S. visa with 10+ months validity",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "U.S. visa with 10+ months validity"
       },
       {
         "current_parser": "miss",
@@ -2568,15 +2158,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "'Work permit' is non-canonical for visa; legacy expects 'visa'. LLM should interpret as USA visa requirement.",
-        "prompt": "USA work permit needed",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "USA work permit needed"
       },
       {
         "current_parser": "miss",
@@ -2589,15 +2171,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Schengen/Europe travel authorization intent without 'visa' or Schengen keyword; legacy does not map this to Schengen.",
-        "prompt": "European entry permit holder for crew",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "European entry permit holder for crew"
       },
       {
         "current_parser": "partial",
@@ -2613,15 +2187,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Compound mention of C1/D + US visa; legacy may fire on either, accepted_types should include C1/D.",
-        "prompt": "C1/D and US visa both required",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "C1/D and US visa both required"
       },
       {
         "current_parser": "partial",
@@ -2638,17 +2204,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Legacy fires C1/D as US visa but drops the 8-month remaining-validity requirement.",
-        "prompt": "C1D with 8 months left",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "final_combined_eval": "docs/eval-evidence/ai-search-tail-plus-solved-eval-2026-06-09.json",
-          "final_combined_score": "docs/eval-evidence/ai-search-tail-plus-solved-score-2026-06-09.json",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Retested in final combined eval; value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "C1D with 8 months left"
       },
       {
         "current_parser": "miss",
@@ -2665,15 +2221,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Class without hyphen + duration.",
-        "prompt": "USA H1B holder with 18 months validity",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "USA H1B holder with 18 months validity"
       },
       {
         "current_parser": "partial",
@@ -2686,15 +2234,7 @@
         },
         "expected_primary_family": "us_visa",
         "note": "'Schengen' in cues; 'long-stay' qualifier shouldn't change family.",
-        "prompt": "Schengen long-stay valid",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "Schengen long-stay valid"
       },
       {
         "current_parser": "partial",
@@ -2707,18 +2247,207 @@
         },
         "expected_primary_family": "us_visa",
         "note": "Critical disambiguation test: 'MV applicants' = vessel prefix, but 'Maritime Crew Visa' explicit. Australia group should fire.",
-        "prompt": "MV applicants need Maritime Crew Visa",
-        "scoring_notes": {
-          "eval_date": "2026-06-09",
-          "llm_confidence": "high",
-          "llm_family_rescued": true,
-          "review_note": "Value matches corpus convention.",
-          "reviewer": "codex-manual",
-          "value_review": "accepted"
-        }
+        "prompt": "MV applicants need Maritime Crew Visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "having valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "having a valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need chief officer with valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "master with current US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "2nd engineer has a valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "looking for captain with american visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief engineer with US work authorization"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "ETO with C1/D visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need fitter with valid C1/D"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "looking for 3rd officer with C1 visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need oiler with valid C1 visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "D visa required for this 4th engineer search"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "pumpman with valid D visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "master with B1/B2 visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief cook with valid B1/B2"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "find chief officer having US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "2nd officer with current American visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "3rd engineer with usa visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need captain with valid c1d"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "looking for eTO who has valid us visa"
+      }
+    ],
+    "visa_validity_window": [
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa is valid at least for 10 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "valid US visa for 10 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "minimum 10 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa should be valid for 10 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa is valid at least for 12 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "valid US visa for 18 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "minimum 18 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa should be valid for 24 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief officer with valid US visa for 10 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "2nd engineer whose US visa is valid at least for 12 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "master minimum 9 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "captain US visa should be valid for 15 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "ETO with valid US visa for 18 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need 3rd officer with US visa valid at least for 6 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "4th engineer minimum 11 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief cook with valid US visa for 14 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "pumpman US visa should be valid for 8 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "bosun US visa is valid at least for 20 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "junior engineer with minimum 13 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "oiler with valid US visa for 16 months"
       }
     ]
   },
-  "notes": "v0.2 \u2014 reconstructed AI Search tail set with passport_validity cycle-3 starter rows, five promoted-family revalidation rows, and cross-family controls. Rebuilt after v0.1 loss documented in AI_Search_Results/README.md.",
-  "schema_version": "tail_set.v0.2"
+  "family_counts": {
+    "age_range": 42,
+    "certificate_requirement": 20,
+    "coc_document_gate": 20,
+    "controls": 12,
+    "passport_validity": 40,
+    "rank_match": 42,
+    "recent_contract_vessel_experience": 20,
+    "stcw_basic": 42,
+    "unsupported_or_diagnostic": 15,
+    "us_visa": 42,
+    "visa_validity_window": 20
+  },
+  "prompt_count": 315,
+  "purpose": [
+    "bootstrap launch-gate prompt coverage review before sufficient production prompt volume exists",
+    "seed parser-evaluation review for active deterministic Phase 1 families",
+    "must be replaced or supplemented by real stored prompt logs as usage grows",
+    "bootstrap parser-coverage review for the validity-window and recent-contract vessel experience families",
+    "support launch-gate evidence before enough stored production prompts exist",
+    "combined solved-set regression input for cycle-3 v0.2 revalidation"
+  ],
+  "source_corpora": [
+    {
+      "date": null,
+      "path": "AI_Search_Results/seajobs_tail_set_v0.2.json",
+      "prompt_count": 140,
+      "status": null
+    },
+    {
+      "date": "2026-06-09",
+      "path": "docs/eval-evidence/ai-search-bootstrap-solved-corpus-2026-06-09.json",
+      "prompt_count": 175,
+      "status": "combined_non_production_bootstrap_solved_set"
+    }
+  ],
+  "status": "combined_shadow_audit_corpus"
 }
