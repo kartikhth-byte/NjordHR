@@ -1,11 +1,24 @@
 import unittest
 from pathlib import Path
+from collections import Counter
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class SupabaseMigrationTests(unittest.TestCase):
+    def test_supabase_migration_versions_are_unique(self):
+        migration_dir = REPO_ROOT / "supabase" / "migrations"
+        versions = [
+            path.name.split("_", 1)[0]
+            for path in migration_dir.glob("*.sql")
+        ]
+        duplicates = sorted(
+            version for version, count in Counter(versions).items() if count > 1
+        )
+
+        self.assertEqual([], duplicates)
+
     def test_candidate_facts_promotion_rpc_serializes_current_row_flip(self):
         sql = (
             REPO_ROOT
