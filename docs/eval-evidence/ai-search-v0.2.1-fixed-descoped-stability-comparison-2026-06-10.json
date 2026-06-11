@@ -1,0 +1,222 @@
+{
+  "status": "stability_rerun_complete",
+  "date": "2026-06-10",
+  "purpose": "Stability comparison after de-scoping the AB-or-OS rank OR-set row from v0.2.1 promotion evidence.",
+  "run_1": {
+    "eval": "docs/eval-evidence/ai-search-v0.2.1-fixed-eval-2026-06-10.json",
+    "score": "docs/eval-evidence/ai-search-v0.2.1-fixed-descoped-score-2026-06-10.json",
+    "integrity": {
+      "prompt_count": 345,
+      "row_count": 345,
+      "all_llm_ok": false,
+      "states": [
+        {
+          "shadow_mode": "enabled",
+          "llm_plan_source": null,
+          "fallback_used": null,
+          "failure_reason": "ok",
+          "count": 345
+        }
+      ]
+    }
+  },
+  "run_2": {
+    "eval": "docs/eval-evidence/ai-search-v0.2.1-fixed-eval-2026-06-10-rerun.json",
+    "score": "docs/eval-evidence/ai-search-v0.2.1-fixed-descoped-score-2026-06-10-rerun.json",
+    "integrity": {
+      "prompt_count": 345,
+      "row_count": 345,
+      "all_llm_ok": false,
+      "states": [
+        {
+          "shadow_mode": "enabled",
+          "llm_plan_source": null,
+          "fallback_used": null,
+          "failure_reason": "ok",
+          "count": 345
+        }
+      ]
+    }
+  },
+  "normalized_prompt_match": {
+    "common": 345,
+    "missing_in_run_1": [],
+    "missing_in_run_2": []
+  },
+  "comparison_outcome_deltas": [],
+  "llm_payload_deltas": [],
+  "run_1_score_projection": {
+    "rescue_by_family": {
+      "age_range": {
+        "rescued": 24,
+        "total": 24,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "certificate_requirement": {
+        "rescued": 15,
+        "total": 15,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "passport_validity": {
+        "rescued": 21,
+        "total": 21,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 20
+      },
+      "rank_match": {
+        "rescued": 23,
+        "total": 26,
+        "rescue_rate": 0.885,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "recent_contract_vessel_experience": {
+        "rescued": 4,
+        "total": 4,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 19
+      },
+      "stcw_basic": {
+        "rescued": 17,
+        "total": 17,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "stcw_endorsement": {
+        "rescued": 6,
+        "total": 6,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "unsupported": {
+        "rescued": 0,
+        "total": 5,
+        "rescue_rate": 0.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "us_visa": {
+        "rescued": 26,
+        "total": 26,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 40
+      }
+    },
+    "controls": {
+      "total": 25,
+      "violations": 0,
+      "cases": []
+    },
+    "solved_set": {
+      "total": 79,
+      "regressions": 0
+    },
+    "promote_candidates": [
+      "age_range",
+      "certificate_requirement",
+      "passport_validity",
+      "rank_match",
+      "recent_contract_vessel_experience",
+      "stcw_basic",
+      "stcw_endorsement",
+      "us_visa"
+    ]
+  },
+  "run_2_score_projection": {
+    "rescue_by_family": {
+      "age_range": {
+        "rescued": 24,
+        "total": 24,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "certificate_requirement": {
+        "rescued": 15,
+        "total": 15,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "passport_validity": {
+        "rescued": 21,
+        "total": 21,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 20
+      },
+      "rank_match": {
+        "rescued": 23,
+        "total": 26,
+        "rescue_rate": 0.885,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "recent_contract_vessel_experience": {
+        "rescued": 4,
+        "total": 4,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 19
+      },
+      "stcw_basic": {
+        "rescued": 17,
+        "total": 17,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "stcw_endorsement": {
+        "rescued": 6,
+        "total": 6,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "unsupported": {
+        "rescued": 0,
+        "total": 5,
+        "rescue_rate": 0.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 0
+      },
+      "us_visa": {
+        "rescued": 26,
+        "total": 26,
+        "rescue_rate": 1.0,
+        "solved_set_regressions": 0,
+        "solved_set_total": 40
+      }
+    },
+    "controls": {
+      "total": 25,
+      "violations": 0,
+      "cases": []
+    },
+    "solved_set": {
+      "total": 79,
+      "regressions": 0
+    },
+    "promote_candidates": [
+      "age_range",
+      "certificate_requirement",
+      "passport_validity",
+      "rank_match",
+      "recent_contract_vessel_experience",
+      "stcw_basic",
+      "stcw_endorsement",
+      "us_visa"
+    ]
+  },
+  "score_projection_match": true,
+  "verdict": "stable_match"
+}

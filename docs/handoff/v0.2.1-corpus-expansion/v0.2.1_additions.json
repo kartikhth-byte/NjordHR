@@ -1,0 +1,429 @@
+{
+  "_purpose": "v0.2.1 corpus expansion: bug regressions + multi-family compounds + controls expansion.",
+  "_target": "AI_Search_Results/seajobs_tail_set_v0.2.json",
+  "_instructions": "Splice the 'additions' dict into the existing 'families' dict. For buckets that already exist (us_visa, controls), append to the existing arrays. For new buckets (recent_contract_vessel_experience, multi), the splicer creates them. The splicer MUST skip any underscore-prefixed keys inside 'additions' as defensive metadata-safety. See HANDOFF_v0.2.1_corpus_expansion.md.",
+  "_schema_note": "For rows with expected_primary_family='multi', the top-level keys of expected_constraint MUST be family IDs (age_range, rank_match, certificate_requirement, etc.), NOT hard_constraints schema keys (age_years, rank, certifications). The scorer's _expected_families() reads these keys literally and looks them up against the catalog via GOLD_TO_PLAN_FAMILY. Using schema keys causes phantom-family attribution. The committed v0.2 row 'valid US visa and passport' follows this convention.",
+  "_visa_accepted_types_note": "USA accepted_types canonical list per _visa_type_definitions() (group='usa') is exactly: ['C1/D (USA)', 'B1/B2 (USA)', 'C1 (USA)', 'D (USA)', 'US Visa (USA)']. Note the '(USA)' suffix on every entry. Verified via the pre-check snippet in HANDOFF \u00a7pre-implementation-checklist step 3. Class shorthands like 'H-1B', 'L-1', 'F-1', 'O-1' are cue regex aliases (used by _SUPPORTED_VISA_CONTEXT_CUES for anchoring) but are NOT in the canonical accepted_types list.",
+  "_row_counts": {
+    "us_visa_regression": 4,
+    "recent_contract_vessel_experience_regression": 3,
+    "multi": 10,
+    "controls_expansion": 13,
+    "total_new_rows": 30
+  },
+  "additions": {
+    "us_visa": [
+      {
+        "prompt": "American visa needed",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "C1/D (USA)",
+              "B1/B2 (USA)",
+              "C1 (USA)",
+              "D (USA)",
+              "US Visa (USA)"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "REGRESSION row for PR #23 bug fix in shadow_llm_provider.py::_visa_accepted_types_for_group. Pre-fix, generic 'US Visa (USA)' with no specific class collapsed accepted_types to ['US Visa (USA)'] placeholder. Post-fix, accepted_types must be the full canonical USA class list. RE-VERIFY accepted_types against live _visa_type_definitions() if the catalog has been updated since 2026-06-10."
+      },
+      {
+        "prompt": "needs US visa",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "C1/D (USA)",
+              "B1/B2 (USA)",
+              "C1 (USA)",
+              "D (USA)",
+              "US Visa (USA)"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "REGRESSION row for PR #23 accepted-types fix. Minimal-form generic USA visa prompt \u2014 exactly the path where the helper backfills accepted_types from the catalog."
+      },
+      {
+        "prompt": "valid visa for USA work assignment",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "C1/D (USA)",
+              "B1/B2 (USA)",
+              "C1 (USA)",
+              "D (USA)",
+              "US Visa (USA)"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "REGRESSION row for PR #23 accepted-types fix. Narrative phrasing without 'visa' adjacent to 'USA'; cue regex still anchors via 'USA' + 'visa'. accepted_types fallback path."
+      },
+      {
+        "prompt": "must have visa for entering the United States",
+        "expected_primary_family": "us_visa",
+        "expected_constraint": {
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "C1/D (USA)",
+              "B1/B2 (USA)",
+              "C1 (USA)",
+              "D (USA)",
+              "US Visa (USA)"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "REGRESSION row for PR #23 accepted-types fix. Formal 'entering the United States' phrasing; cue regex includes 'states' alias. Tests accepted_types backfill on the long-form country reference."
+      }
+    ],
+    "recent_contract_vessel_experience": [
+      {
+        "prompt": "12 months experience on container ship in last 3 contracts",
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "ship_family": "container",
+            "recent_contract_count": 3,
+            "minimum_months": 12
+          }
+        },
+        "current_parser": "partial",
+        "note": "REGRESSION row for PR #23 bug fix in legacy_parser_adapter.py. Pre-fix, legacy emitted non-canonical container vessel as ship_family, which failed query-plan schema validation. Post-fix, ship_family must be canonical container. Uses an explicit recent-contract window so the live legacy extractor emits recent_contract_vessel_experience."
+      },
+      {
+        "prompt": "container vessel experience in recent 3 contracts",
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "ship_family": "container",
+            "recent_contract_count": 3,
+            "minimum_months": 0
+          }
+        },
+        "current_parser": "partial",
+        "note": "REGRESSION row for PR #23 container canonicalization. The exact 'container vessel' phrasing is the literal substring the buggy adapter emitted as ship_family. Critical post-mortem coverage."
+      },
+      {
+        "prompt": "must have served on container ships in last 3 contracts",
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "ship_family": "container",
+            "recent_contract_count": 3,
+            "minimum_months": 0
+          }
+        },
+        "current_parser": "partial",
+        "note": "REGRESSION row for PR #23 container canonicalization. Past-tense 'served on' phrasing. ship_family canonicalization must hold regardless of tense."
+      }
+    ],
+    "multi": [
+      {
+        "prompt": "Chief Engineer with US visa and passport",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "rank_match": {
+            "rank": [
+              "chief_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: rank_match + us_visa + passport_validity. Legacy catches rank + US visa but misses the passport requirement in this compact compound phrasing."
+      },
+      {
+        "prompt": "Chief Engineer with STCW basic",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "chief_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: rank_match + stcw_basic. Both parsers fire independently; tests that the LLM emits BOTH constraints together rather than one-at-a-time."
+      },
+      {
+        "prompt": "officers in their 40s with valid passport",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "age_range": {
+            "min_age": 40,
+            "max_age": 49
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: age_range + passport_validity. Decade-span ('in their 40s') is a documented age miss in v0.2; pairing with passport_validity tests whether the LLM can rescue both families simultaneously. Convention: in their 40s -> [40, 49]."
+      },
+      {
+        "prompt": "AB or OS aged 25-40",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "able_seaman",
+              "ordinary_seaman"
+            ],
+            "operator": "contains_any"
+          },
+          "age_range": {
+            "min_age": 25,
+            "max_age": 40
+          }
+        },
+        "current_parser": "miss",
+        "note": "MULTI: rank_match (two ratings) + age_range (numeric range). Legacy fires both; tests that the LLM preserves both rather than dropping one in compound parsing."
+      },
+      {
+        "prompt": "Master with H-1B visa and 6 months passport validity",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          },
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          },
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 6
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: 3-family compound (rank_match + us_visa + passport_validity). H-1B is a cue alias triggering visa_group=usa but H-1B itself is NOT in the canonical accepted_types list \u2014 the helper backfills the standard maritime USA list. accepted_types deliberately omitted from expected_constraint; the eval value-review step confirms what the LLM emits matches the catalog."
+      },
+      {
+        "prompt": "container vessel Chief Officer with valid US visa",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "chief_officer"
+            ],
+            "operator": "contains_any"
+          },
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa"
+          },
+          "recent_contract_vessel_experience": {
+            "ship_family": "container",
+            "recent_contract_count": 1
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: rank_match + us_visa + ship-family (recent_contract_vessel_experience). Doubles as a container canonicalization regression probe (PR #23 fix) in a multi-family context."
+      },
+      {
+        "prompt": "passport valid for 12 months and US visa C1/D",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true,
+            "minimum_months_remaining": 12
+          },
+          "us_visa": {
+            "required": true,
+            "must_be_valid": true,
+            "visa_group": "usa",
+            "accepted_types": [
+              "C1/D (USA)"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: passport_validity (with months) + us_visa (with specific class). Tests value preservation across compound prompts where each family has structured detail. C1/D is in the canonical accepted_types catalog \u2014 narrow to that single canonical value rather than the full USA list."
+      },
+      {
+        "prompt": "engineer over 30 with AFF certificate",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "age_range": {
+            "min_age": 31
+          },
+          "certificate_requirement": {
+            "certificates_required": [
+              "aff"
+            ]
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: rank_match + age_range + certificate_requirement. Generic 'engineer' rank, strict age bound ('over' -> exclusive +1), advanced cert. NOTE: 'engineer' as a generic alias may or may not be in RANK_ALIAS_TABLE \u2014 verify; if missing, this row probes rank_match LLM rescue too."
+      },
+      {
+        "prompt": "younger than 50 with STCW basic and valid passport",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "age_range": {
+            "max_age": 49
+          },
+          "stcw_basic": {
+            "required": true
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "current_parser": "partial",
+        "note": "MULTI: age_range (strict 'younger than' -> max_age N-1) + stcw_basic + passport_validity. Three-family compound with one strict-bound age constraint."
+      },
+      {
+        "prompt": "tanker experience with STCW endorsement",
+        "expected_primary_family": "multi",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "ship_family": "tanker",
+            "recent_contract_count": 1
+          },
+          "stcw_endorsement": {
+            "endorsements_required": [
+              "tanker_oil"
+            ]
+          }
+        },
+        "current_parser": "miss",
+        "note": "MULTI: ship-family (tanker) + stcw_endorsement. Doubles as ship_family canonicalization coverage for the 'tanker' canonical value AND tests stcw_endorsement family rescue (the 7th promote-candidate family added during v0.2). Convention: 'tanker' alone maps to ship_family='tanker'; 'STCW endorsement' near 'tanker' implies tanker_oil endorsement per catalog."
+      }
+    ],
+    "controls": [
+      {
+        "prompt": "any certificate is acceptable",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for certificate_requirement (family currently has 0 controls). Vague 'any certificate' \u2014 shadow LLM must not hallucinate a specific certificates_required list."
+      },
+      {
+        "prompt": "STCW basic alone is enough",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL: cross-family adversarial. Should fire stcw_basic (not certificate_requirement). The LLM must NOT additionally fire certificate_requirement on this prompt."
+      },
+      {
+        "prompt": "any rank acceptable for this slot",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for rank_match (family currently has 0 controls). Anti-constraint on rank."
+      },
+      {
+        "prompt": "open to officers of all grades",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for rank_match. Qualitative 'all grades' is figurative."
+      },
+      {
+        "prompt": "any endorsement preferred",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for stcw_endorsement (the bonus 7th family with 0 controls). Vague \u2014 must not pick from canonical_endorsement_values()."
+      },
+      {
+        "prompt": "must have tanker familiarization alone",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL: cross-family stcw_endorsement vs certificate_requirement. Tests whether the LLM mistakes a single specific course for stcw_endorsement."
+      },
+      {
+        "prompt": "had US visa application rejected last year",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for us_visa: sharper polarity inversion. Rejected != has valid. Current _VISA_POLARITY_INVERSION covers visa-free, no-visa-required, doesn't-need-visa, without-visa, visa-exempt \u2014 but NOT 'rejected'."
+      },
+      {
+        "prompt": "needs Canadian visa for crew change",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for us_visa: unsupported country. Canada is outside _SUPPORTED_VISA_CONTEXT_CUES \u2014 must not hallucinate as usa."
+      },
+      {
+        "prompt": "Indian tourist visa from last year",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for us_visa: double veto. India is outside supported countries AND tourist class is not maritime."
+      },
+      {
+        "prompt": "passport application pending",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for passport_validity: process-vs-validity distinction. Process state is not a validity assertion."
+      },
+      {
+        "prompt": "passport photocopy attached to CV",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for passport_validity: administrative reference vs validity intent. Tests whether the LLM with anchor veto distinguishes 'passport' as document reference from validity requirement."
+      },
+      {
+        "prompt": "senior captain with stable leadership",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for age_range: figurative age + rank descriptor. _AGE_FIGURATIVE_PATTERNS covers 'senior captain' so age_range veto should hold. Note: 'captain' may fire rank_match (master) \u2014 if it does, this row is effectively informational on rank_match; the age_range veto is what's being tested."
+      },
+      {
+        "prompt": "experienced mature professional",
+        "expected_primary_family": "unsupported",
+        "expected_constraint": {},
+        "current_parser": "unsupported_ok",
+        "note": "CONTROL for age_range: purely figurative 'mature' with no numeric age \u2014 must not fire age_range."
+      }
+    ]
+  }
+}

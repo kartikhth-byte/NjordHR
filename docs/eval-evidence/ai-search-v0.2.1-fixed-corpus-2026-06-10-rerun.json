@@ -1,4 +1,6 @@
 {
+  "date": "combined",
+  "duplicate_prompt_warnings": [],
   "families": {
     "age_range": [
       {
@@ -337,7 +339,7 @@
           }
         },
         "expected_primary_family": "age_range",
-        "note": "Birth-year phrasing — implies max age = current_year - birth_year. As of 2026: born after 1985 -> max_age 41. Convention call: corpus uses 2026 reference.",
+        "note": "Birth-year phrasing \u2014 implies max age = current_year - birth_year. As of 2026: born after 1985 -> max_age 41. Convention call: corpus uses 2026 reference.",
         "prompt": "candidates born after 1985",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -395,7 +397,7 @@
           }
         },
         "expected_primary_family": "age_range",
-        "note": "Compound prompt — sea_service + age. Legacy 'over N' catches age side; sea_service is separate unapplied family.",
+        "note": "Compound prompt \u2014 sea_service + age. Legacy 'over N' catches age side; sea_service is separate unapplied family.",
         "prompt": "minimum experience 5 years and age over 30",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -417,7 +419,7 @@
           }
         },
         "expected_primary_family": "age_range",
-        "note": "'aged N to N years' — range_patterns should catch via 'aged' anchor.",
+        "note": "'aged N to N years' \u2014 range_patterns should catch via 'aged' anchor.",
         "prompt": "officers aged 25 to 45 years preferred",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -448,6 +450,86 @@
           "reviewer": "codex-manual",
           "value_review": "accepted"
         }
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "2nd engineer between 30 and 45 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "chief officer between the ages of 35 and 50"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "master within the ages of 40 and 55"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "looking for chief engineer within the age of 38 and 52"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "need 3rd officer with in the age of 25 and 35"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "4th engineer age range of 28 and 38"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "electrical officer age range of 30-42"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "fitter age of 26 and 40 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "deck cadet ages 21 and 27"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "looking for officers aged 30-40"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "master 30 to 45 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "chief officer at least 35 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "2nd engineer older than 32"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "3rd engineer over 29"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "chief cook above 30"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "oiler minimum age of 24"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "bosun up to 48 years old"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "need eTO younger than 40"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "junior engineer under 28"
+      },
+      {
+        "expected_primary_family": "age_range",
+        "prompt": "pumpman maximum age of 50"
       }
     ],
     "certificate_requirement": [
@@ -549,7 +631,7 @@
           }
         },
         "expected_primary_family": "stcw_endorsement",
-        "note": "IGF Code — LNG/gas-fueled vessel endorsement. Convention: generic IGF maps to basic IGF CoP unless advanced is explicit.",
+        "note": "IGF Code \u2014 LNG/gas-fueled vessel endorsement. Convention: generic IGF maps to basic IGF CoP unless advanced is explicit.",
         "prompt": "IGF code certificate required",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -698,7 +780,7 @@
           }
         },
         "expected_primary_family": "certificate_requirement",
-        "note": "Crowd Crisis Management — passenger ship.",
+        "note": "Crowd Crisis Management \u2014 passenger ship.",
         "prompt": "candidate has CCM",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -867,7 +949,7 @@
           }
         },
         "expected_primary_family": "certificate_requirement",
-        "note": "LMS — STCW Reg II/2 management-level requirement.",
+        "note": "LMS \u2014 STCW Reg II/2 management-level requirement.",
         "prompt": "Leadership and Managerial Skills (LMS) completed",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -879,12 +961,94 @@
         }
       }
     ],
+    "coc_document_gate": [
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "valid COC"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "COC required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "need master with valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "chief officer with coc required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "2nd engineer with valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "certificate of competency required for chief engineer"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "must hold valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "master must hold valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "need valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "captain with valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "chief engineer valid coc required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "looking for 2nd officer with certificate of competency required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "chief officer must hold valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "4th engineer valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "junior engineer coc required"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "need electrical officer with valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "certificate of competency required for eto"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "must hold valid certificate of competency"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "looking for chief officer valid coc"
+      },
+      {
+        "expected_primary_family": "coc_document_gate",
+        "prompt": "master with certificate of competency required"
+      }
+    ],
     "controls": [
       {
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Figurative 'without passport restrictions' — does not assert passport requirement.",
+        "note": "Figurative 'without passport restrictions' \u2014 does not assert passport requirement.",
         "prompt": "without passport restrictions"
       },
       {
@@ -898,14 +1062,14 @@
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Wrong sense — 'passport' refers to photo format, not the document. Legacy currently fires passport_validity; shadow/active normalizer must require document-validity context.",
+        "note": "Wrong sense \u2014 'passport' refers to photo format, not the document. Legacy currently fires passport_validity; shadow/active normalizer must require document-validity context.",
         "prompt": "passport-sized photo required with application"
       },
       {
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Figurative age expression — must NOT fire age_range. _AGE_FIGURATIVE_PATTERNS covers 'middle-aged'.",
+        "note": "Figurative age expression \u2014 must NOT fire age_range. _AGE_FIGURATIVE_PATTERNS covers 'middle-aged'.",
         "prompt": "middle-aged officer with stable record"
       },
       {
@@ -919,7 +1083,7 @@
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Generic 'safety training' without STCW/BST/basic cues — must not fire stcw_basic. _STCW_BASIC_CONTEXT_CUES requires explicit anchor.",
+        "note": "Generic 'safety training' without STCW/BST/basic cues \u2014 must not fire stcw_basic. _STCW_BASIC_CONTEXT_CUES requires explicit anchor.",
         "prompt": "any safety training will do"
       },
       {
@@ -940,144 +1104,389 @@
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Two figurative age expressions ('senior captain', 'youthful') — must not fire age_range.",
+        "note": "Two figurative age expressions ('senior captain', 'youthful') \u2014 must not fire age_range.",
         "prompt": "experienced senior captain who is youthful in approach"
       },
       {
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Generic 'certificate' without specific named certificate — must not fire certificate_requirement with empty or invented list.",
+        "note": "Generic 'certificate' without specific named certificate \u2014 must not fire certificate_requirement with empty or invented list.",
         "prompt": "any certificate works"
       },
       {
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Anti-constraint on rank — must not fire rank_match. Convention: ignore figurative rank phrasings.",
+        "note": "Anti-constraint on rank \u2014 must not fire rank_match. Convention: ignore figurative rank phrasings.",
         "prompt": "candidate must be flexible about rank"
       },
       {
         "current_parser": "unsupported_ok",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "Bare 'documents' without 'passport' keyword — must not fall through legacy passport fallback. Tests the anchor strictness.",
+        "note": "Bare 'documents' without 'passport' keyword \u2014 must not fall through legacy passport fallback. Tests the anchor strictness.",
         "prompt": "documents required at joining"
       },
       {
-        "prompt": "any certificate is acceptable",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for certificate_requirement (family currently has 0 controls). Vague 'any certificate' — shadow LLM must not hallucinate a specific certificates_required list."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for certificate_requirement (family currently has 0 controls). Vague 'any certificate' \u2014 shadow LLM must not hallucinate a specific certificates_required list.",
+        "prompt": "any certificate is acceptable"
       },
       {
-        "prompt": "STCW basic alone is enough",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
         "note": "CONTROL: cross-family adversarial. Should fire stcw_basic (not certificate_requirement). The LLM must NOT additionally fire certificate_requirement on this prompt.",
+        "prompt": "STCW basic alone is enough",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": false,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": false,
+          "review_note": "Control violation: LLM hallucinated stcw_basic for an sufficiency/allowance phrasing; requires prompt or control-veto follow-up.",
           "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns kept this sufficiency/allowance phrasing unsupported with no control violation."
+          "value_review": "follow_up"
         }
       },
       {
-        "prompt": "any rank acceptable for this slot",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for rank_match (family currently has 0 controls). Anti-constraint on rank."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for rank_match (family currently has 0 controls). Anti-constraint on rank.",
+        "prompt": "any rank acceptable for this slot"
       },
       {
-        "prompt": "open to officers of all grades",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for rank_match. Qualitative 'all grades' is figurative."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for rank_match. Qualitative 'all grades' is figurative.",
+        "prompt": "open to officers of all grades"
       },
       {
-        "prompt": "any endorsement preferred",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for stcw_endorsement (the bonus 7th family with 0 controls). Vague — must not pick from canonical_endorsement_values()."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for stcw_endorsement (the bonus 7th family with 0 controls). Vague \u2014 must not pick from canonical_endorsement_values().",
+        "prompt": "any endorsement preferred"
       },
       {
-        "prompt": "must have tanker familiarization alone",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
         "note": "CONTROL: cross-family stcw_endorsement vs certificate_requirement. Tests whether the LLM mistakes a single specific course for stcw_endorsement.",
+        "prompt": "must have tanker familiarization alone",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": false,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": false,
+          "review_note": "Control violation: LLM hallucinated stcw_endorsement for an \u201calone is enough\u201d style phrasing; requires prompt or control-veto follow-up.",
           "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns kept this sufficiency/allowance phrasing unsupported with no control violation."
+          "value_review": "follow_up"
         }
       },
       {
+        "current_parser": "unsupported_ok",
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for us_visa: sharper polarity inversion. Rejected != has valid. Current _VISA_POLARITY_INVERSION covers visa-free, no-visa-required, doesn't-need-visa, without-visa, visa-exempt \u2014 but NOT 'rejected'.",
         "prompt": "had US visa application rejected last year",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
-        "current_parser": "unsupported_ok",
-        "note": "CONTROL for us_visa: sharper polarity inversion. Rejected != has valid. Current _VISA_POLARITY_INVERSION covers visa-free, no-visa-required, doesn't-need-visa, without-visa, visa-exempt — but NOT 'rejected'.",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": false,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": false,
+          "review_note": "Control violation: LLM hallucinated us_visa from a rejected application; requires polarity/status veto follow-up.",
           "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns kept rejected visa applications unsupported with no control violation."
+          "value_review": "follow_up"
         }
       },
       {
-        "prompt": "needs Canadian visa for crew change",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for us_visa: unsupported country. Canada is outside _SUPPORTED_VISA_CONTEXT_CUES — must not hallucinate as usa."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for us_visa: unsupported country. Canada is outside _SUPPORTED_VISA_CONTEXT_CUES \u2014 must not hallucinate as usa.",
+        "prompt": "needs Canadian visa for crew change"
       },
       {
-        "prompt": "Indian tourist visa from last year",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for us_visa: double veto. India is outside supported countries AND tourist class is not maritime."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for us_visa: double veto. India is outside supported countries AND tourist class is not maritime.",
+        "prompt": "Indian tourist visa from last year"
       },
       {
-        "prompt": "passport application pending",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for passport_validity: process-vs-validity distinction. Process state is not a validity assertion."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for passport_validity: process-vs-validity distinction. Process state is not a validity assertion.",
+        "prompt": "passport application pending"
       },
       {
-        "prompt": "passport photocopy attached to CV",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for passport_validity: administrative reference vs validity intent. Tests whether the LLM with anchor veto distinguishes 'passport' as document reference from validity requirement."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for passport_validity: administrative reference vs validity intent. Tests whether the LLM with anchor veto distinguishes 'passport' as document reference from validity requirement.",
+        "prompt": "passport photocopy attached to CV"
       },
       {
-        "prompt": "senior captain with stable leadership",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for age_range: figurative age + rank descriptor. _AGE_FIGURATIVE_PATTERNS covers 'senior captain' so age_range veto should hold. Note: 'captain' may fire rank_match (master) — if it does, this row is effectively informational on rank_match; the age_range veto is what's being tested."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for age_range: figurative age + rank descriptor. _AGE_FIGURATIVE_PATTERNS covers 'senior captain' so age_range veto should hold. Note: 'captain' may fire rank_match (master) \u2014 if it does, this row is effectively informational on rank_match; the age_range veto is what's being tested.",
+        "prompt": "senior captain with stable leadership"
       },
       {
-        "prompt": "experienced mature professional",
-        "expected_primary_family": "unsupported",
-        "expected_constraint": {},
         "current_parser": "unsupported_ok",
-        "note": "CONTROL for age_range: purely figurative 'mature' with no numeric age — must not fire age_range."
+        "expected_constraint": {},
+        "expected_primary_family": "unsupported",
+        "note": "CONTROL for age_range: purely figurative 'mature' with no numeric age \u2014 must not fire age_range.",
+        "prompt": "experienced mature professional"
+      }
+    ],
+    "multi": [
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "passport_validity": {
+            "must_be_valid": true
+          },
+          "rank_match": {
+            "operator": "contains_any",
+            "rank": [
+              "chief_engineer"
+            ]
+          },
+          "us_visa": {
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: rank_match + us_visa + passport_validity. Legacy catches rank + US visa but misses the passport requirement in this compact compound phrasing.",
+        "prompt": "Chief Engineer with US visa and passport"
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "chief_engineer"
+            ],
+            "operator": "contains_any"
+          },
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: rank_match + stcw_basic. Both parsers fire independently; tests that the LLM emits BOTH constraints together rather than one-at-a-time.",
+        "prompt": "Chief Engineer with STCW basic",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted chief_engineer rank and STCW basic requirement.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "age_range": {
+            "max_age": 49,
+            "min_age": 40
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: age_range + passport_validity. Decade-span ('in their 40s') is a documented age miss in v0.2; pairing with passport_validity tests whether the LLM can rescue both families simultaneously. Convention: in their 40s -> [40, 49].",
+        "prompt": "officers in their 40s with valid passport",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted age 40-49 and valid passport requirement.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "age_range": {
+            "max_age": 40,
+            "min_age": 25
+          },
+          "rank_match": {
+            "applied_rank_normalized": [
+              "able_seaman",
+              "ordinary_seaman"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: rank_match (two ratings) + age_range (numeric range). Legacy fires both; tests that the LLM preserves both rather than dropping one in compound parsing.",
+        "prompt": "AB or OS aged 25-40",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "Family rescue fired, but value review rejects the row because LLM emitted only OS and missed AB.",
+          "reviewer": "manual",
+          "value_review": "rejected"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "passport_validity": {
+            "minimum_months_remaining": 6,
+            "must_be_valid": true
+          },
+          "rank_match": {
+            "applied_rank_normalized": [
+              "master"
+            ],
+            "operator": "contains_any"
+          },
+          "us_visa": {
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: 3-family compound (rank_match + us_visa + passport_validity). H-1B is a cue alias triggering visa_group=usa but H-1B itself is NOT in the canonical accepted_types list \u2014 the helper backfills the standard maritime USA list. accepted_types deliberately omitted from expected_constraint; the eval value-review step confirms what the LLM emits matches the catalog.",
+        "prompt": "Master with H-1B visa and 6 months passport validity",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted master rank, H1B/USA visa, and 6-month passport validity.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "rank_match": {
+            "applied_rank_normalized": [
+              "chief_officer"
+            ],
+            "operator": "contains_any"
+          },
+          "recent_contract_vessel_experience": {
+            "recent_contract_count": 1,
+            "ship_family": "container"
+          },
+          "us_visa": {
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: rank_match + us_visa + ship-family (recent_contract_vessel_experience). Doubles as a container canonicalization regression probe (PR #23 fix) in a multi-family context.",
+        "prompt": "container vessel Chief Officer with valid US visa"
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "passport_validity": {
+            "minimum_months_remaining": 12,
+            "must_be_valid": true
+          },
+          "us_visa": {
+            "accepted_types": [
+              "C1/D (USA)"
+            ],
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: passport_validity (with months) + us_visa (with specific class). Tests value preservation across compound prompts where each family has structured detail. C1/D is in the canonical accepted_types catalog \u2014 narrow to that single canonical value rather than the full USA list.",
+        "prompt": "passport valid for 12 months and US visa C1/D",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted 12-month passport validity and C1/D USA visa.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "age_range": {
+            "min_age": 31
+          },
+          "certificate_requirement": {
+            "certificates_required": [
+              "aff"
+            ]
+          },
+          "rank_match": {
+            "applied_rank_normalized": [
+              "engineer"
+            ],
+            "operator": "contains_any"
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: rank_match + age_range + certificate_requirement. Generic 'engineer' rank, strict age bound ('over' -> exclusive +1), advanced cert. NOTE: 'engineer' as a generic alias may or may not be in RANK_ALIAS_TABLE \u2014 verify; if missing, this row probes rank_match LLM rescue too.",
+        "prompt": "engineer over 30 with AFF certificate"
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "age_range": {
+            "max_age": 49
+          },
+          "passport_validity": {
+            "must_be_valid": true
+          },
+          "stcw_basic": {
+            "required": true
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: age_range (strict 'younger than' -> max_age N-1) + stcw_basic + passport_validity. Three-family compound with one strict-bound age constraint.",
+        "prompt": "younger than 50 with STCW basic and valid passport",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted max_age=49, STCW basic, and valid passport requirement.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "miss",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "recent_contract_count": 1,
+            "ship_family": "tanker"
+          },
+          "stcw_endorsement": {
+            "endorsements_required": [
+              "tanker_oil"
+            ]
+          }
+        },
+        "expected_primary_family": "multi",
+        "note": "MULTI: ship-family (tanker) + stcw_endorsement. Doubles as ship_family canonicalization coverage for the 'tanker' canonical value AND tests stcw_endorsement family rescue (the 7th promote-candidate family added during v0.2). Convention: 'tanker' alone maps to ship_family='tanker'; 'STCW endorsement' near 'tanker' implies tanker_oil endorsement per catalog.",
+        "prompt": "tanker experience with STCW endorsement"
       }
     ],
     "passport_validity": [
@@ -1480,6 +1889,86 @@
           "reviewer": "codex-manual",
           "value_review": "accepted"
         }
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport valid for 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "18 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport should be valid for at least 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "minimum 18 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "need passport validity 12 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "at least 12 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "minimum 12 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport valid for 10 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "10 months of passport validity required"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport should be valid for 24 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "chief officer with passport valid for 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "2nd engineer needs 18 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "master passport should be valid for at least 12 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "3rd officer minimum 10 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "ETO with passport validity 18 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "need 4th engineer with at least 9 months passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "captain passport valid for 30 months"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "passport should be valid for at least 6 months for bosun"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "chief cook minimum 15 months of passport validity"
+      },
+      {
+        "expected_primary_family": "passport_validity",
+        "prompt": "junior engineer with 21 months of passport validity"
       }
     ],
     "rank_match": [
@@ -1825,7 +2314,7 @@
           }
         },
         "expected_primary_family": "stcw_endorsement",
-        "note": "Dynamic Positioning Officer — represented by the DP operational endorsement catalog value, not a canonical rank.",
+        "note": "Dynamic Positioning Officer \u2014 represented by the DP operational endorsement catalog value, not a canonical rank.",
         "prompt": "DPO role requirement",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -1913,7 +2402,7 @@
           }
         },
         "expected_primary_family": "rank_match",
-        "note": "AB Special (AB(S)) — rated AB. Maps to able_seaman canonical.",
+        "note": "AB Special (AB(S)) \u2014 rated AB. Maps to able_seaman canonical.",
         "prompt": "AB Special endorsement required",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -1968,6 +2457,231 @@
           "reviewer": "codex-manual",
           "value_review": "accepted"
         }
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "2nd engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "chief engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "chief officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "master"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "captain"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "2nd officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "third officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "3rd officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "fourth engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "4th engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "junior 4th engineer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "electrical officer"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "ETO"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "bosun"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "pumpman"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "fitter"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "oiler"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "chief cook"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "deck cadet"
+      },
+      {
+        "expected_primary_family": "rank_match",
+        "prompt": "junior engineer"
+      }
+    ],
+    "recent_contract_vessel_experience": [
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "minimum_months": 12,
+            "recent_contract_count": 3,
+            "ship_family": "container"
+          }
+        },
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "note": "REGRESSION row for PR #23 bug fix in legacy_parser_adapter.py. Pre-fix, legacy emitted non-canonical container vessel as ship_family, which failed query-plan schema validation. Post-fix, ship_family must be canonical container. Uses an explicit recent-contract window so the live legacy extractor emits recent_contract_vessel_experience.",
+        "prompt": "12 months experience on container ship in last 3 contracts",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted container, last 3 contracts, and minimum_months=12.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "minimum_months": 0,
+            "recent_contract_count": 3,
+            "ship_family": "container"
+          }
+        },
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "note": "REGRESSION row for PR #23 container canonicalization. The exact 'container vessel' phrasing is the literal substring the buggy adapter emitted as ship_family. Critical post-mortem coverage.",
+        "prompt": "container vessel experience in recent 3 contracts",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted container and recent_contract_count=3; no explicit month minimum is correctly left unspecified.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "recent_contract_vessel_experience": {
+            "minimum_months": 0,
+            "recent_contract_count": 3,
+            "ship_family": "container"
+          }
+        },
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "note": "REGRESSION row for PR #23 container canonicalization. Past-tense 'served on' phrasing. ship_family canonicalization must hold regardless of tense.",
+        "prompt": "must have served on container ships in last 3 contracts",
+        "scoring_notes": {
+          "eval_date": "2026-06-10",
+          "llm_confidence": "high",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted container and recent_contract_count=3; no explicit month minimum is correctly left unspecified.",
+          "reviewer": "manual",
+          "value_review": "accepted"
+        }
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "12 months experience on container in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "12 months on container in recent 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "minimum 12 months container experience in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "at least 12 months on container in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "container vessel experience for 12 months over last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "10 months experience on container in last 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "minimum 8 months tanker experience in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "14 months on bulk carrier in last 4 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "chief officer with 12 months experience on container in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "2nd engineer minimum 10 months container experience in recent 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "master with 18 months on tanker in last 4 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "captain at least 16 months on bulk carrier in recent 4 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "3rd officer 9 months experience on container in last 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "4th engineer 7 months on tanker in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "ETO minimum 12 months reefer container experience in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "bosun 6 months experience on container in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "pumpman at least 11 months on oil tanker in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "chief cook minimum 5 months cruise experience in recent 2 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "junior engineer 13 months offshore vessel experience in last 3 contracts"
+      },
+      {
+        "expected_primary_family": "recent_contract_vessel_experience",
+        "prompt": "deck cadet 4 months container experience in recent 2 contracts"
       }
     ],
     "stcw_basic": [
@@ -2032,7 +2746,7 @@
         "current_parser": "wrong_family",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "'STCW certificate set' is ambiguous — could include advanced. Default unsupported per blueprint §9.3.",
+        "note": "'STCW certificate set' is ambiguous \u2014 could include advanced. Default unsupported per blueprint \u00a79.3.",
         "prompt": "candidate holds STCW certificate set"
       },
       {
@@ -2100,7 +2814,7 @@
           }
         },
         "expected_primary_family": "stcw_basic",
-        "note": "Spelled component list — lookahead needs acronyms.",
+        "note": "Spelled component list \u2014 lookahead needs acronyms.",
         "prompt": "Personal Survival, Fire Fighting, First Aid, PSSR all valid",
         "scoring_notes": {
           "eval_date": "2026-06-09",
@@ -2141,7 +2855,7 @@
         "current_parser": "wrong_family",
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
-        "note": "'STCW course' too broad — could be advanced. Default unsupported.",
+        "note": "'STCW course' too broad \u2014 could be advanced. Default unsupported.",
         "prompt": "candidate did STCW course recently"
       },
       {
@@ -2327,7 +3041,149 @@
         "expected_constraint": {},
         "expected_primary_family": "unsupported",
         "note": "Advanced certs explicitly + 'no basic' negation. Should NOT fire stcw_basic. LLM rescue critical here.",
-        "prompt": "AFF and advanced FA only — no basic"
+        "prompt": "AFF and advanced FA only \u2014 no basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "with valid STCW basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "must hold all basic stcw certificates"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "valid stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "need chief officer with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "master with stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "looking for 2nd engineer with valid stcw basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "chief cook must hold all basic stcw certificates"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "deck cadet valid stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "need bosun with stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "pumpman with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "4th engineer valid stcw basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "junior engineer with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "need eTO stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "oiler with valid stcw basic safety"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "chief engineer must hold all basic stcw certificates"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "captain valid stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "2nd officer with valid stcw basic"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "fitter with stcw basic required"
+      },
+      {
+        "expected_primary_family": "stcw_basic",
+        "prompt": "master valid stcw basic safety"
+      }
+    ],
+    "unsupported_or_diagnostic": [
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "2nd engineer with 7+ years sea service"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief officer on bulk carrier"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "master available immediately"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief engineer tanker endorsement"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "2nd engineer DPO required"
+      },
+      {
+        "expected_primary_family": "parsing_notes_only",
+        "prompt": "need captain DP2"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief officer VLCC-ish but not exactly"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "gas tanker endorsement for chief officer"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chemical tanker endorsement for master"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "need bosun join immediately"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "4th engineer available from January 15"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "pumpman joinable in 30 days"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "need 3rd officer with 36 months sea service"
+      },
+      {
+        "expected_primary_family": "unsupported_only",
+        "prompt": "chief engineer with GMDSS"
+      },
+      {
+        "expected_primary_family": "parsing_notes_only",
+        "prompt": "random fuzzy thing not really a filter"
       }
     ],
     "us_visa": [
@@ -2833,434 +3689,322 @@
         }
       },
       {
-        "prompt": "American visa needed",
-        "expected_primary_family": "us_visa",
+        "current_parser": "partial",
         "expected_constraint": {
           "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa",
             "accepted_types": [
               "C1/D (USA)",
               "B1/B2 (USA)",
               "C1 (USA)",
               "D (USA)",
               "US Visa (USA)"
-            ]
+            ],
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
           }
         },
-        "current_parser": "partial",
+        "expected_primary_family": "us_visa",
         "note": "REGRESSION row for PR #23 bug fix in shadow_llm_provider.py::_visa_accepted_types_for_group. Pre-fix, generic 'US Visa (USA)' with no specific class collapsed accepted_types to ['US Visa (USA)'] placeholder. Post-fix, accepted_types must be the full canonical USA class list. RE-VERIFY accepted_types against live _visa_type_definitions() if the catalog has been updated since 2026-06-10.",
+        "prompt": "American visa needed",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted required USA visa with broad accepted US visa types, matching corpus convention.",
           "reviewer": "manual",
-          "review_note": "LLM extracted required USA visa with broad accepted US visa types, matching corpus convention."
+          "value_review": "accepted"
         }
       },
       {
+        "current_parser": "partial",
+        "expected_constraint": {
+          "us_visa": {
+            "accepted_types": [
+              "C1/D (USA)",
+              "B1/B2 (USA)",
+              "C1 (USA)",
+              "D (USA)",
+              "US Visa (USA)"
+            ],
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
+          }
+        },
+        "expected_primary_family": "us_visa",
+        "note": "REGRESSION row for PR #23 accepted-types fix. Minimal-form generic USA visa prompt \u2014 exactly the path where the helper backfills accepted_types from the catalog.",
         "prompt": "needs US visa",
-        "expected_primary_family": "us_visa",
-        "expected_constraint": {
-          "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa",
-            "accepted_types": [
-              "C1/D (USA)",
-              "B1/B2 (USA)",
-              "C1 (USA)",
-              "D (USA)",
-              "US Visa (USA)"
-            ]
-          }
-        },
-        "current_parser": "partial",
-        "note": "REGRESSION row for PR #23 accepted-types fix. Minimal-form generic USA visa prompt — exactly the path where the helper backfills accepted_types from the catalog.",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted required USA visa with broad accepted US visa types, matching corpus convention.",
           "reviewer": "manual",
-          "review_note": "LLM extracted required USA visa with broad accepted US visa types, matching corpus convention."
+          "value_review": "accepted"
         }
       },
       {
-        "prompt": "valid visa for USA work assignment",
-        "expected_primary_family": "us_visa",
+        "current_parser": "miss",
         "expected_constraint": {
           "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa",
             "accepted_types": [
               "C1/D (USA)",
               "B1/B2 (USA)",
               "C1 (USA)",
               "D (USA)",
               "US Visa (USA)"
-            ]
+            ],
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
           }
         },
-        "current_parser": "miss",
+        "expected_primary_family": "us_visa",
         "note": "REGRESSION row for PR #23 accepted-types fix. Narrative phrasing without 'visa' adjacent to 'USA'; cue regex still anchors via 'USA' + 'visa'. accepted_types fallback path.",
+        "prompt": "valid visa for USA work assignment",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted required USA visa for USA work context, matching corpus convention.",
           "reviewer": "manual",
-          "review_note": "LLM extracted required USA visa for USA work context, matching corpus convention."
+          "value_review": "accepted"
         }
       },
       {
-        "prompt": "must have visa for entering the United States",
-        "expected_primary_family": "us_visa",
+        "current_parser": "miss",
         "expected_constraint": {
           "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa",
             "accepted_types": [
               "C1/D (USA)",
               "B1/B2 (USA)",
               "C1 (USA)",
               "D (USA)",
               "US Visa (USA)"
-            ]
+            ],
+            "must_be_valid": true,
+            "required": true,
+            "visa_group": "usa"
           }
         },
-        "current_parser": "miss",
+        "expected_primary_family": "us_visa",
         "note": "REGRESSION row for PR #23 accepted-types fix. Formal 'entering the United States' phrasing; cue regex includes 'states' alias. Tests accepted_types backfill on the long-form country reference.",
+        "prompt": "must have visa for entering the United States",
         "scoring_notes": {
           "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
           "llm_confidence": "high",
-          "value_review": "accepted",
+          "llm_family_rescued": true,
+          "review_note": "LLM extracted required USA visa for United States entry context, matching corpus convention.",
           "reviewer": "manual",
-          "review_note": "LLM extracted required USA visa for United States entry context, matching corpus convention."
+          "value_review": "accepted"
         }
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "having valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "having a valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need chief officer with valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "master with current US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "2nd engineer has a valid US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "looking for captain with american visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief engineer with US work authorization"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "ETO with C1/D visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need fitter with valid C1/D"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "looking for 3rd officer with C1 visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need oiler with valid C1 visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "D visa required for this 4th engineer search"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "pumpman with valid D visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "master with B1/B2 visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief cook with valid B1/B2"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "find chief officer having US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "2nd officer with current American visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "3rd engineer with usa visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need captain with valid c1d"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "looking for eTO who has valid us visa"
       }
     ],
-    "recent_contract_vessel_experience": [
+    "visa_validity_window": [
       {
-        "prompt": "12 months experience on container ship in last 3 contracts",
-        "expected_primary_family": "recent_contract_vessel_experience",
-        "expected_constraint": {
-          "recent_contract_vessel_experience": {
-            "ship_family": "container",
-            "recent_contract_count": 3,
-            "minimum_months": 12
-          }
-        },
-        "current_parser": "partial",
-        "note": "REGRESSION row for PR #23 bug fix in legacy_parser_adapter.py. Pre-fix, legacy emitted non-canonical container vessel as ship_family, which failed query-plan schema validation. Post-fix, ship_family must be canonical container. Uses an explicit recent-contract window so the live legacy extractor emits recent_contract_vessel_experience.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted container, last 3 contracts, and minimum_months=12."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa is valid at least for 10 months"
       },
       {
-        "prompt": "container vessel experience in recent 3 contracts",
-        "expected_primary_family": "recent_contract_vessel_experience",
-        "expected_constraint": {
-          "recent_contract_vessel_experience": {
-            "ship_family": "container",
-            "recent_contract_count": 3,
-            "minimum_months": 0
-          }
-        },
-        "current_parser": "partial",
-        "note": "REGRESSION row for PR #23 container canonicalization. The exact 'container vessel' phrasing is the literal substring the buggy adapter emitted as ship_family. Critical post-mortem coverage.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted container and recent_contract_count=3; no explicit month minimum is correctly left unspecified."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "valid US visa for 10 months"
       },
       {
-        "prompt": "must have served on container ships in last 3 contracts",
-        "expected_primary_family": "recent_contract_vessel_experience",
-        "expected_constraint": {
-          "recent_contract_vessel_experience": {
-            "ship_family": "container",
-            "recent_contract_count": 3,
-            "minimum_months": 0
-          }
-        },
-        "current_parser": "partial",
-        "note": "REGRESSION row for PR #23 container canonicalization. Past-tense 'served on' phrasing. ship_family canonicalization must hold regardless of tense.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted container and recent_contract_count=3; no explicit month minimum is correctly left unspecified."
-        }
-      }
-    ],
-    "multi": [
-      {
-        "prompt": "Chief Engineer with US visa and passport",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "rank_match": {
-            "rank": [
-              "chief_engineer"
-            ],
-            "operator": "contains_any"
-          },
-          "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa"
-          },
-          "passport_validity": {
-            "must_be_valid": true
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: rank_match + us_visa + passport_validity. Legacy catches rank + US visa but misses the passport requirement in this compact compound phrasing.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": false,
-          "llm_confidence": "high",
-          "value_review": "follow_up",
-          "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns extracted chief_engineer rank and USA visa, but did not extract passport_validity from compact 'and passport' phrasing. Do not count as accepted promotion evidence until passport_validity is rescued."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "minimum 10 months validity on US visa"
       },
       {
-        "prompt": "Chief Engineer with STCW basic",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "rank_match": {
-            "applied_rank_normalized": [
-              "chief_engineer"
-            ],
-            "operator": "contains_any"
-          },
-          "stcw_basic": {
-            "required": true
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: rank_match + stcw_basic. Both parsers fire independently; tests that the LLM emits BOTH constraints together rather than one-at-a-time.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted chief_engineer rank and STCW basic requirement."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa should be valid for 10 months"
       },
       {
-        "prompt": "officers in their 40s with valid passport",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "age_range": {
-            "min_age": 40,
-            "max_age": 49
-          },
-          "passport_validity": {
-            "must_be_valid": true
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: age_range + passport_validity. Decade-span ('in their 40s') is a documented age miss in v0.2; pairing with passport_validity tests whether the LLM can rescue both families simultaneously. Convention: in their 40s -> [40, 49].",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted age 40-49 and valid passport requirement."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa is valid at least for 12 months"
       },
       {
-        "prompt": "Master with H-1B visa and 6 months passport validity",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "rank_match": {
-            "applied_rank_normalized": [
-              "master"
-            ],
-            "operator": "contains_any"
-          },
-          "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa"
-          },
-          "passport_validity": {
-            "must_be_valid": true,
-            "minimum_months_remaining": 6
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: 3-family compound (rank_match + us_visa + passport_validity). H-1B is a cue alias triggering visa_group=usa but H-1B itself is NOT in the canonical accepted_types list — the helper backfills the standard maritime USA list. accepted_types deliberately omitted from expected_constraint; the eval value-review step confirms what the LLM emits matches the catalog.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted master rank, H1B/USA visa, and 6-month passport validity."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "valid US visa for 18 months"
       },
       {
-        "prompt": "container vessel Chief Officer with valid US visa",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "rank_match": {
-            "applied_rank_normalized": [
-              "chief_officer"
-            ],
-            "operator": "contains_any"
-          },
-          "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa"
-          },
-          "recent_contract_vessel_experience": {
-            "ship_family": "container",
-            "recent_contract_count": 1
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: rank_match + us_visa + ship-family (recent_contract_vessel_experience). Doubles as a container canonicalization regression probe (PR #23 fix) in a multi-family context.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": false,
-          "llm_confidence": "high",
-          "value_review": "follow_up",
-          "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns extracted chief_officer rank and USA visa, but did not promote the bare 'container vessel' mention to recent_contract_vessel_experience. Keep as follow-up rather than accepted value evidence."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "minimum 18 months validity on US visa"
       },
       {
-        "prompt": "passport valid for 12 months and US visa C1/D",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "passport_validity": {
-            "must_be_valid": true,
-            "minimum_months_remaining": 12
-          },
-          "us_visa": {
-            "required": true,
-            "must_be_valid": true,
-            "visa_group": "usa",
-            "accepted_types": [
-              "C1/D (USA)"
-            ]
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: passport_validity (with months) + us_visa (with specific class). Tests value preservation across compound prompts where each family has structured detail. C1/D is in the canonical accepted_types catalog — narrow to that single canonical value rather than the full USA list.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted 12-month passport validity and C1/D USA visa."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "US visa should be valid for 24 months"
       },
       {
-        "prompt": "engineer over 30 with AFF certificate",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "rank_match": {
-            "applied_rank_normalized": [
-              "engineer"
-            ],
-            "operator": "contains_any"
-          },
-          "age_range": {
-            "min_age": 31
-          },
-          "certificate_requirement": {
-            "certificates_required": [
-              "aff"
-            ]
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: rank_match + age_range + certificate_requirement. Generic 'engineer' rank, strict age bound ('over' -> exclusive +1), advanced cert. NOTE: 'engineer' as a generic alias may or may not be in RANK_ALIAS_TABLE — verify; if missing, this row probes rank_match LLM rescue too.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": false,
-          "llm_confidence": "high",
-          "value_review": "follow_up",
-          "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns extracted age_range min_age=31 and cert_aff, but did not extract generic engineer as rank_match. Follow up when deciding whether generic 'engineer' should be a rank alias."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "chief officer with valid US visa for 10 months"
       },
       {
-        "prompt": "younger than 50 with STCW basic and valid passport",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "age_range": {
-            "max_age": 49
-          },
-          "stcw_basic": {
-            "required": true
-          },
-          "passport_validity": {
-            "must_be_valid": true
-          }
-        },
-        "current_parser": "partial",
-        "note": "MULTI: age_range (strict 'younger than' -> max_age N-1) + stcw_basic + passport_validity. Three-family compound with one strict-bound age constraint.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "LLM extracted max_age=49, STCW basic, and valid passport requirement."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "2nd engineer whose US visa is valid at least for 12 months"
       },
       {
-        "prompt": "tanker experience with STCW endorsement",
-        "expected_primary_family": "multi",
-        "expected_constraint": {
-          "recent_contract_vessel_experience": {
-            "ship_family": "tanker",
-            "recent_contract_count": 1
-          },
-          "stcw_endorsement": {
-            "endorsements_required": [
-              "tanker_oil"
-            ]
-          }
-        },
-        "current_parser": "miss",
-        "note": "MULTI: ship-family (tanker) + stcw_endorsement. Doubles as ship_family canonicalization coverage for the 'tanker' canonical value AND tests stcw_endorsement family rescue (the 7th promote-candidate family added during v0.2). Convention: 'tanker' alone maps to ship_family='tanker'; 'STCW endorsement' near 'tanker' implies tanker_oil endorsement per catalog.",
-        "scoring_notes": {
-          "eval_date": "2026-06-10",
-          "llm_family_rescued": true,
-          "llm_confidence": "high",
-          "value_review": "accepted",
-          "reviewer": "manual",
-          "review_note": "Fixed v0.2.1 reruns extracted ship_family=tanker, recent_contract_count=1, and endorsements_required=[tanker_oil]."
-        }
+        "expected_primary_family": "us_visa",
+        "prompt": "master minimum 9 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "captain US visa should be valid for 15 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "ETO with valid US visa for 18 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "need 3rd officer with US visa valid at least for 6 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "4th engineer minimum 11 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "chief cook with valid US visa for 14 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "pumpman US visa should be valid for 8 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "bosun US visa is valid at least for 20 months"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "junior engineer with minimum 13 months validity on US visa"
+      },
+      {
+        "expected_primary_family": "us_visa",
+        "prompt": "oiler with valid US visa for 16 months"
       }
     ]
   },
-  "notes": "v0.2 — reconstructed AI Search tail set with passport_validity cycle-3 starter rows, five promoted-family revalidation rows, and cross-family controls. Rebuilt after v0.1 loss documented in AI_Search_Results/README.md.",
-  "schema_version": "tail_set.v0.2"
+  "family_counts": {
+    "age_range": 42,
+    "certificate_requirement": 20,
+    "coc_document_gate": 20,
+    "controls": 25,
+    "multi": 10,
+    "passport_validity": 40,
+    "rank_match": 42,
+    "recent_contract_vessel_experience": 23,
+    "stcw_basic": 42,
+    "unsupported_or_diagnostic": 15,
+    "us_visa": 46,
+    "visa_validity_window": 20
+  },
+  "prompt_count": 345,
+  "purpose": [
+    "bootstrap launch-gate prompt coverage review before sufficient production prompt volume exists",
+    "seed parser-evaluation review for active deterministic Phase 1 families",
+    "must be replaced or supplemented by real stored prompt logs as usage grows",
+    "bootstrap parser-coverage review for the validity-window and recent-contract vessel experience families",
+    "support launch-gate evidence before enough stored production prompts exist"
+  ],
+  "source_corpora": [
+    {
+      "date": null,
+      "path": "AI_Search_Results/seajobs_tail_set_v0.2.json",
+      "prompt_count": 170,
+      "status": null
+    },
+    {
+      "date": "2026-04-08",
+      "path": "docs/AI_SEARCH_V3_4_BOOTSTRAP_PROMPT_CORPUS_2026-04-08.json",
+      "prompt_count": 115,
+      "status": "non_production_bootstrap"
+    },
+    {
+      "date": "2026-05-12",
+      "path": "docs/AI_SEARCH_VALIDITY_AND_RECENT_CONTRACT_BOOTSTRAP_PROMPT_CORPUS_2026-05-12.json",
+      "prompt_count": 60,
+      "status": "non_production_bootstrap"
+    }
+  ],
+  "status": "combined_shadow_audit_corpus"
 }
