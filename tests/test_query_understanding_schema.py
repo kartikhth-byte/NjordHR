@@ -50,6 +50,57 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
         self.assertEqual(validated["validation"]["status"], "valid")
         self.assertEqual(validated["applied_constraints"][0]["constraint"]["rank"], "2nd_engineer")
 
+    def test_valid_any_of_logical_group_passes_validation(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = []
+        plan["logical_groups"] = [
+            {
+                "id": "vessel_engine_experience_any_of",
+                "type": "any_of",
+                "mode": "required",
+                "source_text": "lng vessel or dual fuel vessel",
+                "confidence": "high",
+                "children": [
+                    {
+                        "id": "experience_ship_type",
+                        "mode": "required",
+                        "constraint": {
+                            "type": "experience_ship_type",
+                            "ship_family": "lng",
+                            "minimum_months": None,
+                        },
+                        "source_text": "lng vessel",
+                        "confidence": "high",
+                        "compatibility": {
+                            "legacy_hard_constraints_key": "experience_ship_type",
+                            "legacy_applied_constraint_id": "experience_ship_type",
+                        },
+                    },
+                    {
+                        "id": "engine_experience",
+                        "mode": "required",
+                        "constraint": {
+                            "type": "engine_experience",
+                            "engine_family": "dual_fuel",
+                            "minimum_months": None,
+                            "recent_contract_count": None,
+                        },
+                        "source_text": "dual fuel vessel",
+                        "confidence": "high",
+                        "compatibility": {
+                            "legacy_hard_constraints_key": "engine_experience",
+                            "legacy_applied_constraint_id": "engine_experience",
+                        },
+                    },
+                ],
+            }
+        ]
+
+        validated = validate_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "valid")
+        self.assertEqual(validated["logical_groups"][0]["type"], "any_of")
+        self.assertEqual(len(validated["logical_groups"][0]["children"]), 2)
+
     def test_missing_required_top_level_field_is_invalid(self):
         plan = _valid_plan()
         plan.pop("normalizer")

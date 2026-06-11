@@ -79,6 +79,22 @@ _PASSPORT_POLARITY_INVERSION = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_SUFFICIENCY_ONLY_PATTERN = re.compile(
+    r"\b(?:alone\s+is\s+enough|is\s+enough|is\s+acceptable|are\s+acceptable|will\s+do|sufficient|that\s+works|works\s+for\s+this|(?:must\s+have|needs?|requires?|requirement\s+is)\s+[^.,;]{0,80}\balone)\b",
+    re.IGNORECASE,
+)
+_VISA_REJECTION_STATUS_PATTERN = re.compile(
+    r"\b(?:visa\s+(?:application\s+)?(?:rejected|refused|denied|declined)|(?:rejected|refused|denied|declined)\s+(?:visa|visa\s+application))\b",
+    re.IGNORECASE,
+)
+_VISA_UNUSABLE_STATUS_PATTERN = re.compile(
+    r"\bvisa\s+(?:application\s+)?(?:pending|expired|cancelled|canceled)\b",
+    re.IGNORECASE,
+)
+_VISA_CURRENT_STATUS_PATTERN = re.compile(
+    r"\b(?:renewed|reissued|extended|valid|current|active)\b",
+    re.IGNORECASE,
+)
 _SUPPORTED_VISA_CONTEXT_CUES = re.compile(
     r"\b(?:"
     r"us|usa|u\.?s\.?|america|american|yankee|states|stateside|"
@@ -190,10 +206,10 @@ def build_shadow_llm_prompt(
     return (
         "You are NjordHR's shadow query normalizer.\n"
         "Return valid JSON for query_plan.v1 only. No markdown/commentary.\n"
-        "Preserve supported hard constraints; send unsupported mandatory requirements to unapplied_constraints with reason "
-        '"unsupported_filter_family".\n'
+        "Supported hard constraints -> applied; unsupported mandatory -> unapplied_constraints reason unsupported_filter_family.\n"
         "Keep only fuzzy suitability language in semantic_query.\n"
-        "Prefer degraded over invalid when possible.\n"
+        "Cross-family OR -> logical_groups any_of; no duplicate applied children.\n"
+        "Prefer degraded over invalid.\n"
         f"The catalog_version is {catalog_version}.\n"
         f"Supported families: {supported_families}.\n"
         f"{age_rule_block}"
@@ -444,9 +460,18 @@ def _us_visa_is_anchored(prompt_text: Any) -> bool:
     text = str(prompt_text or "")
     if not text.strip():
         return False
-    if _VISA_POLARITY_INVERSION.search(text):
+    if _VISA_POLARITY_INVERSION.search(text) or _visa_negative_status_is_active(text):
         return False
     return bool(_SUPPORTED_VISA_CONTEXT_CUES.search(text))
+
+
+def _visa_negative_status_is_active(prompt_text: Any) -> bool:
+    text = str(prompt_text or "")
+    if _VISA_REJECTION_STATUS_PATTERN.search(text):
+        return True
+    if _VISA_UNUSABLE_STATUS_PATTERN.search(text):
+        return not _VISA_CURRENT_STATUS_PATTERN.search(text)
+    return False
 
 
 def _passport_validity_is_anchored(prompt_text: Any) -> bool:
@@ -601,6 +626,10 @@ def _stcw_basic_is_anchored(prompt_text: Any) -> bool:
     lowered = text.lower()
     if not lowered.strip():
         return False
+    if _SUFFICIENCY_ONLY_PATTERN.search(lowered):
+        return False
+    if re.search(r"\bstcw\s+endorsement\b", lowered) and not re.search(r"\b(?:basic|bst|a-?vi/1|pssr|pst|fpff|efa)\b", lowered):
+        return False
     if re.search(r"\bno\s+basic\b|\bwithout\s+basic\b|\bbasic\s+(?:not|required\s+not)\b", lowered):
         return False
     component_hits = sum(
@@ -682,10 +711,13 @@ def _extract_shadow_certificate_values(prompt_text: Any) -> list[str]:
 
 def _extract_shadow_endorsement_values(prompt_text: Any) -> list[str]:
     text = str(prompt_text or "").lower()
+    if _SUFFICIENCY_ONLY_PATTERN.search(text):
+        return []
     values: list[str] = []
     patterns = (
         (r"\bdpo\b|\bdp\s+operator\b", "dp_operational"),
         (r"\bigf\s+code\b|\bigf\s+(?:cop|certificate|endorsement)\b", "igf_basic_cop"),
+        (r"\btanker\s+experience\s+with\s+stcw\s+endorsement\b", "tanker_oil"),
         (r"\boil\s+tanker\s+familiarization\b|\boil\s+tanker\s+familiarisation\b", "tanker_oil_basic_cop"),
         (r"\bchemical\s+tanker\s+familiarization\b|\bchemical\s+tanker\s+familiarisation\b", "tanker_chemical_basic_cop"),
         (r"\b(?:gas|lng|lpg)\s+tanker\s+familiarization\b|\b(?:gas|lng|lpg)\s+tanker\s+familiarisation\b", "tanker_gas_basic_cop"),
@@ -728,7 +760,7 @@ def _extract_shadow_us_visa_constraint(analyzer: Any, prompt_text: Any) -> dict[
     text = str(prompt_text or "").strip().lower()
     if not text:
         return None
-    if _VISA_POLARITY_INVERSION.search(text):
+    if _VISA_POLARITY_INVERSION.search(text) or _visa_negative_status_is_active(text):
         return None
 
     if not _SUPPORTED_VISA_CONTEXT_CUES.search(text):
@@ -804,7 +836,9 @@ def _extract_shadow_recent_contract_vessel_experience(prompt_text: Any) -> dict[
     if not text:
         return None
     lowered = text.lower()
-    if not re.search(r"\b(?:last|recent|previous|past)\s+\d+\s+contracts?\b", lowered):
+    has_contract_window = bool(re.search(r"\b(?:last|recent|previous|past)\s+\d+\s+contracts?\b", lowered))
+    has_vessel_experience = bool(re.search(r"\b(?:experience|served|service)\b", lowered))
+    if not has_contract_window and not has_vessel_experience:
         return None
 
     months = None
@@ -824,13 +858,13 @@ def _extract_shadow_recent_contract_vessel_experience(prompt_text: Any) -> dict[
             ship_family = candidate
             break
 
-    if not ship_family or not contract_count:
+    if not ship_family:
         return None
     return {
         "type": "recent_contract_vessel_experience",
         "ship_family": ship_family,
         "minimum_months": months,
-        "recent_contract_count": contract_count,
+        "recent_contract_count": contract_count or 1,
     }
 
 
@@ -1378,6 +1412,39 @@ def _family_to_canonical_items(
             )
         ], [], [grade.replace("_", " ")]
 
+    if family == "coc_country_match":
+        raw_countries = parameters.get("countries") or parameters.get("country") or parameters.get("issue_authority")
+        if isinstance(raw_countries, str):
+            raw_countries = [raw_countries]
+        countries = [
+            " ".join(str(country or "").lower().split())
+            for country in (raw_countries or [])
+            if str(country or "").strip()
+        ]
+        if not countries:
+            extract_coc_country = getattr(analyzer, "_extract_coc_country_constraint", None)
+            if callable(extract_coc_country):
+                try:
+                    coc_country = extract_coc_country(prompt_text)
+                except Exception:
+                    coc_country = None
+                if isinstance(coc_country, Mapping):
+                    countries = [
+                        " ".join(str(country or "").lower().split())
+                        for country in (coc_country.get("countries") or [])
+                        if str(country or "").strip()
+                    ]
+        if not countries:
+            return [], [], []
+        return [
+            _make_applied_constraint(
+                "coc_country_match",
+                {"type": "coc_country_match", "countries": countries, "operator": "contains_any"},
+                source_text=source_text,
+                confidence=confidence,
+            )
+        ], [], countries
+
     if family == "stcw_basic":
         required_value = _first_present(parameters.get("required"), parameters.get("validity"), parameters.get("must_have"))
         if _is_false_value(required_value):
@@ -1518,6 +1585,8 @@ def _family_to_canonical_items(
         return [], [], []
 
     if family == "stcw_endorsement":
+        if _SUFFICIENCY_ONLY_PATTERN.search(prompt_text or source_text or raw_prompt):
+            return [], [], []
         endorsements = _canonical_list(
             parameters.get("endorsements_required")
             if parameters.get("endorsements_required") is not None
@@ -1864,6 +1933,7 @@ def _translate_model_payload(
     prompt_text = str(raw_input.get("raw_prompt") or raw_prompt or "").strip()
 
     applied_constraints: list[dict[str, Any]] = []
+    logical_groups: list[dict[str, Any]] = []
     unapplied_constraints: list[dict[str, Any]] = []
     semantic_fragments: list[str] = []
 
@@ -1916,6 +1986,10 @@ def _translate_model_payload(
                 continue
             if isinstance(item.get("constraint"), Mapping) and family:
                 applied_constraints.append(dict(item))
+
+    for item in parsed.get("logical_groups") or []:
+        if isinstance(item, Mapping):
+            logical_groups.append(dict(item))
 
     for item in parsed.get("unapplied_constraints") or []:
         if not isinstance(item, Mapping):
@@ -2109,6 +2183,30 @@ def _translate_model_payload(
             )
             semantic_fragments.extend(["valid coc", "coc required", "certificate of competency required", "certificate of competency", "coc"])
 
+    if not any(constraint.get("id") == "coc_country_match" for constraint in applied_constraints):
+        extract_coc_country_constraint = getattr(analyzer, "_extract_coc_country_constraint", None)
+        if callable(extract_coc_country_constraint):
+            try:
+                coc_country = extract_coc_country_constraint(prompt_text)
+            except Exception:
+                coc_country = None
+            if isinstance(coc_country, Mapping):
+                countries = [
+                    " ".join(str(country or "").lower().split())
+                    for country in (coc_country.get("countries") or [])
+                    if str(country or "").strip()
+                ]
+                if countries:
+                    applied_constraints.append(
+                        _make_applied_constraint(
+                            "coc_country_match",
+                            {"type": "coc_country_match", "countries": countries, "operator": "contains_any"},
+                            source_text=_first_string(coc_country.get("display_value"), prompt_text) or prompt_text,
+                            confidence="high",
+                        )
+                    )
+                    semantic_fragments.extend(countries)
+
     if not any(constraint.get("id") == "recent_contract_vessel_experience" for constraint in applied_constraints):
         shadow_recent = _extract_shadow_recent_contract_vessel_experience(prompt_text)
         if isinstance(shadow_recent, Mapping):
@@ -2162,7 +2260,11 @@ def _translate_model_payload(
                 )
                 shadow_visa = None
 
-    if not any(constraint.get("id") == "us_visa" for constraint in applied_constraints) and not _VISA_POLARITY_INVERSION.search(prompt_text):
+    if (
+        not any(constraint.get("id") == "us_visa" for constraint in applied_constraints)
+        and not _VISA_POLARITY_INVERSION.search(prompt_text)
+        and not _visa_negative_status_is_active(prompt_text)
+    ):
         extract_us_visa_constraint = getattr(analyzer, "_extract_us_visa_constraint", None)
         if callable(extract_us_visa_constraint):
             try:
@@ -2293,7 +2395,7 @@ def _translate_model_payload(
         certificates = _extract_shadow_certificate_values(prompt_text)
         endorsements = _extract_shadow_endorsement_values(prompt_text)
         display_value = prompt_text
-        if callable(extract_endorsement_constraint):
+        if callable(extract_endorsement_constraint) and not _SUFFICIENCY_ONLY_PATTERN.search(prompt_text):
             try:
                 endorsement = extract_endorsement_constraint(prompt_text)
             except Exception:
@@ -2395,6 +2497,7 @@ def _translate_model_payload(
             },
         },
         "applied_constraints": applied_constraints,
+        "logical_groups": logical_groups,
         "unapplied_constraints": unapplied_constraints,
         "semantic_query": semantic_query,
         "unrecognized_residual": [],

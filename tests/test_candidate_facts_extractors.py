@@ -14,7 +14,14 @@ class _FakeAnalyzer:
             "role": {"applied_rank_normalized": "2nd_engineer"},
             "personal": {"dob": "1988-02-03"},
             "certifications": {
-                "coc": {"grade": "chief_officer", "expiry_date": "2028-01-01", "status": "VALID"},
+                "coc": {
+                    "grade": "chief_officer",
+                    "country": "india",
+                    "issue_authority": "Indian",
+                    "certificate_type": "Chief Officer(FG)",
+                    "expiry_date": "2028-01-01",
+                    "status": "VALID",
+                },
                 "stcw_basic_all_valid": True,
                 "endorsements": {"tanker_gas": "advanced"},
             },
@@ -29,7 +36,40 @@ class _FakeAnalyzer:
                     {
                         "rank_normalized": "2nd_engineer",
                         "vessel_name": "MV Aurora",
+                        "engine_family": "wartsila_rt_flex",
+                        "engine_types": ["wartsila_rt_flex"],
+                        "engine_details": [
+                            {
+                                "engine_type": "wartsila_rt_flex",
+                                "engine_family": "wartsila_rt_flex",
+                                "manufacturer": "Wartsila/Sulzer",
+                                "lineage": "RT-flex",
+                                "category": "low_speed_2_stroke",
+                                "control_type": "electronic_common_rail",
+                                "fuel_family": "fuel_oil",
+                                "fuel_tags": ["fuel_oil"],
+                                "dual_fuel": False,
+                                "match_source": "model_token",
+                                "raw_mention": "RTFlex",
+                            }
+                        ],
                         "months_total": 60,
+                    }
+                ],
+                "engine_types": ["wartsila_rt_flex"],
+                "engine_details": [
+                    {
+                        "engine_type": "wartsila_rt_flex",
+                        "engine_family": "wartsila_rt_flex",
+                        "manufacturer": "Wartsila/Sulzer",
+                        "lineage": "RT-flex",
+                        "category": "low_speed_2_stroke",
+                        "control_type": "electronic_common_rail",
+                        "fuel_family": "fuel_oil",
+                        "fuel_tags": ["fuel_oil"],
+                        "dual_fuel": False,
+                        "match_source": "model_token",
+                        "raw_mention": "RTFlex",
                     }
                 ],
                 "rank_duration_rows": [
@@ -303,9 +343,16 @@ class CandidateFactsExtractorStubTests(unittest.TestCase):
         self.assertTrue(any(cert["certificate_type"] == "stcw_basic" for cert in payload["certificates"]))
         self.assertTrue(any(end["endorsement_type"] == "tanker_gas" for end in payload["endorsements"]))
         self.assertTrue(payload["evidence"])
+        self.assertEqual(payload["experience"]["engine_types"], ["wartsila_rt_flex"])
+        self.assertEqual(payload["experience"]["engine_details"][0]["lineage"], "RT-flex")
         passport_fact = next(doc for doc in payload["documents"] if doc["document_type"] == "passport")
         coc_fact = next(cert for cert in payload["certificates"] if cert["certificate_type"] == "coc")
         contract_fact = next(contract for contract in payload["contracts"] if contract.get("snippet"))
+        self.assertEqual(contract_fact["engine_family"], "wartsila_rt_flex")
+        self.assertEqual(contract_fact["engine_details"][0]["control_type"], "electronic_common_rail")
+        self.assertEqual(coc_fact["country"], "india")
+        self.assertEqual(coc_fact["issue_authority"], "Indian")
+        self.assertEqual(coc_fact["certificate_type_raw"], "Chief Officer(FG)")
         self.assertIn("Passport Expiry Date", passport_fact["snippet"])
         self.assertIn("CoC Grade", coc_fact["snippet"])
         self.assertIn("Bulk Carrier", contract_fact["snippet"])

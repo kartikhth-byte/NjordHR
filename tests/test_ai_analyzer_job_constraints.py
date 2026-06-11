@@ -410,6 +410,25 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             },
         )
 
+    def test_recent_contract_vessel_experience_accepts_duration_without_contract_window(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Has minimum  12 months experience in oil tanker",
+            rank=self.rank,
+        )
+        self.assertIn("recent_contract_vessel_experience", constraints["applied_constraints"])
+        self.assertNotIn("experience_ship_type", constraints["applied_constraints"])
+        self.assertNotIn("vessel_type", constraints["unapplied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["recent_contract_vessel_experience"],
+            {
+                "vessel_type": "tanker",
+                "min_months": 12,
+                "lookback_contracts": 1,
+                "requested_label": "12 months experience on tanker",
+                "display_value": "Has minimum 12 months experience in oil tanker",
+            },
+        )
+
     def test_recent_contract_vessel_experience_accepts_no_duration_window(self):
         constraints = self.analyzer._extract_job_constraints(
             "container vessel experience in recent 3 contracts",
@@ -455,6 +474,12 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "has MAN B&W experience": "man_b_w_me",
             "WinGD X-DF experience": "wingd_x_df",
             "Wartsila 32DF experience": "wartsila_dual_fuel",
+            "has RTFlex engine type experience": "wartsila_rt_flex",
+            "has 12RTA96C engine experience": "wartsila_rta",
+            "has 6S50MC-C engine experience": "man_b_w_mc",
+            "has ME-LGIA engine experience": "man_b_w_me_lgia",
+            "has electronic engine experience": "electronically_controlled_engine",
+            "has electronically controlled main engine experience": "electronically_controlled_engine",
             "methanol engine experience": "methanol_engine",
             "ammonia engine experience": "ammonia_engine",
         }
@@ -666,6 +691,12 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ("last 2 vessels should be ME-GI", "man_b_w_me_gi", 0, 2),
             ("minimum 6 months on WinGD X-DF", "wingd_x_df", 6, 0),
             ("RT Flex in recent 5 vessels", "wartsila_rt_flex", 0, 5),
+            ("rt-flex engine type experience", "wartsila_rt_flex", 0, 0),
+            ("has experience in rtflex engine", "wartsila_rt_flex", 0, 0),
+            ("has experience in ME-GI engine type", "man_b_w_me_gi", 0, 0),
+            ("has 6S60ME-C10.5 engine experience", "man_b_w_me", 0, 0),
+            ("has X52DF engine type experience", "wingd_x_df", 0, 0),
+            ("electronically controlled engines in recent 4 vessels", "electronically_controlled_engine", 0, 4),
         ]
         for prompt, expected_engine_type, expected_months, expected_contracts in cases:
             with self.subTest(prompt=prompt):
@@ -675,6 +706,17 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 self.assertEqual(engine_constraint["engine_type"], expected_engine_type)
                 self.assertEqual(engine_constraint["min_months"], expected_months)
                 self.assertEqual(engine_constraint["lookback_contracts"], expected_contracts)
+
+    def test_electric_propulsion_terms_do_not_match_electronic_main_engine(self):
+        for prompt in (
+            "has electric engine experience",
+            "has electric propulsion experience",
+            "has diesel-electric propulsion experience",
+            "has electrons engine experience",
+        ):
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertNotIn("engine_experience", constraints["applied_constraints"])
 
     def test_engine_vessel_experience_family_maps_to_same_row_constraint(self):
         cases = [
@@ -1052,6 +1094,79 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     constraints["hard_constraints"]["certifications"],
                     {"coc_required": True, "coc_valid_required": True},
                 )
+
+    def test_coc_country_prompt_maps_to_document_and_country_rules(self):
+        cases = {
+            "has indian coc": "india",
+            "has UK coc": "uk",
+            "has Panama coc": "panama",
+        }
+        for prompt, expected_country in cases.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("coc_document_gate", constraints["applied_constraints"])
+                self.assertIn("coc_country_match", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["certifications"],
+                    {
+                        "coc_required": True,
+                        "coc_valid_required": True,
+                        "display_value": prompt,
+                    },
+                )
+                self.assertEqual(
+                    constraints["hard_constraints"]["coc_country"],
+                    {
+                        "countries": [expected_country],
+                        "operator": "contains_any",
+                        "display_value": prompt,
+                    },
+                )
+
+    def test_coc_country_prompt_normalizes_uk_aliases(self):
+        cases = [
+            "has British coc",
+            "has United Kingdom coc",
+            "has GB coc",
+            "has Great Britain coc",
+        ]
+        for prompt in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("coc_country_match", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["coc_country"]["countries"],
+                    ["uk"],
+                )
+
+    def test_coc_country_prompt_rejects_structural_phantom_countries(self):
+        for prompt in (
+            "Section II coc",
+            "Section II of the coc rules",
+            "chapter 3 coc",
+            "annex VI coc",
+            "has Pacific coc",
+            "has Atlantic coc",
+            "has Asia Pacific coc",
+        ):
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertNotIn("coc_country_match", constraints["applied_constraints"])
+
+    def test_coc_country_prompt_rejects_unknown_ian_phantom_countries(self):
+        for prompt in (
+            "Christian coc holder",
+            "Olympian coc holder",
+            "civilian coc",
+        ):
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertNotIn("coc_country_match", constraints["applied_constraints"])
+
+    def test_coc_grade_prompt_does_not_become_country_prompt(self):
+        constraints = self.analyzer._extract_job_constraints("chief officer coc", rank=self.rank)
+        self.assertIn("coc_grade_match", constraints["applied_constraints"])
+        self.assertNotIn("coc_country_match", constraints["applied_constraints"])
 
     def test_coc_grade_family_variants_map_to_same_requirement(self):
         prompts = {

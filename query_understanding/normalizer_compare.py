@@ -73,6 +73,23 @@ def canonical_comparison_records(
             )
         )
 
+    for item in normalized.get("logical_groups") or []:
+        records.append(
+            CanonicalComparisonRecord(
+                catalog_snapshot_id=snapshot_id,
+                prompt_id=prompt_id,
+                family=str(item.get("id")),
+                mode=str(item.get("mode")),
+                normalized_payload={
+                    "type": item.get("type"),
+                    "children": item.get("children") or [],
+                },
+                source_text=str(item.get("source_text") or ""),
+                status="applied" if normalized.get("validation", {}).get("status") != "invalid" else "invalid",
+                confidence=item.get("confidence") if item.get("confidence") in {"high", "medium", "low"} else None,
+            )
+        )
+
     for item in normalized.get("unapplied_constraints") or []:
         records.append(
             CanonicalComparisonRecord(
@@ -103,6 +120,27 @@ def _index_records(records: Sequence[CanonicalComparisonRecord]) -> Dict[Tuple[s
 def _is_equivalent(legacy: CanonicalComparisonRecord, llm: CanonicalComparisonRecord) -> bool:
     if legacy.status != llm.status:
         return False
+    if legacy.family == llm.family == "us_visa":
+        legacy_payload = legacy.normalized_payload if isinstance(legacy.normalized_payload, Mapping) else {}
+        llm_payload = llm.normalized_payload if isinstance(llm.normalized_payload, Mapping) else {}
+        legacy_types = legacy_payload.get("accepted_types") or []
+        llm_types = llm_payload.get("accepted_types") or []
+        legacy_type_set = {str(value) for value in legacy_types} if isinstance(legacy_types, list) else set()
+        llm_type_set = {str(value) for value in llm_types} if isinstance(llm_types, list) else set()
+        supported_usa_types = {"C1/D (USA)", "B1/B2 (USA)", "C1 (USA)", "D (USA)", "US Visa (USA)"}
+        if (
+            legacy_payload.get("type") == llm_payload.get("type") == "us_visa"
+            and legacy_payload.get("required") is True
+            and llm_payload.get("required") is True
+            and legacy_payload.get("minimum_months_remaining") == llm_payload.get("minimum_months_remaining")
+            and legacy_payload.get("visa_group") == llm_payload.get("visa_group") == "usa"
+            and isinstance(legacy_types, list)
+            and isinstance(llm_types, list)
+            and legacy_type_set == {"US Visa (USA)"}
+            and "US Visa (USA)" in llm_type_set
+            and llm_type_set <= supported_usa_types
+        ):
+            return True
     return _freeze(legacy.normalized_payload) == _freeze(llm.normalized_payload)
 
 

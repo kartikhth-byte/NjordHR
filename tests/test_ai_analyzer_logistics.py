@@ -272,6 +272,86 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         )
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["rows"][0]["engine_types"], ["wingd_x_df", "dual_fuel"])
+        self.assertEqual(fact["rows"][0]["engine_family"], "wingd_x_df")
+        self.assertEqual(fact["rows"][0]["engine_details"][0]["manufacturer"], "WinGD")
+        self.assertEqual(fact["rows"][0]["engine_details"][0]["fuel_family"], "lng_gas")
+        self.assertTrue(fact["rows"][0]["engine_details"][0]["dual_fuel"])
+
+    def test_extract_seajobs_experience_rows_handles_engine_model_spellings(self):
+        cases = [
+            ("RTFlex ENGINE", "wartsila_rt_flex", "Wartsila/Sulzer", "electronic_common_rail"),
+            ("RT-flex96C ENGINE", "wartsila_rt_flex", "Wartsila/Sulzer", "electronic_common_rail"),
+            ("12RTA96C ENGINE", "wartsila_rta", "Wartsila/Sulzer", "mechanical"),
+            ("6S50MC-C ENGINE", "man_b_w_mc", "MAN B&W", "mechanical"),
+            ("6S60ME-C10.5 ENGINE", "man_b_w_me", "MAN B&W", "electronic"),
+        ]
+        for engine_text, expected_engine_type, expected_manufacturer, expected_control_type in cases:
+            with self.subTest(engine_text=engine_text):
+                raw_text = (
+                    "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+                    "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+                    "Seamen Experience Details\n"
+                    "Sign In Sign Out\n"
+                    "# Rank Company Name / Ship Type Tonnage Engine\n"
+                    "Date Date\n"
+                    f"1 2nd Engineer Synergy Maritime / Oil Tanker 35973 {engine_text} 09-Jan-2024 03-Apr-2024\n"
+                )
+                fact = self.analyzer._extract_seajobs_experience_rows(
+                    raw_text,
+                    original_path="/tmp/2nd_Engineer_288.pdf",
+                )
+                row = fact["rows"][0]
+                self.assertEqual(row["engine_types"], [expected_engine_type])
+                self.assertEqual(row["engine_family"], expected_engine_type)
+                self.assertEqual(row["engine_details"][0]["manufacturer"], expected_manufacturer)
+                self.assertEqual(row["engine_details"][0]["control_type"], expected_control_type)
+
+    def test_meo_class_ii_certificate_does_not_match_me_engine_alias(self):
+        details = self.analyzer._extract_engine_details_from_text(
+            "MEO Class II (Motor) Indian 11-Mar-2024"
+        )
+        self.assertEqual(details, [])
+
+    def test_extract_seajobs_experience_rows_handles_empty_engine_column(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 2nd Engineer Synergy Maritime / Oil Tanker 35973 09-Jan-2024 03-Apr-2024\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        row = fact["rows"][0]
+        self.assertEqual(row["engine_types"], [])
+        self.assertIsNone(row["engine_family"])
+        self.assertEqual(row["engine_details"], [])
+
+    def test_extract_seajobs_experience_rows_preserves_multiple_engine_mentions(self):
+        raw_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 2nd Engineer Synergy Maritime / Oil Tanker 35973 ME-C engine and MC-C engine 09-Jan-2024 03-Apr-2024\n"
+        )
+        fact = self.analyzer._extract_seajobs_experience_rows(
+            raw_text,
+            original_path="/tmp/2nd_Engineer_288.pdf",
+        )
+        row = fact["rows"][0]
+        self.assertCountEqual(row["engine_types"], ["man_b_w_me", "man_b_w_mc"])
+        self.assertIn(row["engine_family"], row["engine_types"])
+        self.assertCountEqual(
+            [detail["engine_family"] for detail in row["engine_details"]],
+            ["man_b_w_me", "man_b_w_mc"],
+        )
 
     def test_extract_email_experience_rows_parses_date_complete_table_rows(self):
         raw_text = (
@@ -294,7 +374,7 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["rows"][0]["sign_in_date"], date(2024, 11, 6))
         self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 4, 25))
         self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
-        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_me"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_mc"])
         self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
 
     def test_extract_email_experience_rows_uses_continuation_lines_for_ship_type(self):

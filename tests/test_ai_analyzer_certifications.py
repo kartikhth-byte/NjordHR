@@ -89,7 +89,24 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         )
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["grade"], "master")
+        self.assertEqual(fact["country"], "india")
+        self.assertEqual(fact["issue_authority"], "India")
+        self.assertEqual(fact["certificate_type"], "Master(FG)")
         self.assertEqual(fact["expiry_date"], date(2030, 2, 27))
+        self.assertEqual(fact["expiry_status"], "PARSED")
+
+    def test_extract_coc_fact_from_indian_certificate_details_table_row(self):
+        fact = self.analyzer._extract_coc_fact_from_text(
+            "Certificate Details\n"
+            "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+            "95X5838 MEO Class II (Motor) Indian 11-Mar-2024 22-Apr-2029 99EL3260"
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["grade"], "2nd_engineer")
+        self.assertEqual(fact["country"], "india")
+        self.assertEqual(fact["issue_authority"], "Indian")
+        self.assertEqual(fact["certificate_type"], "MEO Class II (Motor)")
+        self.assertEqual(fact["expiry_date"], date(2029, 4, 22))
         self.assertEqual(fact["expiry_status"], "PARSED")
 
     def test_extract_coc_fact_from_certificate_table_row_without_explicit_coc_label(self):
@@ -98,6 +115,9 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         )
         self.assertEqual(fact["status"], "PARSED")
         self.assertEqual(fact["grade"], "chief_officer")
+        self.assertEqual(fact["country"], "singapore")
+        self.assertEqual(fact["issue_authority"], "Singapore")
+        self.assertEqual(fact["certificate_type"], "Chief Officer(FG)")
         self.assertEqual(fact["expiry_date"], date(2030, 4, 4))
         self.assertEqual(fact["expiry_status"], "PARSED")
 
