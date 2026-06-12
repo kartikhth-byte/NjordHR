@@ -201,6 +201,46 @@ Solved-set inputs:
   `tanker_oil_basic_cop`; generic DCE maps to `tanker_oil_dce`; DPO is modeled
   as `dp_operational` under `stcw_endorsement`, not as a canonical rank.
 
+### v0.2.1 corpus expansion revalidation (2026-06-10)
+
+Fixed eval artifacts:
+`docs/eval-evidence/ai-search-v0.2.1-fixed-corpus-2026-06-10.json`,
+`docs/eval-evidence/ai-search-v0.2.1-fixed-eval-2026-06-10.json`,
+`docs/eval-evidence/ai-search-v0.2.1-fixed-corpus-2026-06-10-rerun.json`,
+`docs/eval-evidence/ai-search-v0.2.1-fixed-eval-2026-06-10-rerun.json`,
+and final de-scoped score/stability artifacts:
+`docs/eval-evidence/ai-search-v0.2.1-fixed-descoped-score-2026-06-10.json`,
+`docs/eval-evidence/ai-search-v0.2.1-fixed-descoped-score-2026-06-10-rerun.json`,
+and
+`docs/eval-evidence/ai-search-v0.2.1-fixed-descoped-stability-comparison-2026-06-10.json`.
+Solved-set inputs:
+`docs/eval-evidence/ai-search-bootstrap-solved-corpus-2026-06-10.json` and
+`docs/eval-evidence/ai-search-bootstrap-solved-report-2026-06-10.json`.
+
+- Fixed LLM run integrity: both fixed full runs evaluated 345 / 345 rows with
+  `llm_plan_source=llm`, 0 fallbacks, and `failure_reason=ok` for every row.
+- Final de-scoped stability re-run: comparator verdict `stable_match`, 345 normalized
+  prompts compared, 0 comparison-outcome deltas, 0 LLM payload deltas, and
+  `score_projection_match=true`.
+- Final de-scoped eval gate: 8 / 8 scoped families pass rescue_rate >= 0.8:
+  `age_range` 24/24, `certificate_requirement` 15/15,
+  `passport_validity` 21/21, `rank_match` 23/26,
+  `recent_contract_vessel_experience` 4/4, `stcw_basic` 17/17,
+  `stcw_endorsement` 6/6, `us_visa` 26/26.
+- final de-scoped control violations: 0 / 25.
+- final de-scoped solved-set regressions: 0 / 79.
+- final de-scoped value-correctness review for v0.2.1 addition rows: 13 `accepted`,
+  0 `rejected`, 0 `retest`, 3 `follow_up`. Row-level `scoring_notes` were
+  written to the canonical v0.2 tail-set rows for all v0.2.1 addition rows and
+  the repaired controls.
+- de-scoped row: `AB or OS aged 25-40` was removed from v0.2.1 promotion
+  evidence because OR-set rank matching is outside the current promotion stage.
+  Reintroduce it when `rank_match` supports an OR/rank-set payload.
+- verdict: v0.2.1 fixed evidence clears the automatic eval, control, solved-set,
+  value-review, and stability gates for the accepted scoped promotion evidence;
+  the three `follow_up` multi rows are excluded from the accepted promotion
+  evidence until their missing families are intentionally supported or de-scoped.
+
 ## Process rule (enforced by `.gitignore`)
 
 `AI_Search_Results/` remains gitignored as a default for one-off diagnostic
