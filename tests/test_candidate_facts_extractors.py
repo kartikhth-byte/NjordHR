@@ -36,6 +36,15 @@ class _FakeAnalyzer:
                     {
                         "rank_normalized": "2nd_engineer",
                         "vessel_name": "MV Aurora",
+                        "vessel_tonnage": [
+                            {
+                                "value": 58000,
+                                "unit": "unspecified",
+                                "source_label": "Tonnage",
+                                "confidence": 0.90,
+                                "evidence_text": "Tonnage: 58000",
+                            }
+                        ],
                         "engine_family": "wartsila_rt_flex",
                         "engine_types": ["wartsila_rt_flex"],
                         "engine_details": [
@@ -345,11 +354,16 @@ class CandidateFactsExtractorStubTests(unittest.TestCase):
         self.assertTrue(payload["evidence"])
         self.assertEqual(payload["experience"]["engine_types"], ["wartsila_rt_flex"])
         self.assertEqual(payload["experience"]["engine_details"][0]["lineage"], "RT-flex")
+        self.assertEqual(payload["experience"]["vessel_tonnage_values"], [58000])
+        self.assertEqual(payload["experience"]["max_vessel_tonnage"], 58000)
+        self.assertEqual(payload["experience"]["min_vessel_tonnage"], 58000)
         passport_fact = next(doc for doc in payload["documents"] if doc["document_type"] == "passport")
         coc_fact = next(cert for cert in payload["certificates"] if cert["certificate_type"] == "coc")
         contract_fact = next(contract for contract in payload["contracts"] if contract.get("snippet"))
         self.assertEqual(contract_fact["engine_family"], "wartsila_rt_flex")
         self.assertEqual(contract_fact["engine_details"][0]["control_type"], "electronic_common_rail")
+        self.assertEqual(contract_fact["vessel_tonnage"][0]["value"], 58000)
+        self.assertEqual(contract_fact["vessel_tonnage"][0]["unit"], "unspecified")
         self.assertEqual(coc_fact["country"], "india")
         self.assertEqual(coc_fact["issue_authority"], "Indian")
         self.assertEqual(coc_fact["certificate_type_raw"], "Chief Officer(FG)")

@@ -5677,6 +5677,115 @@ class AIResumeAnalyzer:
 
         return row_snippets
 
+    _VESSEL_TONNAGE_UNITS = {
+        "dwt": "dwt",
+        "deadweight": "dwt",
+        "dead weight": "dwt",
+        "gt": "gt",
+        "grt": "grt",
+    }
+
+    def _parse_vessel_tonnage_cell(self, value):
+        raw_text = str(value or "")
+        text = " ".join(raw_text.split())
+        if not text:
+            return []
+        if text.lower() in {"-", "--", "na", "n/a", "?", "null", "none", "0"}:
+            return []
+
+        def parse_number(token):
+            normalized = str(token or "").replace(",", "")
+            if re.fullmatch(r"\d+(?:\.0)?", normalized):
+                return int(float(normalized))
+            return None
+
+        labeled_entries = []
+        labeled_patterns = (
+            r"(?<![A-Za-z0-9])(\d+(?:,\d{3})*(?:\.0)?)\s*(DWT|GRT|GT)\b",
+            r"\b(DWT|GRT|GT)\s*(\d+(?:,\d{3})*(?:\.0)?)(?![A-Za-z0-9])",
+        )
+        for pattern in labeled_patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                if match.group(1).upper() in {"DWT", "GRT", "GT"}:
+                    unit_raw = match.group(1)
+                    number_raw = match.group(2)
+                else:
+                    number_raw = match.group(1)
+                    unit_raw = match.group(2)
+                parsed_value = parse_number(number_raw)
+                if parsed_value is None or parsed_value == 0:
+                    continue
+                unit = self._VESSEL_TONNAGE_UNITS.get(unit_raw.lower())
+                if not unit:
+                    continue
+                labeled_entries.append(
+                    {
+                        "value": parsed_value,
+                        "unit": unit,
+                        "source_label": unit_raw.upper(),
+                        "confidence": 0.90,
+                        "evidence_text": text,
+                    }
+                )
+
+        if labeled_entries:
+            unique_entries = []
+            seen = set()
+            for entry in labeled_entries:
+                key = (entry["value"], entry["unit"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                unique_entries.append(entry)
+            return unique_entries
+
+        if re.search(r"\b\d+(?:,\d{3})*\.\d+\b", text) and not re.search(r"\b\d+(?:,\d{3})*\.0\b", text):
+            return []
+        if re.search(r"(?<![A-Za-z0-9])\d+(?:\.\d+)?\s*[kKmM]\b(?![A-Za-z0-9])", text):
+            return []
+        if re.search(r"\d\s*[-–]\s*\d", text):
+            return []
+
+        numeric_tokens = re.findall(r"(?<![A-Za-z0-9.])\d+(?:,\d{3})*(?:\.0)?(?![A-Za-z0-9.])", text)
+        parsed_tokens = [parse_number(token) for token in numeric_tokens]
+        parsed_tokens = [token for token in parsed_tokens if token is not None and token != 0]
+        if len(parsed_tokens) != 1:
+            return []
+
+        confidence = 0.90 if re.fullmatch(r"\d+(?:,\d{3})*(?:\.0)?", text) else 0.70
+        return [
+            {
+                "value": parsed_tokens[0],
+                "unit": "unspecified",
+                "source_label": "Tonnage",
+                "confidence": confidence,
+                "evidence_text": text,
+            }
+        ]
+
+    def _extract_vessel_tonnage_from_seajobs_row(self, row_lines):
+        row_text = " ".join(" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip())
+        if not row_text:
+            return []
+
+        without_dates = row_text
+        for token in self._extract_ordered_date_tokens_from_seajobs_row(row_lines):
+            without_dates = without_dates.replace(token, " ")
+        without_dates = re.sub(r"^\s*\d{1,2}\s+", "", without_dates).strip()
+
+        entries = self._parse_vessel_tonnage_cell(without_dates)
+        if entries:
+            return entries
+
+        ship_type_match = re.search(
+            r"/\s*(?:oil|product|chemical|lng|lpg|crude|bulk|container|tanker|carrier|vessel|cargo)[A-Za-z\s-]*?\s+(.+)$",
+            without_dates,
+            flags=re.IGNORECASE,
+        )
+        if ship_type_match:
+            return self._parse_vessel_tonnage_cell(ship_type_match.group(1))
+        return []
+
     def _extract_rank_from_seajobs_row_window(self, row_lines):
         lines = [" ".join(str(line or "").split()) for line in (row_lines or []) if str(line or "").strip()]
         if not lines:
@@ -5956,6 +6065,7 @@ class AIResumeAnalyzer:
             for detail in engine_details
             if detail.get("engine_type")
         ]
+        vessel_tonnage = self._extract_vessel_tonnage_from_seajobs_row(row_lines)
         return {
             "row_index": row_index,
             "rank_raw": rank_fact.get("raw_rank"),
@@ -5963,6 +6073,7 @@ class AIResumeAnalyzer:
             "sign_in_date": sign_in_date,
             "sign_out_date": sign_out_date,
             "vessel_types": self._extract_row_ship_types_from_seajobs_row(row_lines),
+            "vessel_tonnage": vessel_tonnage,
             "engine_types": list(dict.fromkeys(engine_types)),
             "engine_details": engine_details,
             # Convenience singleton for legacy consumers; use engine_types for full coverage.
@@ -6144,6 +6255,7 @@ class AIResumeAnalyzer:
                 for detail in engine_details
                 if detail.get("engine_type")
             ]
+            vessel_tonnage = self._extract_vessel_tonnage_from_seajobs_row(window)
             parsed_rows.append({
                 "row_index": row_index,
                 "rank_raw": rank_fact.get("raw_rank"),
@@ -6151,6 +6263,7 @@ class AIResumeAnalyzer:
                 "sign_in_date": sign_in_date,
                 "sign_out_date": sign_out_date,
                 "vessel_types": self._extract_row_ship_types_from_seajobs_row(window),
+                "vessel_tonnage": vessel_tonnage,
                 "engine_types": list(dict.fromkeys(engine_types)),
                 "engine_details": engine_details,
                 # Convenience singleton for legacy consumers; use engine_types for full coverage.

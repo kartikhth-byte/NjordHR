@@ -129,6 +129,32 @@ def _validate_fact_extraction(extraction: Any, path: str, errors: List[Dict[str,
     _validate_enum(extraction_obj.get("method"), f"{path}.method", errors, {"table_parser", "regex", "ocr", "llm_extraction", "manual", "fallback"})
 
 
+def _validate_vessel_tonnage_entries(value: Any, path: str, errors: List[Dict[str, Any]]) -> None:
+    if value is None:
+        return
+    entries = _require_list(value, path, errors)
+    if entries is None:
+        return
+    for index, item in enumerate(entries):
+        item_path = f"{path}[{index}]"
+        obj = _require_mapping(item, item_path, errors)
+        if obj is None:
+            continue
+        tonnage_value = obj.get("value")
+        if isinstance(tonnage_value, bool) or not isinstance(tonnage_value, int):
+            errors.append(_error(f"{item_path}.value", "invalid_type", "must be integer"))
+        elif tonnage_value <= 0:
+            errors.append(_error(f"{item_path}.value", "invalid_value", "must be positive"))
+        _validate_enum(obj.get("unit"), f"{item_path}.unit", errors, {"unspecified", "gt", "grt", "dwt"})
+        _require_string(obj.get("source_label"), f"{item_path}.source_label", errors)
+        confidence = obj.get("confidence")
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            errors.append(_error(f"{item_path}.confidence", "invalid_type", "must be number"))
+        elif not 0 <= confidence <= 1:
+            errors.append(_error(f"{item_path}.confidence", "invalid_value", "must be between 0 and 1"))
+        _require_string(obj.get("evidence_text"), f"{item_path}.evidence_text", errors)
+
+
 def _validate_fact_item(item: Any, bucket: str, index: int, errors: List[Dict[str, Any]]) -> None:
     path = f"{bucket}[{index}]"
     obj = _require_mapping(item, path, errors)
@@ -186,6 +212,7 @@ def _validate_fact_item(item: Any, bucket: str, index: int, errors: List[Dict[st
         _require_string(obj.get("vessel_name"), f"{path}.vessel_name", errors, allow_null=True)
         _require_string(obj.get("vessel_type"), f"{path}.vessel_type", errors, allow_null=True)
         _require_string(obj.get("ship_family"), f"{path}.ship_family", errors, allow_null=True)
+        _validate_vessel_tonnage_entries(obj.get("vessel_tonnage"), f"{path}.vessel_tonnage", errors)
         _require_string(obj.get("engine_family"), f"{path}.engine_family", errors, allow_null=True)
         _require_string(obj.get("company"), f"{path}.company", errors, allow_null=True)
         _require_string(obj.get("start_date"), f"{path}.start_date", errors, allow_null=True)
