@@ -400,23 +400,32 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
     def test_seajobs_tonnage_multi_unlabeled_skip(self):
         self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58000 60000"), [])
 
-    def test_seajobs_tonnage_attaches_to_row(self):
-        raw_text = (
-            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
-            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
-            "Seamen Experience Details\n"
-            "Sign In Sign Out\n"
-            "# Rank Company Name / Ship Type Tonnage Engine\n"
-            "Date Date\n"
-            "1 2nd Engineer Synergy Maritime / Oil Tanker 58,000 6S60ME-C10.5 ENGINE 09-Jan-2024 03-Apr-2024\n"
+    def test_seajobs_tonnage_attaches_to_row_without_engine_model_false_positives(self):
+        for engine_text in ("6S60ME-C10.5", "RT-flex96C", "12RTA96C", "6S50MC-C"):
+            with self.subTest(engine_text=engine_text):
+                raw_text = (
+                    "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+                    "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+                    "Seamen Experience Details\n"
+                    "Sign In Sign Out\n"
+                    "# Rank Company Name / Ship Type Tonnage Engine\n"
+                    "Date Date\n"
+                    f"1 2nd Engineer Synergy Maritime / Oil Tanker 58,000 {engine_text} ENGINE 09-Jan-2024 03-Apr-2024\n"
+                )
+                fact = self.analyzer._extract_seajobs_experience_rows(
+                    raw_text,
+                    original_path="/tmp/2nd_Engineer_288.pdf",
+                )
+                row = fact["rows"][0]
+                self.assertEqual(row["vessel_tonnage"][0]["value"], 58000)
+                self.assertEqual(row["vessel_tonnage"][0]["unit"], "unspecified")
+                self.assertEqual(row["vessel_tonnage"][0]["confidence"], 0.70)
+
+    def test_seajobs_tonnage_strips_three_digit_row_numbers(self):
+        entries = self.analyzer._extract_vessel_tonnage_from_seajobs_row(
+            ["101 2nd Engineer Synergy Maritime / Oil Tanker 58,000 ENGINE 09-Jan-2024 03-Apr-2024"]
         )
-        fact = self.analyzer._extract_seajobs_experience_rows(
-            raw_text,
-            original_path="/tmp/2nd_Engineer_288.pdf",
-        )
-        row = fact["rows"][0]
-        self.assertEqual(row["vessel_tonnage"][0]["value"], 58000)
-        self.assertEqual(row["vessel_tonnage"][0]["unit"], "unspecified")
+        self.assertEqual(entries[0]["value"], 58000)
 
     def test_extract_seajobs_experience_rows_preserves_multiple_engine_mentions(self):
         raw_text = (

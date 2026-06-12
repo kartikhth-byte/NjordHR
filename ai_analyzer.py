@@ -5679,8 +5679,6 @@ class AIResumeAnalyzer:
 
     _VESSEL_TONNAGE_UNITS = {
         "dwt": "dwt",
-        "deadweight": "dwt",
-        "dead weight": "dwt",
         "gt": "gt",
         "grt": "grt",
     }
@@ -5771,12 +5769,14 @@ class AIResumeAnalyzer:
         without_dates = row_text
         for token in self._extract_ordered_date_tokens_from_seajobs_row(row_lines):
             without_dates = without_dates.replace(token, " ")
-        without_dates = re.sub(r"^\s*\d{1,2}\s+", "", without_dates).strip()
+        without_dates = re.sub(r"^\s*\d{1,3}\s+", "", without_dates).strip()
 
         entries = self._parse_vessel_tonnage_cell(without_dates)
         if entries:
             return entries
 
+        # Fallback for row windows where PDF extraction splits the tonnage cell
+        # away from the row prefix but keeps it after the ship-type phrase.
         ship_type_match = re.search(
             r"/\s*(?:oil|product|chemical|lng|lpg|crude|bulk|container|tanker|carrier|vessel|cargo)[A-Za-z\s-]*?\s+(.+)$",
             without_dates,
