@@ -616,6 +616,101 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertEqual(applied["us_visa"]["type"], "us_visa")
         self.assertEqual(applied["us_visa"]["visa_group"], "usa")
 
+    def test_build_shadow_llm_query_plan_synthesizes_any_of_when_model_returns_flat_or_children(self):
+        prompt = "has lng vessel or dual fuel vessel or win gd vessel expereince"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {
+                    "filter_family": "experience_ship_type",
+                    "parameters": {"ship_family": "lng"},
+                    "source_text": "lng vessel",
+                },
+                {
+                    "filter_family": "engine_experience",
+                    "parameters": {"engine_family": "dual_fuel"},
+                    "source_text": "dual fuel vessel",
+                },
+                {
+                    "filter_family": "engine_experience",
+                    "parameters": {"engine_family": "wingd_x_engines"},
+                    "source_text": "win gd vessel expereince",
+                },
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertEqual(plan["applied_constraints"], [])
+        self.assertEqual(plan["semantic_query"], "")
+        groups = plan["logical_groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["type"], "any_of")
+        self.assertEqual(
+            [(child["id"], child["constraint"]["type"]) for child in groups[0]["children"]],
+            [
+                ("experience_ship_type", "experience_ship_type"),
+                ("engine_experience", "engine_experience"),
+                ("engine_experience", "engine_experience"),
+            ],
+        )
+        self.assertEqual(groups[0]["children"][0]["constraint"]["ship_family"], "lng")
+        self.assertEqual(groups[0]["children"][1]["constraint"]["engine_family"], "dual_fuel")
+        self.assertEqual(groups[0]["children"][2]["constraint"]["engine_family"], "wingd_x_engines")
+
+    def test_build_shadow_llm_query_plan_synthesizes_any_of_when_model_returns_empty_or_plan(self):
+        prompt = "has lng vessel or dual fuel vessel or win gd vessel expereince"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        plan = result["plan"]
+        self.assertEqual(plan["applied_constraints"], [])
+        self.assertEqual(plan["semantic_query"], "")
+        groups = plan["logical_groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(len(groups[0]["children"]), 3)
+
     def test_build_shadow_llm_query_plan_does_not_infer_age_from_sea_service_numeric_prompt(self):
         plan_payload = {
             "schema_version": "query_plan.v1",
