@@ -109,6 +109,27 @@ class _FakeVectorDb:
 
     def upsert_chunks(self, chunks, embeddings, rank):
         self.upserts.append((chunks, embeddings, rank))
+        return True
+
+
+class _UnavailableVectorDb(_FakeVectorDb):
+    def __init__(self):
+        super().__init__()
+        self.last_error = "Failed to inspect namespace stats: unauthorized"
+
+    def namespace_vector_count(self, *_args, **_kwargs):
+        return None
+
+
+class _FailingVectorDb(_FakeVectorDb):
+    def __init__(self):
+        super().__init__()
+        self.last_error = ""
+
+    def upsert_chunks(self, chunks, embeddings, rank):
+        self.upserts.append((chunks, embeddings, rank))
+        self.last_error = "Upsert failed: unauthorized"
+        return False
 
 
 class AIAnalyzerJobConstraintTests(unittest.TestCase):
@@ -160,6 +181,51 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(context["filename"], "Jane_Doe.pdf")
         self.assertEqual(context["parser_version"], "generic_pdf.v1")
         self.assertEqual(context["facts_revision"], "candidate_facts.v1")
+
+    def test_ingest_folder_does_not_force_reindex_when_vector_health_unknown(self):
+        resume_path = self.rank_folder / "Jane_Doe.pdf"
+        resume_path.write_bytes(b"%PDF-1.4\n")
+
+        self.analyzer.registry = _FakeRegistry()
+        self.analyzer.pdf_processor = _FakePdfProcessor("Jane Doe\n" + ("2nd engineer resume " * 10))
+        self.analyzer.prepper = _FakePrepper()
+        self.analyzer.vector_db = _UnavailableVectorDb()
+        delattr(self.analyzer, "_ingest_folder")
+
+        events = list(self.analyzer._ingest_folder(str(self.rank_folder), self.rank))
+
+        self.assertEqual(events, [{
+            "type": "indexing_complete",
+            "current": 0,
+            "total": 0,
+            "message": "Index is up to date; vector index health could not be verified.",
+        }])
+        self.assertEqual(self.analyzer.vector_db.upserts, [])
+
+    def test_ingest_folder_does_not_mark_processed_when_vector_upsert_fails(self):
+        class _RecordingRegistry(_IngestRegistry):
+            def __init__(self):
+                self.upserts = []
+
+            def upsert_file_record(self, *args, **kwargs):
+                self.upserts.append((args, kwargs))
+
+        resume_path = self.rank_folder / "Jane_Doe.pdf"
+        resume_path.write_bytes(b"%PDF-1.4\n")
+        registry = _RecordingRegistry()
+
+        self.analyzer.registry = registry
+        self.analyzer.pdf_processor = _FakePdfProcessor("Jane Doe\n" + ("2nd engineer resume " * 10))
+        self.analyzer.prepper = _FakePrepper()
+        self.analyzer.vector_db = _FailingVectorDb()
+        delattr(self.analyzer, "_ingest_folder")
+
+        events = list(self.analyzer._ingest_folder(str(self.rank_folder), self.rank))
+
+        self.assertEqual(registry.upserts, [])
+        self.assertEqual(len(self.analyzer.vector_db.upserts), 1)
+        self.assertEqual(events[-1]["type"], "indexing_complete")
+        self.assertTrue(any("vector upsert failed" in event.get("message", "") for event in events))
 
     def test_iter_pdf_files_skips_supporting_document_attachments(self):
         resume_path = self.rank_folder / "Anubhav_Resume.pdf"

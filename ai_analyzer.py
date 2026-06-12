@@ -798,7 +798,7 @@ class PineconeManager:
         except Exception as e:
             self.last_error = f"Failed to inspect namespace stats: {e}"
             print(f"[ERROR] {self.last_error}")
-            return 0
+            return None
 
     def namespace_has_vectors(self, namespace, dimension=None, index_name=None):
         try:
@@ -865,7 +865,8 @@ class PineconeManager:
         return self._index
 
     def upsert_chunks(self, chunks, embeddings, rank):
-        if not embeddings: return
+        if not embeddings:
+            return False
         self.last_error = None
         self._ensure_dimension(len(embeddings[0]))
 
@@ -875,13 +876,15 @@ class PineconeManager:
             vectors_to_upsert.append({"id": chunk_id, "values": embeddings[i], "metadata": chunk['metadata']})
 
         if not vectors_to_upsert:
-            return
+            return False
         try:
             index = self.index
             index.upsert(vectors=vectors_to_upsert, namespace=rank)
+            return True
         except Exception as e:
             self.last_error = f"Upsert failed: {e}"
             print(f"[ERROR] {self.last_error}")
+            return False
 
     def query(self, query_embedding, rank, top_k=30):
         self.last_error = None
@@ -10807,6 +10810,16 @@ class AIResumeAnalyzer:
             # If local registry is up-to-date but vector namespace is empty
             # (e.g., switched to a new dimension-specific index), force reindex.
             vector_count = self.vector_db.namespace_vector_count(rank)
+            if vector_count is None:
+                error_hint = getattr(self.vector_db, "last_error", "") or "Vector index health could not be verified."
+                print(f"[{rank}] Registry is up to date; skipping forced reindex because vector index health is unknown. {error_hint}")
+                yield {
+                    "type": "indexing_complete",
+                    "current": 0,
+                    "total": 0,
+                    "message": "Index is up to date; vector index health could not be verified."
+                }
+                return
             if pdf_paths and vector_count == 0:
                 print(f"[{rank}] Registry is up to date but vector index is empty. Reindexing all {len(pdf_paths)} files.")
                 files_to_process = pdf_paths
@@ -10830,6 +10843,7 @@ class AIResumeAnalyzer:
             "message": f"Indexing {total_files} file(s)..."
         }
         embedding_failures = 0
+        vector_upsert_failures = 0
         folder_metadata = self._rank_manifest_metadata(Path(folder_path))
         for path in files_to_process:
             print(f"  -> Processing: {path.name}")
@@ -10891,7 +10905,24 @@ class AIResumeAnalyzer:
 
             if embeddings:
                 embedding_failures = 0
-                self.vector_db.upsert_chunks(chunks, embeddings, rank)
+                upsert_ok = self.vector_db.upsert_chunks(chunks, embeddings, rank)
+                if not upsert_ok:
+                    vector_upsert_failures += 1
+                    error_hint = getattr(self.vector_db, "last_error", "") or "No details available."
+                    print(f"    - SKIPPED: Vector index upsert failed. {error_hint}")
+                    processed_files += 1
+                    yield {
+                        "type": "indexing_progress",
+                        "current": processed_files,
+                        "total": total_files,
+                        "message": f"Skipped {path.name} (vector upsert failed)"
+                    }
+                    if vector_upsert_failures >= 3:
+                        raise RuntimeError(
+                            f"Vector index upsert repeatedly failed while indexing. Last error: {error_hint}"
+                        )
+                    continue
+                vector_upsert_failures = 0
                 print(f"    - Indexed {len(chunks)} chunks.")
                 self._ingest_mark_processed(str(path), path.stat().st_mtime, resume_id)
                 processed_files += 1
