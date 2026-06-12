@@ -427,6 +427,56 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         )
         self.assertEqual(entries[0]["value"], 58000)
 
+    def test_extract_vessel_tonnage_constraint_minimum(self):
+        constraint = self.analyzer._extract_vessel_tonnage_constraint("has experience on vessels above 50000 tonnage")
+        self.assertEqual(constraint["min_value"], 50000)
+        self.assertIsNone(constraint["max_value"])
+        self.assertEqual(constraint["unit"], "any")
+
+    def test_extract_vessel_tonnage_constraint_range_and_unit(self):
+        constraint = self.analyzer._extract_vessel_tonnage_constraint("vessel tonnage between 30000 and 80000 GRT")
+        self.assertEqual(constraint["min_value"], 30000)
+        self.assertEqual(constraint["max_value"], 80000)
+        self.assertEqual(constraint["unit"], "gt_grt")
+
+    def test_extract_vessel_tonnage_constraint_dwt(self):
+        constraint = self.analyzer._extract_vessel_tonnage_constraint("served on vessels above 100000 dwt")
+        self.assertEqual(constraint["min_value"], 100000)
+        self.assertEqual(constraint["unit"], "dwt")
+
+    def test_extract_vessel_tonnage_constraint_maximum_grt(self):
+        constraint = self.analyzer._extract_vessel_tonnage_constraint("up to 60000 grt")
+        self.assertIsNone(constraint["min_value"])
+        self.assertEqual(constraint["max_value"], 60000)
+        self.assertEqual(constraint["unit"], "gt_grt")
+
+    def test_extract_vessel_tonnage_constraint_bare_value(self):
+        constraint = self.analyzer._extract_vessel_tonnage_constraint("50000 tonnage")
+        self.assertEqual(constraint["min_value"], 50000)
+        self.assertIsNone(constraint["max_value"])
+        self.assertEqual(constraint["unit"], "any")
+
+    def test_extract_vessel_tonnage_constraint_ignores_service_duration(self):
+        self.assertIsNone(self.analyzer._extract_vessel_tonnage_constraint("minimum 12 months experience in oil tanker"))
+
+    def test_extract_job_constraints_does_not_treat_tonnage_as_age(self):
+        constraints = self.analyzer._extract_job_constraints("has experience on vessels above 50000 tonnage")
+        self.assertIn("vessel_tonnage", constraints["hard_constraints"])
+        self.assertNotIn("age_years", constraints["hard_constraints"])
+
+    def test_extract_job_constraints_handles_age_and_tonnage_together(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "above 50000 tonnage and between 30 and 50 years old"
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["vessel_tonnage"],
+            {"min_value": 50000, "max_value": None, "unit": "any", "display_value": "above 50000 tonnage"},
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["age_years"],
+            {"min_age": 30, "max_age": 50},
+        )
+
     def test_extract_seajobs_experience_rows_preserves_multiple_engine_mentions(self):
         raw_text = (
             "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"

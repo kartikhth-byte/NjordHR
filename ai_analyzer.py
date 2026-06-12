@@ -2135,6 +2135,13 @@ class AIResumeAnalyzer:
         for pattern in age_registry["range_patterns"]:
             match = re.search(pattern, prompt)
             if match:
+                # Avoid treating tonnage values like "50000" as age "50" when a
+                # two-digit age pattern matches the prefix of a larger number.
+                if any(
+                    match.end(group_index) < len(prompt) and prompt[match.end(group_index)].isdigit()
+                    for group_index in (1, 2)
+                ):
+                    continue
                 lower = self._age_text_to_int(match.group(1))
                 upper = self._age_text_to_int(match.group(2))
                 if lower is None or upper is None:
@@ -2167,23 +2174,35 @@ class AIResumeAnalyzer:
         for pattern in age_registry["min_patterns"]:
             match = re.search(pattern, prompt)
             if match:
+                # Avoid treating tonnage values like "50000" as age "50" when a
+                # two-digit age pattern matches the prefix of a larger number.
+                if match.end(1) < len(prompt) and prompt[match.end(1)].isdigit():
+                    continue
                 value = self._age_text_to_int(match.group(1))
                 if value is None:
                     continue
                 matched_phrase = match.group(0).lower()
                 if any(term in matched_phrase for term in ("older than", "over", "above")):
                     value += 1
+                if not 18 <= value <= 80:
+                    continue
                 return {"min_age": value, "max_age": None}
 
         for pattern in age_registry["max_patterns"]:
             match = re.search(pattern, prompt)
             if match:
+                # Avoid treating tonnage values like "50000" as age "50" when a
+                # two-digit age pattern matches the prefix of a larger number.
+                if match.end(1) < len(prompt) and prompt[match.end(1)].isdigit():
+                    continue
                 value = self._age_text_to_int(match.group(1))
                 if value is None:
                     continue
                 matched_phrase = match.group(0).lower()
                 if any(term in matched_phrase for term in ("younger than", "under", "below", "less than")):
                     value -= 1
+                if not 18 <= value <= 80:
+                    continue
                 return {"min_age": None, "max_age": value}
 
         return None
@@ -2565,6 +2584,112 @@ class AIResumeAnalyzer:
             "requested_label": requested_label,
             "display_value": self._experience_constraint_display_value(prompt, vessel_type=vessel_type),
         }
+
+    def _extract_vessel_tonnage_constraint(self, user_prompt):
+        prompt = " ".join(str(user_prompt or "").split())
+        if not prompt:
+            return None
+
+        tonnage_anchor = r"(?:vessel\s+)?tonnage|gt|grt|dwt|deadweight"
+        if not re.search(rf"\b(?:{tonnage_anchor})\b", prompt, flags=re.IGNORECASE):
+            return None
+
+        number_pattern = r"(\d{1,3}(?:,\d{3})+|\d+)"
+
+        def parse_number(value):
+            try:
+                parsed = int(str(value or "").replace(",", ""))
+            except (TypeError, ValueError):
+                return None
+            return parsed if parsed > 0 else None
+
+        def unit_from_text(text):
+            lowered = str(text or "").lower()
+            if re.search(r"\bdwt\b|\bdead\s*weight\b|\bdeadweight\b", lowered):
+                return "dwt"
+            if re.search(r"\bgt\b|\bgrt\b", lowered):
+                return "gt_grt"
+            return "any"
+
+        range_patterns = (
+            rf"\b(?:between|from)\s+{number_pattern}\s+(?:and|to|-|–)\s+{number_pattern}\s*(?:{tonnage_anchor})\b",
+            rf"\b(?:{tonnage_anchor})\s+(?:between|from)\s+{number_pattern}\s+(?:and|to|-|–)\s+{number_pattern}\b",
+        )
+        for pattern in range_patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            min_value = parse_number(match.group(1))
+            max_value = parse_number(match.group(2))
+            if min_value is None or max_value is None:
+                continue
+            if min_value > max_value:
+                min_value, max_value = max_value, min_value
+            return {
+                "min_value": min_value,
+                "max_value": max_value,
+                "unit": unit_from_text(match.group(0)),
+                "display_value": match.group(0).strip(),
+            }
+
+        min_patterns = (
+            rf"\b(?:minimum|min|at\s+least|above|over|more\s+than)\s+{number_pattern}\s*(?:{tonnage_anchor})\b",
+            rf"\b(?:{tonnage_anchor})\s*(?:minimum|min|at\s+least|above|over|more\s+than)\s+{number_pattern}\b",
+            rf"\b(?:{tonnage_anchor})\s*(?:>=|>)\s*{number_pattern}\b",
+            rf"\b(?:>=|>)\s*{number_pattern}\s*(?:{tonnage_anchor})\b",
+        )
+        for pattern in min_patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            value = parse_number(match.group(1))
+            if value is None:
+                continue
+            return {
+                "min_value": value,
+                "max_value": None,
+                "unit": unit_from_text(match.group(0)),
+                "display_value": match.group(0).strip(),
+            }
+
+        max_patterns = (
+            rf"\b(?:maximum|max|up\s+to|below|under|less\s+than)\s+{number_pattern}\s*(?:{tonnage_anchor})\b",
+            rf"\b(?:{tonnage_anchor})\s*(?:maximum|max|up\s+to|below|under|less\s+than)\s+{number_pattern}\b",
+            rf"\b(?:{tonnage_anchor})\s*(?:<=|<)\s*{number_pattern}\b",
+            rf"\b(?:<=|<)\s*{number_pattern}\s*(?:{tonnage_anchor})\b",
+        )
+        for pattern in max_patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            value = parse_number(match.group(1))
+            if value is None:
+                continue
+            return {
+                "min_value": None,
+                "max_value": value,
+                "unit": unit_from_text(match.group(0)),
+                "display_value": match.group(0).strip(),
+            }
+
+        bare_patterns = (
+            rf"\b{number_pattern}\s*(?:{tonnage_anchor})\b",
+            rf"\b(?:{tonnage_anchor})\s+{number_pattern}\b",
+        )
+        for pattern in bare_patterns:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            value = parse_number(match.group(1))
+            if value is None:
+                continue
+            return {
+                "min_value": value,
+                "max_value": None,
+                "unit": unit_from_text(match.group(0)),
+                "display_value": match.group(0).strip(),
+            }
+        return None
 
     def _extract_ship_type_from_prompt(self, user_prompt):
         prompt = str(user_prompt or "")
@@ -3855,6 +3980,11 @@ class AIResumeAnalyzer:
         if rank_duration_experience_constraint:
             constraints["hard_constraints"]["rank_duration_experience"] = rank_duration_experience_constraint
             constraints["applied_constraints"].append("rank_duration_experience")
+
+        vessel_tonnage_constraint = self._extract_vessel_tonnage_constraint(user_prompt)
+        if vessel_tonnage_constraint:
+            constraints["hard_constraints"]["vessel_tonnage"] = vessel_tonnage_constraint
+            constraints["applied_constraints"].append("vessel_tonnage")
 
         experienced_ship_type = None if (
             engine_vessel_experience_constraint
@@ -9793,6 +9923,168 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _vessel_tonnage_unit_matches(self, candidate_unit, requested_unit):
+        candidate = str(candidate_unit or "").strip().lower()
+        requested = str(requested_unit or "any").strip().lower()
+        if requested == "any":
+            return candidate in {"unspecified", "gt", "grt", "dwt"}
+        if requested == "unspecified":
+            return candidate == "unspecified"
+        if requested == "gt_grt":
+            return candidate in {"gt", "grt"}
+        if requested == "dwt":
+            return candidate == "dwt"
+        return False
+
+    def _collect_vessel_tonnage_evidence(self, candidate_facts):
+        evidence_rows = []
+        experience = (candidate_facts or {}).get("experience") or {}
+        contracts = (candidate_facts or {}).get("contracts") or []
+        rows = contracts or experience.get("service_rows") or []
+        source_name = "contracts" if contracts else "service_rows"
+        for row_index, row in enumerate(rows, start=1):
+            if not isinstance(row, dict):
+                continue
+            for entry in row.get("vessel_tonnage") or []:
+                if not isinstance(entry, dict):
+                    continue
+                value = entry.get("value")
+                if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                    continue
+                unit = str(entry.get("unit") or "").strip().lower()
+                if unit not in {"unspecified", "gt", "grt", "dwt"}:
+                    continue
+                evidence_rows.append({
+                    "value": value,
+                    "unit": unit,
+                    "source": source_name,
+                    "row_index": row.get("row_index") or row.get("contract_order") or row_index,
+                    "vessel_name": row.get("vessel_name"),
+                    "rank": row.get("rank_normalized") or row.get("rank"),
+                    "evidence_text": entry.get("evidence_text") or row.get("snippet"),
+                    "confidence": entry.get("confidence"),
+                })
+        return evidence_rows
+
+    def _evaluate_vessel_tonnage_rule(self, candidate_facts, constraint):
+        fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.service_rows") or {}
+        confidence = fact_meta.get("confidence")
+        status = str(fact_meta.get("status") or "MISSING")
+
+        min_value = (constraint or {}).get("min_value")
+        max_value = (constraint or {}).get("max_value")
+        requested_unit = str((constraint or {}).get("unit") or "any").strip().lower()
+        if requested_unit not in {"any", "unspecified", "gt_grt", "dwt"}:
+            requested_unit = "any"
+        if (min_value is not None and (isinstance(min_value, bool) or not isinstance(min_value, int) or min_value <= 0)) or (
+            max_value is not None and (isinstance(max_value, bool) or not isinstance(max_value, int) or max_value <= 0)
+        ) or (min_value is None and max_value is None):
+            return self._base_rule_result(
+                "UNKNOWN",
+                "VESSEL_TONNAGE_CONSTRAINT_INVALID",
+                "Vessel tonnage constraint is incomplete.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if status == "SOURCE_EXCLUDED":
+            return self._base_rule_result(
+                "UNKNOWN",
+                "VESSEL_TONNAGE_SOURCE_EXCLUDED",
+                "Vessel tonnage currently requires parsed service rows from a supported resume layout.",
+                actual_value=None,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        evidence_rows = self._collect_vessel_tonnage_evidence(candidate_facts)
+        matching_unit_rows = [
+            row for row in evidence_rows
+            if self._vessel_tonnage_unit_matches(row.get("unit"), requested_unit)
+        ]
+        actual_value = {
+            "evidence": evidence_rows,
+            "matching_unit_evidence": matching_unit_rows,
+        }
+        if not evidence_rows:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "VESSEL_TONNAGE_NOT_FOUND",
+                "No vessel tonnage evidence found in this resume.",
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+        if not matching_unit_rows:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "VESSEL_TONNAGE_UNIT_NOT_FOUND",
+                f"No vessel tonnage evidence matched requested unit policy '{requested_unit}'.",
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        passing_rows = []
+        below_rows = []
+        above_rows = []
+        for row in matching_unit_rows:
+            value = row.get("value")
+            if min_value is not None and value < min_value:
+                below_rows.append(row)
+                continue
+            if max_value is not None and value > max_value:
+                above_rows.append(row)
+                continue
+            passing_rows.append(row)
+
+        if passing_rows:
+            best = max(passing_rows, key=lambda row: row.get("value") or 0)
+            return self._base_rule_result(
+                "PASS",
+                "VESSEL_TONNAGE_MATCH",
+                f"Candidate vessel tonnage evidence includes {best['value']} {best['unit']}, matching the requested range.",
+                actual_value={**actual_value, "matched_evidence": passing_rows},
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        if min_value is not None and below_rows and not above_rows:
+            best_value = max(row.get("value") or 0 for row in below_rows)
+            return self._base_rule_result(
+                "FAIL",
+                "VESSEL_TONNAGE_BELOW_MINIMUM",
+                f"Highest vessel tonnage found is {best_value}, below required minimum {min_value}.",
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        if max_value is not None and above_rows and not below_rows:
+            lowest_value = min(row.get("value") or 0 for row in above_rows)
+            return self._base_rule_result(
+                "FAIL",
+                "VESSEL_TONNAGE_ABOVE_MAXIMUM",
+                f"Lowest vessel tonnage found is {lowest_value}, above required maximum {max_value}.",
+                actual_value=actual_value,
+                expected_value=constraint,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "VESSEL_TONNAGE_OUT_OF_RANGE",
+            "Candidate vessel tonnage evidence does not fall within the requested range.",
+            actual_value=actual_value,
+            expected_value=constraint,
+            confidence=confidence,
+        )
+
     def _evaluate_rank_duration_experience_rule(self, candidate_facts, constraint):
         requested_rank = str((constraint or {}).get("rank_normalized") or "").strip()
         try:
@@ -10674,6 +10966,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_rank_duration_experience_rule(candidate_facts, rank_duration_experience_constraint))
+
+        vessel_tonnage_constraint = hard_constraints.get("vessel_tonnage")
+        if "vessel_tonnage" in applied_constraints and vessel_tonnage_constraint:
+            activated_rules.append("vessel_tonnage")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "VESSEL_TONNAGE_RULE_REQUIRES_V2_FACTS",
+                    "Vessel tonnage requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=vessel_tonnage_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_vessel_tonnage_rule(candidate_facts, vessel_tonnage_constraint))
 
         engine_experience_constraint = hard_constraints.get("engine_experience")
         if "engine_experience" in applied_constraints and engine_experience_constraint:

@@ -619,6 +619,35 @@ class LegacyParserAdapter:
                 "experience_ship_type",
             )
 
+        if "vessel_tonnage" in hard_constraints:
+            payload = hard_constraints.get("vessel_tonnage") or {}
+            min_value = payload.get("min_value")
+            max_value = payload.get("max_value")
+            if min_value is not None:
+                semantic_fragments.extend([
+                    f"minimum {min_value} tonnage",
+                    f"at least {min_value} tonnage",
+                    f"above {min_value} tonnage",
+                ])
+            if max_value is not None:
+                semantic_fragments.extend([
+                    f"maximum {max_value} tonnage",
+                    f"up to {max_value} tonnage",
+                    f"below {max_value} tonnage",
+                ])
+            _append_applied(
+                "vessel_tonnage",
+                {
+                    "type": "vessel_tonnage",
+                    "min_value": min_value,
+                    "max_value": max_value,
+                    "unit": payload.get("unit") or "any",
+                },
+                payload.get("display_value") or user_prompt,
+                "vessel_tonnage",
+                "vessel_tonnage",
+            )
+
         if "recency" in hard_constraints:
             payload = hard_constraints.get("recency") or {}
             if payload.get("display_value"):

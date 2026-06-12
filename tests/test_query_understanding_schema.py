@@ -167,6 +167,110 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
         self.assertEqual(validated["validation"]["status"], "valid")
         self.assertTrue(validated["applied_constraints"][0]["constraint"]["must_be_valid"])
 
+    def test_vessel_tonnage_constraint_is_valid(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "vessel_tonnage",
+                "mode": "required",
+                "constraint": {
+                    "type": "vessel_tonnage",
+                    "min_value": 50000,
+                    "max_value": 80000,
+                    "unit": "gt_grt",
+                },
+                "source_text": "vessel tonnage between 50000 and 80000 GT",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "vessel_tonnage",
+                    "legacy_applied_constraint_id": "vessel_tonnage",
+                },
+            }
+        ]
+        validated = validate_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "valid")
+        constraint = validated["applied_constraints"][0]["constraint"]
+        self.assertEqual(constraint["min_value"], 50000)
+        self.assertEqual(constraint["max_value"], 80000)
+        self.assertEqual(constraint["unit"], "gt_grt")
+
+    def test_invalid_vessel_tonnage_constraint_is_demoted(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "vessel_tonnage",
+                "mode": "required",
+                "constraint": {
+                    "type": "vessel_tonnage",
+                    "min_value": 90000,
+                    "max_value": 50000,
+                    "unit": "tons",
+                },
+                "source_text": "vessel tonnage between 90000 and 50000 tons",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "vessel_tonnage",
+                    "legacy_applied_constraint_id": "vessel_tonnage",
+                },
+            }
+        ]
+        validated = normalize_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertEqual(validated["applied_constraints"], [])
+        self.assertEqual(validated["unapplied_constraints"][0]["id"], "vessel_tonnage")
+        self.assertTrue(any(error["code"] == "invalid_vessel_tonnage_range" for error in validated["validation"]["errors"]))
+        self.assertTrue(any(error["code"] == "invalid_vessel_tonnage_unit" for error in validated["validation"]["errors"]))
+
+    def test_vessel_tonnage_constraint_requires_at_least_one_bound(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "vessel_tonnage",
+                "mode": "required",
+                "constraint": {
+                    "type": "vessel_tonnage",
+                    "min_value": None,
+                    "max_value": None,
+                    "unit": "any",
+                },
+                "source_text": "vessel tonnage",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "vessel_tonnage",
+                    "legacy_applied_constraint_id": "vessel_tonnage",
+                },
+            }
+        ]
+        validated = normalize_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertEqual(validated["applied_constraints"], [])
+        self.assertTrue(any(error["code"] == "missing_vessel_tonnage_bound" for error in validated["validation"]["errors"]))
+
+    def test_vessel_tonnage_constraint_rejects_non_positive_values(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "vessel_tonnage",
+                "mode": "required",
+                "constraint": {
+                    "type": "vessel_tonnage",
+                    "min_value": -1,
+                    "max_value": None,
+                    "unit": "any",
+                },
+                "source_text": "minimum -1 tonnage",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "vessel_tonnage",
+                    "legacy_applied_constraint_id": "vessel_tonnage",
+                },
+            }
+        ]
+        validated = normalize_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertEqual(validated["applied_constraints"], [])
+        self.assertTrue(any(error["code"] == "invalid_min_value" for error in validated["validation"]["errors"]))
+
     def test_us_visa_payload_preserves_visa_group_and_accepted_types(self):
         plan = _valid_plan()
         plan["applied_constraints"] = [

@@ -735,6 +735,171 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
 
+    def test_vessel_tonnage_rule_passes_when_row_value_matches_minimum(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "row_index": 1,
+                            "vessel_name": "MT Aurora",
+                            "vessel_tonnage": [
+                                {"value": 58000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "Tonnage: 58000"}
+                            ],
+                        }
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 50000, "max_value": None, "unit": "any"}},
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_MATCH")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_evidence"][0]["value"], 58000)
+
+    def test_vessel_tonnage_rule_prefers_contract_evidence_without_duplicates(self):
+        tonnage_entry = {"value": 58000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "Tonnage: 58000"}
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"row_index": 1, "vessel_name": "MT Aurora", "vessel_tonnage": [tonnage_entry]}
+                    ],
+                },
+                "contracts": [
+                    {"contract_order": 1, "vessel_name": "MT Aurora", "vessel_tonnage": [tonnage_entry]}
+                ],
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 50000, "max_value": None, "unit": "any"}},
+            },
+        )
+        matched = result["results"][0]["actual_value"]["matched_evidence"]
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["source"], "contracts")
+
+    def test_vessel_tonnage_rule_fails_below_minimum(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"vessel_tonnage": [{"value": 28000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "Tonnage: 28000"}]}
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 50000, "max_value": None, "unit": "any"}},
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_BELOW_MINIMUM")
+
+    def test_vessel_tonnage_rule_fails_above_maximum(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"vessel_tonnage": [{"value": 105000, "unit": "dwt", "confidence": 0.9, "evidence_text": "105000 DWT"}]}
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": None, "max_value": 80000, "unit": "dwt"}},
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_ABOVE_MAXIMUM")
+
+    def test_vessel_tonnage_rule_fails_out_of_range_with_mixed_evidence(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"vessel_tonnage": [{"value": 25000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "25000"}]},
+                        {"vessel_tonnage": [{"value": 90000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "90000"}]},
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 30000, "max_value": 80000, "unit": "any"}},
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_OUT_OF_RANGE")
+
+    def test_vessel_tonnage_rule_unknown_without_evidence(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"service_rows": [{"vessel_name": "MT Aurora"}]},
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 50000, "max_value": None, "unit": "any"}},
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_NOT_FOUND")
+
+    def test_vessel_tonnage_rule_unknown_for_invalid_constraint(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"vessel_tonnage": [{"value": 58000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "Tonnage: 58000"}]}
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": None, "max_value": None, "unit": "any"}},
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_CONSTRAINT_INVALID")
+
+    def test_vessel_tonnage_rule_marks_v1_1_facts_unknown(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {"facts_version": "1.1"},
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 50000, "max_value": None, "unit": "any"}},
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_RULE_REQUIRES_V2_FACTS")
+
+    def test_vessel_tonnage_rule_honors_unit_policy(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"vessel_tonnage": [{"value": 58000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "Tonnage: 58000"}]}
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 50000, "max_value": None, "unit": "dwt"}},
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_UNIT_NOT_FOUND")
+
     def test_engine_experience_rule_honors_recent_contract_window(self):
         result = self.analyzer._evaluate_hard_filters(
             {

@@ -589,6 +589,33 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
             errors.append(_error("invalid_minimum_months", "constraint.minimum_months", "minimum_months must be an integer or null"))
         return {"type": "experience_ship_type", "ship_family": ship_family, "minimum_months": minimum_months}, errors
 
+    if family_id == "vessel_tonnage":
+        if payload.get("type") != "vessel_tonnage":
+            errors.append(_error("invalid_payload_type", "constraint.type", "type must be vessel_tonnage"))
+        min_value = payload.get("min_value")
+        max_value = payload.get("max_value")
+        unit = payload.get("unit")
+        if not (_is_int(min_value) or min_value is None):
+            errors.append(_error("invalid_min_value", "constraint.min_value", "min_value must be an integer or null"))
+        elif isinstance(min_value, int) and min_value <= 0:
+            errors.append(_error("invalid_min_value", "constraint.min_value", "min_value must be positive"))
+        if not (_is_int(max_value) or max_value is None):
+            errors.append(_error("invalid_max_value", "constraint.max_value", "max_value must be an integer or null"))
+        elif isinstance(max_value, int) and max_value <= 0:
+            errors.append(_error("invalid_max_value", "constraint.max_value", "max_value must be positive"))
+        if min_value is None and max_value is None:
+            errors.append(_error("missing_vessel_tonnage_bound", "constraint", "vessel_tonnage must include at least one bound"))
+        if _is_int(min_value) and _is_int(max_value) and min_value > max_value:
+            errors.append(_error("invalid_vessel_tonnage_range", "constraint", "min_value cannot exceed max_value"))
+        if unit not in {"any", "unspecified", "gt_grt", "dwt"}:
+            errors.append(_error("invalid_vessel_tonnage_unit", "constraint.unit", "unit must be any, unspecified, gt_grt, or dwt"))
+        return {
+            "type": "vessel_tonnage",
+            "min_value": min_value,
+            "max_value": max_value,
+            "unit": unit if unit in {"any", "unspecified", "gt_grt", "dwt"} else "any",
+        }, errors
+
     if family_id == "availability":
         if payload.get("type") != "availability":
             errors.append(_error("invalid_payload_type", "constraint.type", "type must be availability"))
