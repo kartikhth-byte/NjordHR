@@ -1141,6 +1141,92 @@ def _repair_us_visa_accepted_types(plan: Mapping[str, Any], prompt_text: Any, an
     return repaired
 
 
+def _constraint_signature(item: Mapping[str, Any]) -> tuple[str, str] | None:
+    family_id = str(item.get("id") or "").strip()
+    constraint = item.get("constraint")
+    if not family_id or not isinstance(constraint, Mapping):
+        return None
+    if family_id == "experience_ship_type":
+        ship_family = str(constraint.get("ship_family") or "").strip()
+        return (family_id, ship_family) if ship_family else None
+    if family_id == "engine_experience":
+        engine_family = str(constraint.get("engine_family") or "").strip()
+        return (family_id, engine_family) if engine_family else None
+    try:
+        payload = json.dumps(constraint, sort_keys=True, separators=(",", ":"))
+    except TypeError:
+        payload = repr(constraint)
+    return family_id, payload
+
+
+def _synthesize_logical_groups_from_legacy(plan: Mapping[str, Any], prompt_text: str, rank: str | None, analyzer: Any) -> dict[str, Any]:
+    if plan.get("logical_groups"):
+        return dict(plan)
+    prompt_text = str(prompt_text or "").strip()
+    if not prompt_text:
+        return dict(plan)
+
+    extract_job_constraints = getattr(analyzer, "_extract_job_constraints", None)
+    if not callable(extract_job_constraints):
+        return dict(plan)
+
+    try:
+        legacy_constraints = extract_job_constraints(prompt_text, rank=rank)
+    except Exception:
+        return dict(plan)
+    if not isinstance(legacy_constraints, Mapping) or not legacy_constraints.get("logical_groups"):
+        return dict(plan)
+
+    try:
+        from .legacy_parser_adapter import LegacyParserAdapter
+
+        legacy_plan = LegacyParserAdapter(analyzer).from_legacy_constraints(
+            legacy_constraints,
+            user_prompt=prompt_text,
+            rank=rank,
+            prompt_template_version="legacy.parser.v1",
+            prompt_id=None,
+        )
+    except Exception:
+        return dict(plan)
+
+    logical_groups = [
+        group
+        for group in (legacy_plan.get("logical_groups") or [])
+        if isinstance(group, Mapping) and group.get("type") == "any_of" and len(group.get("children") or []) >= 2
+    ]
+    if not logical_groups:
+        return dict(plan)
+
+    child_signatures = {
+        signature
+        for group in logical_groups
+        for child in (group.get("children") or [])
+        if isinstance(child, Mapping)
+        for signature in [_constraint_signature(child)]
+        if signature is not None
+    }
+
+    repaired = dict(plan)
+    if child_signatures:
+        repaired["applied_constraints"] = [
+            item
+            for item in (plan.get("applied_constraints") or [])
+            if not (isinstance(item, Mapping) and _constraint_signature(item) in child_signatures)
+        ]
+    repaired["logical_groups"] = list(plan.get("logical_groups") or []) + [dict(group) for group in logical_groups]
+    semantic_query = str(repaired.get("semantic_query") or "").strip()
+    if semantic_query and (
+        _normalize_text(semantic_query).lower() == _normalize_text(prompt_text).lower()
+        or (
+            not repaired.get("applied_constraints")
+            and not repaired.get("unapplied_constraints")
+        )
+    ):
+        repaired["semantic_query"] = ""
+    return repaired
+
+
 def _diagnostic_validation_errors(plan: Mapping[str, Any]) -> list[dict[str, str]]:
     errors = plan.get("validation", {}).get("errors") if isinstance(plan.get("validation"), Mapping) else []
     if not isinstance(errors, list):
@@ -2472,7 +2558,7 @@ def _translate_model_payload(
     semantic_query = _cleanup_semantic_residual(semantic_query)
     if (
         semantic_query
-        and (applied_constraints or unapplied_constraints)
+        and (applied_constraints or logical_groups or unapplied_constraints)
         and _normalize_text(semantic_query).lower() == _normalize_text(prompt_text).lower()
     ):
         semantic_query = ""
@@ -2573,9 +2659,14 @@ def build_shadow_llm_query_plan(
             )
 
         candidate_plan = _normalize_with_semantic_repair(
-            _repair_us_visa_accepted_types(
-                _translate_model_payload(parsed, analyzer=analyzer, raw_prompt=prompt, rank=rank),
+            _synthesize_logical_groups_from_legacy(
+                _repair_us_visa_accepted_types(
+                    _translate_model_payload(parsed, analyzer=analyzer, raw_prompt=prompt, rank=rank),
+                    prompt_text,
+                    analyzer,
+                ),
                 prompt_text,
+                rank,
                 analyzer,
             ),
         )
