@@ -64,6 +64,12 @@ class LegacyParserAdapterTests(unittest.TestCase):
                 ["recent_contract_vessel_experience"],
                 [],
             ),
+            (
+                "has experience on vessels above 50000 tonnage",
+                "2nd Engineer",
+                ["vessel_tonnage"],
+                [],
+            ),
         ]
 
         for prompt, rank, expected_applied, expected_unapplied in cases:
@@ -82,6 +88,15 @@ class LegacyParserAdapterTests(unittest.TestCase):
         self.assertEqual(constraint["type"], "recent_contract_vessel_experience")
         self.assertEqual(constraint["ship_family"], "tanker")
         self.assertEqual(constraint["recent_contract_count"], 3)
+
+    def test_adapter_carries_vessel_tonnage_payload_into_query_plan_shape(self):
+        adapted = self.adapter.adapt("vessel tonnage between 30000 and 80000", rank="2nd Engineer")
+        self.assertEqual(adapted["validation"]["status"], "valid")
+        constraint = adapted["applied_constraints"][0]["constraint"]
+        self.assertEqual(constraint["type"], "vessel_tonnage")
+        self.assertEqual(constraint["min_value"], 30000)
+        self.assertEqual(constraint["max_value"], 80000)
+        self.assertEqual(constraint["unit"], "any")
 
     def test_adapter_preserves_logical_groups(self):
         adapted = self.adapter.adapt(

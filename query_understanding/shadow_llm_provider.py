@@ -205,12 +205,12 @@ def build_shadow_llm_prompt(
     )
     return (
         "You are NjordHR's shadow query normalizer.\n"
-        "Return valid JSON for query_plan.v1 only. No markdown/commentary.\n"
-        "Supported hard constraints -> applied; unsupported mandatory -> unapplied_constraints reason unsupported_filter_family.\n"
+        "Return query_plan.v1 JSON only. No markdown/commentary.\n"
+        "Supported hard constraints -> applied; unsupported mandatory -> unapplied unsupported_filter_family.\n"
         "Keep only fuzzy suitability language in semantic_query.\n"
         "Cross-family OR -> logical_groups any_of; no duplicate applied children.\n"
         "Prefer degraded over invalid.\n"
-        f"The catalog_version is {catalog_version}.\n"
+        f"catalog_version={catalog_version}.\n"
         f"Supported families: {supported_families}.\n"
         f"{age_rule_block}"
         f"{visa_rule_block}"
@@ -866,6 +866,18 @@ def _extract_shadow_recent_contract_vessel_experience(prompt_text: Any) -> dict[
         "minimum_months": months,
         "recent_contract_count": contract_count or 1,
     }
+
+
+def _normalize_vessel_tonnage_unit(value: Any) -> str:
+    unit = str(value or "").strip().lower().replace("-", "_")
+    unit = re.sub(r"\s+", "_", unit)
+    if unit in {"dwt", "deadweight", "dead_weight"}:
+        return "dwt"
+    if unit in {"gt", "grt", "gt_grt", "gross_tonnage", "gross_registered_tonnage"}:
+        return "gt_grt"
+    if unit == "unspecified":
+        return "unspecified"
+    return "any"
 
 
 _AGE_PLAUSIBLE_MIN = 14
@@ -1929,6 +1941,61 @@ def _family_to_canonical_items(
             )
         ], [], [f"{minimum_months} months", "experience as", "rank experience"]
 
+    if family == "vessel_tonnage":
+        minimum_value = _as_positive_int(
+            _first_present(
+                parameters.get("min_value"),
+                parameters.get("minimum_value"),
+                parameters.get("min_tonnage"),
+                parameters.get("minimum_tonnage"),
+                item.get("min_value"),
+                item.get("minimum_value"),
+                item.get("min_tonnage"),
+                item.get("minimum_tonnage"),
+            )
+        )
+        maximum_value = _as_positive_int(
+            _first_present(
+                parameters.get("max_value"),
+                parameters.get("maximum_value"),
+                parameters.get("max_tonnage"),
+                parameters.get("maximum_tonnage"),
+                item.get("max_value"),
+                item.get("maximum_value"),
+                item.get("max_tonnage"),
+                item.get("maximum_tonnage"),
+            )
+        )
+        if minimum_value is None and maximum_value is None:
+            return [], [], []
+        unit = _normalize_vessel_tonnage_unit(
+            _first_present(
+                parameters.get("unit"),
+                parameters.get("tonnage_unit"),
+                item.get("unit"),
+                item.get("tonnage_unit"),
+            )
+        )
+        fragments = []
+        if minimum_value is not None:
+            fragments.append(f"minimum vessel tonnage {minimum_value}")
+        if maximum_value is not None:
+            fragments.append(f"maximum vessel tonnage {maximum_value}")
+        fragments.append(unit)
+        return [
+            _make_applied_constraint(
+                "vessel_tonnage",
+                {
+                    "type": "vessel_tonnage",
+                    "min_value": minimum_value,
+                    "max_value": maximum_value,
+                    "unit": unit,
+                },
+                source_text=source_text,
+                confidence=confidence,
+            )
+        ], [], fragments
+
     if family == "experience_ship_type":
         ship_family = _first_string(parameters.get("ship_family"), parameters.get("vessel_type"))
         if ship_family not in canonical_ship_family_values():
@@ -2316,6 +2383,36 @@ def _translate_model_payload(
                     f"last {shadow_recent.get('recent_contract_count')} contracts" if shadow_recent.get("recent_contract_count") else "",
                 ]
             )
+
+    if not any(constraint.get("id") == "vessel_tonnage" for constraint in applied_constraints):
+        extract_vessel_tonnage_constraint = getattr(analyzer, "_extract_vessel_tonnage_constraint", None)
+        if callable(extract_vessel_tonnage_constraint):
+            try:
+                vessel_tonnage = extract_vessel_tonnage_constraint(prompt_text)
+            except Exception:
+                vessel_tonnage = None
+            if isinstance(vessel_tonnage, Mapping):
+                applied_constraints.append(
+                    _make_applied_constraint(
+                        "vessel_tonnage",
+                        {
+                            "type": "vessel_tonnage",
+                            "min_value": _as_positive_int(vessel_tonnage.get("min_value")),
+                            "max_value": _as_positive_int(vessel_tonnage.get("max_value")),
+                            "unit": _normalize_vessel_tonnage_unit(vessel_tonnage.get("unit")),
+                        },
+                        source_text=_first_string(vessel_tonnage.get("display_value"), prompt_text) or prompt_text,
+                        confidence="high",
+                    )
+                )
+                semantic_fragments.extend(
+                    [
+                        str(vessel_tonnage.get("min_value") or ""),
+                        str(vessel_tonnage.get("max_value") or ""),
+                        str(vessel_tonnage.get("unit") or ""),
+                        "vessel tonnage",
+                    ]
+                )
 
     if not any(constraint.get("id") == "us_visa" for constraint in applied_constraints):
         shadow_visa = _extract_shadow_us_visa_constraint(analyzer, prompt_text)

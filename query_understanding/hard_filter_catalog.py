@@ -32,6 +32,7 @@ ACTIVE_FAMILY_IDS = (
     "rank_certificate_expectation",
     "certificate_requirement",
     "experience_ship_type",
+    "vessel_tonnage",
     "availability",
 )
 
@@ -132,6 +133,11 @@ FAMILY_CATALOG: Dict[str, Dict[str, object]] = {
         "status": ACTIVE,
         "legacy_hard_constraints_key": "experience_ship_type",
         "legacy_applied_constraint_id": "experience_ship_type",
+    },
+    "vessel_tonnage": {
+        "status": ACTIVE,
+        "legacy_hard_constraints_key": "vessel_tonnage",
+        "legacy_applied_constraint_id": "vessel_tonnage",
     },
     "availability": {
         "status": ACTIVE,

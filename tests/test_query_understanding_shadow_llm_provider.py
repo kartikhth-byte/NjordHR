@@ -1422,6 +1422,77 @@ class ShadowLLMProviderTests(unittest.TestCase):
                     legacy_plan=self.legacy_plan,
                 )
 
+    def test_build_shadow_llm_query_plan_translates_vessel_tonnage_payload(self):
+        prompt = "has experience on vessels above 50000 gt"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {
+                    "filter_family": "vessel_tonnage",
+                    "parameters": {"min_tonnage": 50000, "tonnage_unit": "gt"},
+                }
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["id"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertEqual(
+            applied["vessel_tonnage"],
+            {"type": "vessel_tonnage", "min_value": 50000, "max_value": None, "unit": "gt_grt"},
+        )
+
+    def test_build_shadow_llm_query_plan_preserves_legacy_vessel_tonnage_fallback(self):
+        prompt = "vessel tonnage between 30000 and 80000"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["id"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertEqual(
+            applied["vessel_tonnage"],
+            {"type": "vessel_tonnage", "min_value": 30000, "max_value": 80000, "unit": "any"},
+        )
+
     def test_build_shadow_llm_query_plan_normalizes_bootstrap_family_shapes(self):
         cases = [
             (
