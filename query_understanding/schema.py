@@ -82,6 +82,17 @@ FATAL_ERROR_CODES = {
     "invalid_ui_filter_source",
     "invalid_ui_filter_value",
     "invalid_applied_constraints",
+    "invalid_logical_groups",
+    "invalid_logical_group_item",
+    "unknown_logical_group_keys",
+    "invalid_logical_group_id",
+    "invalid_logical_group_type",
+    "invalid_logical_group_mode",
+    "invalid_logical_group_source_text",
+    "invalid_logical_group_confidence",
+    "invalid_logical_group_children",
+    "invalid_logical_group_child",
+    "logical_group_child_demoted",
     "invalid_unapplied_constraints",
     "invalid_unrecognized_residual",
     "invalid_warnings",
@@ -211,11 +222,12 @@ def _validate_top_level(plan: Mapping[str, Any], mode: str) -> Tuple[List[Dict[s
         "warnings",
         "validation",
     }
+    optional_keys = {"logical_groups"}
     missing = sorted(required_keys - set(plan.keys()))
     if missing:
         errors.append(_error("missing_required_top_level_fields", "root", f"Missing required keys: {', '.join(missing)}"))
 
-    unknown = sorted(set(plan.keys()) - required_keys)
+    unknown = sorted(set(plan.keys()) - required_keys - optional_keys)
     if unknown:
         message = f"Unknown top-level keys: {', '.join(unknown)}"
         if mode == "production":
@@ -330,6 +342,26 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
         if payload.get("required") is not True:
             errors.append(_error("invalid_required", "constraint.required", "required must be true"))
         return {"type": "coc_document_gate", "required": True}, errors
+
+    if family_id == "coc_country_match":
+        if payload.get("type") != "coc_country_match":
+            errors.append(_error("invalid_payload_type", "constraint.type", "type must be coc_country_match"))
+        countries = payload.get("countries")
+        if not isinstance(countries, list) or not countries:
+            errors.append(_error("invalid_coc_countries", "constraint.countries", "countries must be a non-empty list"))
+            normalized_countries = []
+        else:
+            normalized_countries = []
+            for index, country in enumerate(countries):
+                if not isinstance(country, str) or not country.strip():
+                    errors.append(_error("invalid_coc_country", f"constraint.countries[{index}]", "country must be a non-empty string"))
+                    continue
+                normalized_countries.append(" ".join(country.lower().split()))
+        return {
+            "type": "coc_country_match",
+            "countries": normalized_countries,
+            "operator": payload.get("operator") if payload.get("operator") in {"contains_any", "equals"} else "contains_any",
+        }, errors
 
     if family_id == "coc_grade_match":
         if payload.get("type") != "coc_grade_match":
@@ -665,6 +697,57 @@ def _normalize_applied_constraint_item(item: Mapping[str, Any], mode: str) -> Tu
     return applied_item, None, errors, warnings
 
 
+def _normalize_logical_group_item(item: Mapping[str, Any], mode: str) -> Tuple[Dict[str, Any] | None, List[Dict[str, str]], List[Dict[str, str]]]:
+    errors: List[Dict[str, str]] = []
+    warnings: List[Dict[str, str]] = []
+    allowed_keys = {"id", "type", "mode", "source_text", "confidence", "children"}
+    unknown = sorted(set(item.keys()) - allowed_keys)
+    if unknown:
+        errors.append(_error("unknown_logical_group_keys", "logical_group", f"Unknown keys: {', '.join(unknown)}"))
+        if mode == "production":
+            return None, errors, warnings
+    if not isinstance(item.get("id"), str) or not item.get("id"):
+        errors.append(_error("invalid_logical_group_id", "logical_group.id", "id must be a non-empty string"))
+    if item.get("type") != "any_of":
+        errors.append(_error("invalid_logical_group_type", "logical_group.type", "type must be any_of"))
+    if item.get("mode") not in VALID_CONSTRAINT_MODES:
+        errors.append(_error("invalid_logical_group_mode", "logical_group.mode", "mode must be required or preferred"))
+    if not isinstance(item.get("source_text"), str):
+        errors.append(_error("invalid_logical_group_source_text", "logical_group.source_text", "source_text must be a string"))
+    if item.get("confidence") not in VALID_CONFIDENCE_VALUES:
+        errors.append(_error("invalid_logical_group_confidence", "logical_group.confidence", "confidence must be high, medium, or low"))
+    children = item.get("children")
+    if not isinstance(children, list) or len(children) < 2:
+        errors.append(_error("invalid_logical_group_children", "logical_group.children", "children must contain at least two constraints"))
+        children = []
+
+    normalized_children: List[Dict[str, Any]] = []
+    for index, child in enumerate(children):
+        if not isinstance(child, Mapping):
+            errors.append(_error("invalid_logical_group_child", f"logical_group.children[{index}]", "child must be an object"))
+            continue
+        applied_item, demoted_item, child_errors, child_warnings = _normalize_applied_constraint_item(child, mode)
+        errors.extend(child_errors)
+        warnings.extend(child_warnings)
+        if demoted_item is not None:
+            errors.append(_error("logical_group_child_demoted", f"logical_group.children[{index}]", "logical-group children must be active applied constraints"))
+        if applied_item is not None:
+            normalized_children.append(applied_item)
+
+    if len(normalized_children) < 2:
+        errors.append(_error("invalid_logical_group_children", "logical_group.children", "logical group must have at least two valid children"))
+    if errors:
+        return None, errors, warnings
+    return {
+        "id": item.get("id"),
+        "type": "any_of",
+        "mode": item.get("mode"),
+        "source_text": item.get("source_text", ""),
+        "confidence": item.get("confidence", "low"),
+        "children": normalized_children,
+    }, errors, warnings
+
+
 def _validate_unapplied_constraint_item(item: Mapping[str, Any], mode: str) -> Tuple[Dict[str, Any] | None, List[Dict[str, str]]]:
     errors: List[Dict[str, str]] = []
     allowed_keys = {"id", "mode", "reason", "source_text", "suggested_handling", "confidence"}
@@ -727,6 +810,7 @@ def normalize_query_plan_v1(plan: Mapping[str, Any], *, mode: str = "production"
             "normalizer": {"name": "legacy", "model": None, "prompt_template_version": "invalid", "catalog_version": CATALOG_VERSION, "created_at": _utc_now_iso()},
             "input": {"raw_prompt": "", "rank_context": None, "ui_filters": {"schema_version": "ui_filters.v1", "filters": []}},
             "applied_constraints": [],
+            "logical_groups": [],
             "unapplied_constraints": [],
             "semantic_query": "",
             "unrecognized_residual": [],
@@ -743,6 +827,7 @@ def normalize_query_plan_v1(plan: Mapping[str, Any], *, mode: str = "production"
         "normalizer": {},
         "input": {},
         "applied_constraints": [],
+        "logical_groups": [],
         "unapplied_constraints": [],
         "semantic_query": "" if plan.get("semantic_query") is None else plan.get("semantic_query", ""),
         "unrecognized_residual": [],
@@ -785,6 +870,7 @@ def normalize_query_plan_v1(plan: Mapping[str, Any], *, mode: str = "production"
     validation_errors.extend(ui_errors)
 
     applied_constraints = plan.get("applied_constraints")
+    logical_groups = plan.get("logical_groups", [])
     unapplied_constraints = plan.get("unapplied_constraints")
     residuals = plan.get("unrecognized_residual")
     warnings = plan.get("warnings")
@@ -792,6 +878,9 @@ def normalize_query_plan_v1(plan: Mapping[str, Any], *, mode: str = "production"
     if not isinstance(applied_constraints, list):
         validation_errors.append(_error("invalid_applied_constraints", "applied_constraints", "applied_constraints must be a list"))
         applied_constraints = []
+    if not isinstance(logical_groups, list):
+        validation_errors.append(_error("invalid_logical_groups", "logical_groups", "logical_groups must be a list"))
+        logical_groups = []
     if not isinstance(unapplied_constraints, list):
         validation_errors.append(_error("invalid_unapplied_constraints", "unapplied_constraints", "unapplied_constraints must be a list"))
         unapplied_constraints = []
@@ -813,6 +902,16 @@ def normalize_query_plan_v1(plan: Mapping[str, Any], *, mode: str = "production"
             normalized_plan["applied_constraints"].append(applied_item)
         if demoted_item is not None:
             normalized_plan["unapplied_constraints"].append(demoted_item)
+
+    for index, item in enumerate(logical_groups):
+        if not isinstance(item, Mapping):
+            validation_errors.append(_error("invalid_logical_group_item", f"logical_groups[{index}]", "logical group must be an object"))
+            continue
+        normalized_item, item_errors, item_warnings = _normalize_logical_group_item(item, mode)
+        validation_errors.extend(item_errors)
+        validation_warnings.extend(item_warnings)
+        if normalized_item is not None:
+            normalized_plan["logical_groups"].append(normalized_item)
 
     for index, item in enumerate(unapplied_constraints):
         if not isinstance(item, Mapping):

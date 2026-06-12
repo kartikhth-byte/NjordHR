@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -54,6 +55,203 @@ class QueryUnderstandingCompareTests(unittest.TestCase):
         self.assertEqual(results[0].family, "rank_match")
         self.assertEqual(results[0].legacy_record.confidence, "high")
         self.assertEqual(results[0].llm_record.confidence, "high")
+
+    def test_compare_query_plans_includes_any_of_logical_groups(self):
+        legacy_plan = _base_plan()
+        llm_plan = deepcopy(legacy_plan)
+        group = {
+            "id": "hard_filter_any_of",
+            "type": "any_of",
+            "mode": "required",
+            "source_text": "valid US visa or Schengen visa",
+            "confidence": "high",
+            "children": [
+                {
+                    "id": "us_visa",
+                    "mode": "required",
+                    "constraint": {
+                        "type": "us_visa",
+                        "required": True,
+                        "minimum_months_remaining": None,
+                        "visa_group": "usa",
+                        "accepted_types": ["US Visa (USA)"],
+                    },
+                    "source_text": "valid US visa",
+                    "confidence": "high",
+                    "compatibility": {
+                        "legacy_hard_constraints_key": "us_visa",
+                        "legacy_applied_constraint_id": "us_visa",
+                    },
+                },
+                {
+                    "id": "us_visa",
+                    "mode": "required",
+                    "constraint": {
+                        "type": "us_visa",
+                        "required": True,
+                        "minimum_months_remaining": None,
+                        "visa_group": "schengen",
+                        "accepted_types": ["Schengen"],
+                    },
+                    "source_text": "Schengen visa",
+                    "confidence": "high",
+                    "compatibility": {
+                        "legacy_hard_constraints_key": "us_visa",
+                        "legacy_applied_constraint_id": "us_visa",
+                    },
+                },
+            ],
+        }
+        legacy_plan["applied_constraints"] = []
+        llm_plan["applied_constraints"] = []
+        legacy_plan["logical_groups"] = [deepcopy(group)]
+        llm_plan["logical_groups"] = [deepcopy(group)]
+
+        results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-any-of")
+        any_of_results = [result for result in results if result.family == "hard_filter_any_of"]
+        self.assertEqual(len(any_of_results), 1)
+        self.assertEqual(any_of_results[0].comparison_outcome, "equivalent")
+
+    def test_compare_query_plans_treats_generic_us_visa_as_equivalent_to_supported_usa_superset(self):
+        legacy_plan = _base_plan()
+        llm_plan = deepcopy(legacy_plan)
+        legacy_plan["applied_constraints"].append(
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "usa",
+                    "accepted_types": ["US Visa (USA)"],
+                },
+                "source_text": "usa visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        )
+        llm_plan["applied_constraints"].append(
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "usa",
+                    "accepted_types": ["C1/D (USA)", "B1/B2 (USA)", "C1 (USA)", "D (USA)", "US Visa (USA)"],
+                },
+                "source_text": "usa visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        )
+
+        results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-1a")
+        outcomes = {result.family: result.comparison_outcome for result in results}
+        self.assertEqual(outcomes["rank_match"], "equivalent")
+        self.assertEqual(outcomes["us_visa"], "equivalent")
+
+    def test_compare_query_plans_does_not_equate_different_specific_us_visa_types(self):
+        legacy_plan = _base_plan()
+        llm_plan = deepcopy(legacy_plan)
+        legacy_plan["applied_constraints"].append(
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "usa",
+                    "accepted_types": ["US Visa (USA)", "B1/B2 (USA)"],
+                },
+                "source_text": "usa visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        )
+        llm_plan["applied_constraints"].append(
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "usa",
+                    "accepted_types": ["US Visa (USA)", "C1/D (USA)"],
+                },
+                "source_text": "usa visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        )
+
+        results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-1b")
+        outcomes = {result.family: result.comparison_outcome for result in results}
+        self.assertEqual(outcomes["rank_match"], "equivalent")
+        self.assertEqual(outcomes["us_visa"], "regression")
+
+    def test_compare_query_plans_does_not_equate_supported_us_visa_list_to_generic_regression(self):
+        legacy_plan = _base_plan()
+        llm_plan = deepcopy(legacy_plan)
+        legacy_plan["applied_constraints"].append(
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "usa",
+                    "accepted_types": ["C1/D (USA)", "B1/B2 (USA)", "C1 (USA)", "D (USA)", "US Visa (USA)"],
+                },
+                "source_text": "usa visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        )
+        llm_plan["applied_constraints"].append(
+            {
+                "id": "us_visa",
+                "mode": "required",
+                "constraint": {
+                    "type": "us_visa",
+                    "required": True,
+                    "minimum_months_remaining": None,
+                    "visa_group": "usa",
+                    "accepted_types": ["US Visa (USA)"],
+                },
+                "source_text": "usa visa",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "us_visa",
+                    "legacy_applied_constraint_id": "us_visa",
+                },
+            }
+        )
+
+        results = compare_query_plans(legacy_plan, llm_plan, prompt_id="prompt-1c")
+        outcomes = {result.family: result.comparison_outcome for result in results}
+        self.assertEqual(outcomes["rank_match"], "equivalent")
+        self.assertEqual(outcomes["us_visa"], "regression")
 
     def test_compare_query_plans_classifies_unsupported_family_delta(self):
         legacy_plan = _base_plan()

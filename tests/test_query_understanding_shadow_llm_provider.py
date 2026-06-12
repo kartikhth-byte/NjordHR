@@ -1190,6 +1190,97 @@ class ShadowLLMProviderTests(unittest.TestCase):
         visa = next(item["constraint"] for item in result["plan"]["applied_constraints"] if item["id"] == "us_visa")
         self.assertEqual(visa["accepted_types"], ["C1/D (USA)"])
 
+    def test_build_shadow_llm_query_plan_allows_renewed_us_visa_after_expired_history(self):
+        prompt = "US visa expired in 2024 but renewed for 2027"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "us_visa", "parameters": {"required": True, "visa_group": "usa"}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        self.assertIn("us_visa", [item["id"] for item in result["plan"]["applied_constraints"]])
+
+    def test_build_shadow_llm_query_plan_does_not_veto_stcw_basic_for_non_sufficiency_alone(self):
+        prompt = "valid STCW basic, served alone as 2/E for 6 months"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "stcw_basic", "parameters": {"required": True}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        self.assertIn("stcw_basic", [item["id"] for item in result["plan"]["applied_constraints"]])
+
+    def test_build_shadow_llm_query_plan_does_not_infer_recent_contract_from_ship_type_in_passing(self):
+        prompt = "candidate mentioned tanker preference during interview"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        self.assertNotIn("recent_contract_vessel_experience", [item["id"] for item in result["plan"]["applied_constraints"]])
+
     def test_build_shadow_llm_query_plan_vetoes_figurative_rank_control(self):
         plan_payload = {
             "schema_version": "query_plan.v1",
@@ -1703,6 +1794,98 @@ class ShadowLLMProviderTests(unittest.TestCase):
                 self.assertEqual([item["id"] for item in plan["unapplied_constraints"]], expected["unapplied"])
                 self.assertEqual(plan["semantic_query"], expected["semantic"])
                 self.assertEqual(plan["validation"]["status"], expected["validation"])
+
+    def test_build_shadow_llm_query_plan_vetoes_v021_control_violations(self):
+        cases = [
+            (
+                "STCW basic alone is enough",
+                {"filter_family": "stcw_basic", "parameters": {"required": True}},
+                "stcw_basic",
+            ),
+            (
+                "must have tanker familiarization alone",
+                {"filter_family": "stcw_endorsement", "parameters": {"endorsements_required": ["tanker_oil_basic_cop"]}},
+                "stcw_endorsement",
+            ),
+            (
+                "had US visa application rejected last year",
+                {"filter_family": "us_visa", "parameters": {"required": True, "visa_group": "usa"}},
+                "us_visa",
+            ),
+        ]
+
+        for prompt, model_constraint, vetoed_family in cases:
+            with self.subTest(prompt=prompt):
+                plan_payload = {
+                    "schema_version": "query_plan.v1",
+                    "normalizer": {
+                        "name": "llm",
+                        "model": "gemini-test-model",
+                        "prompt_template_version": "query_understanding.shadow_llm.v1",
+                        "catalog_version": "query_understanding.catalog.v1",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                    "input": {
+                        "raw_prompt": prompt,
+                        "rank_context": None,
+                        "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+                    },
+                    "applied_constraints": [model_constraint],
+                    "unapplied_constraints": [],
+                    "semantic_query": prompt,
+                    "unrecognized_residual": [],
+                    "warnings": [],
+                    "validation": {"status": "valid", "errors": []},
+                }
+
+                result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+                self.assertEqual(result["diagnostics"]["status"], "success")
+                plan = result["plan"]
+                self.assertNotIn(vetoed_family, [item["id"] for item in plan["applied_constraints"]])
+
+    def test_build_shadow_llm_query_plan_repairs_v021_recent_contract_and_endorsement_miss(self):
+        prompt = "tanker experience with STCW endorsement"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": None,
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "stcw_basic", "parameters": {"required": True}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": prompt,
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload, rank=None)
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["id"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertNotIn("stcw_basic", applied)
+        self.assertEqual(
+            applied["recent_contract_vessel_experience"],
+            {
+                "type": "recent_contract_vessel_experience",
+                "ship_family": "tanker",
+                "minimum_months": None,
+                "recent_contract_count": 1,
+            },
+        )
+        self.assertEqual(
+            applied["stcw_endorsement"],
+            {"type": "stcw_endorsement", "endorsements_required": ["tanker_oil"]},
+        )
 
     def test_build_shadow_llm_query_plan_preserves_untranslated_certificate_requirement_without_repair(self):
         plan_payload = {

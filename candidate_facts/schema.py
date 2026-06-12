@@ -160,12 +160,15 @@ def _validate_fact_item(item: Any, bucket: str, index: int, errors: List[Dict[st
         _require_string(obj.get("issue_date"), f"{path}.issue_date", errors, allow_null=True)
         _require_string(obj.get("expiry_date"), f"{path}.expiry_date", errors, allow_null=True)
         _require_string(obj.get("country"), f"{path}.country", errors, allow_null=True)
+        _require_string(obj.get("issue_authority"), f"{path}.issue_authority", errors, allow_null=True)
+        _require_string(obj.get("certificate_type_raw"), f"{path}.certificate_type_raw", errors, allow_null=True)
     elif bucket == "certificates":
         _require_string(obj.get("certificate_type"), f"{path}.certificate_type", errors)
         if "certificate_number_present" in obj and obj.get("certificate_number_present") is not None and not isinstance(obj.get("certificate_number_present"), bool):
             errors.append(_error(f"{path}.certificate_number_present", "invalid_type", "must be boolean or null"))
         _require_string(obj.get("issue_date"), f"{path}.issue_date", errors, allow_null=True)
         _require_string(obj.get("expiry_date"), f"{path}.expiry_date", errors, allow_null=True)
+        _require_string(obj.get("country"), f"{path}.country", errors, allow_null=True)
     elif bucket == "endorsements":
         _require_string(obj.get("endorsement_type"), f"{path}.endorsement_type", errors)
         if obj.get("level") is not None:

@@ -229,6 +229,9 @@ def _build_certificates(legacy_facts: Mapping[str, Any], evidence_ids: List[str]
                 certificate_number_present=None,
                 issue_date=None,
                 expiry_date=coc.get("expiry_date"),
+                country=coc.get("country"),
+                issue_authority=coc.get("issue_authority"),
+                certificate_type_raw=coc.get("certificate_type"),
                 grade=coc.get("grade"),
                 status=coc.get("status"),
                 snippet=(
@@ -305,6 +308,8 @@ def _build_contracts(legacy_facts: Mapping[str, Any], evidence_ids: List[str], s
                 vessel_type=row.get("vessel_type"),
                 ship_family=row.get("ship_family"),
                 engine_family=row.get("engine_family"),
+                engine_types=row.get("engine_types") or [],
+                engine_details=row.get("engine_details") or [],
                 company=row.get("company"),
                 start_date=row.get("start_date"),
                 end_date=row.get("end_date"),
@@ -438,6 +443,7 @@ def build_candidate_facts_v1(
         "experience": {
             "vessel_types": (legacy_facts.get("experience") or {}).get("vessel_types") or [],
             "engine_types": (legacy_facts.get("experience") or {}).get("engine_types") or [],
+            "engine_details": (legacy_facts.get("experience") or {}).get("engine_details") or [],
             "last_sign_off_date": (legacy_facts.get("experience") or {}).get("last_sign_off_date"),
             "last_sign_off_months_ago": (legacy_facts.get("experience") or {}).get("last_sign_off_months_ago"),
             "service_rows": (legacy_facts.get("experience") or {}).get("service_rows") or _build_contracts(legacy_facts, evidence_ids, source_text=source_text),

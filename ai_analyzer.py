@@ -1118,6 +1118,7 @@ class AIResumeAnalyzer:
     V2_ONLY_CONSTRAINT_IDS = {
         "rank_match",
         "coc_document_gate",
+        "coc_country_match",
         "stcw_basic",
         "company_continuity",
         "passport_validity",
@@ -1127,6 +1128,7 @@ class AIResumeAnalyzer:
         "recency",
         "rank_duration_experience",
     }
+    COC_COUNTRY_CONFIDENCE_THRESHOLD = 0.85
     RANK_ALIAS_TABLE = {
         "master": {
             "canonical_id": "master",
@@ -1601,6 +1603,14 @@ class AIResumeAnalyzer:
                     r"\b{alias}(?:'s)?\s+certificate\s+of\s+competency\b",
                     r"\bcoc\b(?:\s+grade)?\s+(?:for\s+)?{alias}\b",
                     r"\bcertificate\s+of\s+competency\b(?:\s+grade)?\s+(?:for\s+)?{alias}\b",
+                ],
+            },
+            "coc_country_match": {
+                "patterns": [
+                    r"\b(?:has|have|having|hold(?:s|ing)?|with|must\s+have|must\s+hold)\s+(?P<country>[A-Za-z][A-Za-z.\s-]{1,40}?)\s+coc\b",
+                    r"\b(?P<country>[A-Za-z][A-Za-z.\s-]{1,40}?)\s+coc\b",
+                    r"\bcoc\s+(?:issued\s+by|from|authority)\s+(?P<country>[A-Za-z][A-Za-z.\s-]{1,40})\b",
+                    r"\bcertificate\s+of\s+competency\s+(?:issued\s+by|from|authority)?\s*(?P<country>[A-Za-z][A-Za-z.\s-]{1,40})\b",
                 ],
             },
             "rank_duration_experience": {
@@ -2267,6 +2277,151 @@ class AIResumeAnalyzer:
             }
         return None
 
+    def _normalize_coc_country(self, value):
+        normalized = str(value or "").strip().lower()
+        if not normalized:
+            return None
+        normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
+        normalized = re.sub(r"\s+", " ", normalized)
+        aliases = {
+            "in": "india",
+            "india": "india",
+            "indian": "india",
+            "uk": "uk",
+            "u k": "uk",
+            "gb": "uk",
+            "great britain": "uk",
+            "britain": "uk",
+            "british": "uk",
+            "united kingdom": "uk",
+            "australia": "australia",
+            "australian": "australia",
+            "bahamas": "bahamas",
+            "bahamian": "bahamas",
+            "bangladesh": "bangladesh",
+            "bangladeshi": "bangladesh",
+            "brazil": "brazil",
+            "brazilian": "brazil",
+            "canada": "canada",
+            "canadian": "canada",
+            "china": "china",
+            "chinese": "china",
+            "croatia": "croatia",
+            "croatian": "croatia",
+            "cyprus": "cyprus",
+            "cypriot": "cyprus",
+            "denmark": "denmark",
+            "danish": "denmark",
+            "egypt": "egypt",
+            "egyptian": "egypt",
+            "france": "france",
+            "french": "france",
+            "germany": "germany",
+            "german": "germany",
+            "greece": "greece",
+            "greek": "greece",
+            "hong kong": "hong kong",
+            "indonesia": "indonesia",
+            "indonesian": "indonesia",
+            "italy": "italy",
+            "italian": "italy",
+            "japan": "japan",
+            "japanese": "japan",
+            "korea": "korea",
+            "korean": "korea",
+            "liberia": "liberia",
+            "liberian": "liberia",
+            "malaysia": "malaysia",
+            "malaysian": "malaysia",
+            "marshall islands": "marshall islands",
+            "marshallese": "marshall islands",
+            "netherlands": "netherlands",
+            "dutch": "netherlands",
+            "norway": "norway",
+            "norwegian": "norway",
+            "pakistan": "pakistan",
+            "pakistani": "pakistan",
+            "panama": "panama",
+            "panamanian": "panama",
+            "philippines": "philippines",
+            "philippine": "philippines",
+            "filipino": "philippines",
+            "poland": "poland",
+            "polish": "poland",
+            "portugal": "portugal",
+            "portuguese": "portugal",
+            "romania": "romania",
+            "romanian": "romania",
+            "russia": "russia",
+            "russian": "russia",
+            "singapore": "singapore",
+            "singaporean": "singapore",
+            "spain": "spain",
+            "spanish": "spain",
+            "sri lanka": "sri lanka",
+            "sri lankan": "sri lanka",
+            "turkey": "turkey",
+            "turkish": "turkey",
+            "ukraine": "ukraine",
+            "ukrainian": "ukraine",
+            "usa": "usa",
+            "us": "usa",
+            "u s": "usa",
+            "united states": "usa",
+            "american": "usa",
+            "vietnam": "vietnam",
+            "vietnamese": "vietnam",
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        if normalized.endswith("ian"):
+            return None
+        return normalized or None
+
+    def _is_coc_country_phrase_candidate(self, value):
+        phrase = re.sub(r"\s+", " ", str(value or "").strip().lower())
+        phrase = re.sub(r"^(?:a|an|the)\s+", "", phrase)
+        phrase = re.sub(r"\b(?:valid|current|required|mandatory|needed|need|holder)\b", "", phrase)
+        phrase = re.sub(r"\s+", " ", phrase).strip(" -")
+        phrase = re.sub(r"^(?:and|or|for|with)\s+", "", phrase).strip(" -")
+        if not phrase:
+            return None
+        if phrase in {"and", "or", "for", "with"} or re.search(r"\b(?:and|or|for|with)\b", phrase):
+            return None
+        if phrase in {"coc", "certificate", "certificate of competency"}:
+            return None
+        for alias in self.RANK_ALIAS_TABLE:
+            if re.fullmatch(re.escape(alias), phrase, flags=re.IGNORECASE):
+                return None
+        if re.search(
+            r"\b(?:rank|grade|class|officer|engineer|mate|master|captain|"
+            r"section|chapter|article|part|module|paragraph|annex|rule|rules|regulation|regulations|"
+            r"pacific|atlantic|asia|europe|americas|africa|oceania)\b",
+            phrase,
+            flags=re.IGNORECASE,
+        ):
+            return None
+        return phrase
+
+    def _extract_coc_country_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt.strip():
+            return None
+        registry = self._prompt_parsing_registry()["coc_country_match"]
+        for pattern in registry["patterns"]:
+            match = re.search(pattern, prompt, flags=re.IGNORECASE)
+            if not match:
+                continue
+            country_phrase = self._is_coc_country_phrase_candidate(match.group("country"))
+            country = self._normalize_coc_country(country_phrase)
+            if country:
+                return {
+                    "countries": [country],
+                    "operator": "contains_any",
+                    "display_value": match.group(0).strip(),
+                }
+        return None
+
     def _extract_coc_grade_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         if not prompt.strip():
@@ -2378,27 +2533,28 @@ class AIResumeAnalyzer:
         if "experience" not in normalized_prompt and " on " not in normalized_prompt:
             return None
 
-        contracts_match = re.search(r"\b(?:last|recent)\s+(\d+)\s+contracts?\b", normalized_prompt, flags=re.IGNORECASE)
-        if not contracts_match:
-            return None
-
         months_match = re.search(
             r"\b(?:minimum|at\s+least)?\s*(\d+)\s*(years?|months?)\b",
             normalized_prompt,
             flags=re.IGNORECASE,
         )
+        contracts_match = re.search(r"\b(?:last|recent)\s+(\d+)\s+contracts?\b", normalized_prompt, flags=re.IGNORECASE)
+        if not contracts_match and not months_match:
+            return None
+
         min_months = 0
         if months_match:
             value = int(months_match.group(1))
             unit = months_match.group(2).lower()
             min_months = value * 12 if unit.startswith("year") else value
-        lookback_contracts = int(contracts_match.group(1))
+        lookback_contracts = int(contracts_match.group(1)) if contracts_match else 1
         vessel_type = ship_matches[0]
-        requested_label = (
-            f"{min_months} months experience on {vessel_type} in last {lookback_contracts} contracts"
-            if min_months
-            else f"{vessel_type} experience in last {lookback_contracts} contracts"
-        )
+        if min_months and contracts_match:
+            requested_label = f"{min_months} months experience on {vessel_type} in last {lookback_contracts} contracts"
+        elif min_months:
+            requested_label = f"{min_months} months experience on {vessel_type}"
+        else:
+            requested_label = f"{vessel_type} experience in last {lookback_contracts} contracts"
         return {
             "vessel_type": vessel_type,
             "min_months": min_months,
@@ -2427,6 +2583,15 @@ class AIResumeAnalyzer:
 
     def _engine_type_aliases(self):
         aliases = {
+            "man_b_w_mc": [
+                "MAN B&W MC",
+                "MAN BW MC",
+                "MAN MC",
+                "MC engine",
+                "MC engines",
+                "MC-C",
+                "MCC",
+            ],
             "man_b_w_me": [
                 "MAN B&W",
                 "MAN & B&W",
@@ -2438,6 +2603,8 @@ class AIResumeAnalyzer:
                 "ME engines",
                 "ME-C",
                 "ME-B",
+                "MEC",
+                "MEB",
                 "MAN ME",
             ],
             "man_b_w_me_gi": [
@@ -2471,6 +2638,12 @@ class AIResumeAnalyzer:
                 "LPG engine",
                 "propane engine",
             ],
+            "man_b_w_me_lgia": [
+                "ME-LGIA",
+                "MELGIA",
+                "ammonia ME-LGIA",
+                "ammonia dual fuel MAN",
+            ],
             "man_b_w_me_gie": [
                 "ME-GIE",
                 "ethane engine",
@@ -2480,6 +2653,8 @@ class AIResumeAnalyzer:
                 "WinGD X-DF",
                 "X-DF",
                 "XDF",
+                "X-DF2.0",
+                "XDF2.0",
                 "dual fuel WinGD",
                 "LNG X-DF",
             ],
@@ -2497,10 +2672,38 @@ class AIResumeAnalyzer:
                 "ammonia WinGD",
                 "ammonia X-DF",
             ],
+            "wingd_x_df_p": [
+                "X-DF-P",
+                "XDFP",
+                "LPG WinGD",
+                "propane WinGD",
+            ],
+            "wingd_x_df_e": [
+                "X-DF-E",
+                "XDFE",
+                "ethanol WinGD",
+                "ethanol X-DF",
+            ],
             "wingd_x_engines": [
                 "X-Engine",
                 "X-Engines",
                 "WinGD X engine",
+                "WinGD",
+                "Win GD",
+                "Win-GD",
+                "WinGD engine",
+                "Win GD engine",
+                "Win-GD engine",
+            ],
+            "wartsila_rta": [
+                "RTA",
+                "RTA-C",
+                "RTA-U",
+                "RTA-T",
+                "RTA-B",
+                "Sulzer RTA",
+                "Wartsila RTA",
+                "Wärtsilä RTA",
             ],
             "wartsila_dual_fuel": [
                 "Wartsila DF",
@@ -2517,6 +2720,12 @@ class AIResumeAnalyzer:
             "wartsila_rt_flex": [
                 "RT-flex",
                 "RT Flex",
+                "RTFlex",
+                "RTflex",
+                "RT-flex-C",
+                "RT-flex-D",
+                "RT-flex-T",
+                "RT-flex-B",
                 "Wartsila RT-flex",
                 "Wärtsilä RT-flex",
                 "Sulzer RT-flex",
@@ -2525,6 +2734,20 @@ class AIResumeAnalyzer:
             "mitsubishi_uec": [
                 "Mitsubishi UEC",
                 "UEC",
+            ],
+            "electronically_controlled_engine": [
+                "electronic engine",
+                "electronic engines",
+                "electronically controlled engine",
+                "electronically controlled engines",
+                "electronically controlled main engine",
+                "electronically controlled main engines",
+                "electronic main engine",
+                "electronic main engines",
+                "electronic control engine",
+                "electronic controlled engine",
+                "electronically-controlled engine",
+                "electronically-controlled main engine",
             ],
             "dual_fuel": [
                 "dual fuel",
@@ -2570,20 +2793,320 @@ class AIResumeAnalyzer:
             return bool(re.search(r"\bme\s+engines?\b", normalized_text))
         alias_pattern = re.escape(normalized_alias)
         alias_pattern = alias_pattern.replace(r"\ ", r"[\s./()&-]+")
-        return bool(re.search(rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9])", normalized_text))
+        if re.search(rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9])", normalized_text):
+            return True
+        compact_alias = re.sub(r"[\s./()&-]+", "", normalized_alias)
+        compact_text = re.sub(r"[\s./()&-]+", "", normalized_text)
+        if len(compact_alias) >= 5 and compact_alias not in {"engine", "engines"}:
+            return bool(re.search(rf"(?<![a-z0-9]){re.escape(compact_alias)}(?![a-z0-9])", compact_text))
+        return False
 
-    def _extract_engine_types_from_text(self, raw_text):
+    def _engine_type_metadata(self):
+        return {
+            "man_b_w_mc": {
+                "manufacturer": "MAN B&W",
+                "lineage": "MC",
+                "category": "low_speed_2_stroke",
+                "control_type": "mechanical",
+                "fuel_family": "fuel_oil",
+                "fuel_tags": ["fuel_oil"],
+                "dual_fuel": False,
+            },
+            "man_b_w_me": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "fuel_oil",
+                "fuel_tags": ["fuel_oil"],
+                "dual_fuel": False,
+            },
+            "man_b_w_me_gi": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-GI",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "lng_gas_ethane",
+                "fuel_tags": ["lng", "gas", "ethane"],
+                "dual_fuel": True,
+            },
+            "man_b_w_me_ga": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-GA",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "lng_gas",
+                "fuel_tags": ["lng", "gas"],
+                "dual_fuel": True,
+            },
+            "man_b_w_me_lgi": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-LGI",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "liquid_gas",
+                "fuel_tags": ["liquid_gas"],
+                "dual_fuel": True,
+            },
+            "man_b_w_me_lgim": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-LGIM",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "methanol",
+                "fuel_tags": ["methanol"],
+                "dual_fuel": True,
+            },
+            "man_b_w_me_lgip": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-LGIP",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "lpg_propane",
+                "fuel_tags": ["lpg", "propane"],
+                "dual_fuel": True,
+            },
+            "man_b_w_me_lgia": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-LGIA",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "ammonia",
+                "fuel_tags": ["ammonia"],
+                "dual_fuel": True,
+            },
+            "man_b_w_me_gie": {
+                "manufacturer": "MAN B&W",
+                "lineage": "ME-GIE",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "ethane",
+                "fuel_tags": ["ethane", "leg"],
+                "dual_fuel": True,
+            },
+            "wingd_x_df": {
+                "manufacturer": "WinGD",
+                "lineage": "X-DF",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "lng_gas",
+                "fuel_tags": ["lng", "gas"],
+                "dual_fuel": True,
+            },
+            "wingd_x_df_m": {
+                "manufacturer": "WinGD",
+                "lineage": "X-DF-M",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "methanol",
+                "fuel_tags": ["methanol"],
+                "dual_fuel": True,
+            },
+            "wingd_x_df_a": {
+                "manufacturer": "WinGD",
+                "lineage": "X-DF-A",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "ammonia",
+                "fuel_tags": ["ammonia"],
+                "dual_fuel": True,
+            },
+            "wingd_x_df_p": {
+                "manufacturer": "WinGD",
+                "lineage": "X-DF-P",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "lpg_propane",
+                "fuel_tags": ["lpg", "propane"],
+                "dual_fuel": True,
+            },
+            "wingd_x_df_e": {
+                "manufacturer": "WinGD",
+                "lineage": "X-DF-E",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "ethanol",
+                "fuel_tags": ["ethanol"],
+                "dual_fuel": True,
+            },
+            "wingd_x_engines": {
+                "manufacturer": "WinGD",
+                "lineage": "X-Engine",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic",
+                "fuel_family": "fuel_oil",
+                "fuel_tags": ["fuel_oil"],
+                "dual_fuel": False,
+            },
+            "wartsila_rta": {
+                "manufacturer": "Wartsila/Sulzer",
+                "lineage": "RTA",
+                "category": "low_speed_2_stroke",
+                "control_type": "mechanical",
+                "fuel_family": "fuel_oil",
+                "fuel_tags": ["fuel_oil"],
+                "dual_fuel": False,
+            },
+            "wartsila_rt_flex": {
+                "manufacturer": "Wartsila/Sulzer",
+                "lineage": "RT-flex",
+                "category": "low_speed_2_stroke",
+                "control_type": "electronic_common_rail",
+                "fuel_family": "fuel_oil",
+                "fuel_tags": ["fuel_oil"],
+                "dual_fuel": False,
+            },
+            "wartsila_dual_fuel": {
+                "manufacturer": "Wartsila",
+                "lineage": "DF",
+                "category": "medium_speed_4_stroke",
+                "control_type": "electronic",
+                "fuel_family": "dual_fuel",
+                "fuel_tags": ["lng", "gas", "fuel_oil"],
+                "dual_fuel": True,
+            },
+            "mitsubishi_uec": {
+                "manufacturer": "Mitsubishi",
+                "lineage": "UEC",
+                "category": "low_speed_2_stroke",
+                "control_type": "unknown",
+                "fuel_family": "fuel_oil",
+                "fuel_tags": ["fuel_oil"],
+                "dual_fuel": False,
+            },
+            "electronically_controlled_engine": {
+                "manufacturer": None,
+                "lineage": "electronically controlled main engine",
+                "category": "marine_main_engine",
+                "control_type": "electronic",
+                "fuel_family": "unknown",
+                "fuel_tags": [],
+                "dual_fuel": None,
+            },
+            "dual_fuel": {
+                "manufacturer": None,
+                "lineage": "dual fuel",
+                "category": "unknown",
+                "control_type": "unknown",
+                "fuel_family": "dual_fuel",
+                "fuel_tags": ["dual_fuel"],
+                "dual_fuel": True,
+            },
+            "methanol_engine": {
+                "manufacturer": None,
+                "lineage": "methanol engine",
+                "category": "unknown",
+                "control_type": "unknown",
+                "fuel_family": "methanol",
+                "fuel_tags": ["methanol"],
+                "dual_fuel": True,
+            },
+            "ammonia_engine": {
+                "manufacturer": None,
+                "lineage": "ammonia engine",
+                "category": "unknown",
+                "control_type": "unknown",
+                "fuel_family": "ammonia",
+                "fuel_tags": ["ammonia"],
+                "dual_fuel": True,
+            },
+        }
+
+    def _canonical_engine_from_model_token(self, token):
+        normalized = re.sub(r"[^a-z0-9]+", "", self._normalize_engine_type(token))
+        if re.search(r"me[-]?(?:lgia|lga)$", normalized):
+            return "man_b_w_me_lgia"
+        if re.search(r"me[-]?lgim$", normalized):
+            return "man_b_w_me_lgim"
+        if re.search(r"me[-]?lgip$", normalized):
+            return "man_b_w_me_lgip"
+        if re.search(r"me[-]?lgi$", normalized):
+            return "man_b_w_me_lgi"
+        if re.search(r"me[-]?gie$", normalized):
+            return "man_b_w_me_gie"
+        if re.search(r"me[-]?gi$", normalized):
+            return "man_b_w_me_gi"
+        if re.search(r"me[-]?ga$", normalized):
+            return "man_b_w_me_ga"
+        if re.search(r"\d+[sgk]\d+me", normalized):
+            return "man_b_w_me"
+        if re.search(r"\d+[sgk]\d+mc", normalized):
+            return "man_b_w_mc"
+        if re.search(r"\d+rta\d+", normalized):
+            return "wartsila_rta"
+        if normalized.startswith("rtflex"):
+            return "wartsila_rt_flex"
+        if re.search(r"x\d{2,3}df", normalized):
+            return "wingd_x_df"
+        return None
+
+    def _engine_model_matches(self, raw_text):
+        text = str(raw_text or "")
+        if not text:
+            return []
+        patterns = [
+            r"\b\d{1,2}[SGK]\d{2,3}ME(?:[-\s]?(?:C|B|GI|GA|LGI|LGIM|LGIP|LGIA|GIE)(?:\d+(?:\.\d+)?)?)?\b",
+            r"\b\d{1,2}[SGK]\d{2,3}MC(?:[-\s]?C)?\b",
+            r"\b\d{1,2}RTA\d{2,3}[A-Z]?\b",
+            r"\bRT[-\s]?FLEX(?:[-\s]?[A-Z])?\d*[A-Z]?\b",
+            r"\bX\d{2,3}DF(?:\d(?:\.\d+)?)?\b",
+        ]
+        matches = []
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                token = match.group(0)
+                canonical = self._canonical_engine_from_model_token(token)
+                if canonical:
+                    matches.append((canonical, token))
+        return matches
+
+    def _engine_detail_for_canonical(self, canonical_id, raw_mention=None, match_source="alias"):
+        metadata = dict(self._engine_type_metadata().get(canonical_id) or {})
+        detail = {
+            "engine_type": canonical_id,
+            "engine_family": canonical_id,
+            **metadata,
+            "match_source": match_source,
+        }
+        if raw_mention:
+            detail["raw_mention"] = raw_mention
+        return detail
+
+    def _extract_engine_details_from_text(self, raw_text):
         text = self._normalize_engine_type(raw_text)
         if not text:
             return []
-        matches = []
+        details = []
+        seen = set()
+        for canonical, raw_mention in self._engine_model_matches(raw_text):
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            details.append(self._engine_detail_for_canonical(canonical, raw_mention, match_source="model_token"))
         for canonical, aliases in self._engine_type_aliases().items():
             canonical_id = self._normalize_engine_type(canonical).replace(" ", "_")
+            if canonical_id in seen:
+                continue
             for alias in aliases:
+                normalized_alias = self._normalize_engine_type(alias)
+                if (
+                    canonical_id == "man_b_w_me"
+                    and "man_b_w_mc" in seen
+                    and normalized_alias in {"man b&w", "man & b&w", "man b and w", "man bw", "man-b&w", "b&w"}
+                ):
+                    continue
                 if self._engine_alias_matches_text(text, alias):
-                    matches.append(canonical_id)
+                    seen.add(canonical_id)
+                    details.append(self._engine_detail_for_canonical(canonical_id, alias, match_source="alias"))
                     break
-        return list(dict.fromkeys(matches))
+        return details
+
+    def _extract_engine_types_from_text(self, raw_text):
+        return list(dict.fromkeys(
+            detail.get("engine_type")
+            for detail in self._extract_engine_details_from_text(raw_text)
+            if detail.get("engine_type")
+        ))
 
     def _engine_type_expected_values(self, requested_engine_type):
         requested = self._normalize_engine_type(requested_engine_type).replace(" ", "_")
@@ -2597,6 +3120,7 @@ class AIResumeAnalyzer:
                 "man_b_w_me_lgi",
                 "man_b_w_me_lgim",
                 "man_b_w_me_lgip",
+                "man_b_w_me_lgia",
                 "man_b_w_me_gie",
             ],
             "dual_fuel": [
@@ -2606,13 +3130,34 @@ class AIResumeAnalyzer:
                 "man_b_w_me_lgi",
                 "man_b_w_me_lgim",
                 "man_b_w_me_lgip",
+                "man_b_w_me_lgia",
                 "man_b_w_me_gie",
                 "wingd_x_df",
                 "wingd_x_df_m",
                 "wingd_x_df_a",
+                "wingd_x_df_p",
+                "wingd_x_df_e",
                 "wartsila_dual_fuel",
                 "methanol_engine",
                 "ammonia_engine",
+            ],
+            "electronically_controlled_engine": [
+                "electronically_controlled_engine",
+                "man_b_w_me",
+                "man_b_w_me_gi",
+                "man_b_w_me_ga",
+                "man_b_w_me_lgi",
+                "man_b_w_me_lgim",
+                "man_b_w_me_lgip",
+                "man_b_w_me_lgia",
+                "man_b_w_me_gie",
+                "wingd_x_engines",
+                "wingd_x_df",
+                "wingd_x_df_m",
+                "wingd_x_df_a",
+                "wingd_x_df_p",
+                "wingd_x_df_e",
+                "wartsila_rt_flex",
             ],
             "methanol_engine": [
                 "methanol_engine",
@@ -2622,6 +3167,7 @@ class AIResumeAnalyzer:
             "ammonia_engine": [
                 "ammonia_engine",
                 "wingd_x_df_a",
+                "man_b_w_me_lgia",
             ],
         }
         return expanded.get(requested, [requested])
@@ -2694,19 +3240,7 @@ class AIResumeAnalyzer:
             return None
         duration_prompt = self._normalize_engine_type(self._strip_age_constraint_phrases(prompt))
 
-        matches = []
-        for canonical, aliases in self._engine_type_aliases().items():
-            canonical_id = self._normalize_engine_type(canonical).replace(" ", "_")
-            for alias in aliases:
-                normalized_alias = self._normalize_engine_type(alias)
-                if normalized_alias == "b&w":
-                    continue
-                if normalized_alias == "me engine" and re.search(r"\bme\s+engine(?:s)?\b", normalized_prompt):
-                    matches.append(canonical_id)
-                    break
-                if self._engine_alias_matches_text(normalized_prompt, alias):
-                    matches.append(canonical_id)
-                    break
+        matches = self._extract_engine_types_from_text(prompt)
 
         if not matches:
             return None
@@ -2814,6 +3348,169 @@ class AIResumeAnalyzer:
                 vessel_type=vessel_type,
             ),
             "operator": "contains_all_same_row",
+        }
+
+    def _logical_group_hard_constraint_key(self, applied_constraint):
+        return {
+            "age_range": "age_years",
+            "rank_match": "rank",
+            "us_visa": "us_visa",
+            "passport_validity": "passport_validity",
+            "coc_document_gate": "certifications",
+            "coc_country_match": "coc_country",
+            "coc_grade_match": "coc_grade",
+            "stcw_basic": "stcw_basic",
+            "stcw_endorsement": "certifications",
+            "company_continuity": "company_continuity",
+            "engine_vessel_experience": "engine_vessel_experience",
+            "recent_contract_vessel_experience": "recent_contract_vessel_experience",
+            "engine_experience": "engine_experience",
+            "rank_duration_experience": "rank_duration_experience",
+            "experience_ship_type": "experience_ship_type",
+            "recency": "recency",
+            "availability": "availability",
+            "applied_ship_type": "applied_ship_type",
+        }.get(applied_constraint)
+
+    def _logical_group_child_label(self, applied_constraint, hard_key, constraint, source_text):
+        phrase = self._observability_phrase_for_constraint(
+            applied_constraint,
+            {hard_key: constraint},
+            source_text,
+        )
+        if phrase:
+            return phrase
+        if isinstance(constraint, dict):
+            display = constraint.get("display_value") or constraint.get("endorsement_display_value")
+            if display:
+                return str(display)
+            if applied_constraint == "engine_experience":
+                engine_type = constraint.get("engine_type")
+                if engine_type == "dual_fuel":
+                    return "dual fuel engine"
+                if engine_type == "wingd_x_engines":
+                    return "WinGD engine"
+                if engine_type:
+                    return str(engine_type).replace("_", " ")
+            if applied_constraint == "coc_country_match":
+                countries = constraint.get("countries") or []
+                if countries:
+                    return " or ".join(str(country).upper() if str(country).lower() == "uk" else str(country).title() for country in countries)
+        if isinstance(constraint, str):
+            if applied_constraint == "experience_ship_type":
+                return f"{constraint.replace('_', ' ')} vessel"
+            return constraint.replace("_", " ")
+        return str(applied_constraint or "").replace("_", " ")
+
+    def _extract_any_of_logical_group(self, user_prompt, rank=None):
+        prompt = str(user_prompt or "")
+        normalized_prompt = self._normalize_engine_type(prompt)
+        if not re.search(r"\bor\b", normalized_prompt):
+            return None
+        # Mixed boolean precedence is intentionally out of scope for v1.
+        # Avoid turning "(A or B) and C" into "A or (B and C)" until we add
+        # explicit nested all_of/any_of parsing.
+        if re.search(r"\band\s*/\s*or\b|\band\b|\bbut\b|[,;]", normalized_prompt):
+            return None
+
+        raw_parts = [
+            part.strip(" ,.;:?")
+            for part in re.split(r"\bor\b", prompt, flags=re.IGNORECASE)
+            if part.strip(" ,.;:?")
+        ]
+        if len(raw_parts) < 2:
+            return None
+
+        children = []
+        seen = set()
+        for part in raw_parts:
+            part_with_context = part
+            if re.search(r"\bvisa\b", prompt, flags=re.IGNORECASE) and not re.search(r"\bvisa\b", part_with_context, flags=re.IGNORECASE):
+                part_with_context = f"{part_with_context} visa"
+            if re.search(r"\bcoc\b|\bcertificate\s+of\s+competency\b", prompt, flags=re.IGNORECASE) and not re.search(r"\bcoc\b|\bcertificate\s+of\s+competency\b", part_with_context, flags=re.IGNORECASE):
+                part_with_context = f"{part_with_context} COC"
+            if (
+                re.search(r"\b(?:experience|experienced|expereince)\b", prompt, flags=re.IGNORECASE)
+                and not re.search(r"\b(?:experience|experienced|engine|vessel|ship|carrier)\b", part_with_context, flags=re.IGNORECASE)
+            ):
+                part_with_context = f"{part_with_context} experience"
+            if (
+                re.search(r"\b(?:experience|experienced|expereince)\b", prompt, flags=re.IGNORECASE)
+                and re.search(r"\b(?:vessel|ship|carrier)\b", part_with_context, flags=re.IGNORECASE)
+                and not re.search(r"\b(?:experience|experienced|expereince)\b", part_with_context, flags=re.IGNORECASE)
+            ):
+                part_with_context = f"{part_with_context} experience"
+            if re.search(r"\bexpereince\b", part_with_context, flags=re.IGNORECASE) and not re.search(r"\bexperience\b", part_with_context, flags=re.IGNORECASE):
+                part_with_context = f"{part_with_context} experience"
+
+            part_constraints = self._extract_job_constraints(
+                part_with_context,
+                rank=rank,
+                allow_logical_groups=False,
+            )
+            applied_constraints = list(part_constraints.get("applied_constraints") or [])
+            hard_constraints = part_constraints.get("hard_constraints") or {}
+            if (
+                not applied_constraints
+                and "vessel_type" in hard_constraints
+                and re.search(r"\b(?:experience|experienced|expereince)\b", part_with_context, flags=re.IGNORECASE)
+            ):
+                # OR clauses like "LNG vessel or dual fuel engine experience"
+                # need an applied experience rule, not the standalone UI vessel
+                # filter family. Keep this bridge scoped to any_of parsing.
+                vessel_required = (hard_constraints.get("vessel_type") or {}).get("required") or []
+                for vessel_type in vessel_required:
+                    normalized_vessel_type = self._normalize_ship_type(vessel_type)
+                    if not normalized_vessel_type:
+                        continue
+                    key = ("experience_ship_type", "experience_ship_type", normalized_vessel_type)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    label = f"{normalized_vessel_type.replace('_', ' ')} vessel"
+                    children.append({
+                        "applied_constraint": "experience_ship_type",
+                        "hard_constraint_key": "experience_ship_type",
+                        "constraint": normalized_vessel_type,
+                        "label": label,
+                    })
+                continue
+            if "coc_country_match" in applied_constraints:
+                applied_constraints = [
+                    item for item in applied_constraints
+                    if item != "coc_document_gate"
+                ]
+
+            for applied_constraint in applied_constraints:
+                hard_key = self._logical_group_hard_constraint_key(applied_constraint)
+                if not hard_key:
+                    continue
+                if hard_key not in hard_constraints:
+                    continue
+                constraint = hard_constraints[hard_key]
+                key = (applied_constraint, hard_key, repr(constraint))
+                if key in seen:
+                    continue
+                seen.add(key)
+                label = self._logical_group_child_label(applied_constraint, hard_key, constraint, part_with_context)
+                children.append({
+                    "applied_constraint": applied_constraint,
+                    "hard_constraint_key": hard_key,
+                    "constraint": constraint,
+                    "label": label,
+                })
+
+        if len(children) < 2:
+            return None
+        if {child.get("applied_constraint") for child in children} == {"rank_match"}:
+            return None
+
+        labels = [child["label"] for child in children]
+        return {
+            "id": "hard_filter_any_of",
+            "type": "any_of",
+            "label": " or ".join(labels),
+            "children": children,
         }
 
     def _extract_company_continuity_constraint(self, user_prompt):
@@ -3063,7 +3760,7 @@ class AIResumeAnalyzer:
             "matched_phrases": list(dict.fromkeys(matched_phrases)),
         }
 
-    def _extract_job_constraints(self, user_prompt, rank=None):
+    def _extract_job_constraints(self, user_prompt, rank=None, allow_logical_groups=True):
         constraints = {
             "rank": str(rank or "").strip(),
             "hard_constraints": {},
@@ -3071,6 +3768,11 @@ class AIResumeAnalyzer:
             "unapplied_constraints": [],
             "parsing_notes": [],
         }
+        any_of_group = self._extract_any_of_logical_group(user_prompt, rank=rank) if allow_logical_groups else None
+        if any_of_group:
+            constraints.setdefault("logical_groups", []).append(any_of_group)
+            return constraints
+
         age_constraint = self._extract_age_constraint(user_prompt)
         if age_constraint:
             constraints["hard_constraints"]["age_years"] = age_constraint
@@ -3100,9 +3802,20 @@ class AIResumeAnalyzer:
             constraints["applied_constraints"].append("passport_validity")
 
         coc_constraint = self._extract_coc_requirement_constraint(user_prompt)
+        coc_country_constraint = self._extract_coc_country_constraint(user_prompt)
+        if coc_country_constraint and not coc_constraint:
+            coc_constraint = {
+                "coc_required": True,
+                "coc_valid_required": True,
+                "display_value": coc_country_constraint.get("display_value"),
+            }
         if coc_constraint:
             constraints["hard_constraints"]["certifications"] = coc_constraint
             constraints["applied_constraints"].append("coc_document_gate")
+
+        if coc_country_constraint:
+            constraints["hard_constraints"]["coc_country"] = coc_country_constraint
+            constraints["applied_constraints"].append("coc_country_match")
 
         if coc_grade_constraint:
             coc_grade_constraint = dict(coc_grade_constraint)
@@ -3140,7 +3853,11 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["rank_duration_experience"] = rank_duration_experience_constraint
             constraints["applied_constraints"].append("rank_duration_experience")
 
-        experienced_ship_type = None if (engine_vessel_experience_constraint or recent_contract_vessel_experience_constraint or engine_experience_constraint) else self._extract_experience_ship_type_constraint(user_prompt)
+        experienced_ship_type = None if (
+            engine_vessel_experience_constraint
+            or recent_contract_vessel_experience_constraint
+            or engine_experience_constraint
+        ) else self._extract_experience_ship_type_constraint(user_prompt)
         if experienced_ship_type:
             constraints["hard_constraints"]["experience_ship_type"] = experienced_ship_type
             constraints["applied_constraints"].append("experience_ship_type")
@@ -5230,6 +5947,12 @@ class AIResumeAnalyzer:
             return None
 
         rank_fact = self._extract_rank_from_email_service_row(row_lines)
+        engine_details = self._extract_engine_details_from_text(" ".join(row_lines))
+        engine_types = [
+            detail.get("engine_type")
+            for detail in engine_details
+            if detail.get("engine_type")
+        ]
         return {
             "row_index": row_index,
             "rank_raw": rank_fact.get("raw_rank"),
@@ -5237,7 +5960,10 @@ class AIResumeAnalyzer:
             "sign_in_date": sign_in_date,
             "sign_out_date": sign_out_date,
             "vessel_types": self._extract_row_ship_types_from_seajobs_row(row_lines),
-            "engine_types": self._extract_engine_types_from_text(" ".join(row_lines)),
+            "engine_types": list(dict.fromkeys(engine_types)),
+            "engine_details": engine_details,
+            # Convenience singleton for legacy consumers; use engine_types for full coverage.
+            "engine_family": engine_types[0] if engine_types else None,
             "snippet": " ".join(row_lines),
         }
 
@@ -5408,6 +6134,13 @@ class AIResumeAnalyzer:
                 if sign_out_fact.get("status") == "PARSED":
                     sign_out_date = sign_out_fact.get("date")
 
+            row_text = " ".join(window)
+            engine_details = self._extract_engine_details_from_text(row_text)
+            engine_types = [
+                detail.get("engine_type")
+                for detail in engine_details
+                if detail.get("engine_type")
+            ]
             parsed_rows.append({
                 "row_index": row_index,
                 "rank_raw": rank_fact.get("raw_rank"),
@@ -5415,8 +6148,11 @@ class AIResumeAnalyzer:
                 "sign_in_date": sign_in_date,
                 "sign_out_date": sign_out_date,
                 "vessel_types": self._extract_row_ship_types_from_seajobs_row(window),
-                "engine_types": self._extract_engine_types_from_text(" ".join(window)),
-                "snippet": " ".join(window),
+                "engine_types": list(dict.fromkeys(engine_types)),
+                "engine_details": engine_details,
+                # Convenience singleton for legacy consumers; use engine_types for full coverage.
+                "engine_family": engine_types[0] if engine_types else None,
+                "snippet": row_text,
             })
 
         return {
@@ -6457,12 +7193,54 @@ class AIResumeAnalyzer:
             "availability_fact": availability_fact,
         }
 
+    def _extract_coc_table_fields_from_snippet(self, snippet, grade_patterns, date_token_pattern):
+        date_matches = list(re.finditer(date_token_pattern, str(snippet or ""), flags=re.IGNORECASE))
+        if len(date_matches) < 2:
+            return {}
+        prefix = str(snippet or "")[:date_matches[0].start()].strip()
+        prefix = re.sub(
+            r".*\bCertificate\s+No\s*Certificate\s+Type\s+Issue\s+Authority\s+Issue\s+Date\s+Expiry\s+Date\s+Indos\s+No\.?\s*",
+            "",
+            prefix,
+            flags=re.IGNORECASE,
+        )
+        prefix = re.sub(
+            r".*\bCertificate\s+No\s+Certificate\s+Type\s+Issue\s+Authority\s+Issue\s+Date\s+Expiry\s+Date\s+Indos\s+No\.?\s*",
+            "",
+            prefix,
+            flags=re.IGNORECASE,
+        )
+        prefix = re.sub(r"^\s*Certificate\s+Details\s+", "", prefix, flags=re.IGNORECASE).strip()
+        tokens = prefix.split()
+        if len(tokens) > 1 and re.search(r"\d", tokens[0]):
+            prefix = " ".join(tokens[1:]).strip()
+
+        for pattern, _canonical_grade in grade_patterns:
+            match = re.search(pattern, prefix, flags=re.IGNORECASE)
+            if not match:
+                continue
+            certificate_type = match.group(0).strip()
+            before = prefix[:match.start()].strip(" -")
+            after = prefix[match.end():].strip(" -")
+            issue_authority = after or before or None
+            if issue_authority and before and after and before.lower() == after.lower():
+                issue_authority = after
+            return {
+                "certificate_type": certificate_type,
+                "issue_authority": issue_authority,
+                "country": self._normalize_coc_country(issue_authority),
+            }
+        return {}
+
     def _extract_coc_fact_from_text(self, raw_text):
         text = str(raw_text or "")
         if not text:
             return {
                 "status": "MISSING",
                 "grade": None,
+                "country": None,
+                "issue_authority": None,
+                "certificate_type": None,
                 "expiry_date": None,
                 "expiry_status": "MISSING",
                 "confidence": None,
@@ -6490,8 +7268,8 @@ class AIResumeAnalyzer:
             r"fourth\s+engineer\s*\((?:fg|ncv)\)|4th\s+engineer\s*\((?:fg|ncv)\)",
             r"first\s+engineer|1st\s+engineer",
             r"meo\s+cl(?:ass)?[-\s]*(?:i{1,3}|iv|1|2|3|4)\b",
-            r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b",
-            r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b",
+            r"meo\s+class\s+i(?:\s*\(\s*motor\s*\)|\b)",
+            r"meo\s+class\s+ii(?:\s*\(\s*motor\s*\)|\b)",
             r"meo\s+class\s+iv\b",
         ]
         date_token_pattern = (
@@ -6521,6 +7299,9 @@ class AIResumeAnalyzer:
             return {
                 "status": "MISSING",
                 "grade": None,
+                "country": None,
+                "issue_authority": None,
+                "certificate_type": None,
                 "expiry_date": None,
                 "expiry_status": "MISSING",
                 "confidence": None,
@@ -6529,21 +7310,21 @@ class AIResumeAnalyzer:
             }
 
         grade_patterns = [
+            (r"meo\s+class\s+i(?:\s*\(\s*motor\s*\)|\b)", "chief_engineer"),
+            (r"meo\s+class\s+ii(?:\s*\(\s*motor\s*\)|\b)", "2nd_engineer"),
+            (r"meo\s+class\s+iv\b", "4th_engineer"),
             (r"meo\s+cl(?:ass)?[-\s]*4\b|meo\s+cl(?:ass)?[-\s]*iv\b", "4th_engineer"),
             (r"meo\s+cl(?:ass)?[-\s]*2\b|meo\s+cl(?:ass)?[-\s]*ii\b", "2nd_engineer"),
             (r"meo\s+cl(?:ass)?[-\s]*1\b|meo\s+cl(?:ass)?[-\s]*i\b", "chief_engineer"),
-            (r"meo\s+class\s+i\s*(?:\(\s*motor\s*\))?\b", "chief_engineer"),
-            (r"meo\s+class\s+ii\s*(?:\(\s*motor\s*\))?\b", "2nd_engineer"),
-            (r"meo\s+class\s+iv\b", "4th_engineer"),
             (r"first\s+engineer|1st\s+engineer", "chief_engineer"),
             (r"chief\s+engineer", "chief_engineer"),
             (r"second\s+engineer|2nd\s+engineer", "2nd_engineer"),
             (r"third\s+engineer|3rd\s+engineer", "3rd_engineer"),
             (r"fourth\s+engineer|4th\s+engineer", "4th_engineer"),
-            (r"master\s+f\.?g\b|master\s+fg\b|master", "master"),
-            (r"first\s+mate\s+fg|chief\s+mate\s+fg|first\s+mate|chief\s+mate|chief\s+officer", "chief_officer"),
-            (r"second\s+mate\s+fg|2nd\s+mate\s+fg|second\s+mate|2nd\s+officer|second\s+officer", "2nd_officer"),
-            (r"third\s+mate\s+fg|3rd\s+mate\s+fg|third\s+mate|3rd\s+officer|third\s+officer", "3rd_officer"),
+            (r"master\s*\((?:fg|ncv)\)|master\s+f\.?g\b|master\s+fg\b|master", "master"),
+            (r"chief\s+officer\s*\((?:fg|ncv)\)|first\s+mate\s*\((?:fg|ncv)\)|chief\s+mate\s*\((?:fg|ncv)\)|first\s+mate\s+fg|chief\s+mate\s+fg|first\s+mate|chief\s+mate|chief\s+officer", "chief_officer"),
+            (r"second\s+mate\s*\((?:fg|ncv)\)|2nd\s+officer\s*\((?:fg|ncv)\)|second\s+mate\s+fg|2nd\s+mate\s+fg|second\s+mate|2nd\s+officer|second\s+officer", "2nd_officer"),
+            (r"third\s+mate\s*\((?:fg|ncv)\)|3rd\s+officer\s*\((?:fg|ncv)\)|third\s+mate\s+fg|3rd\s+mate\s+fg|third\s+mate|3rd\s+officer|third\s+officer", "3rd_officer"),
         ]
 
         for snippet in snippets:
@@ -6561,15 +7342,33 @@ class AIResumeAnalyzer:
                     break
 
             date_tokens = re.findall(date_token_pattern, snippet, flags=re.IGNORECASE)
+            table_fields = self._extract_coc_table_fields_from_snippet(snippet, grade_patterns, date_token_pattern)
             if len(date_tokens) >= 2:
                 expiry_fact = self._extract_date_fact_from_snippet(date_tokens[1])
             else:
                 expiry_fact = self._extract_date_fact_from_snippet(snippet)
+            coc_country = table_fields.get("country")
+            issue_authority = table_fields.get("issue_authority")
+            certificate_type = table_fields.get("certificate_type")
+            for country_match in re.finditer(
+                r"\b(?:india|indian|uk|u\.?\s*k\.?|united\s+kingdom|british)\b",
+                snippet,
+                flags=re.IGNORECASE,
+            ):
+                if coc_country:
+                    break
+                candidate_country = self._normalize_coc_country(country_match.group(0))
+                if candidate_country:
+                    coc_country = candidate_country
+                    break
 
             if expiry_fact.get("status") == "PARSED":
                 return {
                     "status": "PARSED",
                     "grade": grade,
+                    "country": coc_country,
+                    "issue_authority": issue_authority,
+                    "certificate_type": certificate_type,
                     "expiry_date": expiry_fact.get("date"),
                     "expiry_status": "PARSED",
                     "confidence": 0.9,
@@ -6581,6 +7380,9 @@ class AIResumeAnalyzer:
                 return {
                     "status": "PARSED",
                     "grade": grade,
+                    "country": coc_country,
+                    "issue_authority": issue_authority,
+                    "certificate_type": certificate_type,
                     "expiry_date": None,
                     "expiry_status": expiry_fact.get("status"),
                     "confidence": 0.75,
@@ -6591,6 +7393,9 @@ class AIResumeAnalyzer:
             return {
                 "status": "PARSED",
                 "grade": grade,
+                "country": coc_country,
+                "issue_authority": issue_authority,
+                "certificate_type": certificate_type,
                 "expiry_date": None,
                 "expiry_status": "MISSING",
                 "confidence": 0.7,
@@ -6601,6 +7406,9 @@ class AIResumeAnalyzer:
         return {
             "status": "MISSING",
             "grade": None,
+            "country": None,
+            "issue_authority": None,
+            "certificate_type": None,
             "expiry_date": None,
             "expiry_status": "MISSING",
             "confidence": None,
@@ -7275,7 +8083,12 @@ class AIResumeAnalyzer:
         extracted_full_name = self._extract_candidate_full_name_from_text(source_text)
         candidate_name_snippet = self._candidate_name_excerpt_from_text(source_text, extracted_full_name)
         experienced_ship_types = self._extract_experienced_ship_types_from_text(source_text)
-        experienced_engine_types = self._extract_engine_types_from_text(source_text)
+        experienced_engine_details = self._extract_engine_details_from_text(source_text)
+        experienced_engine_types = list(dict.fromkeys(
+            detail.get("engine_type")
+            for detail in experienced_engine_details
+            if detail.get("engine_type")
+        ))
         logistics_fact = self._extract_logistics_from_text(source_text)
         metadata_entry = {}
         if folder_metadata:
@@ -7320,6 +8133,9 @@ class AIResumeAnalyzer:
             "certifications": {
                 "coc": {
                     "grade": coc_fact.get("grade"),
+                    "country": coc_fact.get("country"),
+                    "issue_authority": coc_fact.get("issue_authority"),
+                    "certificate_type": coc_fact.get("certificate_type"),
                     "expiry_date": coc_fact.get("expiry_date").isoformat() if coc_fact.get("expiry_date") else None,
                     "expiry_status": coc_fact.get("expiry_status"),
                     "status": coc_fact.get("status"),
@@ -7351,6 +8167,7 @@ class AIResumeAnalyzer:
             "experience": {
                 "vessel_types": experienced_ship_types,
                 "engine_types": experienced_engine_types,
+                "engine_details": experienced_engine_details,
                 "last_sign_off_date": last_sign_off_fact.get("last_sign_off_date").isoformat() if last_sign_off_fact.get("last_sign_off_date") else None,
                 "last_sign_off_months_ago": last_sign_off_fact.get("last_sign_off_months_ago"),
                 "service_rows": experience_rows_fact.get("rows") or [],
@@ -7482,6 +8299,14 @@ class AIResumeAnalyzer:
                     status="PARSED" if experienced_engine_types else "MISSING",
                     source_label="resume_text",
                     context={"field": "experience.engine_types"},
+                ),
+                "experience.engine_details": self._build_fact_meta(
+                    len(experienced_engine_details),
+                    confidence=0.8 if experienced_engine_details else None,
+                    extraction_method="resume_keyword_scan",
+                    status="PARSED" if experienced_engine_details else "MISSING",
+                    source_label="resume_text",
+                    context={"field": "experience.engine_details"},
                 ),
                 "experience.service_rows": self._build_fact_meta(
                     len(experience_rows_fact.get("rows") or []),
@@ -8059,7 +8884,7 @@ class AIResumeAnalyzer:
             except Exception:
                 passport_expiry = None
 
-        if confidence is not None and confidence < 0.85:
+        if confidence is not None and confidence < self.COC_COUNTRY_CONFIDENCE_THRESHOLD:
             return self._base_rule_result(
                 "UNKNOWN",
                 "PASSPORT_CONFIDENCE_LOW",
@@ -8375,6 +9200,60 @@ class AIResumeAnalyzer:
             expected_value=constraint,
             confidence=confidence,
             unknown_reason="FACTUAL_UNKNOWN",
+        )
+
+    def _evaluate_coc_country_rule(self, candidate_facts, constraint):
+        coc = (candidate_facts.get("certifications") or {}).get("coc") or {}
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("certifications.coc") or {}).get("confidence")
+        actual_country = self._normalize_coc_country(coc.get("country"))
+        expected_countries = [
+            country
+            for country in (
+                self._normalize_coc_country(country)
+                for country in ((constraint or {}).get("countries") or [])
+            )
+            if country
+        ]
+
+        if confidence is not None and confidence < 0.85:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_COUNTRY_CONFIDENCE_LOW",
+                "COC country evidence confidence is below the hard-filter threshold.",
+                actual_value=actual_country,
+                expected_value=expected_countries,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if actual_country is None:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_COUNTRY_MISSING",
+                "Could not determine certificate of competency issuing country for this candidate.",
+                actual_value=None,
+                expected_value=expected_countries,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if self._evaluate_rule((constraint or {}).get("operator") or "contains_any", [actual_country], expected_countries):
+            return self._base_rule_result(
+                "PASS",
+                "COC_COUNTRY_MATCH",
+                f"Candidate COC issuing country '{actual_country}' matches the requested country filter.",
+                actual_value=actual_country,
+                expected_value=expected_countries,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            "COC_COUNTRY_MISMATCH",
+            f"Candidate COC issuing country '{actual_country}' does not match the requested country filter.",
+            actual_value=actual_country,
+            expected_value=expected_countries,
+            confidence=confidence,
         )
 
     def _evaluate_coc_grade_rule(self, candidate_facts, constraint):
@@ -9360,9 +10239,93 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _evaluate_logical_group_child(self, candidate_facts, child, facts_version):
+        applied_constraint = str((child or {}).get("applied_constraint") or "").strip()
+        hard_constraint_key = str((child or {}).get("hard_constraint_key") or applied_constraint).strip()
+        constraint = (child or {}).get("constraint")
+        if not applied_constraint or not hard_constraint_key:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "LOGICAL_GROUP_CHILD_INVALID",
+                "Logical-group child constraint is incomplete.",
+                actual_value=None,
+                expected_value=child,
+                confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+        result = self._evaluate_hard_filters(
+            candidate_facts,
+            {
+                "applied_constraints": [applied_constraint],
+                "hard_constraints": {hard_constraint_key: constraint},
+            },
+        )
+        child_results = result.get("results") or []
+        if child_results:
+            child_result = dict(child_results[0])
+        else:
+            child_result = self._base_rule_result(
+                result.get("decision") or "UNKNOWN",
+                "LOGICAL_GROUP_CHILD_NO_RESULT",
+                "Logical-group child did not produce a concrete rule result.",
+                actual_value=None,
+                expected_value=child,
+                confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN" if result.get("decision") == "UNKNOWN" else None,
+            )
+        child_result["logical_group_child_label"] = (child or {}).get("label")
+        child_result["logical_group_child_constraint"] = {
+            "applied_constraint": applied_constraint,
+            "hard_constraint_key": hard_constraint_key,
+        }
+        return child_result
+
+    def _evaluate_any_of_group(self, candidate_facts, group, facts_version):
+        children = list((group or {}).get("children") or [])
+        child_results = [
+            self._evaluate_logical_group_child(candidate_facts, child, facts_version)
+            for child in children
+            if isinstance(child, dict)
+        ]
+        labels = [
+            str((child or {}).get("label") or "").strip()
+            for child in children
+            if str((child or {}).get("label") or "").strip()
+        ]
+        label = str((group or {}).get("label") or " or ".join(labels) or "one grouped requirement").strip()
+
+        if any(result.get("decision") == "PASS" for result in child_results):
+            return self._base_rule_result(
+                "PASS",
+                "ANY_OF_GROUP_MATCH",
+                f"Matched because candidate satisfied one of: {', '.join(labels) or label}.",
+                actual_value=child_results,
+                expected_value=group,
+                confidence=None,
+            )
+        if child_results and all(result.get("decision") == "FAIL" for result in child_results):
+            return self._base_rule_result(
+                "FAIL",
+                "ANY_OF_GROUP_MISMATCH",
+                f"Candidate did not satisfy any of: {', '.join(labels) or label}.",
+                actual_value=child_results,
+                expected_value=group,
+                confidence=None,
+            )
+        return self._base_rule_result(
+            "UNKNOWN",
+            "ANY_OF_GROUP_UNKNOWN",
+            f"Could not determine whether candidate satisfies any of: {', '.join(labels) or label}.",
+            actual_value=child_results,
+            expected_value=group,
+            confidence=None,
+            unknown_reason="FACTUAL_UNKNOWN",
+        )
+
     def _evaluate_hard_filters(self, candidate_facts, job_constraints):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
+        logical_groups = list((job_constraints or {}).get("logical_groups") or [])
         results = []
         facts_version = str(candidate_facts.get("facts_version") or self.FACTS_VERSION)
         candidate_id = str((candidate_facts or {}).get("candidate_id") or "").strip()
@@ -9467,6 +10430,22 @@ class AIResumeAnalyzer:
                 ))
             else:
                 results.append(self._evaluate_coc_grade_rule(candidate_facts, coc_grade_constraint))
+
+        coc_country_constraint = hard_constraints.get("coc_country")
+        if "coc_country_match" in applied_constraints and coc_country_constraint:
+            activated_rules.append("coc_country_match")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "COC_COUNTRY_RULE_REQUIRES_V2_FACTS",
+                    "COC issuing-country matching requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=coc_country_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_coc_country_rule(candidate_facts, coc_country_constraint))
 
         stcw_constraint = hard_constraints.get("stcw_basic")
         if "stcw_basic" in applied_constraints and stcw_constraint:
@@ -9685,6 +10664,14 @@ class AIResumeAnalyzer:
                 f"candidate_id={candidate_id or '-'} "
                 f"activated_rules={activated_rules}"
             )
+
+        for group in logical_groups:
+            if not isinstance(group, dict):
+                continue
+            group_type = str(group.get("type") or "").strip().lower()
+            if group_type == "any_of":
+                activated_rules.append(str(group.get("id") or "any_of"))
+                results.append(self._evaluate_any_of_group(candidate_facts, group, facts_version))
 
         # Final hard-filter precedence is load-bearing:
         # FAIL overrides UNKNOWN, and UNKNOWN overrides PASS. This ensures
@@ -10342,6 +11329,7 @@ Examples of GOOD responses:
             allow_semantic_fallback = has_semantic_intent or recruiter_like_semantic_fallback
             has_actionable_constraints = bool(
                 job_constraints.get("applied_constraints")
+                or job_constraints.get("logical_groups")
                 or str(applied_ship_type or "").strip()
                 or str(experienced_ship_type or "").strip()
             )

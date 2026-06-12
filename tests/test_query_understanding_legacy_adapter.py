@@ -83,6 +83,31 @@ class LegacyParserAdapterTests(unittest.TestCase):
         self.assertEqual(constraint["ship_family"], "tanker")
         self.assertEqual(constraint["recent_contract_count"], 3)
 
+    def test_adapter_preserves_logical_groups(self):
+        adapted = self.adapter.adapt(
+            "has lng vessel or dual fuel vessel or win gd vessel expereince",
+            rank="2nd Engineer",
+        )
+
+        self.assertEqual(adapted["validation"]["status"], "valid")
+        self.assertEqual(adapted["applied_constraints"], [])
+        groups = adapted["logical_groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["type"], "any_of")
+        self.assertEqual(groups[0]["mode"], "required")
+        self.assertEqual(groups[0]["confidence"], "high")
+        self.assertEqual(
+            [(child["id"], child["constraint"]["type"]) for child in groups[0]["children"]],
+            [
+                ("experience_ship_type", "experience_ship_type"),
+                ("engine_experience", "engine_experience"),
+                ("engine_experience", "engine_experience"),
+            ],
+        )
+        self.assertEqual(groups[0]["children"][0]["constraint"]["ship_family"], "lng")
+        self.assertEqual(groups[0]["children"][1]["constraint"]["engine_family"], "dual_fuel")
+        self.assertEqual(groups[0]["children"][2]["constraint"]["engine_family"], "wingd_x_engines")
+
     def test_adapter_canonicalizes_ship_family_aliases_from_configured_parser(self):
         legacy = {
             "rank": "",

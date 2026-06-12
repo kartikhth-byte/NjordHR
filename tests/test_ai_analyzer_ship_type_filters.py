@@ -68,6 +68,8 @@ class _FakeConfig:
                 "Tanker",
                 "Product Tanker",
                 "VLCC",
+                "LNG",
+                "LNG Carrier",
                 "Dredger",
                 "Survey Vessel",
             ])
@@ -226,6 +228,138 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
 
         self.assertEqual(engine_types, ["man_b_w_me", "man_b_w_me_gi", "dual_fuel"])
 
+    def test_vessel_engine_or_prompt_populates_any_of_group(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Has lng vessel or dual fuel vessel or win gd vessel expereince"
+        )
+
+        self.assertEqual(constraints["applied_constraints"], [])
+        groups = constraints.get("logical_groups") or []
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["type"], "any_of")
+        self.assertEqual(
+            [child["applied_constraint"] for child in groups[0]["children"]],
+            ["experience_ship_type", "engine_experience", "engine_experience"],
+        )
+        self.assertEqual(groups[0]["children"][0]["constraint"], "lng")
+        self.assertEqual(groups[0]["children"][1]["constraint"]["engine_type"], "dual_fuel")
+        self.assertEqual(groups[0]["children"][2]["constraint"]["engine_type"], "wingd_x_engines")
+
+    def test_vessel_engine_or_prompt_variants_populate_any_of_group(self):
+        cases = [
+            "has experience in lng vessel or has win gd engine experience",
+            "has lng vessel experience or rtflex engine type experience",
+            "has dual fuel engine experience or lng carrier experience",
+        ]
+        for prompt in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt)
+                self.assertEqual(len(constraints.get("logical_groups") or []), 1)
+
+    def test_coc_country_or_prompt_populates_any_of_group(self):
+        constraints = self.analyzer._extract_job_constraints("has indian coc or has UK coc")
+
+        self.assertEqual(constraints["applied_constraints"], [])
+        children = constraints["logical_groups"][0]["children"]
+        self.assertEqual(
+            [(child["applied_constraint"], child["constraint"]["countries"]) for child in children],
+            [("coc_country_match", ["india"]), ("coc_country_match", ["uk"])],
+        )
+
+    def test_visa_or_prompt_populates_any_of_group(self):
+        constraints = self.analyzer._extract_job_constraints("valid US visa or Schengen visa")
+
+        self.assertEqual(constraints["applied_constraints"], [])
+        children = constraints["logical_groups"][0]["children"]
+        self.assertEqual(
+            [(child["applied_constraint"], child["constraint"]["visa_group"]) for child in children],
+            [("us_visa", "usa"), ("us_visa", "schengen")],
+        )
+
+    def test_any_of_recursion_can_be_disabled(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "valid US visa or Schengen visa",
+            allow_logical_groups=False,
+        )
+
+        self.assertNotIn("logical_groups", constraints)
+
+    def test_synonym_or_prompt_does_not_create_any_of_group(self):
+        constraints = self.analyzer._extract_job_constraints("captain or master")
+
+        self.assertNotIn("logical_groups", constraints)
+
+    def test_mixed_and_or_prompt_does_not_create_any_of_group(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "must be over 30 and lng vessel or dual fuel engine experience"
+        )
+
+        self.assertNotIn("logical_groups", constraints)
+
+    def test_vessel_engine_any_of_group_passes_when_ship_child_matches(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Has lng vessel or dual fuel vessel or win gd vessel expereince"
+        )
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "vessel_types": ["lng"],
+                    "engine_types": ["mitsubishi_uec"],
+                },
+                "fact_meta": {
+                    "experience.vessel_types": {"confidence": 0.9},
+                    "experience.engine_types": {"confidence": 0.8},
+                },
+            },
+            constraints,
+        )
+
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ANY_OF_GROUP_MATCH")
+        self.assertIn("Matched because candidate satisfied one of", result["results"][0]["message"])
+
+    def test_vessel_engine_any_of_group_passes_when_engine_child_matches(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Has lng vessel or dual fuel vessel or win gd vessel expereince"
+        )
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "vessel_types": ["bulk carrier"],
+                    "engine_types": ["wingd_x_engines"],
+                },
+                "fact_meta": {
+                    "experience.vessel_types": {"confidence": 0.9},
+                    "experience.engine_types": {"confidence": 0.8},
+                },
+            },
+            constraints,
+        )
+
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ANY_OF_GROUP_MATCH")
+
+    def test_vessel_engine_any_of_group_fails_only_when_all_children_fail(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Has lng vessel or dual fuel vessel or win gd vessel expereince"
+        )
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "vessel_types": ["bulk carrier"],
+                    "engine_types": ["mitsubishi_uec"],
+                },
+                "fact_meta": {
+                    "experience.vessel_types": {"confidence": 0.9},
+                    "experience.engine_types": {"confidence": 0.8},
+                },
+            },
+            constraints,
+        )
+
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ANY_OF_GROUP_MISMATCH")
+
     def test_experience_ship_type_hard_filter_is_separate_from_applied_ship_type(self):
         candidate_facts = {
             "application": {"applied_ship_types": ["Bulk Carrier"]},
@@ -306,6 +440,9 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             {
                 "coc": {
                     "grade": None,
+                    "country": None,
+                    "issue_authority": None,
+                    "certificate_type": None,
                     "expiry_date": None,
                     "expiry_status": "MISSING",
                     "status": "MISSING",

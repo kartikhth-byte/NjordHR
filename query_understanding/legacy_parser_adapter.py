@@ -156,6 +156,7 @@ class LegacyParserAdapter:
         prompt_id: str | None = None,
     ) -> Dict[str, Any]:
         applied_constraints: List[Dict[str, Any]] = []
+        logical_groups: List[Dict[str, Any]] = []
         unapplied_constraints: List[Dict[str, Any]] = []
         residual_text = str(user_prompt or "")
         semantic_fragments: List[str] = []
@@ -168,17 +169,18 @@ class LegacyParserAdapter:
                 "legacy_applied_constraint_id": applied_id,
             }
 
+        def _make_applied(family_id: str, payload: Dict[str, Any], source_text: str, legacy_key: str, applied_id: str | None):
+            return {
+                "id": family_id,
+                "mode": "required",
+                "constraint": payload,
+                "source_text": source_text,
+                "confidence": "high",
+                "compatibility": _compat(legacy_key, applied_id),
+            }
+
         def _append_applied(family_id: str, payload: Dict[str, Any], source_text: str, legacy_key: str, applied_id: str | None):
-            applied_constraints.append(
-                {
-                    "id": family_id,
-                    "mode": "required",
-                    "constraint": payload,
-                    "source_text": source_text,
-                    "confidence": "high",
-                    "compatibility": _compat(legacy_key, applied_id),
-                }
-            )
+            applied_constraints.append(_make_applied(family_id, payload, source_text, legacy_key, applied_id))
 
         def _append_unapplied(family_id: str, reason: str, source_text: str, legacy_key: str, applied_id: str | None, mode: str = "required", suggested_handling: str | None = None):
             unapplied_constraints.append(
@@ -189,6 +191,54 @@ class LegacyParserAdapter:
                     "source_text": source_text,
                     "suggested_handling": suggested_handling or ("block_search" if mode == "required" else "semantic_with_warning"),
                     "confidence": "medium",
+                }
+            )
+
+        def _adapt_logical_group_child(child: Mapping[str, Any]) -> Dict[str, Any] | None:
+            applied_id = str(child.get("applied_constraint") or "").strip()
+            hard_key = str(child.get("hard_constraint_key") or legacy_hard_constraint_key(applied_id) or "").strip()
+            if not applied_id or not hard_key:
+                return None
+            child_source = str(child.get("label") or child.get("source_text") or user_prompt or "")
+            child_legacy = {
+                "rank": str(rank or "").strip(),
+                "hard_constraints": {hard_key: child.get("constraint")},
+                "applied_constraints": [applied_id],
+                "unapplied_constraints": [],
+                "parsing_notes": [],
+            }
+            child_plan = self.from_legacy_constraints(
+                child_legacy,
+                user_prompt=child_source,
+                rank=rank,
+                prompt_template_version=prompt_template_version,
+                prompt_id=prompt_id,
+            )
+            applied = list(child_plan.get("applied_constraints") or [])
+            return applied[0] if applied else None
+
+        for group in legacy_constraints.get("logical_groups") or []:
+            if not isinstance(group, Mapping):
+                continue
+            if str(group.get("type") or "").strip().lower() != "any_of":
+                continue
+            children = [
+                adapted_child
+                for child in (group.get("children") or [])
+                if isinstance(child, Mapping)
+                for adapted_child in [_adapt_logical_group_child(child)]
+                if adapted_child is not None
+            ]
+            if len(children) < 2:
+                continue
+            logical_groups.append(
+                {
+                    "id": str(group.get("id") or "hard_filter_any_of"),
+                    "type": "any_of",
+                    "mode": "required",
+                    "source_text": str(group.get("label") or user_prompt or ""),
+                    "confidence": "high",
+                    "children": children,
                 }
             )
 
@@ -385,6 +435,27 @@ class LegacyParserAdapter:
                     coc_grade.get("display_value") or user_prompt,
                     "coc_grade",
                     "coc_grade_match",
+                )
+
+        if "coc_country" in hard_constraints:
+            coc_country = hard_constraints.get("coc_country") or {}
+            countries = [
+                " ".join(str(country or "").lower().split())
+                for country in (coc_country.get("countries") or [])
+                if str(country or "").strip()
+            ]
+            if countries:
+                semantic_fragments.extend(countries)
+                _append_applied(
+                    "coc_country_match",
+                    {
+                        "type": "coc_country_match",
+                        "countries": countries,
+                        "operator": coc_country.get("operator") or "contains_any",
+                    },
+                    coc_country.get("display_value") or user_prompt,
+                    "coc_country",
+                    "coc_country_match",
                 )
 
         if "stcw_basic" in hard_constraints:
@@ -650,6 +721,7 @@ class LegacyParserAdapter:
                 },
             },
             "applied_constraints": applied_constraints,
+            "logical_groups": logical_groups,
             "unapplied_constraints": unapplied_constraints,
             "semantic_query": semantic_query,
             "unrecognized_residual": [

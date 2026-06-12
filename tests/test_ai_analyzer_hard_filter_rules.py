@@ -173,6 +173,37 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_coc_country_rule_pass(self):
+        result = self.analyzer._evaluate_coc_country_rule(
+            {
+                "certifications": {"coc": {"country": "india"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"countries": ["india"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_coc_country_rule_fail(self):
+        result = self.analyzer._evaluate_coc_country_rule(
+            {
+                "certifications": {"coc": {"country": "uk"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"countries": ["india"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_coc_country_rule_missing_is_unknown(self):
+        result = self.analyzer._evaluate_coc_country_rule(
+            {
+                "certifications": {"coc": {"grade": "2nd_engineer", "country": None}},
+                "fact_meta": {"certifications.coc": {"confidence": None}},
+            },
+            {"countries": ["india"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
     def test_rule_skipped_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
