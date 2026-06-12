@@ -5896,12 +5896,20 @@ class AIResumeAnalyzer:
         if not row_text:
             return []
 
+        def plausible_entries(entries):
+            return [
+                entry
+                for entry in (entries or [])
+                if not (1900 <= int(entry.get("value") or 0) <= 2099)
+                and int(entry.get("value") or 0) <= 400000
+            ]
+
         without_dates = row_text
         for token in self._extract_ordered_date_tokens_from_seajobs_row(row_lines):
             without_dates = without_dates.replace(token, " ")
         without_dates = re.sub(r"^\s*\d{1,3}\s+", "", without_dates).strip()
 
-        entries = self._parse_vessel_tonnage_cell(without_dates)
+        entries = plausible_entries(self._parse_vessel_tonnage_cell(without_dates))
         if entries:
             return entries
 
@@ -5913,7 +5921,36 @@ class AIResumeAnalyzer:
             flags=re.IGNORECASE,
         )
         if ship_type_match:
-            return self._parse_vessel_tonnage_cell(ship_type_match.group(1))
+            entries = plausible_entries(self._parse_vessel_tonnage_cell(ship_type_match.group(1)))
+            if entries:
+                return entries
+
+        after_ship_type = ""
+        slash_match = re.search(r"/\s*(.+)$", without_dates)
+        if slash_match:
+            after_ship_type = slash_match.group(1)
+        if after_ship_type:
+            candidate_matches = []
+            for match in re.finditer(
+                r"(?:(DWT|GRT|GT)\s*)?(\d{1,3}(?:,\d{3})+|\d{4,6})(?:\.0)?(?:\s*(DWT|GRT|GT))?",
+                after_ship_type,
+                flags=re.IGNORECASE,
+            ):
+                raw_number = match.group(2)
+                value = int(str(raw_number).replace(",", ""))
+                if 1900 <= value <= 2099 or value > 400000:
+                    continue
+                unit_raw = match.group(1) or match.group(3)
+                unit = self._VESSEL_TONNAGE_UNITS.get(str(unit_raw or "").lower()) if unit_raw else "unspecified"
+                candidate_matches.append({
+                    "value": value,
+                    "unit": unit,
+                    "source_label": str(unit_raw or "Tonnage").upper() if unit_raw else "Tonnage",
+                    "confidence": 0.70,
+                    "evidence_text": after_ship_type.strip(),
+                })
+            if candidate_matches:
+                return [candidate_matches[0]]
         return []
 
     def _extract_rank_from_seajobs_row_window(self, row_lines):

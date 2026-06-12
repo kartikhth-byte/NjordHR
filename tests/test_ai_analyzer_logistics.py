@@ -427,6 +427,22 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         )
         self.assertEqual(entries[0]["value"], 58000)
 
+    def test_seajobs_tonnage_handles_split_date_fragments_around_row(self):
+        entries = self.analyzer._extract_vessel_tonnage_from_seajobs_row([
+            "2nd 03-Mar-",
+            "1 ESM / Bitumen Tanker 10830 Wartsila 06-Jul-2025",
+            "Engineer 2025",
+        ])
+        self.assertEqual(entries[0]["value"], 10830)
+        self.assertEqual(entries[0]["unit"], "unspecified")
+
+    def test_seajobs_tonnage_does_not_treat_split_year_as_grt_value(self):
+        entries = self.analyzer._extract_vessel_tonnage_from_seajobs_row([
+            "28434 18-Jun-",
+            "6 3rd Engineer Synergy marine services / Oil Tanker MAN & B&W GRT 2021",
+        ])
+        self.assertEqual(entries, [])
+
     def test_extract_vessel_tonnage_constraint_minimum(self):
         constraint = self.analyzer._extract_vessel_tonnage_constraint("has experience on vessels above 50000 tonnage")
         self.assertEqual(constraint["min_value"], 50000)

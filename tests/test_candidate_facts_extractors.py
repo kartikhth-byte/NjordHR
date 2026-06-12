@@ -371,6 +371,27 @@ class CandidateFactsExtractorStubTests(unittest.TestCase):
         self.assertIn("CoC Grade", coc_fact["snippet"])
         self.assertIn("Bulk Carrier", contract_fact["snippet"])
 
+    def test_orchestrator_routes_seajobs_like_pdf_even_without_metadata(self):
+        source_text = (
+            "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+            "Seamen Experience Details\n"
+            "Sign In Sign Out\n"
+            "# Rank Company Name / Ship Type Tonnage Engine\n"
+            "Date Date\n"
+            "1 2nd Engineer Synergy Maritime / Oil Tanker 58000 MAN B&W 09-Jan-2024 03-Apr-2024\n"
+        )
+        payload = build_candidate_facts_v1(
+            _FakeAnalyzer(),
+            "2nd_Engineer_120969.pdf",
+            "2nd Engineer",
+            [{"metadata": {"raw_text": source_text}}],
+            source_origin="manual_upload",
+            detected_layout="unknown",
+        )
+        self.assertEqual(payload["source"]["source_origin"], "seajobs_download")
+        self.assertEqual(payload["source"]["detected_layout"], "seajobs")
+        self.assertEqual(payload["contracts"][0]["vessel_tonnage"][0]["value"], 58000)
+
     def test_seajobs_extractor_marks_empty_extraction_partial(self):
         payload = seajobs.build_candidate_facts_v1(
             _EmptyAnalyzer(),
