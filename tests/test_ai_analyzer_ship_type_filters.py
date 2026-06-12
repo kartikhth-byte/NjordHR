@@ -173,6 +173,82 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["unknown"], 1)
 
+    def test_vessel_tonnage_ui_filter_uses_row_evidence(self):
+        resume_specs = [
+            {"filename": "2nd_Engineer_1001.pdf", "tonnage": 58000},
+            {"filename": "2nd_Engineer_1002.pdf", "tonnage": 28000},
+        ]
+        for spec in resume_specs:
+            _write_fake_pdf(self.rank_folder / spec["filename"])
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(spec["filename"]).stem: [
+                {
+                    "id": f"chunk-{Path(spec['filename']).stem}",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(spec["filename"]).stem,
+                        "rank": self.rank,
+                        "source_path": str(self.rank_folder / spec["filename"]),
+                        "raw_text": spec["filename"],
+                    },
+                }
+            ]
+            for spec in resume_specs
+        }
+        tonnage_by_filename = {spec["filename"]: spec["tonnage"] for spec in resume_specs}
+
+        def fake_candidate_facts(filename, *_args, **_kwargs):
+            tonnage = tonnage_by_filename[filename]
+            return {
+                "facts_version": "2.0",
+                "experience": {
+                    "service_rows": [
+                        {
+                            "vessel_name": "MT Aurora",
+                            "vessel_tonnage": [
+                                {
+                                    "value": tonnage,
+                                    "unit": "unspecified",
+                                    "confidence": 0.9,
+                                    "evidence_text": f"Tonnage: {tonnage}",
+                                }
+                            ],
+                        }
+                    ],
+                    "vessel_types": [],
+                },
+                "application": {"applied_ship_types": []},
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            }
+
+        self.analyzer._build_candidate_facts = fake_candidate_facts
+        self.analyzer._resolve_candidate_age = lambda *args, **kwargs: {
+            "dob": None,
+            "age": None,
+            "dob_parse_status": "MISSING",
+        }
+
+        llm_calls = []
+        self.analyzer._reason_with_llm = lambda prompt, retrieved_chunks, past_feedback: llm_calls.append(prompt) or {
+            "is_match": True,
+            "reason": "Match",
+            "confidence": 0.9,
+        }
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "show candidates",
+            vessel_tonnage_filter={"min_value": 50000, "max_value": None, "unit": "any"},
+        ))
+        complete_event = next(event for event in events if event["type"] == "complete")
+
+        verified = [match["filename"] for match in complete_event["verified_matches"]]
+        self.assertEqual(verified, ["2nd_Engineer_1001.pdf"])
+        self.assertEqual(len(llm_calls), 0)
+        self.assertEqual(complete_event["hard_filter_summary"]["passed"], 1)
+        self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
+
     def test_experienced_ship_type_is_extracted_from_resume_text(self):
         vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
             "Sea Service: Chief Officer on Product Tanker, VLCC and Bulk Carrier vessels."

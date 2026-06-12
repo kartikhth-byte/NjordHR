@@ -877,8 +877,25 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "secret": "must-not-survive",
                     "search_state": {
                         "prompt": "has valid passport",
+                        "vessel_tonnage_filter": {
+                            "min_value": 50000,
+                            "max_value": 80000,
+                            "unit": "gt_grt",
+                            "ignored": "must-not-survive",
+                        },
                         "active_search_step_index": 99,
                         "current_completed_results": {
+                            "search_context": {
+                                "rank_folder": "2nd Engineer",
+                                "applied_ship_type": "Oil Tanker",
+                                "experienced_ship_type": "Any",
+                                "vessel_tonnage_filter": {
+                                    "min_value": 30000,
+                                    "max_value": None,
+                                    "unit": "dwt",
+                                },
+                                "raw_nested": {"secret": "must-not-survive"},
+                            },
                             "verified_matches": [{
                                 "filename": long_filename,
                                 "candidate_scope_id": long_scope_id,
@@ -904,6 +921,28 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         loaded = client.get("/ai_search/recovery_draft").get_json()["draft"]["draft"]
         self.assertNotIn("secret", loaded)
         self.assertEqual(loaded["search_state"]["active_search_step_index"], 9)
+        self.assertEqual(
+            loaded["search_state"]["vessel_tonnage_filter"],
+            {
+                "type": "vessel_tonnage",
+                "min_value": 50000,
+                "max_value": 80000,
+                "unit": "gt_grt",
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["current_completed_results"]["search_context"]["vessel_tonnage_filter"],
+            {
+                "type": "vessel_tonnage",
+                "min_value": 30000,
+                "max_value": None,
+                "unit": "dwt",
+            },
+        )
+        self.assertNotIn(
+            "raw_nested",
+            loaded["search_state"]["current_completed_results"]["search_context"],
+        )
         card = loaded["search_state"]["current_completed_results"]["verified_matches"][0]
         self.assertNotIn("reason", card)
         self.assertNotIn("raw_text", card)

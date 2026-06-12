@@ -151,6 +151,7 @@ def _ai_search_request_fingerprint(
     rank_folder="",
     applied_ship_type="",
     experienced_ship_type="",
+    vessel_tonnage_filter=None,
     parent_search_session_id="",
     changed_content_acknowledgement_id="",
 ):
@@ -161,6 +162,7 @@ def _ai_search_request_fingerprint(
         "rank_folder": "" if is_refinement else str(rank_folder or "").strip(),
         "applied_ship_type": "" if is_refinement else str(applied_ship_type or "").strip(),
         "experienced_ship_type": "" if is_refinement else str(experienced_ship_type or "").strip(),
+        "vessel_tonnage_filter": {} if is_refinement else _normalize_vessel_tonnage_filter(vessel_tonnage_filter),
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "changed_content_acknowledgement_id": (
             str(changed_content_acknowledgement_id or "").strip()
@@ -170,6 +172,47 @@ def _ai_search_request_fingerprint(
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8", "ignore")).hexdigest()
+
+
+def _normalize_vessel_tonnage_filter(value):
+    if not isinstance(value, dict):
+        return {}
+
+    def positive_int(raw):
+        if isinstance(raw, bool) or raw in (None, ""):
+            return None
+        try:
+            parsed = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
+
+    min_value = positive_int(value.get("min_value"))
+    max_value = positive_int(value.get("max_value"))
+    if min_value is None and max_value is None:
+        return {}
+    if min_value is not None and max_value is not None and min_value > max_value:
+        return {}
+    unit = str(value.get("unit") or "any").strip().lower()
+    if unit not in {"any", "unspecified", "gt_grt", "dwt"}:
+        unit = "any"
+    return {
+        "type": "vessel_tonnage",
+        "min_value": min_value,
+        "max_value": max_value,
+        "unit": unit,
+    }
+
+
+def _parse_vessel_tonnage_filter_payload(raw):
+    raw_text = str(raw or "").strip()
+    if not raw_text:
+        return {}
+    try:
+        payload = json.loads(raw_text)
+    except (TypeError, ValueError):
+        return {}
+    return _normalize_vessel_tonnage_filter(payload)
 
 
 def _request_status_event(claim_result):
@@ -1595,6 +1638,9 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "download_root_id": rank_record["download_root_id"],
             "applied_ship_type": str(parent_session.get("applied_ship_type") or "").strip(),
             "experienced_ship_type": str(parent_session.get("experienced_ship_type") or "").strip(),
+            "vessel_tonnage_filter": _normalize_vessel_tonnage_filter(
+                (parent_session.get("context") or {}).get("vessel_tonnage_filter") or {}
+            ),
         },
         "scope_summary": scope_summary,
         "refinement": {
@@ -1615,6 +1661,17 @@ def _safe_recovery_scalar_mapping(value, allowed_keys):
         item = value.get(key)
         if item is None or isinstance(item, (str, int, float, bool)):
             result[key] = item
+    return result
+
+
+def _safe_recovery_search_context(value):
+    result = _safe_recovery_scalar_mapping(
+        value,
+        ("rank_folder", "applied_ship_type", "experienced_ship_type"),
+    )
+    result["vessel_tonnage_filter"] = _normalize_vessel_tonnage_filter(
+        (value if isinstance(value, dict) else {}).get("vessel_tonnage_filter") or {}
+    )
     return result
 
 
@@ -1706,10 +1763,7 @@ def _sanitize_recovery_results(results):
                 "search_mode", "refinement_depth", "search_request_id",
             ),
         ),
-        "search_context": _safe_recovery_scalar_mapping(
-            results.get("search_context"),
-            ("rank_folder", "applied_ship_type", "experienced_ship_type"),
-        ),
+        "search_context": _safe_recovery_search_context(results.get("search_context")),
         "scope_summary": _safe_recovery_scalar_mapping(
             results.get("scope_summary"),
             (
@@ -1763,6 +1817,9 @@ def _sanitize_ai_search_recovery_draft(payload):
             "selected_rank_folder": str(search_state.get("selected_rank_folder") or "")[:256],
             "applied_ship_type": str(search_state.get("applied_ship_type") or "")[:256],
             "experienced_ship_type": str(search_state.get("experienced_ship_type") or "")[:256],
+            "vessel_tonnage_filter": _normalize_vessel_tonnage_filter(
+                search_state.get("vessel_tonnage_filter") or {}
+            ),
             "refinement_state": str(search_state.get("refinement_state") or "disabled")[:64],
             "active_search_step_index": _sanitize_recovery_step_index(
                 search_state.get("active_search_step_index")
@@ -4769,6 +4826,7 @@ def analyze_stream():
     rank_folder_id = request.args.get('rank_folder_id', '').strip()
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
+    vessel_tonnage_filter = _parse_vessel_tonnage_filter_payload(request.args.get('vessel_tonnage_filter', ''))
     parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
     search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
     changed_content_acknowledgement_id = request.args.get(
@@ -4781,6 +4839,7 @@ def analyze_stream():
         rank_folder=rank_folder,
         applied_ship_type=applied_ship_type,
         experienced_ship_type=experienced_ship_type,
+        vessel_tonnage_filter=vessel_tonnage_filter,
         parent_search_session_id=parent_search_session_id,
         changed_content_acknowledgement_id=changed_content_acknowledgement_id,
     )
@@ -4790,6 +4849,7 @@ def analyze_stream():
         "rank_folder": str(rank_folder or "").strip(),
         "applied_ship_type": applied_ship_type,
         "experienced_ship_type": experienced_ship_type,
+        "vessel_tonnage_filter": vessel_tonnage_filter,
         "parent_search_session_id": parent_search_session_id,
         "changed_content_acknowledgement_id": changed_content_acknowledgement_id,
     }
@@ -4937,6 +4997,7 @@ def analyze_stream():
             effective_download_root_id = ""
             effective_applied_ship_type = applied_ship_type
             effective_experienced_ship_type = experienced_ship_type
+            effective_vessel_tonnage_filter = dict(vessel_tonnage_filter or {})
             search_mode = "root"
             root_search_session_id = search_session_id
             refinement_depth = 0
@@ -4971,6 +5032,10 @@ def analyze_stream():
                 parent_rank_folder = str(parent_session.get("rank_folder") or "").strip()
                 parent_applied_ship_type = str(parent_session.get("applied_ship_type") or "").strip()
                 parent_experienced_ship_type = str(parent_session.get("experienced_ship_type") or "").strip()
+                parent_context = parent_session.get("context") or {}
+                parent_vessel_tonnage_filter = _normalize_vessel_tonnage_filter(
+                    parent_context.get("vessel_tonnage_filter") or {}
+                )
                 context_mismatch = (
                     (effective_rank_folder and effective_rank_folder != parent_rank_folder)
                     or (effective_applied_ship_type and effective_applied_ship_type != parent_applied_ship_type)
@@ -4978,10 +5043,14 @@ def analyze_stream():
                         effective_experienced_ship_type
                         and effective_experienced_ship_type != parent_experienced_ship_type
                     )
+                    or (
+                        effective_vessel_tonnage_filter
+                        and effective_vessel_tonnage_filter != parent_vessel_tonnage_filter
+                    )
                 )
                 if context_mismatch:
                     yield _error_sse(
-                        "Refinement must use the rank and ship-type filters saved with the previous verified search.",
+                        "Refinement must use the rank, ship-type, and tonnage filters saved with the previous verified search.",
                         error_code="REFINEMENT_CONTEXT_MISMATCH",
                         retryable=False,
                     )
@@ -5011,6 +5080,7 @@ def analyze_stream():
                 effective_rank_folder = parent_rank_folder
                 effective_applied_ship_type = parent_applied_ship_type
                 effective_experienced_ship_type = parent_experienced_ship_type
+                effective_vessel_tonnage_filter = parent_vessel_tonnage_filter
                 authoritative_context = authoritative_preflight.get("search_context") or {}
                 effective_rank_folder_id = str(
                     authoritative_context.get("rank_folder_id") or ""
@@ -5113,6 +5183,7 @@ def analyze_stream():
                     "download_root_id": effective_download_root_id,
                     "applied_ship_type": effective_applied_ship_type,
                     "experienced_ship_type": effective_experienced_ship_type,
+                    "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                     "search_session_id": search_session_id,
                     "search_mode": search_mode,
                     "parent_search_session_id": parent_search_session_id,
@@ -5137,6 +5208,7 @@ def analyze_stream():
                 prompt,
                 applied_ship_type=effective_applied_ship_type,
                 experienced_ship_type=effective_experienced_ship_type,
+                vessel_tonnage_filter=effective_vessel_tonnage_filter,
                 review_capture_callback=_candidate_facts_review_capture_callback,
                 candidate_scope_ids=candidate_scope_ids,
                 candidate_scope_memberships=candidate_scope_memberships,
@@ -5225,6 +5297,7 @@ def analyze_stream():
                                 "download_root_id": effective_download_root_id,
                                 "applied_ship_type": effective_applied_ship_type,
                                 "experienced_ship_type": effective_experienced_ship_type,
+                                "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                             },
                             input_scope=scope_summary,
                             output=output_counts,
@@ -5262,6 +5335,7 @@ def analyze_stream():
                         "download_root_id": effective_download_root_id,
                         "applied_ship_type": effective_applied_ship_type,
                         "experienced_ship_type": effective_experienced_ship_type,
+                        "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                     }
                     event_to_client["scope_summary"] = scope_summary
                     event_to_client["refinement"] = refinement_payload
@@ -5274,6 +5348,7 @@ def analyze_stream():
                             "rank_folder": effective_rank_folder,
                             "applied_ship_type": effective_applied_ship_type,
                             "experienced_ship_type": effective_experienced_ship_type,
+                            "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                             "search_session_id": search_session_id,
                             "search_mode": search_mode,
                             "parent_search_session_id": parent_search_session_id,
@@ -5358,6 +5433,7 @@ def analyze():
         rank_folder = data.get('rank_folder')
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
         experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
+        vessel_tonnage_filter = _normalize_vessel_tonnage_filter(data.get('vessel_tonnage_filter') or {})
 
         if not prompt or not rank_folder:
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
@@ -5381,6 +5457,7 @@ def analyze():
                 "rank_folder": rank_folder,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
+                "vessel_tonnage_filter": vessel_tonnage_filter,
             },
             actor_role=actor_role,
             actor_username=actor_username,
@@ -5398,6 +5475,7 @@ def analyze():
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=_candidate_facts_review_capture_callback,
         )
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
@@ -5414,6 +5492,7 @@ def analyze():
                 "rank_folder": rank_folder,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
+                "vessel_tonnage_filter": vessel_tonnage_filter,
                 "success": bool(result.get("success")),
                 "verified_matches": len(result.get("verified_matches", [])),
                 "uncertain_matches": len(result.get("uncertain_matches", [])),
@@ -5438,6 +5517,7 @@ def analyze():
                 "rank_folder": rank_folder,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
+                "vessel_tonnage_filter": vessel_tonnage_filter,
                 "error": f"{type(e).__name__}: {e}",
             },
             actor_role=actor_role,

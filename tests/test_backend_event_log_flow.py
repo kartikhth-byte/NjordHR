@@ -1368,7 +1368,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(body["online"]["total_downloaded"], 1)
         self.assertEqual(body["online"]["role_counts"], [{"folder": "OS", "count": 1}])
 
-    def test_analyze_stream_forwards_applied_ship_type_to_analyzer(self):
+    def test_analyze_stream_forwards_ui_filters_to_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         captured = {}
 
@@ -1376,11 +1376,20 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs):
                 pass
 
-            def run_analysis_stream(self, rank_folder, prompt, applied_ship_type=None, experienced_ship_type=None, **_kwargs):
+            def run_analysis_stream(
+                self,
+                rank_folder,
+                prompt,
+                applied_ship_type=None,
+                experienced_ship_type=None,
+                vessel_tonnage_filter=None,
+                **_kwargs,
+            ):
                 captured["rank_folder"] = rank_folder
                 captured["prompt"] = prompt
                 captured["applied_ship_type"] = applied_ship_type
                 captured["experienced_ship_type"] = experienced_ship_type
+                captured["vessel_tonnage_filter"] = vessel_tonnage_filter
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -1392,7 +1401,18 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
             resp = self.client.get(
-                "/analyze_stream?rank_folder=Chief_Officer&prompt=show%20candidates&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
+                "/analyze_stream",
+                query_string={
+                    "rank_folder": "Chief_Officer",
+                    "prompt": "show candidates",
+                    "applied_ship_type": "Bulk Carrier",
+                    "experienced_ship_type": "Tanker",
+                    "vessel_tonnage_filter": json.dumps({
+                        "min_value": 50000,
+                        "max_value": 80000,
+                        "unit": "gt_grt",
+                    }),
+                },
             )
 
         self.assertEqual(resp.status_code, 200)
@@ -1402,6 +1422,15 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(captured["prompt"], "show candidates")
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
         self.assertEqual(captured["experienced_ship_type"], "Tanker")
+        self.assertEqual(
+            captured["vessel_tonnage_filter"],
+            {
+                "type": "vessel_tonnage",
+                "min_value": 50000,
+                "max_value": 80000,
+                "unit": "gt_grt",
+            },
+        )
 
     def test_analyze_stream_accepts_opaque_rank_folder_id(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
