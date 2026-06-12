@@ -125,6 +125,12 @@ test("recovery restore clamps active index and preflights the latest refinable s
     selected_rank_folder: "Chief_Engineer",
     applied_ship_type: "Bulk Carrier",
     experienced_ship_type: "Tanker",
+    vessel_tonnage_filter: {
+      type: "vessel_tonnage",
+      min_value: 50000,
+      max_value: 80000,
+      unit: "gt_grt",
+    },
     refinement_state: "active_running",
     active_search_step_index: 99,
     search_chain: [
@@ -146,6 +152,12 @@ test("recovery restore clamps active index and preflights the latest refinable s
   assert.equal(restored.refinementState, "active_idle");
   assert.equal(restored.refinementMode, true);
   assert.equal(restored.parentSearchSessionIdForPreflight, "search-2");
+  assert.deepEqual(restored.vesselTonnageFilter, {
+    type: "vessel_tonnage",
+    min_value: 50000,
+    max_value: 80000,
+    unit: "gt_grt",
+  });
 });
 
 test("recovery restore preserves historical view instead of making it refinable", () => {

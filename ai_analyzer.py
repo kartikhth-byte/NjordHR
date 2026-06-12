@@ -11709,6 +11709,7 @@ Examples of GOOD responses:
         user_prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -11767,6 +11768,17 @@ Examples of GOOD responses:
                 job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = str(experienced_ship_type).strip()
                 if "experience_ship_type" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("experience_ship_type")
+            if isinstance(vessel_tonnage_filter, dict) and (
+                vessel_tonnage_filter.get("min_value") is not None
+                or vessel_tonnage_filter.get("max_value") is not None
+            ):
+                job_constraints.setdefault("hard_constraints", {})["vessel_tonnage"] = {
+                    "min_value": vessel_tonnage_filter.get("min_value"),
+                    "max_value": vessel_tonnage_filter.get("max_value"),
+                    "unit": vessel_tonnage_filter.get("unit") or "any",
+                }
+                if "vessel_tonnage" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("vessel_tonnage")
             prompt_observability_probe = self._build_prompt_observability(
                 user_prompt,
                 job_constraints,
@@ -11784,6 +11796,7 @@ Examples of GOOD responses:
                 or job_constraints.get("logical_groups")
                 or str(applied_ship_type or "").strip()
                 or str(experienced_ship_type or "").strip()
+                or bool(vessel_tonnage_filter)
             )
             structured_only_prompt = self._is_structured_only_prompt(
                 user_prompt,
@@ -12321,6 +12334,7 @@ Examples of GOOD responses:
         user_prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -12341,6 +12355,7 @@ Examples of GOOD responses:
             user_prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -12439,6 +12454,7 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -12449,6 +12465,7 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -12460,6 +12477,7 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -12470,6 +12488,7 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,

@@ -344,6 +344,7 @@
                     selectedRankFolder: state?.selected_rank_folder || '',
                     appliedShipType: state?.applied_ship_type || '',
                     experiencedShipType: state?.experienced_ship_type || '',
+                    vesselTonnageFilter: state?.vessel_tonnage_filter || {},
                     restoredChain,
                     restoredIndex,
                     restoredResults,
@@ -503,6 +504,9 @@
             const [rankFolderShipTypes, setRankFolderShipTypes] = useState([]);
             const [selectedSearchShipType, setSelectedSearchShipType] = useState('');
             const [selectedExperienceShipType, setSelectedExperienceShipType] = useState('');
+            const [vesselTonnageMin, setVesselTonnageMin] = useState('');
+            const [vesselTonnageMax, setVesselTonnageMax] = useState('');
+            const [vesselTonnageUnit, setVesselTonnageUnit] = useState('any');
             const [aiPrompt, setAiPrompt] = useState('');
             const [analysisResults, setAnalysisResults] = useState(null);
             const [isNeedsReviewCollapsed, setIsNeedsReviewCollapsed] = useState(false);
@@ -3524,6 +3528,54 @@
                 setRefinementAvailability(aiSearchState.invalidatedRefinementAvailability());
             };
 
+            const normalizeTonnageInput = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return null;
+                if (!/^\d+$/.test(text)) return NaN;
+                const parsed = Number.parseInt(text, 10);
+                return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : NaN;
+            };
+
+            const buildVesselTonnageFilter = () => {
+                const minValue = normalizeTonnageInput(vesselTonnageMin);
+                const maxValue = normalizeTonnageInput(vesselTonnageMax);
+                if (Number.isNaN(minValue) || Number.isNaN(maxValue)) {
+                    return { error: 'Vessel tonnage must be a positive whole number.' };
+                }
+                if (minValue === null && maxValue === null) {
+                    return { filter: {} };
+                }
+                if (minValue !== null && maxValue !== null && minValue > maxValue) {
+                    return { error: 'Minimum vessel tonnage cannot be greater than maximum vessel tonnage.' };
+                }
+                const unit = ['any', 'unspecified', 'gt_grt', 'dwt'].includes(vesselTonnageUnit)
+                    ? vesselTonnageUnit
+                    : 'any';
+                return {
+                    filter: {
+                        type: 'vessel_tonnage',
+                        min_value: minValue,
+                        max_value: maxValue,
+                        unit,
+                    },
+                };
+            };
+
+            const vesselTonnageSummary = (filter = {}) => {
+                if (!filter || (filter.min_value == null && filter.max_value == null)) return 'Any';
+                const unitLabel = {
+                    any: 'Any / unspecified',
+                    unspecified: 'Unspecified',
+                    gt_grt: 'GT/GRT',
+                    dwt: 'DWT',
+                }[filter.unit || 'any'] || 'Any / unspecified';
+                if (filter.min_value != null && filter.max_value != null) {
+                    return `${filter.min_value.toLocaleString()}-${filter.max_value.toLocaleString()} (${unitLabel})`;
+                }
+                if (filter.min_value != null) return `>= ${filter.min_value.toLocaleString()} (${unitLabel})`;
+                return `<= ${filter.max_value.toLocaleString()} (${unitLabel})`;
+            };
+
             const startAnalysis = async ({
                 mode = 'root',
                 requestId = newSearchRequestId(),
@@ -3614,6 +3666,17 @@
                         params.set('rank_folder', selectedRankFolder);
                         params.set('applied_ship_type', selectedSearchShipType);
                         params.set('experienced_ship_type', selectedExperienceShipType);
+                        const tonnageResult = buildVesselTonnageFilter();
+                        if (tonnageResult.error) {
+                            preserveCompletedResultsAfterFailure();
+                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                            setIsAnalyzeLoading(false);
+                            handleSendMessage('error', tonnageResult.error);
+                            return;
+                        }
+                        if (tonnageResult.filter && (tonnageResult.filter.min_value != null || tonnageResult.filter.max_value != null)) {
+                            params.set('vessel_tonnage_filter', JSON.stringify(tonnageResult.filter));
+                        }
                     }
                     const eventSource = new EventSource(`${getCloudApiBaseUrl()}/analyze_stream?${params.toString()}`);
                     eventSourceRef.current = eventSource;
@@ -3761,6 +3824,10 @@
                     return handleSendMessage('warning', 'You are viewing an earlier result set. Return to latest results to refine further.');
                 }
                 if (!refinementMode) {
+                    const tonnageResult = buildVesselTonnageFilter();
+                    if (tonnageResult.error) {
+                        return handleSendMessage('error', tonnageResult.error);
+                    }
                     return startAnalysis({ mode: 'root', prompt: aiPrompt.trim() });
                 }
                 try {
@@ -3941,6 +4008,7 @@
                     selected_rank_folder: selectedRankFolder,
                     applied_ship_type: selectedSearchShipType,
                     experienced_ship_type: selectedExperienceShipType,
+                    vessel_tonnage_filter: buildVesselTonnageFilter().filter || {},
                     refinement_state: refinementState,
                     active_search_step_index: activeSearchStepIndex,
                     current_completed_results: recoveryResults(analysisResultsRef.current),
@@ -3991,6 +4059,17 @@
                     setSelectedRankFolder(restored.selectedRankFolder);
                     setSelectedSearchShipType(restored.appliedShipType);
                     setSelectedExperienceShipType(restored.experiencedShipType);
+                    setVesselTonnageMin(
+                        restored.vesselTonnageFilter?.min_value != null
+                            ? String(restored.vesselTonnageFilter.min_value)
+                            : ''
+                    );
+                    setVesselTonnageMax(
+                        restored.vesselTonnageFilter?.max_value != null
+                            ? String(restored.vesselTonnageFilter.max_value)
+                            : ''
+                    );
+                    setVesselTonnageUnit(restored.vesselTonnageFilter?.unit || 'any');
                     setAnalysisResults(restored.restoredResults);
                     analysisResultsRef.current = restored.restoredResults;
                     setSearchChain(restored.restoredChain);
@@ -4092,7 +4171,8 @@
                 return () => clearTimeout(timer);
             }, [
                 authUser, activeTab, aiPrompt, selectedRankFolder, selectedSearchShipType,
-                selectedExperienceShipType, refinementState, refinementAvailability,
+                selectedExperienceShipType, vesselTonnageMin, vesselTonnageMax, vesselTonnageUnit,
+                refinementState, refinementAvailability,
                 analysisResults, searchChain, activeSearchStepIndex,
             ]);
 
@@ -7280,6 +7360,61 @@
                                             <p className="mt-1 text-xs text-gray-500">Derived conservatively from resume vessel references. Missing or unclear evidence is treated as needs review.</p>
                                         </div>
                                         <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Vessel Tonnage Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                                <div>
+                                                    <label htmlFor="vesselTonnageMin" className="block text-xs font-medium text-gray-600">Minimum</label>
+                                                    <input
+                                                        id="vesselTonnageMin"
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        min="1"
+                                                        step="1"
+                                                        value={vesselTonnageMin}
+                                                        onChange={e => { setVesselTonnageMin(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        placeholder="e.g., 50000"
+                                                        disabled={refinementMode}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="vesselTonnageMax" className="block text-xs font-medium text-gray-600">Maximum</label>
+                                                    <input
+                                                        id="vesselTonnageMax"
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        min="1"
+                                                        step="1"
+                                                        value={vesselTonnageMax}
+                                                        onChange={e => { setVesselTonnageMax(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        placeholder="e.g., 80000"
+                                                        disabled={refinementMode}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="vesselTonnageUnit" className="block text-xs font-medium text-gray-600">Unit</label>
+                                                    <select
+                                                        id="vesselTonnageUnit"
+                                                        value={vesselTonnageUnit}
+                                                        onChange={e => { setVesselTonnageUnit(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        disabled={refinementMode}
+                                                    >
+                                                        <option value="any">Any / unspecified</option>
+                                                        <option value="unspecified">Unspecified only</option>
+                                                        <option value="gt_grt">GT/GRT only</option>
+                                                        <option value="dwt">DWT only</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Uses row-level Seajobs tonnage evidence. The default matches any stored tonnage unit; GT/GRT and DWT filters require labeled evidence.
+                                            </p>
+                                        </div>
+                                        <div>
                                             <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-1">Enter AI Search Prompt</label>
                                             <textarea
                                                 id="prompt"
@@ -7785,6 +7920,7 @@
                                     <p className="mt-1"><span className="font-medium">Rank:</span> {pendingRefinementConfirmation.preflight.search_context?.rank_folder || selectedRankFolder}</p>
                                     <p className="mt-1"><span className="font-medium">Applied ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.applied_ship_type || 'Any'}</p>
                                     <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.experienced_ship_type || 'Any'}</p>
+                                    <p className="mt-1"><span className="font-medium">Vessel tonnage:</span> {vesselTonnageSummary(pendingRefinementConfirmation.preflight.search_context?.vessel_tonnage_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Next step:</span> Refinement {searchChain.length}</p>
                                 </div>
                                 {Number(pendingRefinementConfirmation.preflight.scope_summary?.unavailable_percentage || 0) > 30 && (
