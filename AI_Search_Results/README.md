@@ -89,6 +89,21 @@ Rebuilding v0.1 wholesale is not the recommended approach. Instead:
    `NEEDS_HUMAN_REVIEW` flag on individual rows works, but the convention
    decisions themselves belong here so the next loss can't take them.
 
+## Cross-family co-occurrence policy
+
+Hard-filter families may evaluate independently unless a query plan explicitly
+contains a logical group that enforces co-occurrence. For vessel tonnage v1,
+`vessel_tonnage` is intentionally independent from `experience_ship_type`,
+`rank_match`, and `engine_experience`. A compound search such as
+`oil tanker above 50000 tonnage` may match when vessel-type evidence and
+tonnage evidence appear on different sea-service rows.
+
+This limitation is intentional for vessel tonnage Phase 1 and must be disclosed
+in UI helper text and result evidence. Results should show the evidence row or
+value that satisfied each family so recruiters can review cross-row matches.
+Generalized same-row matching is deferred to GitHub Issue #36 via a future
+`same_row` logical group. See `docs/specs/vessel_tonnage_v1.md`.
+
 ## v0.2 revalidation evidence
 
 The rebuilt v0.2 corpus is **new evidence**, not a byte-for-byte replacement for
