@@ -110,6 +110,77 @@ class CandidateFactsSchemaTests(unittest.TestCase):
         self.assertEqual(result.status, "invalid")
         self.assertTrue(any(error["path"] == "documents[0].presence" for error in result.errors))
 
+    def test_contract_vessel_tonnage_entries_are_validated(self):
+        payload = _valid_candidate_facts()
+        payload["contracts"] = [
+            {
+                "fact_id": "contract-1",
+                "fact_type": "contract",
+                "canonical_value": "MT Example",
+                "display_value": "MT Example",
+                "presence": "observed_true",
+                "confidence": "medium",
+                "evidence_ids": ["ev-1"],
+                "extraction": {
+                    "extractor": "seajobs",
+                    "parser_version": "1",
+                    "method": "table_parser",
+                },
+                "rank": "2nd_engineer",
+                "vessel_name": "MT Example",
+                "vessel_type": "oil_tanker",
+                "ship_family": "tanker",
+                "vessel_tonnage": [
+                    {
+                        "value": "58000",
+                        "unit": "tons",
+                        "source_label": "Tonnage",
+                        "confidence": 1.5,
+                        "evidence_text": "Tonnage: 58000",
+                    }
+                ],
+            }
+        ]
+        result = validate_candidate_facts_v1(payload)
+        self.assertEqual(result.status, "invalid")
+        self.assertTrue(any(error["path"] == "contracts[0].vessel_tonnage[0].value" for error in result.errors))
+        self.assertTrue(any(error["path"] == "contracts[0].vessel_tonnage[0].unit" for error in result.errors))
+        self.assertTrue(any(error["path"] == "contracts[0].vessel_tonnage[0].confidence" for error in result.errors))
+
+    def test_contract_vessel_tonnage_requires_source_label_and_evidence_text(self):
+        payload = _valid_candidate_facts()
+        payload["contracts"] = [
+            {
+                "fact_id": "contract-1",
+                "fact_type": "contract",
+                "canonical_value": "MT Example",
+                "display_value": "MT Example",
+                "presence": "observed_true",
+                "confidence": "medium",
+                "evidence_ids": ["ev-1"],
+                "extraction": {
+                    "extractor": "seajobs",
+                    "parser_version": "1",
+                    "method": "table_parser",
+                },
+                "rank": "2nd_engineer",
+                "vessel_name": "MT Example",
+                "vessel_type": "oil_tanker",
+                "ship_family": "tanker",
+                "vessel_tonnage": [
+                    {
+                        "value": 58000,
+                        "unit": "unspecified",
+                        "confidence": 0.9,
+                    }
+                ],
+            }
+        ]
+        result = validate_candidate_facts_v1(payload)
+        self.assertEqual(result.status, "invalid")
+        self.assertTrue(any(error["path"] == "contracts[0].vessel_tonnage[0].source_label" for error in result.errors))
+        self.assertTrue(any(error["path"] == "contracts[0].vessel_tonnage[0].evidence_text" for error in result.errors))
+
 
 if __name__ == "__main__":
     unittest.main()

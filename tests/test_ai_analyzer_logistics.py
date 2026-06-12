@@ -331,6 +331,102 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertIsNone(row["engine_family"])
         self.assertEqual(row["engine_details"], [])
 
+    def test_seajobs_tonnage_clean_integer(self):
+        self.assertEqual(
+            self.analyzer._parse_vessel_tonnage_cell("58000"),
+            [{"value": 58000, "unit": "unspecified", "source_label": "Tonnage", "confidence": 0.90, "evidence_text": "58000"}],
+        )
+
+    def test_seajobs_tonnage_comma_separated(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58,000")[0]["value"], 58000)
+
+    def test_seajobs_tonnage_decimal_zero(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58000.0")[0]["value"], 58000)
+
+    def test_seajobs_tonnage_non_whole_decimal(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58000.5"), [])
+
+    def test_seajobs_tonnage_shorthand_rejected(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58k"), [])
+
+    def test_seajobs_tonnage_zero_is_missing(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("0"), [])
+
+    def test_seajobs_tonnage_dash_sentinels(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("-"), [])
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("--"), [])
+
+    def test_seajobs_tonnage_na_sentinels(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("NA"), [])
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("N/A"), [])
+
+    def test_seajobs_tonnage_question_sentinel(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("?"), [])
+
+    def test_seajobs_tonnage_null_string(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("null"), [])
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("none"), [])
+
+    def test_seajobs_tonnage_whitespace_only(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("   \n\t"), [])
+
+    def test_seajobs_tonnage_noisy_with_unit(self):
+        entries = self.analyzer._parse_vessel_tonnage_cell("58000 MT")
+        self.assertEqual(entries[0]["value"], 58000)
+        self.assertEqual(entries[0]["unit"], "unspecified")
+        self.assertEqual(entries[0]["confidence"], 0.70)
+
+    def test_seajobs_tonnage_label_prefix(self):
+        entries = self.analyzer._parse_vessel_tonnage_cell("Tonnage 58000")
+        self.assertEqual(entries[0]["value"], 58000)
+        self.assertEqual(entries[0]["confidence"], 0.70)
+
+    def test_seajobs_tonnage_dwt_labeled(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("105000 DWT")[0]["unit"], "dwt")
+
+    def test_seajobs_tonnage_gt_labeled(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58000 GT")[0]["unit"], "gt")
+
+    def test_seajobs_tonnage_grt_labeled(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58000 GRT")[0]["unit"], "grt")
+
+    def test_seajobs_tonnage_multi_labeled_split(self):
+        entries = self.analyzer._parse_vessel_tonnage_cell("58000 GT / 105000 DWT")
+        self.assertEqual(entries, [
+            {"value": 58000, "unit": "gt", "source_label": "GT", "confidence": 0.90, "evidence_text": "58000 GT / 105000 DWT"},
+            {"value": 105000, "unit": "dwt", "source_label": "DWT", "confidence": 0.90, "evidence_text": "58000 GT / 105000 DWT"},
+        ])
+
+    def test_seajobs_tonnage_multi_unlabeled_skip(self):
+        self.assertEqual(self.analyzer._parse_vessel_tonnage_cell("58000 60000"), [])
+
+    def test_seajobs_tonnage_attaches_to_row_without_engine_model_false_positives(self):
+        for engine_text in ("6S60ME-C10.5", "RT-flex96C", "12RTA96C", "6S50MC-C"):
+            with self.subTest(engine_text=engine_text):
+                raw_text = (
+                    "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"
+                    "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer\n"
+                    "Seamen Experience Details\n"
+                    "Sign In Sign Out\n"
+                    "# Rank Company Name / Ship Type Tonnage Engine\n"
+                    "Date Date\n"
+                    f"1 2nd Engineer Synergy Maritime / Oil Tanker 58,000 {engine_text} ENGINE 09-Jan-2024 03-Apr-2024\n"
+                )
+                fact = self.analyzer._extract_seajobs_experience_rows(
+                    raw_text,
+                    original_path="/tmp/2nd_Engineer_288.pdf",
+                )
+                row = fact["rows"][0]
+                self.assertEqual(row["vessel_tonnage"][0]["value"], 58000)
+                self.assertEqual(row["vessel_tonnage"][0]["unit"], "unspecified")
+                self.assertEqual(row["vessel_tonnage"][0]["confidence"], 0.70)
+
+    def test_seajobs_tonnage_strips_three_digit_row_numbers(self):
+        entries = self.analyzer._extract_vessel_tonnage_from_seajobs_row(
+            ["101 2nd Engineer Synergy Maritime / Oil Tanker 58,000 ENGINE 09-Jan-2024 03-Apr-2024"]
+        )
+        self.assertEqual(entries[0]["value"], 58000)
+
     def test_extract_seajobs_experience_rows_preserves_multiple_engine_mentions(self):
         raw_text = (
             "Download by : R Aditya (Njordships Management India Pvt Ltd)\n"

@@ -307,6 +307,7 @@ def _build_contracts(legacy_facts: Mapping[str, Any], evidence_ids: List[str], s
                 vessel_name=row.get("vessel_name"),
                 vessel_type=row.get("vessel_type"),
                 ship_family=row.get("ship_family"),
+                vessel_tonnage=row.get("vessel_tonnage") or [],
                 engine_family=row.get("engine_family"),
                 engine_types=row.get("engine_types") or [],
                 engine_details=row.get("engine_details") or [],
@@ -322,6 +323,22 @@ def _build_contracts(legacy_facts: Mapping[str, Any], evidence_ids: List[str], s
             )
         )
     return contracts
+
+
+def _collect_vessel_tonnage_values(legacy_facts: Mapping[str, Any]) -> List[int]:
+    values: List[int] = []
+    for row in (legacy_facts.get("experience") or {}).get("service_rows") or []:
+        if not isinstance(row, Mapping):
+            continue
+        for entry in row.get("vessel_tonnage") or []:
+            if not isinstance(entry, Mapping):
+                continue
+            value = entry.get("value")
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int):
+                values.append(value)
+    return values
 
 
 def _build_rank_experience(legacy_facts: Mapping[str, Any], evidence_ids: List[str], source_text: str = "") -> List[Dict[str, Any]]:
@@ -412,6 +429,7 @@ def build_candidate_facts_v1(
         source_text = "\n".join(str((chunk.get("metadata") or {}).get("raw_text", "")) for chunk in (chunks or []))
     evidence = [_make_evidence(str(original_path or filename))]
     evidence_ids = [item["evidence_id"] for item in evidence]
+    vessel_tonnage_values = _collect_vessel_tonnage_values(legacy_facts)
 
     source = _build_source_identity(legacy_facts, filename, source_text)
     candidate_facts = {
@@ -444,6 +462,9 @@ def build_candidate_facts_v1(
             "vessel_types": (legacy_facts.get("experience") or {}).get("vessel_types") or [],
             "engine_types": (legacy_facts.get("experience") or {}).get("engine_types") or [],
             "engine_details": (legacy_facts.get("experience") or {}).get("engine_details") or [],
+            "vessel_tonnage_values": vessel_tonnage_values,
+            "max_vessel_tonnage": max(vessel_tonnage_values) if vessel_tonnage_values else None,
+            "min_vessel_tonnage": min(vessel_tonnage_values) if vessel_tonnage_values else None,
             "last_sign_off_date": (legacy_facts.get("experience") or {}).get("last_sign_off_date"),
             "last_sign_off_months_ago": (legacy_facts.get("experience") or {}).get("last_sign_off_months_ago"),
             "service_rows": (legacy_facts.get("experience") or {}).get("service_rows") or _build_contracts(legacy_facts, evidence_ids, source_text=source_text),
