@@ -161,6 +161,124 @@ def _canonicalize_list(value: Sequence[Any]) -> List[str]:
     return ordered
 
 
+def _validate_positive_int_or_null(value: Any, *, path: str, field_name: str) -> List[Dict[str, str]]:
+    if value is None:
+        return []
+    if not _is_int(value):
+        return [_error(f"invalid_{field_name}", path, f"{field_name} must be an integer or null")]
+    if value <= 0:
+        return [_error(f"invalid_{field_name}", path, f"{field_name} must be positive")]
+    return []
+
+
+def _normalize_experience_filter_item(
+    item: Mapping[str, Any],
+    *,
+    family_id: str,
+    value_field: str,
+    valid_values: Iterable[str],
+    path: str,
+) -> Tuple[Dict[str, Any] | None, List[Dict[str, str]]]:
+    errors: List[Dict[str, str]] = []
+    allowed_keys = {value_field, "minimum_months", "years_back", "contract_count"}
+    unknown = sorted(set(item.keys()) - allowed_keys)
+    if unknown:
+        errors.append(_error("unknown_experience_filter_item_keys", path, f"Unknown keys: {', '.join(unknown)}"))
+
+    canonical_value = item.get(value_field)
+    if not isinstance(canonical_value, str) or canonical_value not in set(valid_values):
+        errors.append(_error(f"invalid_{value_field}", f"{path}.{value_field}", f"{value_field} must be canonical"))
+
+    minimum_months = item.get("minimum_months")
+    if not (_is_int(minimum_months) or minimum_months is None):
+        errors.append(_error("invalid_minimum_months", f"{path}.minimum_months", "minimum_months must be an integer or null"))
+    elif isinstance(minimum_months, int) and minimum_months < 0:
+        errors.append(_error("invalid_minimum_months", f"{path}.minimum_months", "minimum_months must be zero or positive"))
+
+    years_back = item.get("years_back")
+    contract_count = item.get("contract_count")
+    errors.extend(_validate_positive_int_or_null(years_back, path=f"{path}.years_back", field_name="years_back"))
+    errors.extend(_validate_positive_int_or_null(contract_count, path=f"{path}.contract_count", field_name="contract_count"))
+    if years_back is not None and contract_count is not None:
+        errors.append(_error(f"{family_id}_recency_ambiguous", path, "years_back and contract_count are mutually exclusive per item"))
+
+    if errors:
+        return None, errors
+    return {
+        value_field: canonical_value,
+        "minimum_months": minimum_months,
+        "years_back": years_back,
+        "contract_count": contract_count,
+    }, errors
+
+
+def _dedupe_experience_filter_items(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    value_field: str,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
+    deduped: List[Dict[str, Any]] = []
+    warnings: List[Dict[str, str]] = []
+    seen = set()
+    removed_count = 0
+    for item in items:
+        key = (
+            item.get(value_field),
+            item.get("minimum_months"),
+            item.get("years_back"),
+            item.get("contract_count"),
+        )
+        if key in seen:
+            removed_count += 1
+            continue
+        seen.add(key)
+        deduped.append(dict(item))
+    if removed_count:
+        warnings.append(_warning("duplicate_filter_rows", f"Duplicate filter ignored; removed_count={removed_count}", "info"))
+    return deduped, warnings
+
+
+def _validate_experience_filter_payload(
+    payload: Mapping[str, Any],
+    *,
+    family_id: str,
+    value_field: str,
+    valid_values: Iterable[str],
+) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
+    errors: List[Dict[str, str]] = []
+    warnings: List[Dict[str, str]] = []
+    match_mode = payload.get("match_mode")
+    if match_mode != "any_of":
+        errors.append(_error(f"{family_id}_unsupported_match_mode", "constraint.match_mode", "match_mode must be any_of"))
+    items = payload.get("items")
+    if not isinstance(items, list) or not items:
+        errors.append(_error("invalid_experience_filter_items", "constraint.items", "items must be a non-empty list"))
+        items = []
+
+    normalized_items: List[Dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, Mapping):
+            errors.append(_error("invalid_experience_filter_item", f"constraint.items[{index}]", "item must be an object"))
+            continue
+        normalized_item, item_errors = _normalize_experience_filter_item(
+            item,
+            family_id=family_id,
+            value_field=value_field,
+            valid_values=valid_values,
+            path=f"constraint.items[{index}]",
+        )
+        errors.extend(item_errors)
+        if normalized_item is not None:
+            normalized_items.append(normalized_item)
+
+    normalized_items, dedupe_warnings = _dedupe_experience_filter_items(normalized_items, value_field=value_field)
+    warnings.extend(dedupe_warnings)
+    result: Dict[str, Any] = {"type": family_id, "match_mode": "any_of", "items": normalized_items}
+    if warnings:
+        result["_validation_warnings"] = warnings
+    return result, errors
+
+
 def _error(code: str, path: str, message: str) -> Dict[str, str]:
     return {"code": code, "path": path, "message": message}
 
@@ -443,6 +561,15 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
     if family_id == "engine_experience":
         if payload.get("type") != "engine_experience":
             errors.append(_error("invalid_payload_type", "constraint.type", "type must be engine_experience"))
+        if "items" in payload:
+            normalized_payload, item_errors = _validate_experience_filter_payload(
+                payload,
+                family_id="engine_experience",
+                value_field="engine_family",
+                valid_values=canonical_engine_family_values(),
+            )
+            errors.extend(item_errors)
+            return normalized_payload, errors
         engine_family = payload.get("engine_family")
         minimum_months = payload.get("minimum_months")
         recent_contract_count = payload.get("recent_contract_count")
@@ -581,6 +708,15 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
     if family_id == "experience_ship_type":
         if payload.get("type") != "experience_ship_type":
             errors.append(_error("invalid_payload_type", "constraint.type", "type must be experience_ship_type"))
+        if "items" in payload:
+            normalized_payload, item_errors = _validate_experience_filter_payload(
+                payload,
+                family_id="experience_ship_type",
+                value_field="ship_family",
+                valid_values=canonical_ship_family_values(),
+            )
+            errors.extend(item_errors)
+            return normalized_payload, errors
         ship_family = payload.get("ship_family")
         minimum_months = payload.get("minimum_months")
         if not isinstance(ship_family, str) or ship_family not in canonical_ship_family_values():
@@ -595,6 +731,8 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
         min_value = payload.get("min_value")
         max_value = payload.get("max_value")
         unit = payload.get("unit")
+        years_back = payload.get("years_back")
+        contract_count = payload.get("contract_count")
         if not (_is_int(min_value) or min_value is None):
             errors.append(_error("invalid_min_value", "constraint.min_value", "min_value must be an integer or null"))
         elif isinstance(min_value, int) and min_value <= 0:
@@ -609,12 +747,18 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
             errors.append(_error("invalid_vessel_tonnage_range", "constraint", "min_value cannot exceed max_value"))
         if unit not in {"any", "unspecified", "gt_grt", "dwt"}:
             errors.append(_error("invalid_vessel_tonnage_unit", "constraint.unit", "unit must be any, unspecified, gt_grt, or dwt"))
-        return {
+        errors.extend(_validate_positive_int_or_null(years_back, path="constraint.years_back", field_name="years_back"))
+        if contract_count is not None:
+            errors.append(_error("invalid_vessel_tonnage_contract_count", "constraint.contract_count", "contract_count is not supported for vessel_tonnage in v1"))
+        normalized = {
             "type": "vessel_tonnage",
             "min_value": min_value,
             "max_value": max_value,
             "unit": unit if unit in {"any", "unspecified", "gt_grt", "dwt"} else "any",
-        }, errors
+        }
+        if "years_back" in payload:
+            normalized["years_back"] = years_back
+        return normalized, errors
 
     if family_id == "availability":
         if payload.get("type") != "availability":
@@ -695,6 +839,10 @@ def _normalize_applied_constraint_item(item: Mapping[str, Any], mode: str) -> Tu
         return None, unapplied_item, errors, warnings
 
     normalized_payload, payload_errors = _validate_payload_family(family_id, item.get("constraint"))
+    if isinstance(normalized_payload, MutableMapping):
+        payload_warnings = normalized_payload.pop("_validation_warnings", [])
+        if isinstance(payload_warnings, list):
+            warnings.extend(warning for warning in payload_warnings if isinstance(warning, Mapping))
     errors.extend(payload_errors)
     if payload_errors:
         reason = "validation_failed"
