@@ -90,14 +90,41 @@ class _FakeAnalyzer:
     def _rank_manifest_metadata(self, _folder):
         return {}
 
-    def _synchronous_reextract_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
+    def _build_candidate_facts(self, filename, rank, chunks, original_path=None, text_cache=None, folder_metadata=None):
         self.reextract_calls.append((filename, rank, original_path))
-        return _candidate_facts(
-            source_origin="seajobs_download",
-            detected_layout="seajobs",
-            parser_version="legacy_bridge.v1",
-            tonnage=[49996],
-        )
+        return {
+            "candidate_id": filename,
+            "identity": {"full_name": "Jane Doe"},
+            "role": {"applied_rank_normalized": "2nd_engineer"},
+            "personal": {"dob": None},
+            "certifications": {"coc": {}, "endorsements": {}},
+            "logistics": {},
+            "experience": {
+                "vessel_types": ["tanker"],
+                "engine_types": [],
+                "engine_details": [],
+                "service_rows": [
+                    {
+                        "row_index": 1,
+                        "rank_normalized": "2nd_engineer",
+                        "vessel_type": "Oil Tanker",
+                        "vessel_tonnage": [
+                            {
+                                "value": 49996,
+                                "unit": "unspecified",
+                                "source_label": "Tonnage",
+                                "confidence": 0.70,
+                                "evidence_text": "Oil Tanker 49996",
+                            }
+                        ],
+                        "engine_details": [],
+                    }
+                ],
+                "rank_duration_rows": [],
+            },
+            "application": {"applied_ship_types": []},
+            "derived": {},
+        }
 
 
 class ForceReextractSeajobsCandidateFactsTests(unittest.TestCase):

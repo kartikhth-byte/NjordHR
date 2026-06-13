@@ -200,7 +200,8 @@ def scan_and_refresh(
         if folder_key not in folder_metadata_cache:
             folder_metadata_cache[folder_key] = analyzer._rank_manifest_metadata(pdf_path.parent)
         folder_metadata = folder_metadata_cache[folder_key]
-        candidate_facts = analyzer._synchronous_reextract_candidate_facts(
+        candidate_facts = repo.build_candidate_facts(
+            analyzer,
             pdf_path.name,
             rank_name,
             chunks,
