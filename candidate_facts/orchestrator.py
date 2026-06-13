@@ -46,7 +46,7 @@ def _source_text_from_inputs(
     return "\n".join(str((chunk.get("metadata") or {}).get("raw_text", "")) for chunk in (chunks or []))
 
 
-def _looks_like_seajobs_layout(source_text: str) -> bool:
+def looks_like_seajobs_layout(source_text: str) -> bool:
     text = str(source_text or "")
     if not text.strip():
         return False
@@ -60,6 +60,10 @@ def _looks_like_seajobs_layout(source_text: str) -> bool:
     ):
         return True
     return False
+
+
+def _looks_like_seajobs_layout(source_text: str) -> bool:
+    return looks_like_seajobs_layout(source_text)
 
 
 def build_candidate_facts_v1(
