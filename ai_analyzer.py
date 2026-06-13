@@ -10011,11 +10011,12 @@ class AIResumeAnalyzer:
                     continue
                 dated_rows.append({**row, "_sort_sign_in_date": sign_in_date, "_sort_sign_out_date": sign_out_date})
             dated_rows.sort(key=lambda row: (row.get("_sort_sign_out_date"), row.get("_sort_sign_in_date")), reverse=True)
+            contract_count = int(contract_count)
             return {
-                "rows": dated_rows[:int(contract_count)],
+                "rows": dated_rows[:contract_count],
                 "undated_rows": undated_rows,
                 "scope": {"contract_count": int(contract_count)},
-                "needs_date_review": bool(undated_rows),
+                "needs_date_review": len(dated_rows) >= contract_count and bool(undated_rows),
             }
         return {
             "rows": rows,
@@ -10050,10 +10051,12 @@ class AIResumeAnalyzer:
         missing_reason_code,
         needs_date_reason_code,
         confidence=None,
+        today=None,
     ):
         experience = candidate_facts.get("experience") or {}
         service_rows = experience.get("service_rows") or []
-        scoped = self._scope_service_rows_for_experience_item(service_rows, item)
+        today = today or date.today()
+        scoped = self._scope_service_rows_for_experience_item(service_rows, item, today=today)
         rows = scoped["rows"]
         expected_values = {value for value in expected_values if value}
         minimum_months = int((item or {}).get("minimum_months") or 0)
@@ -10075,7 +10078,7 @@ class AIResumeAnalyzer:
                 parsed_rows += 1
             if not (row_values & expected_values):
                 continue
-            months = self._months_in_scoped_row(row, item)
+            months = self._months_in_scoped_row(row, item, today=today)
             matched_months += months or 0
             matched_contracts += 1
 
@@ -10195,11 +10198,12 @@ class AIResumeAnalyzer:
             unknown_reason="FACTUAL_UNKNOWN",
         )
 
-    def _evaluate_experience_ship_type_rule(self, candidate_facts, constraint):
+    def _evaluate_experience_ship_type_rule(self, candidate_facts, constraint, *, today=None):
         items = (constraint or {}).get("items") if isinstance(constraint, dict) else None
         if isinstance(items, list):
             confidence = ((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence")
             item_results = []
+            today = today or date.today()
             for item in items:
                 requested_ship_type = self._normalize_ship_type((item or {}).get("ship_family"))
                 expected_ship_types = self._ship_type_expected_values(requested_ship_type)
@@ -10215,6 +10219,7 @@ class AIResumeAnalyzer:
                     missing_reason_code="EXPERIENCE_SHIP_TYPE_MISSING",
                     needs_date_reason_code="EXPERIENCE_SHIP_TYPE_NEEDS_DATE_REVIEW",
                     confidence=confidence,
+                    today=today,
                 ))
             return self._combine_any_of_item_results(
                 item_results,
@@ -10309,7 +10314,7 @@ class AIResumeAnalyzer:
                 })
         return evidence_rows
 
-    def _evaluate_vessel_tonnage_rule(self, candidate_facts, constraint):
+    def _evaluate_vessel_tonnage_rule(self, candidate_facts, constraint, *, today=None):
         fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.service_rows") or {}
         confidence = fact_meta.get("confidence")
         status = str(fact_meta.get("status") or "MISSING")
@@ -10346,7 +10351,7 @@ class AIResumeAnalyzer:
         evidence_rows = self._collect_vessel_tonnage_evidence(candidate_facts)
         years_back = (constraint or {}).get("years_back")
         if years_back:
-            today = date.today()
+            today = today or date.today()
             window_start = today - timedelta(days=365 * int(years_back))
             evidence_rows = [
                 row for row in evidence_rows
@@ -10546,10 +10551,11 @@ class AIResumeAnalyzer:
             unknown_reason="FACTUAL_UNKNOWN",
         )
 
-    def _evaluate_engine_experience_rule(self, candidate_facts, constraint):
+    def _evaluate_engine_experience_rule(self, candidate_facts, constraint, *, today=None):
         if isinstance((constraint or {}).get("items"), list):
             confidence = ((candidate_facts.get("fact_meta") or {}).get("experience.engine_types") or {}).get("confidence")
             item_results = []
+            today = today or date.today()
             for item in (constraint or {}).get("items") or []:
                 requested_engine_type = self._normalize_engine_type((item or {}).get("engine_family")).replace(" ", "_")
                 expected_engine_types = self._engine_type_expected_values(requested_engine_type)
@@ -10565,6 +10571,7 @@ class AIResumeAnalyzer:
                     missing_reason_code="ENGINE_EXPERIENCE_MISSING",
                     needs_date_reason_code="ENGINE_EXPERIENCE_NEEDS_DATE_REVIEW",
                     confidence=confidence,
+                    today=today,
                 ))
             return self._combine_any_of_item_results(
                 item_results,
@@ -11026,7 +11033,7 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
-    def _evaluate_logical_group_child(self, candidate_facts, child, facts_version):
+    def _evaluate_logical_group_child(self, candidate_facts, child, facts_version, *, today=None):
         applied_constraint = str((child or {}).get("applied_constraint") or "").strip()
         hard_constraint_key = str((child or {}).get("hard_constraint_key") or applied_constraint).strip()
         constraint = (child or {}).get("constraint")
@@ -11046,6 +11053,7 @@ class AIResumeAnalyzer:
                 "applied_constraints": [applied_constraint],
                 "hard_constraints": {hard_constraint_key: constraint},
             },
+            today=today,
         )
         child_results = result.get("results") or []
         if child_results:
@@ -11067,10 +11075,10 @@ class AIResumeAnalyzer:
         }
         return child_result
 
-    def _evaluate_any_of_group(self, candidate_facts, group, facts_version):
+    def _evaluate_any_of_group(self, candidate_facts, group, facts_version, *, today=None):
         children = list((group or {}).get("children") or [])
         child_results = [
-            self._evaluate_logical_group_child(candidate_facts, child, facts_version)
+            self._evaluate_logical_group_child(candidate_facts, child, facts_version, today=today)
             for child in children
             if isinstance(child, dict)
         ]
@@ -11109,7 +11117,7 @@ class AIResumeAnalyzer:
             unknown_reason="FACTUAL_UNKNOWN",
         )
 
-    def _evaluate_hard_filters(self, candidate_facts, job_constraints):
+    def _evaluate_hard_filters(self, candidate_facts, job_constraints, *, today=None):
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
         applied_constraints = set((job_constraints or {}).get("applied_constraints") or [])
         logical_groups = list((job_constraints or {}).get("logical_groups") or [])
@@ -11360,7 +11368,7 @@ class AIResumeAnalyzer:
                     unknown_reason="VERSION_MISMATCH_UNKNOWN",
                 ))
             else:
-                results.append(self._evaluate_vessel_tonnage_rule(candidate_facts, vessel_tonnage_constraint))
+                results.append(self._evaluate_vessel_tonnage_rule(candidate_facts, vessel_tonnage_constraint, today=today))
 
         engine_experience_constraint = hard_constraints.get("engine_experience")
         if "engine_experience" in applied_constraints and engine_experience_constraint:
@@ -11376,7 +11384,7 @@ class AIResumeAnalyzer:
                     unknown_reason="VERSION_MISMATCH_UNKNOWN",
                 ))
             else:
-                results.append(self._evaluate_engine_experience_rule(candidate_facts, engine_experience_constraint))
+                results.append(self._evaluate_engine_experience_rule(candidate_facts, engine_experience_constraint, today=today))
 
         ship_type_constraint = hard_constraints.get("applied_ship_type")
         if "applied_ship_type" in applied_constraints and ship_type_constraint:
@@ -11422,7 +11430,7 @@ class AIResumeAnalyzer:
         experience_ship_type_constraint = hard_constraints.get("experience_ship_type")
         if "experience_ship_type" in applied_constraints and experience_ship_type_constraint:
             activated_rules.append("experience_ship_type")
-            results.append(self._evaluate_experience_ship_type_rule(candidate_facts, experience_ship_type_constraint))
+            results.append(self._evaluate_experience_ship_type_rule(candidate_facts, experience_ship_type_constraint, today=today))
 
         if hard_filter_debug:
             print(
@@ -11437,7 +11445,7 @@ class AIResumeAnalyzer:
             group_type = str(group.get("type") or "").strip().lower()
             if group_type == "any_of":
                 activated_rules.append(str(group.get("id") or "any_of"))
-                results.append(self._evaluate_any_of_group(candidate_facts, group, facts_version))
+                results.append(self._evaluate_any_of_group(candidate_facts, group, facts_version, today=today))
 
         # Final hard-filter precedence is load-bearing:
         # FAIL overrides UNKNOWN, and UNKNOWN overrides PASS. This ensures

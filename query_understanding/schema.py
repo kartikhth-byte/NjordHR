@@ -247,6 +247,9 @@ def _validate_experience_filter_payload(
 ) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
     errors: List[Dict[str, str]] = []
     warnings: List[Dict[str, str]] = []
+    match_mode = payload.get("match_mode")
+    if match_mode != "any_of":
+        errors.append(_error(f"{family_id}_unsupported_match_mode", "constraint.match_mode", "match_mode must be any_of"))
     items = payload.get("items")
     if not isinstance(items, list) or not items:
         errors.append(_error("invalid_experience_filter_items", "constraint.items", "items must be a non-empty list"))
@@ -270,7 +273,7 @@ def _validate_experience_filter_payload(
 
     normalized_items, dedupe_warnings = _dedupe_experience_filter_items(normalized_items, value_field=value_field)
     warnings.extend(dedupe_warnings)
-    result: Dict[str, Any] = {"type": family_id, "items": normalized_items}
+    result: Dict[str, Any] = {"type": family_id, "match_mode": "any_of", "items": normalized_items}
     if warnings:
         result["_validation_warnings"] = warnings
     return result, errors

@@ -279,6 +279,7 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
                 "mode": "required",
                 "constraint": {
                     "type": "experience_ship_type",
+                    "match_mode": "any_of",
                     "items": [
                         {"ship_family": "tanker", "minimum_months": 12, "years_back": 3, "contract_count": None},
                         {"ship_family": "tanker", "minimum_months": 12, "years_back": 3, "contract_count": None},
@@ -298,6 +299,7 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
 
         self.assertEqual(validated["validation"]["status"], "degraded")
         constraint = validated["applied_constraints"][0]["constraint"]
+        self.assertEqual(constraint["match_mode"], "any_of")
         self.assertEqual(
             constraint["items"],
             [
@@ -315,6 +317,7 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
                 "mode": "required",
                 "constraint": {
                     "type": "engine_experience",
+                    "match_mode": "any_of",
                     "items": [
                         {"engine_family": "dual_fuel", "minimum_months": None, "years_back": 3, "contract_count": 2},
                     ],
@@ -333,6 +336,93 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
         self.assertEqual(validated["validation"]["status"], "degraded")
         self.assertEqual(validated["applied_constraints"], [])
         self.assertTrue(any(error["code"] == "engine_experience_recency_ambiguous" for error in validated["validation"]["errors"]))
+
+    def test_experience_filter_rejects_invalid_match_mode(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "experience_ship_type",
+                "mode": "required",
+                "constraint": {
+                    "type": "experience_ship_type",
+                    "match_mode": "all_of",
+                    "items": [
+                        {"ship_family": "tanker", "minimum_months": None, "years_back": None, "contract_count": None},
+                    ],
+                },
+                "source_text": "tanker and lng experience",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "experience_ship_type",
+                    "legacy_applied_constraint_id": "experience_ship_type",
+                },
+            }
+        ]
+
+        validated = normalize_query_plan_v1(plan)
+
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertEqual(validated["applied_constraints"], [])
+        self.assertTrue(
+            any(error["code"] == "experience_ship_type_unsupported_match_mode" for error in validated["validation"]["errors"])
+        )
+
+    def test_experience_filter_requires_match_mode_for_v1_items(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "engine_experience",
+                "mode": "required",
+                "constraint": {
+                    "type": "engine_experience",
+                    "items": [
+                        {"engine_family": "dual_fuel", "minimum_months": None, "years_back": None, "contract_count": None},
+                    ],
+                },
+                "source_text": "dual fuel engine experience",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "engine_experience",
+                    "legacy_applied_constraint_id": "engine_experience",
+                },
+            }
+        ]
+
+        validated = normalize_query_plan_v1(plan)
+
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertTrue(
+            any(error["code"] == "engine_experience_unsupported_match_mode" for error in validated["validation"]["errors"])
+        )
+
+    def test_experience_filter_dedupes_rows_with_different_key_order(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "experience_ship_type",
+                "mode": "required",
+                "constraint": {
+                    "type": "experience_ship_type",
+                    "match_mode": "any_of",
+                    "items": [
+                        {"ship_family": "tanker", "minimum_months": 12, "years_back": 3, "contract_count": None},
+                        {"contract_count": None, "years_back": 3, "minimum_months": 12, "ship_family": "tanker"},
+                    ],
+                },
+                "source_text": "tanker in last 3 years",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "experience_ship_type",
+                    "legacy_applied_constraint_id": "experience_ship_type",
+                },
+            }
+        ]
+
+        validated = normalize_query_plan_v1(plan)
+
+        self.assertEqual(validated["validation"]["status"], "degraded")
+        self.assertEqual(len(validated["applied_constraints"][0]["constraint"]["items"]), 1)
+        self.assertTrue(any(warning["code"] == "duplicate_filter_rows" for warning in validated["warnings"]))
 
     def test_vessel_tonnage_accepts_years_back_but_not_contract_count(self):
         plan = _valid_plan()
