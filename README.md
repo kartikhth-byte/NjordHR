@@ -276,6 +276,34 @@ Related helper scripts:
 - `scripts/prompt_corpus_review_report.py`
 - `scripts/query_understanding_shadow_audit.py`
 
+## Seajobs Candidate-Facts Reextract Workflow
+Use this after a Seajobs parser/routing fix when existing PDFs in the app data folder may still have stale or missing candidate-facts rows. The tool only targets PDFs whose raw text clearly looks like a Seajobs resume layout and whose current candidate facts were routed as generic/manual/unknown. By default it performs a dry run.
+
+Dry run for one rank:
+```bash
+python3 scripts/force_reextract_seajobs_candidate_facts.py --rank "2nd Engineer" --include-missing
+```
+
+Apply after the dry-run report looks correct:
+```bash
+python3 scripts/force_reextract_seajobs_candidate_facts.py --rank "2nd Engineer" --include-missing --apply
+```
+
+Success criteria:
+- `selected_count` equals the expected Seajobs-looking PDF count.
+- `refreshed_count == selected_count` when `--apply` is used.
+- `error_count == 0`.
+- Refreshed rows have `source_origin=seajobs_download`, `detected_layout=seajobs`, and non-empty match-driving fields such as `experience.vessel_tonnage_values` when the parser fix was about tonnage.
+
+Useful options:
+- `--include-missing`: also creates rows for Seajobs-looking PDFs with no current candidate-facts row.
+- `--force`: refreshes all Seajobs-looking PDFs, including rows already routed as Seajobs.
+- `--download-root /path/to/Resumes`: overrides the configured download folder.
+- `--cache-dir /path/to/candidate_facts`: overrides the candidate-facts row store.
+- `--output /path/to/report.json`: writes the dry-run/apply report to a specific file.
+
+The default report path is `AI_Search_Results/force_reextract_seajobs_candidate_facts_<timestamp>.json`. On macOS, the default row store is `~/Library/Application Support/NjordHR/candidate_facts/candidate_resume_facts_rows.jsonl`.
+
 ## Supabase Migrations (Scaffold)
 - SQL migrations are under:
   - `supabase/migrations/001_initial_schema.sql`
