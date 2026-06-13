@@ -6456,6 +6456,18 @@ class AIResumeAnalyzer:
             return None
         return max(1, total_days // 30)
 
+    def _coerce_service_date(self, value):
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                return date.fromisoformat(value.strip())
+            except Exception:
+                return None
+        return None
+
     def _extract_ordered_date_tokens_from_seajobs_row(self, row_lines):
         month_pattern = r'(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)'
         partial_pattern = re.compile(
@@ -9960,6 +9972,298 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
+    def _service_row_date_range(self, row, *, today=None):
+        today = today or date.today()
+        sign_in_date = self._coerce_service_date((row or {}).get("sign_in_date"))
+        sign_out_date = self._coerce_service_date((row or {}).get("sign_out_date")) or today
+        if not sign_in_date:
+            return None, None
+        if sign_out_date < sign_in_date:
+            return None, None
+        return sign_in_date, sign_out_date
+
+    def _service_row_overlaps_window(self, row, window_start, window_end):
+        sign_in_date, sign_out_date = self._service_row_date_range(row, today=window_end)
+        if not sign_in_date or not sign_out_date:
+            return False
+        return sign_in_date <= window_end and sign_out_date >= window_start
+
+    def _scope_service_rows_for_experience_item(self, service_rows, item, *, today=None):
+        today = today or date.today()
+        years_back = (item or {}).get("years_back")
+        contract_count = (item or {}).get("contract_count")
+        rows = [row for row in (service_rows or []) if isinstance(row, dict)]
+        if years_back:
+            window_start = today - timedelta(days=365 * int(years_back))
+            return {
+                "rows": [row for row in rows if self._service_row_overlaps_window(row, window_start, today)],
+                "undated_rows": [row for row in rows if not self._service_row_date_range(row, today=today)[0]],
+                "scope": {"years_back": int(years_back), "window_start": window_start.isoformat(), "window_end": today.isoformat()},
+                "needs_date_review": False,
+            }
+        if contract_count:
+            dated_rows = []
+            undated_rows = []
+            for row in rows:
+                sign_in_date, sign_out_date = self._service_row_date_range(row, today=today)
+                if not sign_in_date or not sign_out_date:
+                    undated_rows.append(row)
+                    continue
+                dated_rows.append({**row, "_sort_sign_in_date": sign_in_date, "_sort_sign_out_date": sign_out_date})
+            dated_rows.sort(key=lambda row: (row.get("_sort_sign_out_date"), row.get("_sort_sign_in_date")), reverse=True)
+            return {
+                "rows": dated_rows[:int(contract_count)],
+                "undated_rows": undated_rows,
+                "scope": {"contract_count": int(contract_count)},
+                "needs_date_review": bool(undated_rows),
+            }
+        return {
+            "rows": rows,
+            "undated_rows": [],
+            "scope": {},
+            "needs_date_review": False,
+        }
+
+    def _months_in_scoped_row(self, row, item, *, today=None):
+        today = today or date.today()
+        sign_in_date, sign_out_date = self._service_row_date_range(row, today=today)
+        if not sign_in_date or not sign_out_date:
+            return None
+        years_back = (item or {}).get("years_back")
+        if years_back:
+            window_start = today - timedelta(days=365 * int(years_back))
+            sign_in_date = max(sign_in_date, window_start)
+            sign_out_date = min(sign_out_date, today)
+        return self._compute_service_duration_months(sign_in_date, sign_out_date)
+
+    def _evaluate_experience_item_rows(
+        self,
+        candidate_facts,
+        item,
+        *,
+        value_field,
+        row_field,
+        expected_values,
+        family_label,
+        match_reason_code,
+        insufficient_reason_code,
+        missing_reason_code,
+        needs_date_reason_code,
+        confidence=None,
+    ):
+        experience = candidate_facts.get("experience") or {}
+        service_rows = experience.get("service_rows") or []
+        scoped = self._scope_service_rows_for_experience_item(service_rows, item)
+        rows = scoped["rows"]
+        expected_values = {value for value in expected_values if value}
+        minimum_months = int((item or {}).get("minimum_months") or 0)
+
+        matched_months = 0
+        matched_contracts = 0
+        parsed_rows = 0
+        for row in rows:
+            row_values = {
+                value
+                for value in (
+                    self._normalize_ship_type(raw) if row_field == "vessel_types" else self._normalize_engine_type(raw).replace(" ", "_")
+                    for raw in (row.get(row_field) or [])
+                    if raw
+                )
+                if value
+            }
+            if row_values:
+                parsed_rows += 1
+            if not (row_values & expected_values):
+                continue
+            months = self._months_in_scoped_row(row, item)
+            matched_months += months or 0
+            matched_contracts += 1
+
+        undated_match_count = 0
+        for row in scoped["undated_rows"]:
+            row_values = {
+                value
+                for value in (
+                    self._normalize_ship_type(raw) if row_field == "vessel_types" else self._normalize_engine_type(raw).replace(" ", "_")
+                    for raw in (row.get(row_field) or [])
+                    if raw
+                )
+                if value
+            }
+            if row_values & expected_values:
+                undated_match_count += 1
+
+        actual_value = {
+            "item": item,
+            "matched_months": matched_months,
+            "matched_contracts": matched_contracts,
+            "evaluated_contracts": len(rows),
+            "scope": scoped["scope"],
+        }
+
+        if scoped["needs_date_review"] or (item.get("years_back") and matched_contracts == 0 and undated_match_count):
+            return self._base_rule_result(
+                "UNKNOWN",
+                needs_date_reason_code,
+                f"Could not evaluate {family_label} recency because one or more contract dates are missing.",
+                actual_value={**actual_value, "undated_contracts": len(scoped["undated_rows"]), "undated_matching_contracts": undated_match_count},
+                expected_value=item,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if parsed_rows == 0:
+            aggregate_values = [
+                (self._normalize_ship_type(raw) if row_field == "vessel_types" else self._normalize_engine_type(raw).replace(" ", "_"))
+                for raw in (experience.get(row_field) or [])
+                if raw
+            ]
+            aggregate_values = [value for value in aggregate_values if value]
+            if not item.get("years_back") and not item.get("contract_count") and minimum_months == 0 and aggregate_values:
+                if set(aggregate_values) & expected_values:
+                    return self._base_rule_result(
+                        "PASS",
+                        match_reason_code,
+                        f"Candidate resume shows {family_label} matching '{item.get(value_field)}'.",
+                        actual_value=aggregate_values,
+                        expected_value=item,
+                        confidence=confidence,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    insufficient_reason_code,
+                    f"Candidate {family_label} evidence does not match '{item.get(value_field)}'.",
+                    actual_value=aggregate_values,
+                    expected_value=item,
+                    confidence=confidence,
+                )
+            return self._base_rule_result(
+                "UNKNOWN",
+                missing_reason_code,
+                f"Could not determine {family_label} from parsed service rows.",
+                actual_value=actual_value,
+                expected_value=item,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if matched_contracts and (minimum_months == 0 or matched_months >= minimum_months):
+            return self._base_rule_result(
+                "PASS",
+                match_reason_code,
+                f"Candidate has {family_label} matching '{item.get(value_field)}'.",
+                actual_value=actual_value,
+                expected_value=item,
+                confidence=confidence,
+            )
+
+        return self._base_rule_result(
+            "FAIL",
+            insufficient_reason_code,
+            f"Candidate does not meet the requested {family_label} item '{item.get(value_field)}'.",
+            actual_value=actual_value,
+            expected_value=item,
+            confidence=confidence,
+        )
+
+    def _combine_any_of_item_results(self, item_results, *, constraint, family_label, match_code, mismatch_code, unknown_code):
+        if any(result.get("decision") == "PASS" for result in item_results):
+            return self._base_rule_result(
+                "PASS",
+                match_code,
+                f"Candidate satisfied one {family_label} item.",
+                actual_value=item_results,
+                expected_value=constraint,
+                confidence=None,
+            )
+        if item_results and all(result.get("decision") == "FAIL" for result in item_results):
+            return self._base_rule_result(
+                "FAIL",
+                mismatch_code,
+                f"Candidate did not satisfy any requested {family_label} item.",
+                actual_value=item_results,
+                expected_value=constraint,
+                confidence=None,
+            )
+        return self._base_rule_result(
+            "UNKNOWN",
+            unknown_code,
+            f"Could not determine whether candidate satisfies any requested {family_label} item.",
+            actual_value=item_results,
+            expected_value=constraint,
+            confidence=None,
+            unknown_reason="FACTUAL_UNKNOWN",
+        )
+
+    def _evaluate_experience_ship_type_rule(self, candidate_facts, constraint):
+        items = (constraint or {}).get("items") if isinstance(constraint, dict) else None
+        if isinstance(items, list):
+            confidence = ((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence")
+            item_results = []
+            for item in items:
+                requested_ship_type = self._normalize_ship_type((item or {}).get("ship_family"))
+                expected_ship_types = self._ship_type_expected_values(requested_ship_type)
+                item_results.append(self._evaluate_experience_item_rows(
+                    candidate_facts,
+                    item,
+                    value_field="ship_family",
+                    row_field="vessel_types",
+                    expected_values=expected_ship_types,
+                    family_label="experienced ship type",
+                    match_reason_code="EXPERIENCE_SHIP_TYPE_MATCH",
+                    insufficient_reason_code="EXPERIENCE_SHIP_TYPE_MISMATCH",
+                    missing_reason_code="EXPERIENCE_SHIP_TYPE_MISSING",
+                    needs_date_reason_code="EXPERIENCE_SHIP_TYPE_NEEDS_DATE_REVIEW",
+                    confidence=confidence,
+                ))
+            return self._combine_any_of_item_results(
+                item_results,
+                constraint=constraint,
+                family_label="experienced ship type",
+                match_code="EXPERIENCE_SHIP_TYPE_MATCH",
+                mismatch_code="EXPERIENCE_SHIP_TYPE_MISMATCH",
+                unknown_code="EXPERIENCE_SHIP_TYPE_UNKNOWN",
+            )
+
+        requested_ship_type = self._normalize_ship_type(constraint)
+        expected_ship_types = self._ship_type_expected_values(requested_ship_type)
+        experienced_ship_types = [
+            self._normalize_ship_type(value)
+            for value in ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
+        ]
+        experienced_ship_types = [value for value in experienced_ship_types if value]
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence")
+        if not experienced_ship_types:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "EXPERIENCE_SHIP_TYPE_MISSING",
+                f"Could not determine experienced ship type for requested filter '{constraint}'.",
+                actual_value=[],
+                expected_value=expected_ship_types,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+        if self._evaluate_rule("contains_any", experienced_ship_types, expected_ship_types):
+            return self._base_rule_result(
+                "PASS",
+                "EXPERIENCE_SHIP_TYPE_MATCH",
+                f"Candidate resume shows experience on '{constraint}'.",
+                actual_value=experienced_ship_types,
+                expected_value=expected_ship_types,
+                confidence=confidence,
+            )
+        return self._base_rule_result(
+            "FAIL",
+            "EXPERIENCE_SHIP_TYPE_MISMATCH",
+            (
+                f"Candidate experienced ship types {experienced_ship_types} do not match requested "
+                f"filter '{constraint}'."
+            ),
+            actual_value=experienced_ship_types,
+            expected_value=expected_ship_types,
+            confidence=confidence,
+        )
+
     def _vessel_tonnage_unit_matches(self, candidate_unit, requested_unit):
         candidate = str(candidate_unit or "").strip().lower()
         requested = str(requested_unit or "any").strip().lower()
@@ -9998,6 +10302,8 @@ class AIResumeAnalyzer:
                     "row_index": row.get("row_index") or row.get("contract_order") or row_index,
                     "vessel_name": row.get("vessel_name"),
                     "rank": row.get("rank_normalized") or row.get("rank"),
+                    "sign_in_date": row.get("sign_in_date"),
+                    "sign_out_date": row.get("sign_out_date"),
                     "evidence_text": entry.get("evidence_text") or row.get("snippet"),
                     "confidence": entry.get("confidence"),
                 })
@@ -10038,6 +10344,14 @@ class AIResumeAnalyzer:
             )
 
         evidence_rows = self._collect_vessel_tonnage_evidence(candidate_facts)
+        years_back = (constraint or {}).get("years_back")
+        if years_back:
+            today = date.today()
+            window_start = today - timedelta(days=365 * int(years_back))
+            evidence_rows = [
+                row for row in evidence_rows
+                if self._service_row_overlaps_window(row, window_start, today)
+            ]
         matching_unit_rows = [
             row for row in evidence_rows
             if self._vessel_tonnage_unit_matches(row.get("unit"), requested_unit)
@@ -10233,6 +10547,34 @@ class AIResumeAnalyzer:
         )
 
     def _evaluate_engine_experience_rule(self, candidate_facts, constraint):
+        if isinstance((constraint or {}).get("items"), list):
+            confidence = ((candidate_facts.get("fact_meta") or {}).get("experience.engine_types") or {}).get("confidence")
+            item_results = []
+            for item in (constraint or {}).get("items") or []:
+                requested_engine_type = self._normalize_engine_type((item or {}).get("engine_family")).replace(" ", "_")
+                expected_engine_types = self._engine_type_expected_values(requested_engine_type)
+                item_results.append(self._evaluate_experience_item_rows(
+                    candidate_facts,
+                    item,
+                    value_field="engine_family",
+                    row_field="engine_types",
+                    expected_values=expected_engine_types,
+                    family_label="engine experience",
+                    match_reason_code="ENGINE_EXPERIENCE_MATCH",
+                    insufficient_reason_code="ENGINE_EXPERIENCE_MISMATCH",
+                    missing_reason_code="ENGINE_EXPERIENCE_MISSING",
+                    needs_date_reason_code="ENGINE_EXPERIENCE_NEEDS_DATE_REVIEW",
+                    confidence=confidence,
+                ))
+            return self._combine_any_of_item_results(
+                item_results,
+                constraint=constraint,
+                family_label="engine experience",
+                match_code="ENGINE_EXPERIENCE_MATCH",
+                mismatch_code="ENGINE_EXPERIENCE_MISMATCH",
+                unknown_code="ENGINE_EXPERIENCE_UNKNOWN",
+            )
+
         requested_engine_type = self._normalize_engine_type((constraint or {}).get("engine_type")).replace(" ", "_")
         expected_engine_types = [
             self._normalize_engine_type(value).replace(" ", "_")
@@ -11080,44 +11422,7 @@ class AIResumeAnalyzer:
         experience_ship_type_constraint = hard_constraints.get("experience_ship_type")
         if "experience_ship_type" in applied_constraints and experience_ship_type_constraint:
             activated_rules.append("experience_ship_type")
-            requested_ship_type = self._normalize_ship_type(experience_ship_type_constraint)
-            expected_ship_types = self._ship_type_expected_values(requested_ship_type)
-            experienced_ship_types = [
-                self._normalize_ship_type(value)
-                for value in ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
-            ]
-            experienced_ship_types = [value for value in experienced_ship_types if value]
-            if not experienced_ship_types:
-                results.append(self._base_rule_result(
-                    "UNKNOWN",
-                    "EXPERIENCE_SHIP_TYPE_MISSING",
-                    f"Could not determine experienced ship type for requested filter '{experience_ship_type_constraint}'.",
-                    actual_value=[],
-                    expected_value=expected_ship_types,
-                    confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
-                    unknown_reason="FACTUAL_UNKNOWN",
-                ))
-            elif self._evaluate_rule("contains_any", experienced_ship_types, expected_ship_types):
-                results.append(self._base_rule_result(
-                    "PASS",
-                    "EXPERIENCE_SHIP_TYPE_MATCH",
-                    f"Candidate resume shows experience on '{experience_ship_type_constraint}'.",
-                    actual_value=experienced_ship_types,
-                    expected_value=expected_ship_types,
-                    confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
-                ))
-            else:
-                results.append(self._base_rule_result(
-                    "FAIL",
-                    "EXPERIENCE_SHIP_TYPE_MISMATCH",
-                    (
-                        f"Candidate experienced ship types {experienced_ship_types} do not match requested "
-                        f"filter '{experience_ship_type_constraint}'."
-                    ),
-                    actual_value=experienced_ship_types,
-                    expected_value=expected_ship_types,
-                    confidence=((candidate_facts.get("fact_meta") or {}).get("experience.vessel_types") or {}).get("confidence"),
-                ))
+            results.append(self._evaluate_experience_ship_type_rule(candidate_facts, experience_ship_type_constraint))
 
         if hard_filter_debug:
             print(

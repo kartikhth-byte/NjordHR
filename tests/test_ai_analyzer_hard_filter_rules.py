@@ -900,6 +900,138 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_UNIT_NOT_FOUND")
 
+    def test_vessel_tonnage_rule_honors_years_back_window(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2021, 1, 1),
+                            "sign_out_date": date(2021, 6, 1),
+                            "vessel_tonnage": [{"value": 80000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "80000"}],
+                        },
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "vessel_tonnage": [{"value": 52000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "52000"}],
+                        },
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 75000, "max_value": None, "unit": "any", "years_back": 2}},
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_BELOW_MINIMUM")
+        self.assertEqual(len(result["results"][0]["actual_value"]["evidence"]), 1)
+
+    def test_experience_ship_type_items_pass_when_any_item_matches(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "vessel_types": ["lng carrier"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.vessel_types": {"confidence": 0.9},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["experience_ship_type"],
+                "hard_constraints": {
+                    "experience_ship_type": {
+                        "type": "experience_ship_type",
+                        "items": [
+                            {"ship_family": "tanker", "minimum_months": None, "years_back": 2, "contract_count": None},
+                            {"ship_family": "lng", "minimum_months": None, "years_back": 2, "contract_count": None},
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
+
+    def test_experience_ship_type_contract_count_with_undated_row_needs_review(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {"vessel_types": ["oil tanker"]},
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "vessel_types": ["bulk carrier"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.vessel_types": {"confidence": 0.9},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["experience_ship_type"],
+                "hard_constraints": {
+                    "experience_ship_type": {
+                        "type": "experience_ship_type",
+                        "items": [
+                            {"ship_family": "tanker", "minimum_months": None, "years_back": None, "contract_count": 1},
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_UNKNOWN")
+        self.assertEqual(result["results"][0]["actual_value"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_NEEDS_DATE_REVIEW")
+
+    def test_engine_experience_items_support_contract_count(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 7, 1),
+                            "sign_out_date": date(2025, 12, 1),
+                            "engine_types": ["dual_fuel"],
+                        },
+                        {
+                            "sign_in_date": date(2024, 1, 1),
+                            "sign_out_date": date(2024, 6, 1),
+                            "engine_types": ["mitsubishi_uec"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.9},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "type": "engine_experience",
+                        "items": [
+                            {"engine_family": "dual_fuel", "minimum_months": None, "years_back": None, "contract_count": 1},
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
     def test_engine_experience_rule_honors_recent_contract_window(self):
         result = self.analyzer._evaluate_hard_filters(
             {
