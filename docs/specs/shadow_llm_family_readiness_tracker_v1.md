@@ -41,10 +41,10 @@ When a PR adds or materially changes a deterministic hard-filter family:
 | Family | Owning spec / context | shadow_prompt_ready | shadow_tests_ready | llm_revalidation_pending | Notes |
 |---|---|---:|---:|---:|---|
 | `engine_experience` | `engine_experience_layers_v1.md`, `experience_filters_v1.md` | yes | yes | yes | Explicit prompt rules/examples added; bootstrap corpus rows and fallback tests are in place. Include in the next broader shadow revalidation pass. |
-| `vessel_tonnage` | `vessel_tonnage_v1.md`, `experience_filters_v1.md` | partial | yes | yes | Shadow translation and legacy-fallback tests exist. Prompt guidance is thinner than engine and should be strengthened in a follow-up shadow prompt pass. |
-| `experience_ship_type` | `experience_filters_v1.md` | partial | yes | yes | Mixed-family / logical-group translation is covered. Dedicated prompt examples for standalone ship-type recency filters are still lighter than desired. |
-| `coc_document_gate` | `search_pickers_v1.md` | partial | yes | yes | Shadow extraction/translation is covered, including compound prompt paths. No dedicated prompt-rule block yet. |
-| `coc_country_match` | `search_pickers_v1.md` | partial | no | yes | Translation path exists in the shadow provider, but direct shadow-suite coverage should be added before the next broader family revalidation. |
+| `vessel_tonnage` | `vessel_tonnage_v1.md`, `experience_filters_v1.md` | yes | yes | yes | Prompt rules/examples and direct shadow translation tests now exist. Keep included in the next broader LLM revalidation batch. |
+| `experience_ship_type` | `experience_filters_v1.md` | yes | yes | yes | Prompt rules/examples and direct shadow tests now exist. One shadow translation path still emits the current legacy scalar shape, so future shape-promotion work should update the tracker note rather than regress coverage. |
+| `coc_document_gate` | `search_pickers_v1.md` | yes | yes | yes | Dedicated prompt-rule coverage now exists alongside compound and translation tests. |
+| `coc_country_match` | `search_pickers_v1.md` | yes | yes | yes | Prompt rules/examples and direct shadow translation coverage now exist. Keep on the pending list for the next broader family revalidation pass. |
 
 ## Current policy decision
 

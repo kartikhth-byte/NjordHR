@@ -174,17 +174,15 @@ def build_shadow_llm_prompt(
 ) -> str:
     age_rule_block = (
         "age_range:\n"
-        "- Numeric or spelled year bounds.\n"
         "- 'between N and M (years old)', 'aged N to M', 'N-M years old' -> minimum_years=N, maximum_years=M.\n"
-        "- 'N+', 'minimum age N', 'nlt N', 'no younger than N', 'not below N' -> minimum_years=N.\n"
-        "- 'no older than N', 'not above N', 'cannot exceed N', 'nmt N' -> maximum_years=N.\n"
+        "- 'N+', 'minimum age N', 'nlt N', 'not below N' -> minimum_years=N; 'no older than N', 'not above N', 'nmt N' -> maximum_years=N.\n"
         "- 'under N', 'below N', 'younger than N' -> maximum_years=N-1.\n"
-        "- 'mid-30s', 'early 40s', 'late 20s', 'forties' -> decade span; 'around N' / 'approximately N' -> approximate band.\n"
+        "- 'mid-30s', 'forties' -> decade span; 'around N' / 'approximately N' -> approximate band.\n"
     )
     visa_rule_block = (
         "us_visa (family id for USA, Australia, and Schengen visas):\n"
-        "- Supported groups: usa (US/USA/American/Yankee/states/H-1B/L-1/F-1/O-1/C1-D/B1-B2), australia (Australia/MCV/Maritime Crew Visa), schengen (Schengen/European/EU).\n"
-        "- Apply only when a supported country/class is named; always emit visa_group and include accepted_types for specific classes.\n"
+        "- Supported groups: usa (US/USA/American/H-1B/L-1/F-1/O-1/C1-D/B1-B2), australia (Australia/MCV/Maritime Crew Visa), schengen (Schengen/European/EU).\n"
+        "- Apply only when a supported country/class is named; emit visa_group and accepted_types for specific classes.\n"
         "- 'visa-free X', 'no visa required', 'doesn't need visa' -> unsupported (opposite intent).\n"
         "- Vague 'visas' / 'proper visas' without a country -> unsupported.\n"
         "- Visas for other countries -> unsupported.\n"
@@ -194,34 +192,48 @@ def build_shadow_llm_prompt(
         "stcw_basic:\n"
         "- 'STCW basic', 'basic STCW', 'basic safety training', 'BST' (bare or qualified), 'STCW A-VI/1' -> stcw_basic.\n"
         "- All four basic components together (PSSR, PST, FPFF, EFA) -> stcw_basic.\n"
-        "- Quantifiers like 'all four basic certificates' / '4 basic certificates' -> stcw_basic.\n"
+        "- 'all four basic certificates' / '4 basic certificates' -> stcw_basic.\n"
         "- Advanced certificates (AFF, MFA, AFA) belong to certificate_requirement, NOT stcw_basic.\n"
-        "- Generic 'safety training' without STCW/BST/basic cues is unsupported.\n"
+    )
+    experience_ship_type_rule_block = (
+        "experience_ship_type:\n"
+        "- Use explicit ship family/value from the prompt. 'oil tanker experience' -> ship_family=tanker.\n"
+        "- Cross-family OR with engine/vessel concepts -> logical_groups any_of.\n"
+    )
+    vessel_tonnage_rule_block = (
+        "vessel_tonnage:\n"
+        "- 'above 50000 gt', 'between 30000 and 80000 dwt', 'minimum 40000 tonnage' -> min/max/unit.\n"
+        "- Unlabeled tonnage -> unit=any; GT/GRT normalize to gt_grt.\n"
+        "- If prompt mixes age and tonnage, keep them as separate constraints.\n"
+    )
+    coc_rule_block = (
+        "coc_document_gate / coc_country_match:\n"
+        "- 'valid COC', 'COC required', 'certificate of competency' -> coc_document_gate required=true.\n"
+        "- 'Indian CoC', 'UK CoC', 'Honduras-issued CoC' -> coc_country_match countries=[...].\n"
+        "- Keep country matching separate from document gate; emit both when asked.\n"
     )
     engine_rule_block = (
         "engine_experience:\n"
-        "- Preserve requested specificity. Generic manufacturer/family prompts stay generic; do not invent a subtype.\n"
         "- Manufacturer/family examples: 'MAN experience' -> man; 'MAN B&W' or 'B&W' -> man_b_w; 'WinGD engine' -> wingd_x_engines.\n"
         "- Subtype examples: 'ME engine' -> man_b_w_me; 'ME-C' -> man_b_w_me_c; 'ME-GI' -> man_b_w_me_gi; 'X-DF' -> wingd_x_df; 'X-DF-HP' -> wingd_x_df_hp; 'RT-flex' -> wartsila_rt_flex.\n"
-        "- Broad deterministic buckets: 'dual fuel engine' -> dual_fuel; 'electronic engine' / 'electronically controlled engine' / 'camless engine' -> electronically_controlled_engine; 'mechanical engine' / 'camshaft engine' -> mechanical_engine.\n"
+        "- Buckets: 'dual fuel engine' -> dual_fuel; 'electronic engine' / 'electronically controlled engine' / 'camless engine' -> electronically_controlled_engine; 'mechanical engine' / 'camshaft engine' -> mechanical_engine.\n"
         "- 'Sulzer' -> sulzer; 'UEC-LSII' -> mitsubishi_uec_lsii; 'UEC-LSE/LSH/LSJ' -> electronic Mitsubishi UEC subtypes.\n"
-        "- Diesel-electric / HV / Azipod / scrubber / EGR stay semantic or unsupported in v1 unless a canonical engine family is also named.\n"
+        "- Diesel-electric / HV / Azipod / scrubber / EGR stay semantic/unsupported unless a canonical engine family is also named.\n"
         "- Fallbacks are evaluator-time only: if the prompt asks for 'ME engine', still emit man_b_w_me even if a resume may later contain only MAN B&W evidence.\n"
     )
     return (
-        "You are NjordHR's shadow query normalizer.\n"
-        "Return query_plan.v1 JSON only. No markdown/commentary.\n"
+        "NjordHR shadow query normalizer.\n"
+        "Return query_plan.v1 JSON only.\n"
         "Supported hard constraints -> applied; unsupported mandatory -> unapplied unsupported_filter_family.\n"
-        "Keep only fuzzy suitability language in semantic_query.\n"
-        "Cross-family OR -> logical_groups any_of; no duplicate applied children.\n"
-        "Prefer degraded over invalid.\n"
+        "Keep only fuzzy suitability language in semantic_query. Cross-family OR -> logical_groups any_of. Prefer degraded over invalid.\n"
         f"catalog_version={catalog_version}.\n"
         f"{age_rule_block}"
         f"{visa_rule_block}"
         f"{stcw_rule_block}"
+        f"{experience_ship_type_rule_block}"
+        f"{vessel_tonnage_rule_block}"
+        f"{coc_rule_block}"
         f"{engine_rule_block}"
-        f"Required schema_version: query_plan.v1.\n"
-        "Output shape keys: schema_version, normalizer, input, applied_constraints, unapplied_constraints, semantic_query, unrecognized_residual, warnings, validation.\n"
         "Prompt:\n"
         f"{json.dumps({'raw_prompt': prompt, 'rank_context': rank, 'catalog_version': catalog_version}, ensure_ascii=False)}\n"
     )
