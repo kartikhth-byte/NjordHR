@@ -2216,6 +2216,27 @@ def _settings_payload(include_plain_secrets=False):
         except Exception:
             agent_settings = {}
 
+    def _agent_setting_present(name):
+        return isinstance(agent_settings, dict) and name in agent_settings
+
+    def _agent_setting_value(name, fallback=""):
+        if _agent_setting_present(name):
+            return str(agent_settings.get(name, "")).strip()
+        return _advanced_value(name, fallback)
+
+    def _agent_setting_bool(name, fallback=False):
+        if _agent_setting_present(name):
+            return bool(agent_settings.get(name, fallback))
+        return _advanced_bool(name, fallback)
+
+    def _agent_setting_int(name, fallback):
+        if _agent_setting_present(name):
+            try:
+                return int(agent_settings.get(name, fallback) or fallback)
+            except Exception:
+                return int(fallback)
+        return _int_setting("Advanced", name, fallback)
+
     payload = {
         "non_secret": {
             "default_download_folder": settings.get("Default_Download_Folder", ""),
@@ -2238,39 +2259,23 @@ def _settings_payload(include_plain_secrets=False):
             "use_supabase_reads": bool(getattr(feature_flags, "use_supabase_reads", False)),
             "use_local_agent": bool(feature_flags.use_local_agent),
             "use_cloud_export": bool(feature_flags.use_cloud_export),
-            "email_intake_enabled": _advanced_bool(
-                "email_intake_enabled",
-                bool(agent_settings.get("email_intake_enabled", False)),
+            "email_intake_enabled": _agent_setting_bool("email_intake_enabled", False),
+            "email_intake_mailbox": _agent_setting_value("email_intake_mailbox", ""),
+            "email_intake_monitored_folder": (
+                _agent_setting_value("email_intake_monitored_folder", "Inbox/NjordHR Resumes")
+                or "Inbox/NjordHR Resumes"
             ),
-            "email_intake_mailbox": _advanced_value(
-                "email_intake_mailbox",
-                str(agent_settings.get("email_intake_mailbox", "")).strip(),
+            "email_intake_processed_folder": (
+                _agent_setting_value("email_intake_processed_folder", "Inbox/NjordHR Processed")
+                or "Inbox/NjordHR Processed"
             ),
-            "email_intake_monitored_folder": _advanced_value(
-                "email_intake_monitored_folder",
-                str(agent_settings.get("email_intake_monitored_folder", "")).strip() or "Inbox/NjordHR Resumes",
+            "email_intake_failed_folder": (
+                _agent_setting_value("email_intake_failed_folder", "Inbox/NjordHR Failed")
+                or "Inbox/NjordHR Failed"
             ),
-            "email_intake_processed_folder": _advanced_value(
-                "email_intake_processed_folder",
-                str(agent_settings.get("email_intake_processed_folder", "")).strip() or "Inbox/NjordHR Processed",
-            ),
-            "email_intake_failed_folder": _advanced_value(
-                "email_intake_failed_folder",
-                str(agent_settings.get("email_intake_failed_folder", "")).strip() or "Inbox/NjordHR Failed",
-            ),
-            "email_intake_poll_interval_seconds": _int_setting(
-                "Advanced",
-                "email_intake_poll_interval_seconds",
-                int(agent_settings.get("email_intake_poll_interval_seconds", 60) or 60),
-            ),
-            "outlook_client_id": _advanced_value(
-                "outlook_client_id",
-                str(agent_settings.get("outlook_client_id", "")).strip(),
-            ),
-            "outlook_tenant_id": _advanced_value(
-                "outlook_tenant_id",
-                str(agent_settings.get("outlook_tenant_id", "organizations")).strip() or "organizations",
-            ) or "organizations",
+            "email_intake_poll_interval_seconds": _agent_setting_int("email_intake_poll_interval_seconds", 60),
+            "outlook_client_id": _agent_setting_value("outlook_client_id", ""),
+            "outlook_tenant_id": _agent_setting_value("outlook_tenant_id", "organizations") or "organizations",
         },
         "secrets": {
             "seajob_username": _mask_secret(_seajob_username()),
