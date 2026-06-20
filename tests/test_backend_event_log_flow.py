@@ -9,6 +9,7 @@ import tempfile
 import unittest
 import time
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1382,6 +1383,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 prompt,
                 applied_ship_type=None,
                 experienced_ship_type=None,
+                experience_ship_type_filter=None,
+                engine_experience_filter=None,
                 vessel_tonnage_filter=None,
                 **_kwargs,
             ):
@@ -1389,6 +1392,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 captured["prompt"] = prompt
                 captured["applied_ship_type"] = applied_ship_type
                 captured["experienced_ship_type"] = experienced_ship_type
+                captured["experience_ship_type_filter"] = experience_ship_type_filter
+                captured["engine_experience_filter"] = engine_experience_filter
                 captured["vessel_tonnage_filter"] = vessel_tonnage_filter
                 yield {
                     "type": "complete",
@@ -1406,11 +1411,28 @@ class BackendEventLogFlowTests(unittest.TestCase):
                     "rank_folder": "Chief_Officer",
                     "prompt": "show candidates",
                     "applied_ship_type": "Bulk Carrier",
-                    "experienced_ship_type": "Tanker",
+                    "experience_ship_type_filter": json.dumps({
+                        "type": "experience_ship_type",
+                        "match_mode": "any_of",
+                        "items": [{
+                            "ship_family": "Bulk Carrier",
+                            "minimum_months": 12,
+                            "years_back": 3,
+                        }],
+                    }),
+                    "engine_experience_filter": json.dumps({
+                        "type": "engine_experience",
+                        "match_mode": "any_of",
+                        "items": [{
+                            "engine_family": "wingd_x_engines",
+                            "contract_count": 2,
+                        }],
+                    }),
                     "vessel_tonnage_filter": json.dumps({
                         "min_value": 50000,
                         "max_value": 80000,
                         "unit": "gt_grt",
+                        "years_back": 4,
                     }),
                 },
             )
@@ -1421,7 +1443,33 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(captured["rank_folder"], "Chief_Officer")
         self.assertEqual(captured["prompt"], "show candidates")
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
-        self.assertEqual(captured["experienced_ship_type"], "Tanker")
+        self.assertEqual(captured["experienced_ship_type"], "")
+        self.assertEqual(
+            captured["experience_ship_type_filter"],
+            {
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [{
+                    "ship_family": "bulk carrier",
+                    "minimum_months": 12,
+                    "years_back": 3,
+                    "contract_count": None,
+                }],
+            },
+        )
+        self.assertEqual(
+            captured["engine_experience_filter"],
+            {
+                "type": "engine_experience",
+                "match_mode": "any_of",
+                "items": [{
+                    "engine_family": "wingd_x_engines",
+                    "minimum_months": None,
+                    "years_back": None,
+                    "contract_count": 2,
+                }],
+            },
+        )
         self.assertEqual(
             captured["vessel_tonnage_filter"],
             {
@@ -1429,8 +1477,144 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 "min_value": 50000,
                 "max_value": 80000,
                 "unit": "gt_grt",
+                "years_back": 4,
             },
         )
+
+    def test_analyze_stream_serializes_date_objects_in_match_payloads(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, *_args, **_kwargs):
+                yield {
+                    "type": "complete",
+                    "verified_matches": [{
+                        "filename": "Chief_Officer_1001.pdf",
+                        "reason": "Passed hard filters.",
+                        "confidence": 1.0,
+                        "hard_filter_decision": "PASS",
+                        "hard_filter_reasons": [{
+                            "decision": "PASS",
+                            "reason_code": "VESSEL_TONNAGE_MATCH",
+                            "message": "Candidate vessel tonnage evidence includes 32000 unspecified, matching the requested range.",
+                            "actual_value": {
+                                "evidence": [{
+                                    "value": 32000,
+                                    "unit": "unspecified",
+                                    "sign_in_date": date(2025, 1, 1),
+                                    "sign_out_date": date(2025, 6, 1),
+                                }],
+                            },
+                            "expected_value": {"min_value": 10000, "max_value": 40000, "unit": "any"},
+                            "confidence": 0.9,
+                        }],
+                        "default_insights": {},
+                    }],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {"scanned": 1, "passed": 1, "failed": 0, "unknown": 0, "matched": 1},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                "/analyze_stream",
+                query_string={
+                    "rank_folder": "Chief_Officer",
+                    "prompt": "has valid passport",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_data(as_text=True)
+        self.assertIn('"type": "complete"', payload)
+        self.assertIn('"sign_in_date": "2025-01-01"', payload)
+        self.assertIn('"sign_out_date": "2025-06-01"', payload)
+
+    def test_parse_experience_ship_type_filter_payload_dedupes_items(self):
+        payload = backend_server._parse_experience_ship_type_filter_payload(json.dumps({
+            "type": "experience_ship_type",
+            "match_mode": "any_of",
+            "items": [
+                {"ship_family": "Bulk Carrier", "minimum_months": 12, "years_back": 3},
+                {"ship_family": "bulk carrier", "minimum_months": 12, "years_back": 3},
+            ],
+        }))
+
+        self.assertEqual(
+            payload,
+            {
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [{
+                    "ship_family": "bulk carrier",
+                    "minimum_months": 12,
+                    "years_back": 3,
+                    "contract_count": None,
+                }],
+            },
+        )
+
+    def test_parse_experience_ship_type_filter_payload_accepts_configured_dropdown_values(self):
+        payload = backend_server._parse_experience_ship_type_filter_payload(json.dumps({
+            "type": "experience_ship_type",
+            "match_mode": "any_of",
+            "items": [
+                {"ship_family": "Oil Tanker", "years_back": 3},
+                {"ship_family": "Chemical/Oil Products Tanker", "minimum_months": 12},
+            ],
+        }))
+
+        self.assertEqual(
+            payload,
+            {
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [
+                    {
+                        "ship_family": "oil tanker",
+                        "minimum_months": None,
+                        "years_back": 3,
+                        "contract_count": None,
+                    },
+                    {
+                        "ship_family": "chemical oil products tanker",
+                        "minimum_months": 12,
+                        "years_back": None,
+                        "contract_count": None,
+                    },
+                ],
+            },
+        )
+
+    def test_parse_experience_ship_type_filter_payload_returns_empty_for_invalid_match_mode(self):
+        payload = backend_server._parse_experience_ship_type_filter_payload(json.dumps({
+            "type": "experience_ship_type",
+            "match_mode": "all_of",
+            "items": [{"ship_family": "Bulk Carrier"}],
+        }))
+
+        self.assertEqual(payload, {})
+
+    def test_parse_experience_ship_type_filter_payload_returns_empty_for_malformed_json(self):
+        payload = backend_server._parse_experience_ship_type_filter_payload("{bad json")
+        self.assertEqual(payload, {})
+
+    def test_parse_engine_experience_filter_payload_drops_ambiguous_recency_item(self):
+        payload = backend_server._parse_engine_experience_filter_payload(json.dumps({
+            "type": "engine_experience",
+            "match_mode": "any_of",
+            "items": [{
+                "engine_family": "wingd_x_engines",
+                "years_back": 2,
+                "contract_count": 3,
+            }],
+        }))
+
+        self.assertEqual(payload, {})
 
     def test_analyze_stream_accepts_opaque_rank_folder_id(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

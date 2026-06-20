@@ -44,6 +44,7 @@ from ai_analyzer import Analyzer
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
 from query_understanding import build_shadow_audit_entry, build_shadow_llm_query_plan
+from query_understanding.hard_filter_catalog import canonical_engine_family_values, canonical_ship_family_values
 from query_understanding.supabase_telemetry_store import SupabaseTelemetryStore
 
 # --- App Initialization ---
@@ -151,6 +152,8 @@ def _ai_search_request_fingerprint(
     rank_folder="",
     applied_ship_type="",
     experienced_ship_type="",
+    experience_ship_type_filter=None,
+    engine_experience_filter=None,
     vessel_tonnage_filter=None,
     parent_search_session_id="",
     changed_content_acknowledgement_id="",
@@ -162,6 +165,8 @@ def _ai_search_request_fingerprint(
         "rank_folder": "" if is_refinement else str(rank_folder or "").strip(),
         "applied_ship_type": "" if is_refinement else str(applied_ship_type or "").strip(),
         "experienced_ship_type": "" if is_refinement else str(experienced_ship_type or "").strip(),
+        "experience_ship_type_filter": {} if is_refinement else _normalize_experience_ship_type_filter(experience_ship_type_filter),
+        "engine_experience_filter": {} if is_refinement else _normalize_engine_experience_filter(engine_experience_filter),
         "vessel_tonnage_filter": {} if is_refinement else _normalize_vessel_tonnage_filter(vessel_tonnage_filter),
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "changed_content_acknowledgement_id": (
@@ -174,37 +179,108 @@ def _ai_search_request_fingerprint(
     return hashlib.sha256(encoded.encode("utf-8", "ignore")).hexdigest()
 
 
-def _normalize_vessel_tonnage_filter(value):
-    if not isinstance(value, dict):
-        return {}
+def _positive_int_or_none(raw):
+    if isinstance(raw, bool) or raw in (None, ""):
+        return None
+    try:
+        parsed = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
-    def positive_int(raw):
-        if isinstance(raw, bool) or raw in (None, ""):
-            return None
-        try:
-            parsed = int(str(raw).strip())
-        except (TypeError, ValueError):
-            return None
-        return parsed if parsed > 0 else None
 
-    min_value = positive_int(value.get("min_value"))
-    max_value = positive_int(value.get("max_value"))
-    if min_value is None and max_value is None:
-        return {}
-    if min_value is not None and max_value is not None and min_value > max_value:
-        return {}
-    unit = str(value.get("unit") or "any").strip().lower()
-    if unit not in {"any", "unspecified", "gt_grt", "dwt"}:
-        unit = "any"
+def _normalize_ship_family_value(raw_value):
+    normalized = str(raw_value or "").strip().lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _normalize_experience_filter_item(value, *, value_key, allowed_values=None, normalize_value=None):
+    value = value if isinstance(value, dict) else {}
+    raw_value = str(value.get(value_key) or "").strip()
+    canonical_value = None
+    if callable(normalize_value):
+        canonical_value = normalize_value(raw_value)
+    elif allowed_values is not None:
+        normalized_lookup = raw_value.lower().replace("-", "_").replace(" ", "_")
+        allowed_lookup = {
+            str(candidate).strip().lower().replace("-", "_").replace(" ", "_"): str(candidate).strip()
+            for candidate in allowed_values
+            if str(candidate or "").strip()
+        }
+        canonical_value = allowed_lookup.get(normalized_lookup)
+    if not canonical_value:
+        return None
+    minimum_months = _positive_int_or_none(value.get("minimum_months"))
+    years_back = _positive_int_or_none(value.get("years_back"))
+    contract_count = _positive_int_or_none(value.get("contract_count"))
+    if years_back is not None and contract_count is not None:
+        return None
     return {
-        "type": "vessel_tonnage",
-        "min_value": min_value,
-        "max_value": max_value,
-        "unit": unit,
+        value_key: canonical_value,
+        "minimum_months": minimum_months,
+        "years_back": years_back,
+        "contract_count": contract_count,
     }
 
 
-def _parse_vessel_tonnage_filter_payload(raw):
+def _normalize_experience_filter(value, *, filter_type, value_key, allowed_values=None, normalize_value=None):
+    value = value if isinstance(value, dict) else {}
+    match_mode = value.get("match_mode")
+    if match_mode not in (None, "", "any_of"):
+        return {}
+    items = value.get("items")
+    if not isinstance(items, list) or not items:
+        return {}
+    normalized_items = []
+    seen = set()
+    for item in items:
+        normalized_item = _normalize_experience_filter_item(
+            item,
+            value_key=value_key,
+            allowed_values=allowed_values,
+            normalize_value=normalize_value,
+        )
+        if not normalized_item:
+            continue
+        dedupe_key = (
+            normalized_item.get(value_key),
+            normalized_item.get("minimum_months"),
+            normalized_item.get("years_back"),
+            normalized_item.get("contract_count"),
+        )
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        normalized_items.append(normalized_item)
+    if not normalized_items:
+        return {}
+    return {
+        "type": filter_type,
+        "match_mode": "any_of",
+        "items": normalized_items,
+    }
+
+
+def _normalize_experience_ship_type_filter(value):
+    return _normalize_experience_filter(
+        value,
+        filter_type="experience_ship_type",
+        value_key="ship_family",
+        normalize_value=_normalize_ship_family_value,
+    )
+
+
+def _normalize_engine_experience_filter(value):
+    return _normalize_experience_filter(
+        value,
+        filter_type="engine_experience",
+        value_key="engine_family",
+        allowed_values=canonical_engine_family_values(),
+    )
+
+
+def _parse_json_filter_payload(raw, normalizer):
     raw_text = str(raw or "").strip()
     if not raw_text:
         return {}
@@ -212,7 +288,69 @@ def _parse_vessel_tonnage_filter_payload(raw):
         payload = json.loads(raw_text)
     except (TypeError, ValueError):
         return {}
-    return _normalize_vessel_tonnage_filter(payload)
+    return normalizer(payload)
+
+
+def _normalize_vessel_tonnage_filter(value):
+    if not isinstance(value, dict):
+        return {}
+
+    min_value = _positive_int_or_none(value.get("min_value"))
+    max_value = _positive_int_or_none(value.get("max_value"))
+    if min_value is None and max_value is None:
+        return {}
+    if min_value is not None and max_value is not None and min_value > max_value:
+        return {}
+    unit = str(value.get("unit") or "any").strip().lower()
+    if unit not in {"any", "unspecified", "gt_grt", "dwt"}:
+        unit = "any"
+    normalized = {
+        "type": "vessel_tonnage",
+        "min_value": min_value,
+        "max_value": max_value,
+        "unit": unit,
+    }
+    years_back = _positive_int_or_none(value.get("years_back"))
+    if years_back is not None:
+        normalized["years_back"] = years_back
+    return normalized
+
+
+def _parse_vessel_tonnage_filter_payload(raw):
+    return _parse_json_filter_payload(raw, _normalize_vessel_tonnage_filter)
+
+
+def _parse_experience_ship_type_filter_payload(raw):
+    return _parse_json_filter_payload(raw, _normalize_experience_ship_type_filter)
+
+
+def _parse_engine_experience_filter_payload(raw):
+    return _parse_json_filter_payload(raw, _normalize_engine_experience_filter)
+
+
+def _experience_filter_summary(filter_value, *, value_key):
+    normalized = filter_value if isinstance(filter_value, dict) else {}
+    items = normalized.get("items") if isinstance(normalized.get("items"), list) else []
+    labels = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        family = str(item.get(value_key) or "").strip()
+        if not family:
+            continue
+        label = family.replace("_", " ")
+        minimum_months = _positive_int_or_none(item.get("minimum_months"))
+        years_back = _positive_int_or_none(item.get("years_back"))
+        contract_count = _positive_int_or_none(item.get("contract_count"))
+        parts = [label]
+        if minimum_months:
+            parts.append(f"{minimum_months}m+")
+        if years_back:
+            parts.append(f"{years_back}y")
+        elif contract_count:
+            parts.append(f"{contract_count}c")
+        labels.append(" ".join(parts))
+    return " | ".join(labels)
 
 
 def _request_status_event(claim_result):
@@ -235,6 +373,16 @@ def _request_status_event(claim_result):
             payload["delivery_mode"] = "metadata_only"
             payload["replay_available"] = False
     return payload
+
+
+def _json_default(value):
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        try:
+            return isoformat()
+        except Exception:
+            pass
+    return str(value)
 
 
 def _cloud_api_runtime_summary():
@@ -1638,6 +1786,12 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "download_root_id": rank_record["download_root_id"],
             "applied_ship_type": str(parent_session.get("applied_ship_type") or "").strip(),
             "experienced_ship_type": str(parent_session.get("experienced_ship_type") or "").strip(),
+            "experience_ship_type_filter": _normalize_experience_ship_type_filter(
+                (parent_session.get("context") or {}).get("experience_ship_type_filter") or {}
+            ),
+            "engine_experience_filter": _normalize_engine_experience_filter(
+                (parent_session.get("context") or {}).get("engine_experience_filter") or {}
+            ),
             "vessel_tonnage_filter": _normalize_vessel_tonnage_filter(
                 (parent_session.get("context") or {}).get("vessel_tonnage_filter") or {}
             ),
@@ -1668,6 +1822,12 @@ def _safe_recovery_search_context(value):
     result = _safe_recovery_scalar_mapping(
         value,
         ("rank_folder", "applied_ship_type", "experienced_ship_type"),
+    )
+    result["experience_ship_type_filter"] = _normalize_experience_ship_type_filter(
+        (value if isinstance(value, dict) else {}).get("experience_ship_type_filter") or {}
+    )
+    result["engine_experience_filter"] = _normalize_engine_experience_filter(
+        (value if isinstance(value, dict) else {}).get("engine_experience_filter") or {}
     )
     result["vessel_tonnage_filter"] = _normalize_vessel_tonnage_filter(
         (value if isinstance(value, dict) else {}).get("vessel_tonnage_filter") or {}
@@ -1817,6 +1977,12 @@ def _sanitize_ai_search_recovery_draft(payload):
             "selected_rank_folder": str(search_state.get("selected_rank_folder") or "")[:256],
             "applied_ship_type": str(search_state.get("applied_ship_type") or "")[:256],
             "experienced_ship_type": str(search_state.get("experienced_ship_type") or "")[:256],
+            "experience_ship_type_filter": _normalize_experience_ship_type_filter(
+                search_state.get("experience_ship_type_filter") or {}
+            ),
+            "engine_experience_filter": _normalize_engine_experience_filter(
+                search_state.get("engine_experience_filter") or {}
+            ),
             "vessel_tonnage_filter": _normalize_vessel_tonnage_filter(
                 search_state.get("vessel_tonnage_filter") or {}
             ),
@@ -4699,6 +4865,17 @@ def get_config_ship_types():
         return jsonify({"success": False, "message": str(e), "ship_types": []}), 500
 
 
+@app.route('/get_config_engine_families', methods=['GET'])
+def get_config_engine_families():
+    ok, reason = _require_role("admin", "manager", "recruiter")
+    if not ok:
+        return jsonify({"success": False, "message": reason}), 403
+    try:
+        return jsonify({"success": True, "engine_families": sorted(canonical_engine_family_values())})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e), "engine_families": []}), 500
+
+
 @app.route('/ai_search/refinement_scope/<search_session_id>/preflight', methods=['GET'])
 def ai_search_refinement_scope_preflight(search_session_id):
     ok, reason = _require_role("admin", "manager", "recruiter")
@@ -4826,6 +5003,12 @@ def analyze_stream():
     rank_folder_id = request.args.get('rank_folder_id', '').strip()
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
+    experience_ship_type_filter = _parse_experience_ship_type_filter_payload(
+        request.args.get('experience_ship_type_filter', '')
+    )
+    engine_experience_filter = _parse_engine_experience_filter_payload(
+        request.args.get('engine_experience_filter', '')
+    )
     vessel_tonnage_filter = _parse_vessel_tonnage_filter_payload(request.args.get('vessel_tonnage_filter', ''))
     parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
     search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
@@ -4839,6 +5022,8 @@ def analyze_stream():
         rank_folder=rank_folder,
         applied_ship_type=applied_ship_type,
         experienced_ship_type=experienced_ship_type,
+        experience_ship_type_filter=experience_ship_type_filter,
+        engine_experience_filter=engine_experience_filter,
         vessel_tonnage_filter=vessel_tonnage_filter,
         parent_search_session_id=parent_search_session_id,
         changed_content_acknowledgement_id=changed_content_acknowledgement_id,
@@ -4849,6 +5034,8 @@ def analyze_stream():
         "rank_folder": str(rank_folder or "").strip(),
         "applied_ship_type": applied_ship_type,
         "experienced_ship_type": experienced_ship_type,
+        "experience_ship_type_filter": experience_ship_type_filter,
+        "engine_experience_filter": engine_experience_filter,
         "vessel_tonnage_filter": vessel_tonnage_filter,
         "parent_search_session_id": parent_search_session_id,
         "changed_content_acknowledgement_id": changed_content_acknowledgement_id,
@@ -4997,6 +5184,8 @@ def analyze_stream():
             effective_download_root_id = ""
             effective_applied_ship_type = applied_ship_type
             effective_experienced_ship_type = experienced_ship_type
+            effective_experience_ship_type_filter = dict(experience_ship_type_filter or {})
+            effective_engine_experience_filter = dict(engine_experience_filter or {})
             effective_vessel_tonnage_filter = dict(vessel_tonnage_filter or {})
             search_mode = "root"
             root_search_session_id = search_session_id
@@ -5033,6 +5222,12 @@ def analyze_stream():
                 parent_applied_ship_type = str(parent_session.get("applied_ship_type") or "").strip()
                 parent_experienced_ship_type = str(parent_session.get("experienced_ship_type") or "").strip()
                 parent_context = parent_session.get("context") or {}
+                parent_experience_ship_type_filter = _normalize_experience_ship_type_filter(
+                    parent_context.get("experience_ship_type_filter") or {}
+                )
+                parent_engine_experience_filter = _normalize_engine_experience_filter(
+                    parent_context.get("engine_experience_filter") or {}
+                )
                 parent_vessel_tonnage_filter = _normalize_vessel_tonnage_filter(
                     parent_context.get("vessel_tonnage_filter") or {}
                 )
@@ -5042,6 +5237,14 @@ def analyze_stream():
                     or (
                         effective_experienced_ship_type
                         and effective_experienced_ship_type != parent_experienced_ship_type
+                    )
+                    or (
+                        effective_experience_ship_type_filter
+                        and effective_experience_ship_type_filter != parent_experience_ship_type_filter
+                    )
+                    or (
+                        effective_engine_experience_filter
+                        and effective_engine_experience_filter != parent_engine_experience_filter
                     )
                     or (
                         effective_vessel_tonnage_filter
@@ -5080,6 +5283,8 @@ def analyze_stream():
                 effective_rank_folder = parent_rank_folder
                 effective_applied_ship_type = parent_applied_ship_type
                 effective_experienced_ship_type = parent_experienced_ship_type
+                effective_experience_ship_type_filter = parent_experience_ship_type_filter
+                effective_engine_experience_filter = parent_engine_experience_filter
                 effective_vessel_tonnage_filter = parent_vessel_tonnage_filter
                 authoritative_context = authoritative_preflight.get("search_context") or {}
                 effective_rank_folder_id = str(
@@ -5183,6 +5388,8 @@ def analyze_stream():
                     "download_root_id": effective_download_root_id,
                     "applied_ship_type": effective_applied_ship_type,
                     "experienced_ship_type": effective_experienced_ship_type,
+                    "experience_ship_type_filter": effective_experience_ship_type_filter,
+                    "engine_experience_filter": effective_engine_experience_filter,
                     "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                     "search_session_id": search_session_id,
                     "search_mode": search_mode,
@@ -5208,6 +5415,8 @@ def analyze_stream():
                 prompt,
                 applied_ship_type=effective_applied_ship_type,
                 experienced_ship_type=effective_experienced_ship_type,
+                experience_ship_type_filter=effective_experience_ship_type_filter,
+                engine_experience_filter=effective_engine_experience_filter,
                 vessel_tonnage_filter=effective_vessel_tonnage_filter,
                 review_capture_callback=_candidate_facts_review_capture_callback,
                 candidate_scope_ids=candidate_scope_ids,
@@ -5297,6 +5506,8 @@ def analyze_stream():
                                 "download_root_id": effective_download_root_id,
                                 "applied_ship_type": effective_applied_ship_type,
                                 "experienced_ship_type": effective_experienced_ship_type,
+                                "experience_ship_type_filter": effective_experience_ship_type_filter,
+                                "engine_experience_filter": effective_engine_experience_filter,
                                 "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                             },
                             input_scope=scope_summary,
@@ -5335,6 +5546,8 @@ def analyze_stream():
                         "download_root_id": effective_download_root_id,
                         "applied_ship_type": effective_applied_ship_type,
                         "experienced_ship_type": effective_experienced_ship_type,
+                        "experience_ship_type_filter": effective_experience_ship_type_filter,
+                        "engine_experience_filter": effective_engine_experience_filter,
                         "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                     }
                     event_to_client["scope_summary"] = scope_summary
@@ -5348,6 +5561,8 @@ def analyze_stream():
                             "rank_folder": effective_rank_folder,
                             "applied_ship_type": effective_applied_ship_type,
                             "experienced_ship_type": effective_experienced_ship_type,
+                            "experience_ship_type_filter": effective_experience_ship_type_filter,
+                            "engine_experience_filter": effective_engine_experience_filter,
                             "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                             "search_session_id": search_session_id,
                             "search_mode": search_mode,
@@ -5383,7 +5598,7 @@ def analyze_stream():
                             "AI Search request tracking could not record the completed request. Please retry with a new request.",
                         )
                         return
-                yield f"data: {json.dumps(event_to_client)}\n\n"
+                yield f"data: {json.dumps(event_to_client, default=_json_default)}\n\n"
             
         except Exception as e:
             print(f"[BACKEND ERROR] {e}")
@@ -5433,6 +5648,12 @@ def analyze():
         rank_folder = data.get('rank_folder')
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
         experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
+        experience_ship_type_filter = _normalize_experience_ship_type_filter(
+            data.get('experience_ship_type_filter') or {}
+        )
+        engine_experience_filter = _normalize_engine_experience_filter(
+            data.get('engine_experience_filter') or {}
+        )
         vessel_tonnage_filter = _normalize_vessel_tonnage_filter(data.get('vessel_tonnage_filter') or {})
 
         if not prompt or not rank_folder:
@@ -5457,6 +5678,8 @@ def analyze():
                 "rank_folder": rank_folder,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
+                "experience_ship_type_filter": experience_ship_type_filter,
+                "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
             },
             actor_role=actor_role,
@@ -5475,6 +5698,8 @@ def analyze():
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            experience_ship_type_filter=experience_ship_type_filter,
+            engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=_candidate_facts_review_capture_callback,
         )
@@ -5492,6 +5717,8 @@ def analyze():
                 "rank_folder": rank_folder,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
+                "experience_ship_type_filter": experience_ship_type_filter,
+                "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "success": bool(result.get("success")),
                 "verified_matches": len(result.get("verified_matches", [])),
@@ -5517,6 +5744,8 @@ def analyze():
                 "rank_folder": rank_folder,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
+                "experience_ship_type_filter": experience_ship_type_filter,
+                "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "error": f"{type(e).__name__}: {e}",
             },
