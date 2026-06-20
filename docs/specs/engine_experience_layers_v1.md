@@ -875,3 +875,10 @@ under-covered alias maps, and over-broad compatibility rules.
 
 v1 should establish the deterministic hierarchy, the fallback semantics, and
 the boundary for a later semantic layer cleanly.
+# Follow-up note
+
+- The current bootstrap corpus and shadow prompt coverage for `engine_experience`
+  are preparation evidence only. On the next real shadow-LLM normalization /
+  revalidation pass for the broader family set, include `engine_experience`
+  explicitly so manufacturer-only vs subtype-specific prompts and fallback
+  outcomes are evaluated alongside the other active families.

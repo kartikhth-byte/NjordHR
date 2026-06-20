@@ -6,6 +6,9 @@
     "seed parser-evaluation review for active deterministic Phase 1 families",
     "must be replaced or supplemented by real stored prompt logs as usage grows"
   ],
+  "follow_up_notes": [
+    "Include engine_experience in the next real shadow-LLM normalization and revalidation pass that covers the broader family set; do not leave engine_experience bootstrap-only once the next cross-family eval cycle runs."
+  ],
   "supported_families": [
     "age_range",
     "us_visa",
