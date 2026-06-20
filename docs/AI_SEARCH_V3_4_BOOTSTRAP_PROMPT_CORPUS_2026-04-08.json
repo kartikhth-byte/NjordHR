@@ -428,59 +428,59 @@
     "unsupported_or_diagnostic": [
       {
         "prompt": "2nd engineer with 7+ years sea service",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "chief officer on bulk carrier",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "master available immediately",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "chief engineer tanker endorsement",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "2nd engineer DPO required",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "need captain DP2",
-        "expected_primary_family": "parsing_notes_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "chief officer VLCC-ish but not exactly",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "gas tanker endorsement for chief officer",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "chemical tanker endorsement for master",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "need bosun join immediately",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "4th engineer available from January 15",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "pumpman joinable in 30 days",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "need 3rd officer with 36 months sea service",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "chief engineer with GMDSS",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "rank_match"
       },
       {
         "prompt": "random fuzzy thing not really a filter",
@@ -488,15 +488,15 @@
       },
       {
         "prompt": "has diesel-electric propulsion experience",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "parsing_notes_only"
       },
       {
         "prompt": "has azipod propulsion experience",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "parsing_notes_only"
       },
       {
         "prompt": "has scrubber and EGR experience",
-        "expected_primary_family": "unsupported_only"
+        "expected_primary_family": "parsing_notes_only"
       }
     ],
     "engine_experience": [

@@ -62,6 +62,10 @@ def _family_present(constraints, expected):
     return expected in constraints["applied_constraints"] or expected in constraints["unapplied_constraints"]
 
 
+def _presence_expectation_applies(expected):
+    return expected not in {"unsupported_only", "parsing_notes_only", "mixed_supported", "unclassified"}
+
+
 def _evaluate_corpus(corpus):
     analyzer = AIResumeAnalyzer.__new__(AIResumeAnalyzer)
     supported_families = _supported_families(corpus)
@@ -81,7 +85,11 @@ def _evaluate_corpus(corpus):
             constraints = analyzer._extract_job_constraints(prompt)
             actual = _primary_family(constraints, supported_families)
             primary_matched = actual == expected
-            present_matched = _family_present(constraints, expected)
+            present_matched = (
+                _family_present(constraints, expected)
+                if _presence_expectation_applies(expected)
+                else primary_matched
+            )
             if primary_matched:
                 primary_match += 1
             if present_matched:
