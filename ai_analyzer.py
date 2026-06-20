@@ -11,6 +11,7 @@ import configparser
 import re
 import io
 import threading
+import unicodedata
 import uuid
 from dataclasses import dataclass, asdict
 from copy import deepcopy
@@ -52,6 +53,7 @@ _PROMOTION_STAGE_FAMILIES = [
 ]
 _MAX_PROMOTION_STAGE = 5
 _DEFAULT_PROMOTION_STAGE = 0  # opt-in only — existing installs unchanged on upgrade
+_ENGINE_MAP_VERSION = "engine-map-2026-06-19"
 
 
 @dataclass(frozen=True)
@@ -2711,6 +2713,25 @@ class AIResumeAnalyzer:
 
     def _engine_type_aliases(self):
         aliases = {
+            "man": [
+                "MAN",
+                "Everllence",
+                "MAN Energy Solutions",
+                "Everllence engine",
+                "MAN engine",
+            ],
+            "man_b_w": [
+                "MAN B&W",
+                "MAN & B&W",
+                "MAN B and W",
+                "MAN BW",
+                "MAN-B&W",
+                "B&W",
+                "B and W",
+                "B+W",
+                "MAN B&W LMC",
+                "Everllence B&W",
+            ],
             "man_b_w_mc": [
                 "MAN B&W MC",
                 "MAN BW MC",
@@ -2721,26 +2742,34 @@ class AIResumeAnalyzer:
                 "MCC",
             ],
             "man_b_w_me": [
-                "MAN B&W",
-                "MAN & B&W",
-                "MAN B and W",
-                "MAN BW",
-                "MAN-B&W",
-                "B&W",
+                "MAN B&W ME",
+                "MAN & B&W ME",
                 "ME engine",
                 "ME engines",
-                "ME-C",
-                "ME-B",
-                "MEC",
-                "MEB",
                 "MAN ME",
+            ],
+            "man_b_w_me_b": [
+                "MAN B&W ME-B",
+                "ME-B",
+                "MEB",
+            ],
+            "man_b_w_me_c": [
+                "MAN B&W ME-C",
+                "ME-C",
+                "MEC",
             ],
             "man_b_w_me_gi": [
                 "ME-GI",
                 "MEGI",
+                "ME GI",
                 "GI engine",
                 "gas injection",
                 "LNG ME-GI",
+            ],
+            "man_b_w_me_c_gi": [
+                "ME-C-GI",
+                "MECGI",
+                "ME C GI",
             ],
             "man_b_w_me_ga": [
                 "ME-GA",
@@ -2777,6 +2806,14 @@ class AIResumeAnalyzer:
                 "ethane engine",
                 "LEG engine",
             ],
+            "wingd": [
+                "WinGD",
+                "Win GD",
+                "Win-GD",
+                "WinGD engine",
+                "Win GD engine",
+                "Win-GD engine",
+            ],
             "wingd_x_df": [
                 "WinGD X-DF",
                 "X-DF",
@@ -2786,13 +2823,15 @@ class AIResumeAnalyzer:
                 "dual fuel WinGD",
                 "LNG X-DF",
             ],
-            "wingd_x_df_m": [
+            "wingd_x_df_m_e": [
                 "X-DF-M",
                 "XDFM",
                 "X-DF-M/E",
                 "XDFME",
                 "methanol WinGD",
                 "methanol X-DF",
+                "ethanol WinGD",
+                "ethanol X-DF",
             ],
             "wingd_x_df_a": [
                 "X-DF-A",
@@ -2800,17 +2839,10 @@ class AIResumeAnalyzer:
                 "ammonia WinGD",
                 "ammonia X-DF",
             ],
-            "wingd_x_df_p": [
-                "X-DF-P",
-                "XDFP",
-                "LPG WinGD",
-                "propane WinGD",
-            ],
-            "wingd_x_df_e": [
-                "X-DF-E",
-                "XDFE",
-                "ethanol WinGD",
-                "ethanol X-DF",
+            "wingd_x_df_hp": [
+                "X-DF-HP",
+                "XDFHP",
+                "high pressure X-DF",
             ],
             "wingd_x_engines": [
                 "X-Engine",
@@ -2859,9 +2891,90 @@ class AIResumeAnalyzer:
                 "Sulzer RT-flex",
                 "Sulzer RT Flex",
             ],
+            "wartsila": [
+                "Wartsila",
+                "Wärtsilä",
+                "Wartsila engine",
+                "Wärtsilä engine",
+                "Wartsila main engine",
+                "Wärtsilä main engine",
+            ],
+            "sulzer": [
+                "Sulzer",
+            ],
+            "mak": [
+                "Mak",
+                "MaK",
+                "Mak engine",
+                "MaK engine",
+                "Caterpillar Mak",
+                "Caterpillar MaK",
+            ],
+            "mitsubishi": [
+                "Mitsubishi",
+                "J-ENG",
+                "Japan Engine Corporation",
+            ],
             "mitsubishi_uec": [
                 "Mitsubishi UEC",
                 "UEC",
+            ],
+            "mitsubishi_uec_lsii": [
+                "UEC-LSII",
+                "UECLSII",
+            ],
+            "mitsubishi_uec_lse": [
+                "UEC-LSE",
+                "UECLSE",
+                "UEC Eco",
+                "Eco-Engine",
+            ],
+            "mitsubishi_uec_lsh": [
+                "UEC-LSH",
+                "UECLSH",
+            ],
+            "mitsubishi_uec_lsj": [
+                "UEC-LSJ",
+                "UECLSJ",
+            ],
+            "yanmar": [
+                "Yanmar",
+                "Yanmar engine",
+                "Yanmar main engine",
+            ],
+            "bergen": [
+                "Bergen",
+                "Bergen engine",
+                "Bergen main engine",
+            ],
+            "caterpillar": [
+                "Caterpillar",
+                "CAT engine",
+                "CAT main engine",
+            ],
+            "pielstick": [
+                "Pielstick",
+                "SEMT Pielstick",
+                "SEMT-Pielstick",
+            ],
+            "himsen": [
+                "Himsen",
+                "Hyundai Himsen",
+            ],
+            "daihatsu": [
+                "Daihatsu",
+            ],
+            "niigata": [
+                "Niigata",
+            ],
+            "doosan": [
+                "Doosan",
+            ],
+            "mtu": [
+                "MTU",
+            ],
+            "detroit_diesel": [
+                "Detroit Diesel",
             ],
             "electronically_controlled_engine": [
                 "electronic engine",
@@ -2876,6 +2989,12 @@ class AIResumeAnalyzer:
                 "electronic controlled engine",
                 "electronically-controlled engine",
                 "electronically-controlled main engine",
+            ],
+            "mechanical_engine": [
+                "mechanical engine",
+                "mechanical engines",
+                "camshaft engine",
+                "camshaft engines",
             ],
             "dual_fuel": [
                 "dual fuel",
@@ -2905,8 +3024,13 @@ class AIResumeAnalyzer:
         return aliases
 
     def _normalize_engine_type(self, value):
-        normalized = str(value or "").strip().lower()
-        normalized = normalized.replace("wärtsilä", "wartsila")
+        normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        normalized = unicodedata.normalize("NFKD", normalized)
+        normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+        normalized = re.sub(r"[‐‑‒–—−]", "-", normalized)
+        normalized = normalized.replace("＆", "&")
+        normalized = re.sub(r"\b([a-z])\s*(?:and|\+|&)\s*([a-z])\b", r"\1&\2", normalized)
+        normalized = re.sub(r"[™®©]", "", normalized)
         normalized = re.sub(r"[_/]+", " ", normalized)
         normalized = re.sub(r"\s+", " ", normalized)
         return normalized.strip()
@@ -2929,241 +3053,314 @@ class AIResumeAnalyzer:
             return bool(re.search(rf"(?<![a-z0-9]){re.escape(compact_alias)}(?![a-z0-9])", compact_text))
         return False
 
-    def _engine_type_metadata(self):
+    def _engine_manufacturer_nodes(self):
         return {
-            "man_b_w_mc": {
-                "manufacturer": "MAN B&W",
-                "lineage": "MC",
-                "category": "low_speed_2_stroke",
-                "control_type": "mechanical",
-                "fuel_family": "fuel_oil",
-                "fuel_tags": ["fuel_oil"],
-                "dual_fuel": False,
-            },
-            "man_b_w_me": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "fuel_oil",
-                "fuel_tags": ["fuel_oil"],
-                "dual_fuel": False,
-            },
-            "man_b_w_me_gi": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-GI",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "lng_gas_ethane",
-                "fuel_tags": ["lng", "gas", "ethane"],
-                "dual_fuel": True,
-            },
-            "man_b_w_me_ga": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-GA",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "lng_gas",
-                "fuel_tags": ["lng", "gas"],
-                "dual_fuel": True,
-            },
-            "man_b_w_me_lgi": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-LGI",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "liquid_gas",
-                "fuel_tags": ["liquid_gas"],
-                "dual_fuel": True,
-            },
-            "man_b_w_me_lgim": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-LGIM",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "methanol",
-                "fuel_tags": ["methanol"],
-                "dual_fuel": True,
-            },
-            "man_b_w_me_lgip": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-LGIP",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "lpg_propane",
-                "fuel_tags": ["lpg", "propane"],
-                "dual_fuel": True,
-            },
-            "man_b_w_me_lgia": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-LGIA",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "ammonia",
-                "fuel_tags": ["ammonia"],
-                "dual_fuel": True,
-            },
-            "man_b_w_me_gie": {
-                "manufacturer": "MAN B&W",
-                "lineage": "ME-GIE",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "ethane",
-                "fuel_tags": ["ethane", "leg"],
-                "dual_fuel": True,
-            },
-            "wingd_x_df": {
-                "manufacturer": "WinGD",
-                "lineage": "X-DF",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "lng_gas",
-                "fuel_tags": ["lng", "gas"],
-                "dual_fuel": True,
-            },
-            "wingd_x_df_m": {
-                "manufacturer": "WinGD",
-                "lineage": "X-DF-M",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "methanol",
-                "fuel_tags": ["methanol"],
-                "dual_fuel": True,
-            },
-            "wingd_x_df_a": {
-                "manufacturer": "WinGD",
-                "lineage": "X-DF-A",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "ammonia",
-                "fuel_tags": ["ammonia"],
-                "dual_fuel": True,
-            },
-            "wingd_x_df_p": {
-                "manufacturer": "WinGD",
-                "lineage": "X-DF-P",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "lpg_propane",
-                "fuel_tags": ["lpg", "propane"],
-                "dual_fuel": True,
-            },
-            "wingd_x_df_e": {
-                "manufacturer": "WinGD",
-                "lineage": "X-DF-E",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "ethanol",
-                "fuel_tags": ["ethanol"],
-                "dual_fuel": True,
-            },
-            "wingd_x_engines": {
-                "manufacturer": "WinGD",
-                "lineage": "X-Engine",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic",
-                "fuel_family": "fuel_oil",
-                "fuel_tags": ["fuel_oil"],
-                "dual_fuel": False,
-            },
-            "wartsila_rta": {
-                "manufacturer": "Wartsila/Sulzer",
-                "lineage": "RTA",
-                "category": "low_speed_2_stroke",
-                "control_type": "mechanical",
-                "fuel_family": "fuel_oil",
-                "fuel_tags": ["fuel_oil"],
-                "dual_fuel": False,
-            },
-            "wartsila_rt_flex": {
-                "manufacturer": "Wartsila/Sulzer",
-                "lineage": "RT-flex",
-                "category": "low_speed_2_stroke",
-                "control_type": "electronic_common_rail",
-                "fuel_family": "fuel_oil",
-                "fuel_tags": ["fuel_oil"],
-                "dual_fuel": False,
-            },
-            "wartsila_dual_fuel": {
-                "manufacturer": "Wartsila",
-                "lineage": "DF",
-                "category": "medium_speed_4_stroke",
-                "control_type": "electronic",
-                "fuel_family": "dual_fuel",
-                "fuel_tags": ["lng", "gas", "fuel_oil"],
-                "dual_fuel": True,
-            },
-            "mitsubishi_uec": {
-                "manufacturer": "Mitsubishi",
-                "lineage": "UEC",
-                "category": "low_speed_2_stroke",
-                "control_type": "unknown",
-                "fuel_family": "fuel_oil",
-                "fuel_tags": ["fuel_oil"],
-                "dual_fuel": False,
-            },
-            "electronically_controlled_engine": {
-                "manufacturer": None,
-                "lineage": "electronically controlled main engine",
-                "category": "marine_main_engine",
-                "control_type": "electronic",
-                "fuel_family": "unknown",
-                "fuel_tags": [],
-                "dual_fuel": None,
-            },
-            "dual_fuel": {
-                "manufacturer": None,
-                "lineage": "dual fuel",
-                "category": "unknown",
-                "control_type": "unknown",
-                "fuel_family": "dual_fuel",
-                "fuel_tags": ["dual_fuel"],
-                "dual_fuel": True,
-            },
-            "methanol_engine": {
-                "manufacturer": None,
-                "lineage": "methanol engine",
-                "category": "unknown",
-                "control_type": "unknown",
-                "fuel_family": "methanol",
-                "fuel_tags": ["methanol"],
-                "dual_fuel": True,
-            },
-            "ammonia_engine": {
-                "manufacturer": None,
-                "lineage": "ammonia engine",
-                "category": "unknown",
-                "control_type": "unknown",
-                "fuel_family": "ammonia",
-                "fuel_tags": ["ammonia"],
-                "dual_fuel": True,
-            },
+            "man",
+            "wingd",
+            "wartsila",
+            "sulzer",
+            "mitsubishi",
+            "mak",
+            "yanmar",
+            "bergen",
+            "caterpillar",
+            "pielstick",
+            "himsen",
+            "daihatsu",
+            "niigata",
+            "doosan",
+            "mtu",
+            "detroit_diesel",
         }
+
+    def _engine_parent_map(self):
+        return {
+            "man_b_w": "man",
+            "man_b_w_mc": "man_b_w",
+            "man_b_w_me": "man_b_w",
+            "man_b_w_me_b": "man_b_w_me",
+            "man_b_w_me_c": "man_b_w_me",
+            "man_b_w_me_gi": "man_b_w_me",
+            "man_b_w_me_c_gi": "man_b_w_me_c",
+            "man_b_w_me_ga": "man_b_w_me",
+            "man_b_w_me_lgi": "man_b_w_me",
+            "man_b_w_me_lgim": "man_b_w_me",
+            "man_b_w_me_lgip": "man_b_w_me",
+            "man_b_w_me_lgia": "man_b_w_me",
+            "man_b_w_me_gie": "man_b_w_me",
+            "wingd_x_engines": "wingd",
+            "wingd_x_df": "wingd_x_engines",
+            "wingd_x_df_m_e": "wingd_x_engines",
+            "wingd_x_df_a": "wingd_x_engines",
+            "wingd_x_df_hp": "wingd_x_engines",
+            "wartsila_rta": "wartsila",
+            "wartsila_rt_flex": "wartsila",
+            "wartsila_dual_fuel": "wartsila",
+            "mitsubishi_uec": "mitsubishi",
+            "mitsubishi_uec_lsii": "mitsubishi_uec",
+            "mitsubishi_uec_lse": "mitsubishi_uec",
+            "mitsubishi_uec_lsh": "mitsubishi_uec",
+            "mitsubishi_uec_lsj": "mitsubishi_uec",
+        }
+
+    def _engine_display_label_map(self):
+        return {
+            "man": "MAN / Everllence",
+            "man_b_w": "MAN B&W",
+            "man_b_w_mc": "MAN B&W MC",
+            "man_b_w_me": "MAN B&W ME",
+            "man_b_w_me_b": "MAN B&W ME-B",
+            "man_b_w_me_c": "MAN B&W ME-C",
+            "man_b_w_me_gi": "MAN B&W ME-GI",
+            "man_b_w_me_c_gi": "MAN B&W ME-C-GI",
+            "man_b_w_me_ga": "MAN B&W ME-GA",
+            "man_b_w_me_lgi": "MAN B&W ME-LGI",
+            "man_b_w_me_lgim": "MAN B&W ME-LGIM",
+            "man_b_w_me_lgip": "MAN B&W ME-LGIP",
+            "man_b_w_me_lgia": "MAN B&W ME-LGIA",
+            "man_b_w_me_gie": "MAN B&W ME-GIE",
+            "wingd": "WinGD",
+            "wingd_x_engines": "WinGD X engines",
+            "wingd_x_df": "WinGD X-DF",
+            "wingd_x_df_m_e": "WinGD X-DF-M/E",
+            "wingd_x_df_a": "WinGD X-DF-A",
+            "wingd_x_df_hp": "WinGD X-DF-HP",
+            "wartsila": "Wartsila",
+            "wartsila_rta": "Wartsila / Sulzer RTA",
+            "wartsila_rt_flex": "Wartsila / Sulzer RT-flex",
+            "wartsila_dual_fuel": "Wartsila dual fuel",
+            "sulzer": "Sulzer",
+            "mitsubishi": "Mitsubishi",
+            "mitsubishi_uec": "Mitsubishi UEC",
+            "mitsubishi_uec_lsii": "Mitsubishi UEC-LSII",
+            "mitsubishi_uec_lse": "Mitsubishi UEC-LSE",
+            "mitsubishi_uec_lsh": "Mitsubishi UEC-LSH",
+            "mitsubishi_uec_lsj": "Mitsubishi UEC-LSJ",
+            "mak": "MaK",
+            "yanmar": "Yanmar",
+            "bergen": "Bergen",
+            "caterpillar": "Caterpillar",
+            "pielstick": "Pielstick",
+            "himsen": "Himsen",
+            "daihatsu": "Daihatsu",
+            "niigata": "Niigata",
+            "doosan": "Doosan",
+            "mtu": "MTU",
+            "detroit_diesel": "Detroit Diesel",
+            "electronically_controlled_engine": "Electronically controlled engine",
+            "mechanical_engine": "Mechanical engine",
+            "dual_fuel": "Dual fuel",
+            "methanol_engine": "Methanol engine",
+            "ammonia_engine": "Ammonia engine",
+        }
+
+    def _engine_compatibility_expansion_map(self):
+        return {
+            "sulzer": ["sulzer", "wartsila_rta", "wartsila_rt_flex"],
+        }
+
+    def _engine_bucket_roots(self):
+        return {
+            "dual_fuel": [
+                "man_b_w_me_gi",
+                "man_b_w_me_c_gi",
+                "man_b_w_me_ga",
+                "man_b_w_me_lgi",
+                "man_b_w_me_lgim",
+                "man_b_w_me_lgip",
+                "man_b_w_me_lgia",
+                "man_b_w_me_gie",
+                "wingd_x_df",
+                "wingd_x_df_m_e",
+                "wingd_x_df_a",
+                "wingd_x_df_hp",
+                "wartsila_dual_fuel",
+            ],
+            "electronically_controlled_engine": [
+                "man_b_w_me",
+                "wingd_x_engines",
+                "wartsila_rt_flex",
+                "mitsubishi_uec_lse",
+                "mitsubishi_uec_lsh",
+                "mitsubishi_uec_lsj",
+            ],
+            "mechanical_engine": [
+                "man_b_w_mc",
+                "wartsila_rta",
+                "mitsubishi_uec_lsii",
+            ],
+        }
+
+    def _engine_children_map(self):
+        children = {}
+        for child, parent in self._engine_parent_map().items():
+            children.setdefault(parent, set()).add(child)
+        return children
+
+    def _engine_lineage(self, engine_type):
+        lineage = []
+        current = self._engine_parent_map().get(engine_type)
+        while current:
+            lineage.append(current)
+            current = self._engine_parent_map().get(current)
+        return list(reversed(lineage))
+
+    def _engine_descendants(self, engine_type):
+        descendants = []
+        queue = list(sorted(self._engine_children_map().get(engine_type, ())))
+        while queue:
+            current = queue.pop(0)
+            descendants.append(current)
+            queue.extend(sorted(self._engine_children_map().get(current, ())))
+        return descendants
+
+    def _engine_display_label(self, engine_type):
+        return self._engine_display_label_map().get(engine_type) or str(engine_type or "").replace("_", " ").strip()
+
+    def _engine_is_manufacturer_node(self, engine_type):
+        return engine_type in self._engine_manufacturer_nodes()
+
+    def _engine_specificity_rank(self, engine_type):
+        return len(self._engine_lineage(engine_type))
+
+    def _engine_family_id_for_node(self, engine_type):
+        if not engine_type:
+            return None
+        current = engine_type
+        parent_map = self._engine_parent_map()
+        while current:
+            parent = parent_map.get(current)
+            if not parent:
+                return None if self._engine_is_manufacturer_node(current) else current
+            if self._engine_is_manufacturer_node(parent):
+                return current
+            current = parent
+        return None
+
+    def _engine_manufacturer_id_for_node(self, engine_type):
+        if not engine_type:
+            return None
+        if self._engine_is_manufacturer_node(engine_type):
+            return engine_type
+        for ancestor in reversed(self._engine_lineage(engine_type)):
+            if self._engine_is_manufacturer_node(ancestor):
+                return ancestor
+        return None
+
+    def _engine_type_metadata(self):
+        parent_map = self._engine_parent_map()
+        display_labels = self._engine_display_label_map()
+        base_metadata = {
+            "man": {"manufacturer": "MAN / Everllence", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "man_b_w": {"manufacturer": "MAN B&W", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "man_b_w_mc": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "mechanical", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "man_b_w_me": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "man_b_w_me_b": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "man_b_w_me_c": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "man_b_w_me_gi": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "lng_gas_ethane", "fuel_tags": ["lng", "gas", "ethane"], "dual_fuel": True},
+            "man_b_w_me_c_gi": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "lng_gas_ethane", "fuel_tags": ["lng", "gas", "ethane"], "dual_fuel": True},
+            "man_b_w_me_ga": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "lng_gas", "fuel_tags": ["lng", "gas"], "dual_fuel": True},
+            "man_b_w_me_lgi": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "liquid_gas", "fuel_tags": ["liquid_gas"], "dual_fuel": True},
+            "man_b_w_me_lgim": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "methanol", "fuel_tags": ["methanol"], "dual_fuel": True},
+            "man_b_w_me_lgip": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "lpg_propane", "fuel_tags": ["lpg", "propane"], "dual_fuel": True},
+            "man_b_w_me_lgia": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "ammonia", "fuel_tags": ["ammonia"], "dual_fuel": True},
+            "man_b_w_me_gie": {"manufacturer": "MAN B&W", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "ethane", "fuel_tags": ["ethane", "leg"], "dual_fuel": True},
+            "wingd": {"manufacturer": "WinGD", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "wingd_x_engines": {"manufacturer": "WinGD", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "wingd_x_df": {"manufacturer": "WinGD", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "lng_gas", "fuel_tags": ["lng", "gas"], "dual_fuel": True},
+            "wingd_x_df_m_e": {"manufacturer": "WinGD", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "methanol_ethanol", "fuel_tags": ["methanol", "ethanol"], "dual_fuel": True},
+            "wingd_x_df_a": {"manufacturer": "WinGD", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "ammonia", "fuel_tags": ["ammonia"], "dual_fuel": True},
+            "wingd_x_df_hp": {"manufacturer": "WinGD", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "lng_gas", "fuel_tags": ["lng", "gas", "high_pressure"], "dual_fuel": True},
+            "wartsila": {"manufacturer": "Wartsila", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "wartsila_rta": {"manufacturer": "Wartsila/Sulzer", "category": "low_speed_2_stroke", "control_type": "mechanical", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "wartsila_rt_flex": {"manufacturer": "Wartsila/Sulzer", "category": "low_speed_2_stroke", "control_type": "electronic_common_rail", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "wartsila_dual_fuel": {"manufacturer": "Wartsila", "category": "medium_speed_4_stroke", "control_type": "electronic", "fuel_family": "dual_fuel", "fuel_tags": ["lng", "gas", "fuel_oil"], "dual_fuel": True},
+            "sulzer": {"manufacturer": "Sulzer", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "mitsubishi": {"manufacturer": "Mitsubishi", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "mitsubishi_uec": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "unknown", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "mitsubishi_uec_lsii": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "mechanical", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "mitsubishi_uec_lse": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "mitsubishi_uec_lsh": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "mitsubishi_uec_lsj": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "mak": {"manufacturer": "MaK", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "yanmar": {"manufacturer": "Yanmar", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "bergen": {"manufacturer": "Bergen", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "caterpillar": {"manufacturer": "Caterpillar", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "pielstick": {"manufacturer": "Pielstick", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "himsen": {"manufacturer": "Himsen", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "daihatsu": {"manufacturer": "Daihatsu", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "niigata": {"manufacturer": "Niigata", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "doosan": {"manufacturer": "Doosan", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "mtu": {"manufacturer": "MTU", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "detroit_diesel": {"manufacturer": "Detroit Diesel", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "electronically_controlled_engine": {"manufacturer": None, "category": "marine_main_engine", "control_type": "electronic", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "mechanical_engine": {"manufacturer": None, "category": "marine_main_engine", "control_type": "mechanical", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "dual_fuel": {"manufacturer": None, "category": "unknown", "control_type": "unknown", "fuel_family": "dual_fuel", "fuel_tags": ["dual_fuel"], "dual_fuel": True},
+            "methanol_engine": {"manufacturer": None, "category": "unknown", "control_type": "unknown", "fuel_family": "methanol", "fuel_tags": ["methanol"], "dual_fuel": True},
+            "ammonia_engine": {"manufacturer": None, "category": "unknown", "control_type": "unknown", "fuel_family": "ammonia", "fuel_tags": ["ammonia"], "dual_fuel": True},
+        }
+        metadata = {}
+        for engine_type, values in base_metadata.items():
+            parent_family_id = parent_map.get(engine_type)
+            metadata[engine_type] = {
+                **values,
+                "engine_type": engine_type,
+                "engine_family": engine_type,
+                "display_label": display_labels.get(engine_type, engine_type.replace("_", " ")),
+                "manufacturer_id": self._engine_manufacturer_id_for_node(engine_type),
+                "family_id": self._engine_family_id_for_node(engine_type),
+                "parent_family_id": parent_family_id,
+                "lineage": self._engine_lineage(engine_type),
+                "map_version": _ENGINE_MAP_VERSION,
+            }
+        return metadata
 
     def _canonical_engine_from_model_token(self, token):
         normalized = re.sub(r"[^a-z0-9]+", "", self._normalize_engine_type(token))
-        if re.search(r"me[-]?(?:lgia|lga)$", normalized):
+        if re.search(r"mecgi", normalized):
+            return "man_b_w_me_c_gi"
+        if re.search(r"me(?:lgia|lga)$", normalized):
             return "man_b_w_me_lgia"
-        if re.search(r"me[-]?lgim$", normalized):
+        if re.search(r"melgim$", normalized):
             return "man_b_w_me_lgim"
-        if re.search(r"me[-]?lgip$", normalized):
+        if re.search(r"melgip$", normalized):
             return "man_b_w_me_lgip"
-        if re.search(r"me[-]?lgi$", normalized):
+        if re.search(r"melgi$", normalized):
             return "man_b_w_me_lgi"
-        if re.search(r"me[-]?gie$", normalized):
+        if re.search(r"megie$", normalized):
             return "man_b_w_me_gie"
-        if re.search(r"me[-]?gi$", normalized):
+        if re.search(r"megi$", normalized):
             return "man_b_w_me_gi"
-        if re.search(r"me[-]?ga$", normalized):
+        if re.search(r"mega$", normalized):
             return "man_b_w_me_ga"
+        if re.search(r"mec", normalized):
+            return "man_b_w_me_c"
+        if re.search(r"meb", normalized):
+            return "man_b_w_me_b"
         if re.search(r"\d+[sgk]\d+me", normalized):
             return "man_b_w_me"
         if re.search(r"\d+[sgk]\d+mc", normalized):
             return "man_b_w_mc"
+        if re.search(r"ueclsii", normalized):
+            return "mitsubishi_uec_lsii"
+        if re.search(r"ueclse", normalized):
+            return "mitsubishi_uec_lse"
+        if re.search(r"ueclsh", normalized):
+            return "mitsubishi_uec_lsh"
+        if re.search(r"ueclsj", normalized):
+            return "mitsubishi_uec_lsj"
+        if re.search(r"uec", normalized):
+            return "mitsubishi_uec"
         if re.search(r"\d+rta\d+", normalized):
             return "wartsila_rta"
         if normalized.startswith("rtflex"):
             return "wartsila_rt_flex"
+        if re.search(r"x\d{2,3}dfhp", normalized):
+            return "wingd_x_df_hp"
+        if re.search(r"x\d{2,3}df(?:me|m)$", normalized):
+            return "wingd_x_df_m_e"
+        if re.search(r"x\d{2,3}dfa", normalized):
+            return "wingd_x_df_a"
         if re.search(r"x\d{2,3}df", normalized):
             return "wingd_x_df"
         return None
@@ -3173,11 +3370,12 @@ class AIResumeAnalyzer:
         if not text:
             return []
         patterns = [
-            r"\b\d{1,2}[SGK]\d{2,3}ME(?:[-\s]?(?:C|B|GI|GA|LGI|LGIM|LGIP|LGIA|GIE)(?:\d+(?:\.\d+)?)?)?\b",
+            r"\b\d{1,2}[SGK]\d{2,3}ME(?:[-\s]?(?:B|C|C-GI|GI|GA|LGI|LGIM|LGIP|LGIA|GIE)(?:\d+(?:\.\d+)?)?)?\b",
             r"\b\d{1,2}[SGK]\d{2,3}MC(?:[-\s]?C)?\b",
             r"\b\d{1,2}RTA\d{2,3}[A-Z]?\b",
             r"\bRT[-\s]?FLEX(?:[-\s]?[A-Z])?\d*[A-Z]?\b",
-            r"\bX\d{2,3}DF(?:\d(?:\.\d+)?)?\b",
+            r"\bX\d{2,3}DF(?:[-\s]?(?:M\/E|M|A|HP)|\d(?:\.\d+)?)?\b",
+            r"\bUEC[-\s]?(?:LSII|LSE|LSH|LSJ)\b",
         ]
         matches = []
         for pattern in patterns:
@@ -3223,11 +3421,34 @@ class AIResumeAnalyzer:
                     and normalized_alias in {"man b&w", "man & b&w", "man b and w", "man bw", "man-b&w", "b&w"}
                 ):
                     continue
+                if (
+                    canonical_id == "wingd_x_df"
+                    and re.search(r"\bx[\s-]?df[\s-]?(?:p|e)\b", text)
+                ):
+                    continue
                 if self._engine_alias_matches_text(text, alias):
                     seen.add(canonical_id)
                     details.append(self._engine_detail_for_canonical(canonical_id, alias, match_source="alias"))
                     break
-        return details
+        details = sorted(
+            details,
+            key=lambda detail: (
+                self._engine_specificity_rank(detail.get("engine_type")),
+                len(str(detail.get("raw_mention") or "")),
+            ),
+            reverse=True,
+        )
+        filtered = []
+        kept_engine_types = set()
+        for detail in details:
+            engine_type = detail.get("engine_type")
+            if engine_type in kept_engine_types:
+                continue
+            if any(engine_type in self._engine_lineage(kept) for kept in kept_engine_types):
+                continue
+            filtered.append(detail)
+            kept_engine_types.add(engine_type)
+        return filtered
 
     def _extract_engine_types_from_text(self, raw_text):
         return list(dict.fromkeys(
@@ -3240,65 +3461,196 @@ class AIResumeAnalyzer:
         requested = self._normalize_engine_type(requested_engine_type).replace(" ", "_")
         if not requested:
             return []
-        expanded = {
-            "man_b_w_me": [
-                "man_b_w_me",
-                "man_b_w_me_gi",
-                "man_b_w_me_ga",
-                "man_b_w_me_lgi",
-                "man_b_w_me_lgim",
-                "man_b_w_me_lgip",
-                "man_b_w_me_lgia",
-                "man_b_w_me_gie",
-            ],
-            "dual_fuel": [
-                "dual_fuel",
-                "man_b_w_me_gi",
-                "man_b_w_me_ga",
-                "man_b_w_me_lgi",
-                "man_b_w_me_lgim",
-                "man_b_w_me_lgip",
-                "man_b_w_me_lgia",
-                "man_b_w_me_gie",
-                "wingd_x_df",
-                "wingd_x_df_m",
-                "wingd_x_df_a",
-                "wingd_x_df_p",
-                "wingd_x_df_e",
-                "wartsila_dual_fuel",
-                "methanol_engine",
-                "ammonia_engine",
-            ],
-            "electronically_controlled_engine": [
-                "electronically_controlled_engine",
-                "man_b_w_me",
-                "man_b_w_me_gi",
-                "man_b_w_me_ga",
-                "man_b_w_me_lgi",
-                "man_b_w_me_lgim",
-                "man_b_w_me_lgip",
-                "man_b_w_me_lgia",
-                "man_b_w_me_gie",
-                "wingd_x_engines",
-                "wingd_x_df",
-                "wingd_x_df_m",
-                "wingd_x_df_a",
-                "wingd_x_df_p",
-                "wingd_x_df_e",
-                "wartsila_rt_flex",
-            ],
-            "methanol_engine": [
-                "methanol_engine",
-                "man_b_w_me_lgim",
-                "wingd_x_df_m",
-            ],
-            "ammonia_engine": [
-                "ammonia_engine",
-                "wingd_x_df_a",
-                "man_b_w_me_lgia",
-            ],
+        expected_values = [requested]
+        expected_values.extend(self._engine_descendants(requested))
+        for compatible in self._engine_compatibility_expansion_map().get(requested, []):
+            if compatible not in expected_values:
+                expected_values.append(compatible)
+            for descendant in self._engine_descendants(compatible):
+                if descendant not in expected_values:
+                    expected_values.append(descendant)
+        for root in self._engine_bucket_roots().get(requested, []):
+            if root not in expected_values:
+                expected_values.append(root)
+            for descendant in self._engine_descendants(root):
+                if descendant not in expected_values:
+                    expected_values.append(descendant)
+        if requested == "methanol_engine":
+            for value in ("man_b_w_me_lgim", "wingd_x_df_m_e"):
+                if value not in expected_values:
+                    expected_values.append(value)
+        if requested == "ammonia_engine":
+            for value in ("man_b_w_me_lgia", "wingd_x_df_a"):
+                if value not in expected_values:
+                    expected_values.append(value)
+        return expected_values
+
+    def _engine_bucket_fallback_allowed(self, requested_engine_type):
+        return requested_engine_type in {"dual_fuel", "electronically_controlled_engine"}
+
+    def _engine_match_outcome(self, requested_engine_type, candidate_engine_types):
+        requested = self._normalize_engine_type(requested_engine_type).replace(" ", "_")
+        candidate_values = [
+            self._normalize_engine_type(value).replace(" ", "_")
+            for value in (candidate_engine_types or [])
+            if value
+        ]
+        candidate_values = list(dict.fromkeys(value for value in candidate_values if value))
+        if not requested or not candidate_values:
+            return None
+
+        expected_values = set(self._engine_type_expected_values(requested))
+        descendants = set(self._engine_descendants(requested))
+        ancestors = list(reversed(self._engine_lineage(requested)))
+
+        strongest = None
+        for candidate in candidate_values:
+            if candidate == requested:
+                outcome = {
+                    "rank": 5,
+                    "decision": "PASS",
+                    "reason_code": "ENGINE_EXPERIENCE_MATCH",
+                    "match_source": "exact",
+                    "engine_type": candidate,
+                    "confidence": None,
+                    "compatibility_expansion_used": None,
+                }
+            elif candidate in descendants or candidate in expected_values:
+                outcome = {
+                    "rank": 4,
+                    "decision": "PASS",
+                    "reason_code": "ENGINE_EXPERIENCE_MATCH",
+                    "match_source": "descendant",
+                    "engine_type": candidate,
+                    "confidence": None,
+                    "compatibility_expansion_used": None,
+                }
+            elif candidate in ancestors and not self._engine_is_manufacturer_node(candidate):
+                outcome = {
+                    "rank": 3,
+                    "decision": "UNKNOWN",
+                    "reason_code": "ENGINE_EXPERIENCE_FAMILY_FALLBACK",
+                    "match_source": "family_fallback",
+                    "engine_type": candidate,
+                    "confidence": 0.7,
+                    "compatibility_expansion_used": None,
+                }
+            elif candidate in ancestors and self._engine_is_manufacturer_node(candidate):
+                outcome = {
+                    "rank": 2,
+                    "decision": "UNKNOWN",
+                    "reason_code": "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK",
+                    "match_source": "manufacturer_fallback",
+                    "engine_type": candidate,
+                    "confidence": 0.6,
+                    "compatibility_expansion_used": None,
+                }
+            elif self._engine_bucket_fallback_allowed(requested):
+                candidate_ancestors = set(self._engine_lineage(candidate))
+                family_candidates = set()
+                manufacturer_candidates = set()
+                for root in self._engine_bucket_roots().get(requested, []):
+                    for ancestor in self._engine_lineage(root):
+                        if self._engine_is_manufacturer_node(ancestor):
+                            manufacturer_candidates.add(ancestor)
+                        else:
+                            family_candidates.add(ancestor)
+                if candidate in family_candidates or candidate_ancestors & family_candidates:
+                    outcome = {
+                        "rank": 3,
+                        "decision": "UNKNOWN",
+                        "reason_code": "ENGINE_EXPERIENCE_FAMILY_FALLBACK",
+                        "match_source": "family_fallback",
+                        "engine_type": candidate,
+                        "confidence": 0.7,
+                        "compatibility_expansion_used": None,
+                    }
+                elif candidate in manufacturer_candidates or candidate_ancestors & manufacturer_candidates:
+                    outcome = {
+                        "rank": 2,
+                        "decision": "UNKNOWN",
+                        "reason_code": "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK",
+                        "match_source": "manufacturer_fallback",
+                        "engine_type": candidate,
+                        "confidence": 0.6,
+                        "compatibility_expansion_used": None,
+                    }
+                else:
+                    outcome = None
+            else:
+                outcome = None
+
+            if outcome and (strongest is None or outcome["rank"] > strongest["rank"]):
+                strongest = outcome
+        return strongest
+
+    def _format_engine_match_message(self, requested_engine_type, match_outcome):
+        requested_label = self._engine_display_label(requested_engine_type)
+        if not match_outcome:
+            return f"Could not determine engine experience for requested filter '{requested_label}'."
+        evidence_label = self._engine_display_label(match_outcome.get("engine_type"))
+        match_source = match_outcome.get("match_source")
+        if match_source in {"exact", "descendant"}:
+            return f"Candidate has {evidence_label} experience matching '{requested_label}'."
+        if match_source == "family_fallback":
+            return (
+                f"Resume mentions {evidence_label}, but does not specify the requested subtype "
+                f"'{requested_label}'. Included as a family-level engine match for recruiter review."
+            )
+        if match_source == "manufacturer_fallback":
+            return (
+                f"Resume mentions {evidence_label}, but does not specify the requested engine family/subtype "
+                f"'{requested_label}'. Included as a manufacturer-level engine match for recruiter review."
+            )
+        return f"Could not determine engine experience for requested filter '{requested_label}'."
+
+    def _engine_matched_evidence(self, match_outcome):
+        if not match_outcome:
+            return None
+        metadata = dict(self._engine_type_metadata().get(match_outcome.get("engine_type")) or {})
+        return {
+            "engine_type": match_outcome.get("engine_type"),
+            "manufacturer_id": metadata.get("manufacturer_id"),
+            "family_id": metadata.get("family_id"),
+            "parent_family_id": metadata.get("parent_family_id"),
+            "lineage": metadata.get("lineage") or [],
+            "display_label": metadata.get("display_label"),
+            "map_version": metadata.get("map_version"),
         }
-        return expanded.get(requested, [requested])
+
+    def _summarize_engine_service_rows(self, rows, requested_engine_type):
+        strongest = None
+        matched_months = 0
+        matched_contracts = 0
+        parsed_engine_rows = 0
+        for row in rows:
+            row_engine_types = [
+                self._normalize_engine_type(value).replace(" ", "_")
+                for value in (row.get("engine_types") or [])
+                if value
+            ]
+            row_engine_types = list(dict.fromkeys(value for value in row_engine_types if value))
+            if row_engine_types:
+                parsed_engine_rows += 1
+            outcome = self._engine_match_outcome(requested_engine_type, row_engine_types)
+            if not outcome:
+                continue
+            months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
+            if months is None:
+                continue
+            matched_months += months
+            matched_contracts += 1
+            if strongest is None or outcome["rank"] > strongest["rank"]:
+                strongest = {
+                    **outcome,
+                    "row_engine_types": row_engine_types,
+                }
+        return {
+            "strongest": strongest,
+            "matched_months": matched_months,
+            "matched_contracts": matched_contracts,
+            "parsed_engine_rows": parsed_engine_rows,
+        }
 
     def _experience_constraint_display_value(self, user_prompt, engine_type=None, vessel_type=None):
         """Return the smallest prompt clause range containing the requested experience terms."""
@@ -4902,6 +5254,122 @@ class AIResumeAnalyzer:
         self._configured_ship_type_labels_cache = normalized
         return normalized
 
+    def _ship_type_families_for_label(self, raw_label):
+        label = self._normalize_ship_type(raw_label)
+        if not label:
+            return []
+
+        families = []
+
+        def add(name):
+            if name not in families:
+                families.append(name)
+
+        if (
+            "tanker" in label
+            or label in {"vlcc", "ulcc", "obo"}
+        ):
+            add("tanker")
+
+        if label in {"lng", "lng carrier"}:
+            add("lng")
+            add("gas carrier")
+        if label in {"lpg", "lpg carrier"}:
+            add("lpg")
+            add("gas carrier")
+        if any(token in label for token in ("vlgc", "vlec", "legc")):
+            add("gas carrier")
+
+        if "bulk" in label or label in {"vloc", "wood log carrier", "transhipper"}:
+            add("bulk carrier")
+
+        if "container" in label:
+            add("container")
+
+        if any(token in label for token in ("ro ro", "roro", "ropax")):
+            add("ro-ro")
+
+        if "car carrier" in label or "pure car truck carrier" in label:
+            add("car carrier")
+
+        if (
+            "offshore" in label
+            or any(token in label for token in ("aht", "ahts", "osv", "psv", "dsv", "msv", "ffsv", "gtv"))
+            or "supply vessel" in label
+            or "supply and utility vessel" in label
+            or "pipelaying vessel" in label
+        ):
+            add("offshore")
+
+        if "survey vessel" in label or "research vessel" in label:
+            add("survey vessel")
+
+        if "dredger" in label:
+            add("dredger")
+
+        if "drill ship" in label or "drillship" in label or "rig" in label:
+            add("rig")
+
+        if "barge" in label:
+            add("barge")
+
+        if "passenger" in label or "cruise" in label:
+            add("passenger")
+
+        if "reefer" in label:
+            add("reefer")
+
+        if label in {
+            "general cargo",
+            "dry cargo",
+            "dry cargo vessel",
+            "multi purpose",
+            "heavy lift",
+            "coastal vessel",
+            "cement carrier",
+            "livestock carrier",
+        }:
+            add("general cargo")
+
+        if "tug" in label:
+            add("tug")
+        if "fishing vessel" in label:
+            add("fishing vessel")
+        if "yacht" in label:
+            add("yacht")
+        if "war ship" in label:
+            add("naval")
+
+        return families
+
+    def _ship_type_family_aliases(self):
+        cache = getattr(self, "_ship_type_family_aliases_cache", None)
+        if cache is not None:
+            return cache
+
+        family_aliases = {}
+
+        def register(family, raw_label):
+            normalized_label = self._normalize_ship_type(raw_label)
+            if not family or not normalized_label:
+                return
+            family_aliases.setdefault(family, [])
+            if normalized_label not in family_aliases[family]:
+                family_aliases[family].append(normalized_label)
+
+        for family, aliases in self._ship_type_aliases().items():
+            register(family, family)
+            for alias in aliases:
+                register(family, alias)
+
+        for label in self._configured_ship_type_labels():
+            for family in self._ship_type_families_for_label(label):
+                register(family, label)
+                register(family, family)
+
+        self._ship_type_family_aliases_cache = family_aliases
+        return family_aliases
+
     def _extract_configured_ship_types(self, raw_text):
         original_text = str(raw_text or "")
         if not original_text.strip():
@@ -4971,23 +5439,28 @@ class AIResumeAnalyzer:
                     seen.add(normalized_alias)
             return expected_values or [normalized_requested]
 
-        aliases = self._ship_type_aliases().get(normalized_requested)
-        if not aliases:
-            for canonical, candidate_aliases in self._ship_type_aliases().items():
-                normalized_aliases = [self._normalize_ship_type(alias) for alias in candidate_aliases]
-                if normalized_requested in normalized_aliases:
-                    aliases = candidate_aliases
-                    break
-        if not aliases:
-            return [normalized_requested]
-
         expected_values = []
         seen = set()
-        for alias in aliases:
-            normalized_alias = self._normalize_ship_type(alias)
-            if normalized_alias and normalized_alias not in seen:
-                expected_values.append(normalized_alias)
-                seen.add(normalized_alias)
+        family_aliases = self._ship_type_family_aliases()
+
+        def add(value):
+            normalized_value = self._normalize_ship_type(value)
+            if normalized_value and normalized_value not in seen:
+                expected_values.append(normalized_value)
+                seen.add(normalized_value)
+
+        add(normalized_requested)
+
+        if normalized_requested in family_aliases:
+            for alias in family_aliases.get(normalized_requested) or []:
+                add(alias)
+            return expected_values or [normalized_requested]
+
+        for family in self._ship_type_families_for_label(normalized_requested):
+            add(family)
+            for alias in family_aliases.get(family) or []:
+                add(alias)
+
         return expected_values or [normalized_requested]
 
     def _experience_keyword_aliases(self):
@@ -8765,6 +9238,7 @@ class AIResumeAnalyzer:
 
     def _build_default_search_insights(self, candidate_facts):
         derived = (candidate_facts or {}).get("derived") or {}
+        experience = (candidate_facts or {}).get("experience") or {}
         fact_meta = (candidate_facts or {}).get("fact_meta") or {}
         insights = {}
 
@@ -8783,6 +9257,26 @@ class AIResumeAnalyzer:
             insights["max_contract_gap_days"] = max_gap_days
             insights["max_contract_gap_start"] = max_gap_start
             insights["max_contract_gap_end"] = max_gap_end
+
+        vessel_tonnage_meta = fact_meta.get("experience.service_rows") or {}
+        evidence_rows = self._collect_vessel_tonnage_evidence(candidate_facts)
+        vessel_tonnage_values = [
+            value for value in (experience.get("vessel_tonnage_values") or [])
+            if isinstance(value, int) and not isinstance(value, bool) and value > 0
+        ]
+        if not vessel_tonnage_values:
+            vessel_tonnage_values = [
+                row.get("value")
+                for row in evidence_rows
+                if isinstance(row.get("value"), int) and not isinstance(row.get("value"), bool) and row.get("value") > 0
+            ]
+        if vessel_tonnage_meta.get("status") == "PARSED" and vessel_tonnage_values:
+            insights["max_vessel_tonnage"] = max(vessel_tonnage_values)
+            insights["min_vessel_tonnage"] = min(vessel_tonnage_values)
+            if evidence_rows:
+                best_row = max(evidence_rows, key=lambda row: row.get("value") or 0)
+                insights["best_vessel_tonnage_value"] = best_row.get("value")
+                insights["best_vessel_tonnage_unit"] = best_row.get("unit")
 
         return insights
 
@@ -10170,14 +10664,15 @@ class AIResumeAnalyzer:
         )
 
     def _combine_any_of_item_results(self, item_results, *, constraint, family_label, match_code, mismatch_code, unknown_code):
-        if any(result.get("decision") == "PASS" for result in item_results):
+        passing_result = next((result for result in item_results if result.get("decision") == "PASS"), None)
+        if passing_result:
             return self._base_rule_result(
                 "PASS",
                 match_code,
-                f"Candidate satisfied one {family_label} item.",
+                passing_result.get("message") or f"Candidate satisfied one {family_label} item.",
                 actual_value=item_results,
                 expected_value=constraint,
-                confidence=None,
+                confidence=passing_result.get("confidence"),
             )
         if item_results and all(result.get("decision") == "FAIL" for result in item_results):
             return self._base_rule_result(
@@ -10552,26 +11047,114 @@ class AIResumeAnalyzer:
         )
 
     def _evaluate_engine_experience_rule(self, candidate_facts, constraint, *, today=None):
+        experience = candidate_facts.get("experience") or {}
+        fact_meta = candidate_facts.get("fact_meta") or {}
+        confidence = (fact_meta.get("experience.engine_types") or {}).get("confidence")
+        service_rows_confidence = (fact_meta.get("experience.service_rows") or {}).get("confidence")
+        today = today or date.today()
+
         if isinstance((constraint or {}).get("items"), list):
-            confidence = ((candidate_facts.get("fact_meta") or {}).get("experience.engine_types") or {}).get("confidence")
             item_results = []
-            today = today or date.today()
+            service_rows = experience.get("service_rows") or []
+            aggregate_engine_types = [
+                self._normalize_engine_type(value).replace(" ", "_")
+                for value in (experience.get("engine_types") or [])
+                if value
+            ]
+            aggregate_engine_types = list(dict.fromkeys(value for value in aggregate_engine_types if value))
             for item in (constraint or {}).get("items") or []:
                 requested_engine_type = self._normalize_engine_type((item or {}).get("engine_family")).replace(" ", "_")
-                expected_engine_types = self._engine_type_expected_values(requested_engine_type)
-                item_results.append(self._evaluate_experience_item_rows(
-                    candidate_facts,
-                    item,
-                    value_field="engine_family",
-                    row_field="engine_types",
-                    expected_values=expected_engine_types,
-                    family_label="engine experience",
-                    match_reason_code="ENGINE_EXPERIENCE_MATCH",
-                    insufficient_reason_code="ENGINE_EXPERIENCE_MISMATCH",
-                    missing_reason_code="ENGINE_EXPERIENCE_MISSING",
-                    needs_date_reason_code="ENGINE_EXPERIENCE_NEEDS_DATE_REVIEW",
-                    confidence=confidence,
-                    today=today,
+                if not requested_engine_type:
+                    item_results.append(self._base_rule_result(
+                        "UNKNOWN",
+                        "ENGINE_EXPERIENCE_CONSTRAINT_INVALID",
+                        "Engine experience constraint is incomplete.",
+                        actual_value=None,
+                        expected_value=item,
+                        confidence=confidence,
+                        unknown_reason="FACTUAL_UNKNOWN",
+                    ))
+                    continue
+                scoped = self._scope_service_rows_for_experience_item(service_rows, item, today=today)
+                row_summary = self._summarize_engine_service_rows(scoped["rows"], requested_engine_type)
+                undated_matching = 0
+                for row in scoped["undated_rows"]:
+                    if self._engine_match_outcome(requested_engine_type, row.get("engine_types") or []):
+                        undated_matching += 1
+                actual_value = {
+                    "item": item,
+                    "matched_months": row_summary["matched_months"],
+                    "matched_contracts": row_summary["matched_contracts"],
+                    "evaluated_contracts": len(scoped["rows"]),
+                    "scope": scoped["scope"],
+                    "matched_evidence": self._engine_matched_evidence(row_summary["strongest"]),
+                }
+                minimum_months = int((item or {}).get("minimum_months") or 0)
+                if scoped["needs_date_review"] or ((item or {}).get("years_back") and row_summary["matched_contracts"] == 0 and undated_matching):
+                    item_results.append(self._base_rule_result(
+                        "UNKNOWN",
+                        "ENGINE_EXPERIENCE_NEEDS_DATE_REVIEW",
+                        "Could not evaluate engine experience recency because one or more contract dates are missing.",
+                        actual_value={**actual_value, "undated_contracts": len(scoped["undated_rows"]), "undated_matching_contracts": undated_matching},
+                        expected_value=item,
+                        confidence=service_rows_confidence or confidence,
+                        unknown_reason="FACTUAL_UNKNOWN",
+                    ))
+                    continue
+                if row_summary["strongest"] and row_summary["matched_contracts"] and (minimum_months == 0 or row_summary["matched_months"] >= minimum_months):
+                    strongest = row_summary["strongest"]
+                    item_results.append(self._base_rule_result(
+                        strongest["decision"],
+                        strongest["reason_code"],
+                        self._format_engine_match_message(requested_engine_type, strongest),
+                        actual_value=actual_value,
+                        expected_value=item,
+                        confidence=strongest["confidence"] if strongest["decision"] == "UNKNOWN" else (service_rows_confidence or confidence),
+                        unknown_reason="FACTUAL_UNKNOWN" if strongest["decision"] == "UNKNOWN" else None,
+                    ))
+                    continue
+                if row_summary["parsed_engine_rows"] == 0:
+                    aggregate_outcome = self._engine_match_outcome(requested_engine_type, aggregate_engine_types)
+                    if aggregate_outcome:
+                        item_results.append(self._base_rule_result(
+                            aggregate_outcome["decision"],
+                            aggregate_outcome["reason_code"],
+                            self._format_engine_match_message(requested_engine_type, aggregate_outcome),
+                            actual_value={**actual_value, "aggregate_engine_types": aggregate_engine_types, "matched_evidence": self._engine_matched_evidence(aggregate_outcome)},
+                            expected_value=item,
+                            confidence=aggregate_outcome["confidence"] if aggregate_outcome["decision"] == "UNKNOWN" else confidence,
+                            unknown_reason="FACTUAL_UNKNOWN" if aggregate_outcome["decision"] == "UNKNOWN" else None,
+                        ))
+                    elif aggregate_engine_types:
+                        item_results.append(self._base_rule_result(
+                            "FAIL",
+                            "ENGINE_EXPERIENCE_MISMATCH",
+                            f"Candidate engine experience does not match '{self._engine_display_label(requested_engine_type)}'.",
+                            actual_value={**actual_value, "aggregate_engine_types": aggregate_engine_types},
+                            expected_value=item,
+                            confidence=confidence,
+                        ))
+                    else:
+                        item_results.append(self._base_rule_result(
+                            "UNKNOWN",
+                            "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED",
+                            f"Could not evaluate engine evidence for requested filter '{self._engine_display_label(requested_engine_type)}'.",
+                            actual_value=actual_value,
+                            expected_value=item,
+                            confidence=confidence,
+                            unknown_reason="FACTUAL_UNKNOWN",
+                        ))
+                    continue
+                item_results.append(self._base_rule_result(
+                    "FAIL",
+                    "ENGINE_EXPERIENCE_MISMATCH" if minimum_months == 0 else "ENGINE_EXPERIENCE_INSUFFICIENT",
+                    (
+                        f"Candidate does not meet the requested engine experience item "
+                        f"'{self._engine_display_label(requested_engine_type)}'."
+                    ),
+                    actual_value=actual_value,
+                    expected_value=item,
+                    confidence=service_rows_confidence or confidence,
                 ))
             return self._combine_any_of_item_results(
                 item_results,
@@ -10583,21 +11166,7 @@ class AIResumeAnalyzer:
             )
 
         requested_engine_type = self._normalize_engine_type((constraint or {}).get("engine_type")).replace(" ", "_")
-        expected_engine_types = [
-            self._normalize_engine_type(value).replace(" ", "_")
-            for value in ((constraint or {}).get("expected_values") or self._engine_type_expected_values(requested_engine_type))
-            if value
-        ]
-        experience = candidate_facts.get("experience") or {}
-        experienced_engine_types = [
-            self._normalize_engine_type(value).replace(" ", "_")
-            for value in (experience.get("engine_types") or [])
-            if value
-        ]
-        experienced_engine_types = list(dict.fromkeys(experienced_engine_types))
-        fact_meta = (candidate_facts.get("fact_meta") or {}).get("experience.engine_types") or {}
-        confidence = fact_meta.get("confidence")
-
+        expected_engine_types = self._engine_type_expected_values(requested_engine_type)
         if not requested_engine_type or not expected_engine_types:
             return self._base_rule_result(
                 "UNKNOWN",
@@ -10613,22 +11182,16 @@ class AIResumeAnalyzer:
         lookback_contracts = int((constraint or {}).get("lookback_contracts") or 0)
         recent_contract_match_mode = str((constraint or {}).get("recent_contract_match_mode") or "any").strip().lower()
         if min_months > 0 or lookback_contracts > 0:
-            service_rows = experience.get("service_rows") or []
             valid_rows = []
-            for row in service_rows:
+            for row in (experience.get("service_rows") or []):
                 sign_in_date = row.get("sign_in_date")
                 sign_out_date = row.get("sign_out_date")
                 if not sign_in_date or not sign_out_date or sign_out_date < sign_in_date:
                     continue
-                row_engine_types = [
-                    self._normalize_engine_type(value).replace(" ", "_")
-                    for value in (row.get("engine_types") or [])
-                    if value
-                ]
                 valid_rows.append({
                     "sign_in_date": sign_in_date,
                     "sign_out_date": sign_out_date,
-                    "engine_types": row_engine_types,
+                    "engine_types": row.get("engine_types") or [],
                 })
 
             if not valid_rows:
@@ -10638,205 +11201,154 @@ class AIResumeAnalyzer:
                     "Could not determine contract-level engine experience from the selected resume.",
                     actual_value=None,
                     expected_value=constraint,
-                    confidence=confidence,
+                    confidence=service_rows_confidence or confidence,
                     unknown_reason="FACTUAL_UNKNOWN",
                 )
 
             valid_rows.sort(key=lambda row: (row.get("sign_out_date"), row.get("sign_in_date")), reverse=True)
             evaluated_rows = valid_rows[:lookback_contracts] if lookback_contracts > 0 else valid_rows
-            matched_months = 0
-            matched_contracts = 0
-            parsed_engine_rows = 0
-            for row in evaluated_rows:
-                row_engine_types = set(row.get("engine_types") or [])
-                if row_engine_types:
-                    parsed_engine_rows += 1
-                if not (row_engine_types & set(expected_engine_types)):
-                    continue
-                months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
-                if months is None:
-                    continue
-                matched_months += months
-                matched_contracts += 1
+            row_summary = self._summarize_engine_service_rows(evaluated_rows, requested_engine_type)
+            actual_value = {
+                "matched_months": row_summary["matched_months"],
+                "matched_contracts": row_summary["matched_contracts"],
+                "evaluated_contracts": len(evaluated_rows),
+                "matched_evidence": self._engine_matched_evidence(row_summary["strongest"]),
+            }
 
-            if parsed_engine_rows == 0:
+            if row_summary["parsed_engine_rows"] == 0:
                 return self._base_rule_result(
                     "FAIL",
                     "ENGINE_EXPERIENCE_MISMATCH",
-                    f"Candidate has parsed service rows but no engine evidence matching '{requested_engine_type}'.",
-                    actual_value={
-                        "matched_months": 0,
-                        "matched_contracts": 0,
-                        "evaluated_contracts": len(evaluated_rows),
-                    },
+                    f"Candidate has parsed service rows but no engine evidence matching '{self._engine_display_label(requested_engine_type)}'.",
+                    actual_value=actual_value,
                     expected_value=constraint,
-                    confidence=confidence,
+                    confidence=service_rows_confidence or confidence,
                 )
 
             if lookback_contracts > 0 and min_months == 0 and recent_contract_match_mode == "all":
-                if len(evaluated_rows) >= lookback_contracts and matched_contracts == lookback_contracts:
+                if len(evaluated_rows) >= lookback_contracts and row_summary["matched_contracts"] == lookback_contracts and row_summary["strongest"] and row_summary["strongest"]["decision"] == "PASS":
                     return self._base_rule_result(
                         "PASS",
                         "ENGINE_EXPERIENCE_MATCH",
-                        (
-                            f"Candidate has '{requested_engine_type}' experience in all "
-                            f"{lookback_contracts} recent contract(s)."
-                        ),
-                        actual_value={
-                            "matched_months": matched_months,
-                            "matched_contracts": matched_contracts,
-                            "evaluated_contracts": len(evaluated_rows),
-                            "required_contracts": lookback_contracts,
-                            "recent_contract_match_mode": recent_contract_match_mode,
-                        },
+                        f"Candidate has {self._engine_display_label(requested_engine_type)} experience in all {lookback_contracts} recent contract(s).",
+                        actual_value={**actual_value, "required_contracts": lookback_contracts, "recent_contract_match_mode": recent_contract_match_mode},
                         expected_value=constraint,
-                        confidence=confidence,
+                        confidence=service_rows_confidence or confidence,
                     )
                 return self._base_rule_result(
                     "FAIL",
                     "ENGINE_EXPERIENCE_INSUFFICIENT",
                     (
-                        f"Candidate has '{requested_engine_type}' experience in "
-                        f"{matched_contracts} of the recent {lookback_contracts} contract(s); "
+                        f"Candidate has {self._engine_display_label(requested_engine_type)} experience in "
+                        f"{row_summary['matched_contracts']} of the recent {lookback_contracts} contract(s); "
                         f"all {lookback_contracts} were required."
                     ),
-                    actual_value={
-                        "matched_months": matched_months,
-                        "matched_contracts": matched_contracts,
-                        "evaluated_contracts": len(evaluated_rows),
-                        "required_contracts": lookback_contracts,
-                        "recent_contract_match_mode": recent_contract_match_mode,
-                    },
+                    actual_value={**actual_value, "required_contracts": lookback_contracts, "recent_contract_match_mode": recent_contract_match_mode},
                     expected_value=constraint,
-                    confidence=confidence,
+                    confidence=service_rows_confidence or confidence,
                 )
 
-            if min_months == 0 and matched_contracts > 0:
+            if row_summary["strongest"] and row_summary["matched_contracts"] and (min_months == 0 or row_summary["matched_months"] >= min_months):
+                strongest = row_summary["strongest"]
                 return self._base_rule_result(
-                    "PASS",
-                    "ENGINE_EXPERIENCE_MATCH",
-                    (
-                        f"Candidate has '{requested_engine_type}' experience in "
-                        f"{matched_contracts} contract(s)."
-                    ),
-                    actual_value={
-                        "matched_months": matched_months,
-                        "matched_contracts": matched_contracts,
-                        "evaluated_contracts": len(evaluated_rows),
-                    },
+                    strongest["decision"],
+                    strongest["reason_code"],
+                    self._format_engine_match_message(requested_engine_type, strongest),
+                    actual_value=actual_value,
                     expected_value=constraint,
-                    confidence=confidence,
-                )
-
-            if min_months > 0 and matched_months >= min_months:
-                return self._base_rule_result(
-                    "PASS",
-                    "ENGINE_EXPERIENCE_MATCH",
-                    (
-                        f"Candidate has {matched_months} month(s) with "
-                        f"'{requested_engine_type}'."
-                    ),
-                    actual_value={
-                        "matched_months": matched_months,
-                        "matched_contracts": matched_contracts,
-                        "evaluated_contracts": len(evaluated_rows),
-                    },
-                    expected_value=constraint,
-                    confidence=confidence,
+                    confidence=strongest["confidence"] if strongest["decision"] == "UNKNOWN" else (service_rows_confidence or confidence),
+                    unknown_reason="FACTUAL_UNKNOWN" if strongest["decision"] == "UNKNOWN" else None,
                 )
 
             return self._base_rule_result(
                 "FAIL",
                 "ENGINE_EXPERIENCE_INSUFFICIENT",
                 (
-                    f"Candidate has only {matched_months} month(s) with "
-                    f"'{requested_engine_type}', below the required {min_months}."
+                    f"Candidate has only {row_summary['matched_months']} month(s) with "
+                    f"'{self._engine_display_label(requested_engine_type)}', below the required {min_months}."
                 ),
-                actual_value={
-                    "matched_months": matched_months,
-                    "matched_contracts": matched_contracts,
-                    "evaluated_contracts": len(evaluated_rows),
-                },
+                actual_value=actual_value,
                 expected_value=constraint,
-                confidence=confidence,
+                confidence=service_rows_confidence or confidence,
             )
 
-        if not experienced_engine_types:
-            service_rows = experience.get("service_rows") or []
-            row_engine_types = []
-            parsed_service_rows = 0
-            for row in service_rows:
-                if row.get("engine_types"):
-                    parsed_service_rows += 1
-                for engine_type in row.get("engine_types") or []:
-                    normalized_engine_type = self._normalize_engine_type(engine_type).replace(" ", "_")
-                    if normalized_engine_type:
-                        row_engine_types.append(normalized_engine_type)
-            row_engine_types = list(dict.fromkeys(row_engine_types))
-            if row_engine_types:
-                if set(row_engine_types) & set(expected_engine_types):
-                    return self._base_rule_result(
-                        "PASS",
-                        "ENGINE_EXPERIENCE_MATCH",
-                        f"Candidate SeaJobs rows show experience with '{requested_engine_type}'.",
-                        actual_value=row_engine_types,
-                        expected_value=expected_engine_types,
-                        confidence=confidence,
-                    )
-                return self._base_rule_result(
-                    "FAIL",
-                    "ENGINE_EXPERIENCE_MISMATCH",
-                    (
-                        f"Candidate engine experience {row_engine_types} does not match requested "
-                        f"filter '{requested_engine_type}'."
-                    ),
-                    actual_value=row_engine_types,
-                    expected_value=expected_engine_types,
-                    confidence=confidence,
-                )
-            service_rows_status = str(((candidate_facts.get("fact_meta") or {}).get("experience.service_rows") or {}).get("status") or "")
-            if service_rows and service_rows_status == "PARSED":
-                return self._base_rule_result(
-                    "FAIL",
-                    "ENGINE_EXPERIENCE_MISMATCH",
-                    (
-                        f"Candidate has parsed service rows but no engine evidence matching "
-                        f"'{requested_engine_type}'."
-                    ),
-                    actual_value=[],
-                    expected_value=expected_engine_types,
-                    confidence=confidence,
-                )
+        experienced_engine_types = [
+            self._normalize_engine_type(value).replace(" ", "_")
+            for value in (experience.get("engine_types") or [])
+            if value
+        ]
+        experienced_engine_types = list(dict.fromkeys(experienced_engine_types))
+        outcome = self._engine_match_outcome(requested_engine_type, experienced_engine_types)
+        if outcome:
             return self._base_rule_result(
-                "UNKNOWN",
-                "ENGINE_EXPERIENCE_MISSING",
-                f"Could not determine engine experience for requested filter '{requested_engine_type}'.",
-                actual_value=[],
+                outcome["decision"],
+                outcome["reason_code"],
+                self._format_engine_match_message(requested_engine_type, outcome),
+                actual_value={
+                    "engine_types": experienced_engine_types,
+                    "matched_evidence": self._engine_matched_evidence(outcome),
+                },
                 expected_value=expected_engine_types,
-                confidence=confidence,
-                unknown_reason="FACTUAL_UNKNOWN",
+                confidence=outcome["confidence"] if outcome["decision"] == "UNKNOWN" else confidence,
+                unknown_reason="FACTUAL_UNKNOWN" if outcome["decision"] == "UNKNOWN" else None,
             )
-
-        if set(experienced_engine_types) & set(expected_engine_types):
+        if experienced_engine_types:
             return self._base_rule_result(
-                "PASS",
-                "ENGINE_EXPERIENCE_MATCH",
-                f"Candidate resume shows experience with '{requested_engine_type}'.",
-                actual_value=experienced_engine_types,
+                "FAIL",
+                "ENGINE_EXPERIENCE_MISMATCH",
+                (
+                    f"Candidate engine experience {experienced_engine_types} does not match requested "
+                    f"filter '{self._engine_display_label(requested_engine_type)}'."
+                ),
+                actual_value={"engine_types": experienced_engine_types},
                 expected_value=expected_engine_types,
                 confidence=confidence,
             )
 
+        service_rows = experience.get("service_rows") or []
+        row_engine_types = []
+        for row in service_rows:
+            for engine_type in (row.get("engine_types") or []):
+                normalized_engine_type = self._normalize_engine_type(engine_type).replace(" ", "_")
+                if normalized_engine_type:
+                    row_engine_types.append(normalized_engine_type)
+        row_engine_types = list(dict.fromkeys(row_engine_types))
+        row_outcome = self._engine_match_outcome(requested_engine_type, row_engine_types)
+        if row_outcome:
+            return self._base_rule_result(
+                row_outcome["decision"],
+                row_outcome["reason_code"],
+                self._format_engine_match_message(requested_engine_type, row_outcome),
+                actual_value={
+                    "engine_types": row_engine_types,
+                    "matched_evidence": self._engine_matched_evidence(row_outcome),
+                },
+                expected_value=expected_engine_types,
+                confidence=row_outcome["confidence"] if row_outcome["decision"] == "UNKNOWN" else (service_rows_confidence or confidence),
+                unknown_reason="FACTUAL_UNKNOWN" if row_outcome["decision"] == "UNKNOWN" else None,
+            )
+
+        service_rows_status = str((fact_meta.get("experience.service_rows") or {}).get("status") or "")
+        if service_rows and service_rows_status == "PARSED":
+            return self._base_rule_result(
+                "FAIL",
+                "ENGINE_EXPERIENCE_MISMATCH",
+                (
+                    f"Candidate has parsed service rows but no engine evidence matching "
+                    f"'{self._engine_display_label(requested_engine_type)}'."
+                ),
+                actual_value={"engine_types": row_engine_types},
+                expected_value=expected_engine_types,
+                confidence=service_rows_confidence or confidence,
+            )
         return self._base_rule_result(
-            "FAIL",
-            "ENGINE_EXPERIENCE_MISMATCH",
-            (
-                f"Candidate engine experience {experienced_engine_types} does not match requested "
-                f"filter '{requested_engine_type}'."
-            ),
-            actual_value=experienced_engine_types,
+            "UNKNOWN",
+            "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED",
+            f"Could not evaluate engine evidence for requested filter '{self._engine_display_label(requested_engine_type)}'.",
+            actual_value={"engine_types": []},
             expected_value=expected_engine_types,
             confidence=confidence,
+            unknown_reason="FACTUAL_UNKNOWN",
         )
 
     def _evaluate_engine_vessel_experience_rule(self, candidate_facts, constraint):
@@ -12059,6 +12571,8 @@ Examples of GOOD responses:
         user_prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        experience_ship_type_filter=None,
+        engine_experience_filter=None,
         vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
@@ -12114,19 +12628,42 @@ Examples of GOOD responses:
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
                 if "applied_ship_type" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("applied_ship_type")
-            if str(experienced_ship_type or "").strip():
+            normalized_experience_ship_type_filter = (
+                dict(experience_ship_type_filter)
+                if isinstance(experience_ship_type_filter, dict) and isinstance(experience_ship_type_filter.get("items"), list)
+                and experience_ship_type_filter.get("items")
+                else None
+            )
+            normalized_engine_experience_filter = (
+                dict(engine_experience_filter)
+                if isinstance(engine_experience_filter, dict) and isinstance(engine_experience_filter.get("items"), list)
+                and engine_experience_filter.get("items")
+                else None
+            )
+            if normalized_experience_ship_type_filter:
+                job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = normalized_experience_ship_type_filter
+                if "experience_ship_type" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("experience_ship_type")
+            elif str(experienced_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["experience_ship_type"] = str(experienced_ship_type).strip()
                 if "experience_ship_type" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("experience_ship_type")
+            if normalized_engine_experience_filter:
+                job_constraints.setdefault("hard_constraints", {})["engine_experience"] = normalized_engine_experience_filter
+                if "engine_experience" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("engine_experience")
             if isinstance(vessel_tonnage_filter, dict) and (
                 vessel_tonnage_filter.get("min_value") is not None
                 or vessel_tonnage_filter.get("max_value") is not None
             ):
-                job_constraints.setdefault("hard_constraints", {})["vessel_tonnage"] = {
+                tonnage_constraint = {
                     "min_value": vessel_tonnage_filter.get("min_value"),
                     "max_value": vessel_tonnage_filter.get("max_value"),
                     "unit": vessel_tonnage_filter.get("unit") or "any",
                 }
+                if vessel_tonnage_filter.get("years_back") is not None:
+                    tonnage_constraint["years_back"] = vessel_tonnage_filter.get("years_back")
+                job_constraints.setdefault("hard_constraints", {})["vessel_tonnage"] = tonnage_constraint
                 if "vessel_tonnage" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("vessel_tonnage")
             prompt_observability_probe = self._build_prompt_observability(
@@ -12146,6 +12683,8 @@ Examples of GOOD responses:
                 or job_constraints.get("logical_groups")
                 or str(applied_ship_type or "").strip()
                 or str(experienced_ship_type or "").strip()
+                or bool(normalized_experience_ship_type_filter)
+                or bool(normalized_engine_experience_filter)
                 or bool(vessel_tonnage_filter)
             )
             structured_only_prompt = self._is_structured_only_prompt(
@@ -12684,6 +13223,8 @@ Examples of GOOD responses:
         user_prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        experience_ship_type_filter=None,
+        engine_experience_filter=None,
         vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
@@ -12705,6 +13246,8 @@ Examples of GOOD responses:
             user_prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            experience_ship_type_filter=experience_ship_type_filter,
+            engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
@@ -12804,6 +13347,8 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        experience_ship_type_filter=None,
+        engine_experience_filter=None,
         vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
@@ -12815,6 +13360,8 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            experience_ship_type_filter=experience_ship_type_filter,
+            engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
@@ -12827,6 +13374,8 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        experience_ship_type_filter=None,
+        engine_experience_filter=None,
         vessel_tonnage_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
@@ -12838,6 +13387,8 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            experience_ship_type_filter=experience_ship_type_filter,
+            engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
