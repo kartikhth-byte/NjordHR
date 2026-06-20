@@ -172,36 +172,41 @@ def build_shadow_llm_prompt(
     rank: str | None = None,
     catalog_version: str = CATALOG_VERSION,
 ) -> str:
-    supported_families = ", ".join(sorted(SUPPORTED_FAMILY_IDS))
     age_rule_block = (
         "age_range:\n"
-        "- Numeric or spelled bounds in years.\n"
+        "- Numeric or spelled year bounds.\n"
         "- 'between N and M (years old)', 'aged N to M', 'N-M years old' -> minimum_years=N, maximum_years=M.\n"
-        "- 'N+', 'N and above', 'minimum age N', 'nlt N', 'no younger than N', 'not below N' -> minimum_years=N.\n"
-        "- 'no older than N', 'not above N', 'cannot exceed N', 'N and below', 'nmt N' -> maximum_years=N.\n"
-        "- 'under N', 'below N', 'younger than N' -> maximum_years=N-1 (strict).\n"
-        "- 'in their 30s' / 'forties' / 'mid-30s' / 'early 40s' / 'late 20s' -> decade span.\n"
-        "- 'around N' / 'approximately N' -> approximate band around N.\n"
+        "- 'N+', 'minimum age N', 'nlt N', 'no younger than N', 'not below N' -> minimum_years=N.\n"
+        "- 'no older than N', 'not above N', 'cannot exceed N', 'nmt N' -> maximum_years=N.\n"
+        "- 'under N', 'below N', 'younger than N' -> maximum_years=N-1.\n"
+        "- 'mid-30s', 'early 40s', 'late 20s', 'forties' -> decade span; 'around N' / 'approximately N' -> approximate band.\n"
     )
     visa_rule_block = (
         "us_visa (family id for USA, Australia, and Schengen visas):\n"
-        "- Apply only when the prompt names a supported visa country/class. Otherwise unsupported.\n"
         "- Supported groups: usa (US/USA/American/Yankee/states/H-1B/L-1/F-1/O-1/C1-D/B1-B2), australia (Australia/MCV/Maritime Crew Visa), schengen (Schengen/European/EU).\n"
-        "- Always emit visa_group; include accepted_types when a specific class is named.\n"
+        "- Apply only when a supported country/class is named; always emit visa_group and include accepted_types for specific classes.\n"
         "- 'visa-free X', 'no visa required', 'doesn't need visa' -> unsupported (opposite intent).\n"
-        "- Visas for other countries (Canada, UK, Japan, etc.) -> unsupported.\n"
         "- Vague 'visas' / 'proper visas' without a country -> unsupported.\n"
+        "- Visas for other countries -> unsupported.\n"
         "- 'MV visa' near Australia -> australia; 'MV' as vessel prefix -> not us_visa.\n"
-        "- Example: valid US visa -> {\"type\": \"us_visa\", \"required\": true, \"visa_group\": \"usa\"}.\n"
     )
     stcw_rule_block = (
         "stcw_basic:\n"
         "- 'STCW basic', 'basic STCW', 'basic safety training', 'BST' (bare or qualified), 'STCW A-VI/1' -> stcw_basic.\n"
         "- All four basic components together (PSSR, PST, FPFF, EFA) -> stcw_basic.\n"
-        "- Quantifier phrasings ('all four basic certificates', '4 basic certificates') -> stcw_basic.\n"
+        "- Quantifiers like 'all four basic certificates' / '4 basic certificates' -> stcw_basic.\n"
         "- Advanced certificates (AFF, MFA, AFA) belong to certificate_requirement, NOT stcw_basic.\n"
-        "- Example: PSSR, PST, FPFF, EFA -> stcw_basic.\n"
         "- Generic 'safety training' without STCW/BST/basic cues is unsupported.\n"
+    )
+    engine_rule_block = (
+        "engine_experience:\n"
+        "- Preserve requested specificity. Generic manufacturer/family prompts stay generic; do not invent a subtype.\n"
+        "- Manufacturer/family examples: 'MAN experience' -> man; 'MAN B&W' or 'B&W' -> man_b_w; 'WinGD engine' -> wingd_x_engines.\n"
+        "- Subtype examples: 'ME engine' -> man_b_w_me; 'ME-C' -> man_b_w_me_c; 'ME-GI' -> man_b_w_me_gi; 'X-DF' -> wingd_x_df; 'X-DF-HP' -> wingd_x_df_hp; 'RT-flex' -> wartsila_rt_flex.\n"
+        "- Broad deterministic buckets: 'dual fuel engine' -> dual_fuel; 'electronic engine' / 'electronically controlled engine' / 'camless engine' -> electronically_controlled_engine; 'mechanical engine' / 'camshaft engine' -> mechanical_engine.\n"
+        "- 'Sulzer' -> sulzer; 'UEC-LSII' -> mitsubishi_uec_lsii; 'UEC-LSE/LSH/LSJ' -> electronic Mitsubishi UEC subtypes.\n"
+        "- Diesel-electric / HV / Azipod / scrubber / EGR stay semantic or unsupported in v1 unless a canonical engine family is also named.\n"
+        "- Fallbacks are evaluator-time only: if the prompt asks for 'ME engine', still emit man_b_w_me even if a resume may later contain only MAN B&W evidence.\n"
     )
     return (
         "You are NjordHR's shadow query normalizer.\n"
@@ -211,33 +216,12 @@ def build_shadow_llm_prompt(
         "Cross-family OR -> logical_groups any_of; no duplicate applied children.\n"
         "Prefer degraded over invalid.\n"
         f"catalog_version={catalog_version}.\n"
-        f"Supported families: {supported_families}.\n"
         f"{age_rule_block}"
         f"{visa_rule_block}"
         f"{stcw_rule_block}"
+        f"{engine_rule_block}"
         f"Required schema_version: query_plan.v1.\n"
-        "Output shape:\n"
-        "{\n"
-        '  "schema_version": "query_plan.v1",\n'
-        '  "normalizer": {\n'
-        '    "name": "llm",\n'
-        '    "model": "string",\n'
-        '    "prompt_template_version": "query_understanding.shadow_llm.v1",\n'
-        '    "catalog_version": "string",\n'
-        '    "created_at": "ISO-8601 timestamp"\n'
-        "  },\n"
-        '  "input": {\n'
-        f'    "raw_prompt": {json.dumps(prompt)},\n'
-        f'    "rank_context": {json.dumps(rank)},\n'
-        '    "ui_filters": {"schema_version": "ui_filters.v1", "filters": []}\n'
-        "  },\n"
-        '  "applied_constraints": [],\n'
-        '  "unapplied_constraints": [],\n'
-        '  "semantic_query": "string",\n'
-        '  "unrecognized_residual": [],\n'
-        '  "warnings": [],\n'
-        '  "validation": {"status": "valid", "errors": []}\n'
-        "}\n"
+        "Output shape keys: schema_version, normalizer, input, applied_constraints, unapplied_constraints, semantic_query, unrecognized_residual, warnings, validation.\n"
         "Prompt:\n"
         f"{json.dumps({'raw_prompt': prompt, 'rank_context': rank, 'catalog_version': catalog_version}, ensure_ascii=False)}\n"
     )
