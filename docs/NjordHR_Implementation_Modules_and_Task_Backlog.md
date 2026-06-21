@@ -314,6 +314,28 @@ Suggested overlap:
   - patch only the repeated observed pattern
   - rerun the same-folder diagnostic before any broader validation
 
+### 6.2.1 Current experience-filters / engine-layer post-merge follow-up focus
+- `P1` Sentence-aware engine negation remains intentionally deferred:
+  - current v1 suppresses straightforward pre-mention negation inside a bounded look-behind window
+  - sentence-boundary-aware handling is still needed to avoid suppressing positive evidence in nearby later sentences
+  - treat this as the first engine-layer correctness follow-up if field telemetry shows false suppression
+- `P1` Decide and document methanol / ammonia broad-bucket fallback symmetry:
+  - current deterministic layer supports the subtype families
+  - broad bucket behavior for manufacturer-only evidence should be made explicit and then regression-tested
+  - do not change bucket semantics piecemeal without a written decision
+- `P1` Add the `MAN B&W LMC` alias follow-up:
+  - resumes that say `MAN B&W LMC` should normalize consistently to the intended `MAN B&W MC` family when the alias is confirmed
+  - land this as a narrow extraction/evaluator patch with direct regression coverage
+- `P1` Reopen CoC demonym normalization:
+  - add demonyms such as `Iranian`, `Maldivian`, `Mauritian`, and `Argentinian`
+  - keep this work isolated from unrelated search-prompt changes
+- `P2` Harden settings input typing:
+  - reject boolean payloads passed into `_agent_setting_int`
+  - keep `0` as a valid round-tripping integer value
+- `P2` Clean debug payload hygiene for logical-group aggregation:
+  - `_combine_any_of_item_results` should not leak oversized internal detail into `actual_value`
+  - keep recruiter-facing reason text and debug/audit payloads intentionally separate
+
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).
 - `M1-T1` Create Supabase environments (`dev`, `staging`, `prod`).
