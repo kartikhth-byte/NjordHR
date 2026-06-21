@@ -71,6 +71,7 @@ implementation**.
 | Default manufacturer fallback confidence | `60%` |
 | Exact/descendant deterministic match | Existing deterministic pass behavior retained |
 | Broad buckets (`dual_fuel`, `electronically_controlled_engine`, `mechanical_engine`) | Deterministic |
+| `methanol_engine` / `ammonia_engine` relation to `dual_fuel` | Child buckets of `dual_fuel` in evaluator semantics |
 | `mechanical_engine` scope | Low-speed two-stroke mechanical bucket in v1; medium-speed and unmodeled manufacturers are excluded unless explicit subtype coverage is added |
 | `sulzer` relation to `wartsila_rta` / `wartsila_rt_flex` | Compatibility alias bucket, not a second structural parent in the hierarchy |
 | `ME-GA` vs `ME-GI` | Sibling products; both belong to `dual_fuel`; neither inherits the other's evidence |
@@ -413,8 +414,8 @@ Examples:
 Reason text pattern:
 
 `Resume mentions {evidence display label}, but does not specify the requested
-subtype '{requested display label}'. Included as a family-level engine match
-for recruiter review.`
+engine detail '{requested display label}'. Included as a family-level engine
+match for recruiter review.`
 
 ### Manufacturer-level fallback
 
@@ -437,7 +438,7 @@ Examples:
 Reason text pattern:
 
 `Resume mentions {evidence display label}, but does not specify the requested
-engine family/subtype '{requested display label}'. Included as a
+engine detail '{requested display label}'. Included as a
 manufacturer-level engine match for recruiter review.`
 
 ### No relationship
@@ -530,6 +531,45 @@ v1 recommendation:
   `electronically_controlled_engine` at the default family-fallback confidence
   of `70%`, landing in `Needs Review`
 - do **not** allow manufacturer-only fallback into `mechanical_engine`
+
+### Bucket fallback matrix for `dual_fuel`, `methanol_engine`, `ammonia_engine`
+
+Treat the broad-fuel buckets as an explicit semantic ladder in the
+deterministic evaluator:
+
+- `dual_fuel`
+  - `methanol_engine`
+  - `ammonia_engine`
+
+The matrix for v1 is:
+
+| Recruiter request | Resume evidence | Outcome |
+|---|---|---|
+| `dual_fuel` | `dual_fuel` | `PASS` |
+| `dual_fuel` | `methanol_engine` / `ammonia_engine` | `PASS` |
+| `dual_fuel` | subtype under those buckets (`ME-LGIM`, `X-DF-M/E`, `ME-LGIA`, `X-DF-A`) | `PASS` |
+| `methanol_engine` | `methanol_engine` | `PASS` |
+| `methanol_engine` | `ME-LGIM` / `X-DF-M/E` | `PASS` |
+| `methanol_engine` | `dual_fuel` only | `UNKNOWN` via family fallback (`70%`) |
+| `methanol_engine` | generic manufacturer / family only (`MAN`, `MAN B&W`, `WinGD`, `WinGD X engines`) | `FAIL` |
+| `ammonia_engine` | `ammonia_engine` | `PASS` |
+| `ammonia_engine` | `ME-LGIA` / `X-DF-A` | `PASS` |
+| `ammonia_engine` | `dual_fuel` only | `UNKNOWN` via family fallback (`70%`) |
+| `ammonia_engine` | generic manufacturer / family only (`MAN`, `MAN B&W`, `WinGD`, `WinGD X engines`) | `FAIL` |
+| specific methanol / ammonia subtype | matching bucket ancestor in lineage (`methanol_engine`, `ammonia_engine`, or `dual_fuel`) | `UNKNOWN` via family fallback (`70%`) |
+
+Interpretation:
+
+- bucket or subtype evidence can satisfy a broader bucket request
+- ancestor bucket evidence can support a narrower request only as
+  lower-confidence recruiter-review evidence
+- plain manufacturer/family evidence is still too weak to imply
+  `methanol_engine` or `ammonia_engine`
+
+This is intentionally more conservative than the generic `dual_fuel` fallback
+rule. A recruiter searching specifically for methanol or ammonia should not get
+`MAN B&W` or `WinGD` candidates promoted into `Needs Review` without any fuel
+signal.
 
 ## Semantic Technical-Experience Layer
 
@@ -816,6 +856,8 @@ Add explicit reason codes for formatter support:
 - `Sulzer` prompt normalization and `Sulzer RT-flex` resume extraction
 - `mechanical_engine` FAIL against an electronic-only candidate
 - `dual_fuel` family fallback confidence and bucket behavior
+- `methanol_engine` / `ammonia_engine` bucket fallback symmetry and regression
+  matrix
 - strongest-outcome tie-break when a candidate has both subtype and
   manufacturer evidence
 - `man` vs `wartsila` cross-branch fail

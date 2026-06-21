@@ -727,6 +727,44 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
 
+    def test_engine_experience_rule_matches_methanol_bucket_for_dual_fuel_request(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["methanol_engine"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "dual_fuel",
+                        "expected_values": self.analyzer._engine_type_expected_values("dual_fuel"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
+    def test_engine_experience_rule_matches_ammonia_bucket_for_dual_fuel_request(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["ammonia_engine"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "dual_fuel",
+                        "expected_values": self.analyzer._engine_type_expected_values("dual_fuel"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
     def test_engine_experience_rule_matches_generic_man_b_w_family(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -876,6 +914,240 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
         self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_uses_family_fallback_for_methanol_bucket_when_only_dual_fuel_is_known(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["dual_fuel"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "methanol_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("methanol_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_uses_family_fallback_for_ammonia_bucket_when_only_dual_fuel_is_known(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["dual_fuel"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "ammonia_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("ammonia_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_uses_family_fallback_for_specific_methanol_subtype_when_only_bucket_is_known(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["methanol_engine"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me_lgim",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me_lgim"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_does_not_use_generic_family_fallback_for_specific_methanol_subtype(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me_lgim",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me_lgim"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
+    def test_engine_experience_rule_uses_family_fallback_for_specific_ammonia_subtype_when_only_bucket_is_known(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["ammonia_engine"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "wingd_x_df_a",
+                        "expected_values": self.analyzer._engine_type_expected_values("wingd_x_df_a"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_does_not_use_electronic_bucket_fallback_for_specific_methanol_subtype(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["electronically_controlled_engine"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me_lgim",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me_lgim"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
+    def test_engine_experience_rule_does_not_use_manufacturer_fallback_for_methanol_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "methanol_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("methanol_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
+    def test_engine_experience_rule_does_not_use_family_fallback_for_ammonia_bucket_from_generic_engine_family(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w_me"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "ammonia_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("ammonia_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
+    def test_engine_experience_rule_sibling_buckets_do_not_match(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["methanol_engine"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "ammonia_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("ammonia_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
+    def test_engine_experience_rule_prefers_descendant_pass_over_bucket_fallback(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["dual_fuel", "man_b_w_me_lgim"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "methanol_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("methanol_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+        self.assertIn("Methanol engine", result["results"][0]["message"])
+
+    def test_engine_experience_rule_family_fallback_message_uses_engine_detail_wording(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["dual_fuel"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "methanol_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("methanol_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertIn("requested engine detail 'Methanol engine'", result["results"][0]["message"])
+
+    def test_engine_experience_rule_manufacturer_fallback_message_uses_engine_detail_wording(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "electronically_controlled_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("electronically_controlled_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK")
+        self.assertIn("requested engine detail 'Electronically controlled engine'", result["results"][0]["message"])
 
     def test_engine_experience_rule_returns_unknown_when_parsed_rows_have_no_engine_evidence(self):
         result = self.analyzer._evaluate_hard_filters(

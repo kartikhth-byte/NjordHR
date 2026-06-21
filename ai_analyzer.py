@@ -3248,6 +3248,94 @@ class AIResumeAnalyzer:
             ],
         }
 
+    def _engine_bucket_parent_map(self):
+        return {
+            "methanol_engine": "dual_fuel",
+            "ammonia_engine": "dual_fuel",
+        }
+
+    def _engine_buckets_containing(self, engine_type):
+        normalized = self._normalize_engine_type(engine_type).replace(" ", "_")
+        if not normalized:
+            return []
+        buckets = []
+        if normalized in self._engine_bucket_roots():
+            buckets.append(normalized)
+        for bucket, roots in self._engine_bucket_roots().items():
+            if bucket == normalized:
+                continue
+            if normalized in roots:
+                buckets.append(bucket)
+                continue
+            for root in roots:
+                if normalized in self._engine_descendants(root):
+                    buckets.append(bucket)
+                    break
+        return sorted(set(buckets), key=lambda bucket: self._engine_bucket_depth(bucket))
+
+    def _engine_bucket_lineage(self, engine_type):
+        normalized = self._normalize_engine_type(engine_type).replace(" ", "_")
+        if not normalized:
+            return []
+        buckets = self._engine_buckets_containing(normalized)
+        if not buckets:
+            return []
+        parent_map = self._engine_bucket_parent_map()
+        metadata = self._engine_type_metadata().get(normalized) or {}
+        preferred_leaf = None
+        fuel_family = metadata.get("fuel_family")
+        if fuel_family == "methanol" and "methanol_engine" in buckets:
+            preferred_leaf = "methanol_engine"
+        elif fuel_family == "ammonia" and "ammonia_engine" in buckets:
+            preferred_leaf = "ammonia_engine"
+        elif metadata.get("dual_fuel") is True and "dual_fuel" in buckets:
+            preferred_leaf = "dual_fuel"
+        elif metadata.get("control_type") in {"electronic", "electronic_common_rail"} and "electronically_controlled_engine" in buckets:
+            preferred_leaf = "electronically_controlled_engine"
+        elif metadata.get("control_type") == "mechanical" and "mechanical_engine" in buckets:
+            preferred_leaf = "mechanical_engine"
+        else:
+            preferred_leaf = max(buckets, key=lambda bucket: self._engine_bucket_depth(bucket))
+
+        lineage = [preferred_leaf]
+        current = parent_map.get(preferred_leaf)
+        while current:
+            lineage.append(current)
+            current = parent_map.get(current)
+        return list(reversed(lineage))
+
+    def _engine_bucket_depth(self, bucket):
+        depth = 0
+        current = self._engine_bucket_parent_map().get(bucket)
+        while current:
+            depth += 1
+            current = self._engine_bucket_parent_map().get(current)
+        return depth
+
+    def _engine_bucket_descendants(self, bucket):
+        normalized = self._normalize_engine_type(bucket).replace(" ", "_")
+        if not normalized:
+            return []
+        descendants = []
+        queue = [
+            child
+            for child, parent in self._engine_bucket_parent_map().items()
+            if parent == normalized
+        ]
+        while queue:
+            current = queue.pop(0)
+            descendants.append(current)
+            queue.extend(
+                child
+                for child, parent in self._engine_bucket_parent_map().items()
+                if parent == current
+            )
+        return descendants
+
+    def _engine_is_fuel_specific_bucket_request(self, engine_type):
+        bucket_lineage = self._engine_bucket_lineage(engine_type)
+        return any(bucket in {"methanol_engine", "ammonia_engine"} for bucket in bucket_lineage)
+
     def _engine_children_map(self):
         children = {}
         for child, parent in self._engine_parent_map().items():
@@ -3557,6 +3645,9 @@ class AIResumeAnalyzer:
             return []
         expected_values = [requested]
         expected_values.extend(self._engine_descendants(requested))
+        for child_bucket in self._engine_bucket_descendants(requested):
+            if child_bucket not in expected_values:
+                expected_values.append(child_bucket)
         for compatible in self._engine_compatibility_expansion_map().get(requested, []):
             if compatible not in expected_values:
                 expected_values.append(compatible)
@@ -3589,6 +3680,8 @@ class AIResumeAnalyzer:
         expected_values = set(self._engine_type_expected_values(requested))
         descendants = set(self._engine_descendants(requested))
         ancestors = list(reversed(self._engine_lineage(requested)))
+        bucket_ancestors = list(reversed(self._engine_bucket_lineage(requested)))
+        fuel_specific_bucket_request = self._engine_is_fuel_specific_bucket_request(requested)
 
         strongest = None
         for candidate in candidate_values:
@@ -3612,7 +3705,11 @@ class AIResumeAnalyzer:
                     "confidence": None,
                     "compatibility_expansion_used": None,
                 }
-            elif candidate in ancestors and not self._engine_is_manufacturer_node(candidate):
+            elif (
+                candidate in ancestors
+                and not self._engine_is_manufacturer_node(candidate)
+                and not fuel_specific_bucket_request
+            ):
                 outcome = {
                     "rank": 3,
                     "decision": "UNKNOWN",
@@ -3622,7 +3719,11 @@ class AIResumeAnalyzer:
                     "confidence": 0.7,
                     "compatibility_expansion_used": None,
                 }
-            elif candidate in ancestors and self._engine_is_manufacturer_node(candidate):
+            elif (
+                candidate in ancestors
+                and self._engine_is_manufacturer_node(candidate)
+                and not fuel_specific_bucket_request
+            ):
                 outcome = {
                     "rank": 2,
                     "decision": "UNKNOWN",
@@ -3630,6 +3731,16 @@ class AIResumeAnalyzer:
                     "match_source": "manufacturer_fallback",
                     "engine_type": candidate,
                     "confidence": 0.6,
+                    "compatibility_expansion_used": None,
+                }
+            elif candidate in bucket_ancestors and candidate != requested:
+                outcome = {
+                    "rank": 3,
+                    "decision": "UNKNOWN",
+                    "reason_code": "ENGINE_EXPERIENCE_FAMILY_FALLBACK",
+                    "match_source": "family_fallback",
+                    "engine_type": candidate,
+                    "confidence": 0.7,
                     "compatibility_expansion_used": None,
                 }
             elif self._engine_bucket_fallback_allowed(requested):
@@ -3681,12 +3792,12 @@ class AIResumeAnalyzer:
             return f"Candidate has {evidence_label} experience matching '{requested_label}'."
         if match_source == "family_fallback":
             return (
-                f"Resume mentions {evidence_label}, but does not specify the requested subtype "
+                f"Resume mentions {evidence_label}, but does not specify the requested engine detail "
                 f"'{requested_label}'. Included as a family-level engine match for recruiter review."
             )
         if match_source == "manufacturer_fallback":
             return (
-                f"Resume mentions {evidence_label}, but does not specify the requested engine family/subtype "
+                f"Resume mentions {evidence_label}, but does not specify the requested engine detail "
                 f"'{requested_label}'. Included as a manufacturer-level engine match for recruiter review."
             )
         return f"Could not determine engine experience for requested filter '{requested_label}'."
