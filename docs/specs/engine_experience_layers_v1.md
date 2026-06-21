@@ -301,7 +301,7 @@ extraction-hardening spec should add stronger context classification.
 - `ME-LGIP` -> `man_b_w_me_lgip`
 - `ME-LGIA` -> `man_b_w_me_lgia`
 - `ME-GIE` -> `man_b_w_me_gie`
-- `MC` / `MC-C` -> `man_b_w_mc`
+- `MC` / `MC-C` / `MAN B&W LMC` -> `man_b_w_mc`
 - bore/stroke model strings such as `S60ME-C`, `K98MC`, and `RT-flex58T-D`
   resolve by longest recognized subtype/model token first
 - `WinGD` -> `wingd`
