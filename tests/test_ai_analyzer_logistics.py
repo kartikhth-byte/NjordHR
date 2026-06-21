@@ -345,6 +345,35 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
                 details = self.analyzer._extract_engine_details_from_text(raw_text)
                 self.assertEqual(details, [])
 
+    def test_extract_engine_details_does_not_cross_sentence_boundary_for_negation(self):
+        cases = [
+            ("Held no formal certifications. Operated ME-GI engines for 18 months.", "man_b_w_me_gi"),
+            ("No prior training noted.\nWorked on RT-flex engines during last contract.", "wartsila_rt_flex"),
+            ("No experience\nMAN B&W", "man_b_w"),
+            ("never operated MC : also operated ME-GI", "man_b_w_me_gi"),
+        ]
+        for raw_text, expected_engine in cases:
+            with self.subTest(raw_text=raw_text):
+                details = self.analyzer._extract_engine_details_from_text(raw_text)
+                self.assertEqual([detail["engine_type"] for detail in details], [expected_engine])
+
+    def test_extract_engine_details_respects_compact_alias_negation_and_sentence_boundaries(self):
+        negated = self.analyzer._extract_engine_details_from_text("no manb&w engine experience")
+        self.assertEqual(negated, [])
+
+        positive = self.analyzer._extract_engine_details_from_text("manb&w")
+        self.assertEqual([detail["engine_type"] for detail in positive], ["man_b_w"])
+
+    def test_extract_engine_details_handles_negated_and_positive_repeat_mentions(self):
+        cases = [
+            ("NO ME-GI. Operated ME-GI.", "man_b_w_me_gi"),
+            ("no man b&w engine. then MAN B&W", "man_b_w"),
+        ]
+        for raw_text, expected_engine in cases:
+            with self.subTest(raw_text=raw_text):
+                details = self.analyzer._extract_engine_details_from_text(raw_text)
+                self.assertEqual([detail["engine_type"] for detail in details], [expected_engine])
+
     def test_extract_engine_experience_constraint_prefers_specific_subtype_over_generic_bucket(self):
         constraint = self.analyzer._extract_engine_experience_constraint(
             "has ME-LGIM methanol engine experience"
