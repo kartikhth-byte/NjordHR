@@ -3024,6 +3024,7 @@ class AIResumeAnalyzer:
 
     def _normalize_engine_type(self, value):
         normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+        normalized = normalized.replace("\r\n", "\n").replace("\r", "\n")
         normalized = unicodedata.normalize("NFKD", normalized)
         normalized = "".join(char for char in normalized if not unicodedata.combining(char))
         normalized = re.sub(r"[‐‑‒–—−]", "-", normalized)
@@ -3031,7 +3032,9 @@ class AIResumeAnalyzer:
         normalized = re.sub(r"\b([a-z])\s*(?:and|\+|&)\s*([a-z])\b", r"\1&\2", normalized)
         normalized = re.sub(r"[™®©]", "", normalized)
         normalized = re.sub(r"[_/]+", " ", normalized)
-        normalized = re.sub(r"\s+", " ", normalized)
+        normalized = re.sub(r"[^\S\n]+", " ", normalized)
+        normalized = re.sub(r" *\n *", "\n", normalized)
+        normalized = re.sub(r"\n+", "\n", normalized)
         return normalized.strip()
 
     def _engine_alias_matches_text(self, normalized_text, alias):
@@ -3051,12 +3054,23 @@ class AIResumeAnalyzer:
             if not self._engine_match_is_negated(normalized_text, match.start()):
                 return True
         compact_alias = re.sub(r"[\s./()&-]+", "", normalized_alias)
-        compact_text = re.sub(r"[\s./()&-]+", "", normalized_text)
+        compact_text, compact_index_map = self._compact_engine_text_with_index_map(normalized_text)
         if len(compact_alias) >= 5 and compact_alias not in {"engine", "engines"}:
             for match in re.finditer(rf"(?<![a-z0-9]){re.escape(compact_alias)}(?![a-z0-9])", compact_text):
-                if not self._engine_match_is_negated(compact_text, match.start()):
+                original_start = compact_index_map[match.start()]
+                if not self._engine_match_is_negated(normalized_text, original_start):
                     return True
         return False
+
+    def _compact_engine_text_with_index_map(self, text):
+        compact_chars = []
+        index_map = []
+        for index, char in enumerate(str(text or "")):
+            if re.match(r"[\s./()&-]", char):
+                continue
+            compact_chars.append(char)
+            index_map.append(index)
+        return "".join(compact_chars), index_map
 
     def _engine_negation_patterns(self):
         return (
@@ -3069,8 +3083,17 @@ class AIResumeAnalyzer:
             r"\bnever\s+operated\b",
         )
 
-    def _engine_match_is_negated(self, text, start_index):
+    def _engine_negation_window(self, text, start_index):
         prefix = str(text or "")[max(0, start_index - 80):start_index]
+        if not prefix:
+            return ""
+        last_boundary = max(prefix.rfind(boundary) for boundary in (".", "!", "?", ";", ":", "\n"))
+        if last_boundary >= 0:
+            prefix = prefix[last_boundary + 1 :]
+        return prefix
+
+    def _engine_match_is_negated(self, text, start_index):
+        prefix = self._engine_negation_window(text, start_index)
         normalized_prefix = self._normalize_engine_type(prefix)
         if not normalized_prefix:
             return False
