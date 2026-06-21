@@ -2729,11 +2729,11 @@ class AIResumeAnalyzer:
                 "B&W",
                 "B and W",
                 "B+W",
-                "MAN B&W LMC",
                 "Everllence B&W",
             ],
             "man_b_w_mc": [
                 "MAN B&W MC",
+                "MAN B&W LMC",
                 "MAN BW MC",
                 "MAN MC",
                 "MC engine",

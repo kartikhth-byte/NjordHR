@@ -325,6 +325,7 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
     def test_extract_engine_details_handles_engine_map_regressions(self):
         cases = [
             ("Everllence B&W", ["man_b_w"]),
+            ("MAN B&W LMC", ["man_b_w_mc"]),
             ("X92DF-HP", ["wingd_x_df_hp"]),
             ("X-DF-P", []),
             ("X-DF-E", []),
