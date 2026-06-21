@@ -344,6 +344,8 @@
                     selectedRankFolder: state?.selected_rank_folder || '',
                     appliedShipType: state?.applied_ship_type || '',
                     experiencedShipType: state?.experienced_ship_type || '',
+                    experienceShipTypeFilter: state?.experience_ship_type_filter || {},
+                    engineExperienceFilter: state?.engine_experience_filter || {},
                     vesselTonnageFilter: state?.vessel_tonnage_filter || {},
                     restoredChain,
                     restoredIndex,
@@ -399,6 +401,13 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         const aiSearchState = window.NjordAiSearchState;
+        const DEFAULT_EXPERIENCE_FILTER_ROW = Object.freeze({
+            family: '',
+            recency_mode: 'any_time',
+            years_back: '',
+            contract_count: '3',
+            minimum_months: '',
+        });
 
         function App() {
             const [activeTab, setActiveTab] = useState('download');
@@ -503,10 +512,13 @@
             const [isDownloadBrowserVerifying, setIsDownloadBrowserVerifying] = useState(false);
             const [rankFolderShipTypes, setRankFolderShipTypes] = useState([]);
             const [selectedSearchShipType, setSelectedSearchShipType] = useState('');
-            const [selectedExperienceShipType, setSelectedExperienceShipType] = useState('');
+            const [configuredEngineFamilies, setConfiguredEngineFamilies] = useState([]);
+            const [experienceShipTypeRows, setExperienceShipTypeRows] = useState([]);
+            const [engineExperienceRows, setEngineExperienceRows] = useState([]);
             const [vesselTonnageMin, setVesselTonnageMin] = useState('');
             const [vesselTonnageMax, setVesselTonnageMax] = useState('');
             const [vesselTonnageUnit, setVesselTonnageUnit] = useState('any');
+            const [vesselTonnageYearsBack, setVesselTonnageYearsBack] = useState('');
             const [aiPrompt, setAiPrompt] = useState('');
             const [analysisResults, setAnalysisResults] = useState(null);
             const [isNeedsReviewCollapsed, setIsNeedsReviewCollapsed] = useState(false);
@@ -998,6 +1010,7 @@
                 fetchManualReviewSummary(authUser);
                 fetchManualReviewRoles(authUser);
                 fetchConfiguredShipTypes();
+                fetchConfiguredEngineFamilies();
             }, [authUser, downloadLog]);
 
             useEffect(() => {
@@ -1964,15 +1977,42 @@
                     if (data.success) {
                         const nextShipTypes = data.ship_types || [];
                         setShipTypes(nextShipTypes);
-                        setSelectedExperienceShipType(prev => (prev && nextShipTypes.includes(prev) ? prev : ''));
+                        setExperienceShipTypeRows(prev => prev.map(row => (
+                            row.family
+                                ? { ...row, family: reconcileFamilyOptionValue(row.family, nextShipTypes) }
+                                : row
+                        )));
                     } else {
                         setShipTypes([]);
-                        setSelectedExperienceShipType('');
+                        setExperienceShipTypeRows(prev => prev.map(row => ({ ...row, family: '' })));
                     }
                 } catch (error) {
                     console.error("Could not fetch configured ship types", error);
                     setShipTypes([]);
-                    setSelectedExperienceShipType('');
+                    setExperienceShipTypeRows(prev => prev.map(row => ({ ...row, family: '' })));
+                }
+            };
+
+            const fetchConfiguredEngineFamilies = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/get_config_engine_families`);
+                    const data = await response.json();
+                    if (data.success) {
+                        const nextFamilies = data.engine_families || [];
+                        setConfiguredEngineFamilies(nextFamilies);
+                        setEngineExperienceRows(prev => prev.map(row => (
+                            row.family
+                                ? { ...row, family: reconcileFamilyOptionValue(row.family, nextFamilies) }
+                                : row
+                        )));
+                    } else {
+                        setConfiguredEngineFamilies([]);
+                        setEngineExperienceRows(prev => prev.map(row => ({ ...row, family: '' })));
+                    }
+                } catch (error) {
+                    console.error("Could not fetch configured engine families", error);
+                    setConfiguredEngineFamilies([]);
+                    setEngineExperienceRows(prev => prev.map(row => ({ ...row, family: '' })));
                 }
             };
 
@@ -2272,7 +2312,7 @@
                         email_intake_failed_folder: nonSecret.email_intake_failed_folder || 'Inbox/NjordHR Failed',
                         email_intake_poll_interval_seconds: String(nonSecret.email_intake_poll_interval_seconds || '60'),
                         outlook_client_id: nonSecret.outlook_client_id || '',
-                        outlook_tenant_id: nonSecret.outlook_tenant_id || 'organizations',
+                        outlook_tenant_id: nonSecret.outlook_tenant_id ?? 'organizations',
                         seajob_username: secretsPlain.seajob_username || '',
                         seajob_password: secretsPlain.seajob_password || '',
                         gemini_api_key: secretsPlain.gemini_api_key || '',
@@ -3536,11 +3576,98 @@
                 return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : NaN;
             };
 
+            const createExperienceFilterRow = (overrides = {}) => ({
+                ...DEFAULT_EXPERIENCE_FILTER_ROW,
+                ...overrides,
+            });
+
+            const normalizeFamilyOptionKey = (value) => String(value || '')
+                .trim()
+                .toLowerCase()
+                .replace(/-/g, '_')
+                .replace(/\s+/g, '_');
+
+            const reconcileFamilyOptionValue = (value, options) => {
+                const requestedKey = normalizeFamilyOptionKey(value);
+                if (!requestedKey) return '';
+                const candidates = Array.isArray(options) ? options : [];
+                const resolved = candidates.find(option => normalizeFamilyOptionKey(option) === requestedKey);
+                return resolved || '';
+            };
+
+            const normalizePositiveIntegerInput = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return null;
+                if (!/^\d+$/.test(text)) return NaN;
+                const parsed = Number.parseInt(text, 10);
+                return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : NaN;
+            };
+
+            const buildExperienceFilterFromRows = ({ rows, familyKey, type }) => {
+                const normalizedItems = [];
+                for (const row of Array.isArray(rows) ? rows : []) {
+                    const family = String(row?.family || '').trim();
+                    if (!family) continue;
+                    const minimumMonths = normalizePositiveIntegerInput(row?.minimum_months);
+                    const yearsBack = row?.recency_mode === 'years_back'
+                        ? normalizePositiveIntegerInput(row?.years_back)
+                        : null;
+                    const contractCount = row?.recency_mode === 'contract_count'
+                        ? normalizePositiveIntegerInput(row?.contract_count)
+                        : null;
+                    if (
+                        Number.isNaN(minimumMonths)
+                        || Number.isNaN(yearsBack)
+                        || Number.isNaN(contractCount)
+                        || (row?.recency_mode === 'years_back' && yearsBack === null)
+                        || (row?.recency_mode === 'contract_count' && contractCount === null)
+                    ) {
+                        return { error: 'Experience filter values must be positive whole numbers.' };
+                    }
+                    normalizedItems.push({
+                        [familyKey]: family,
+                        minimum_months: minimumMonths,
+                        years_back: yearsBack,
+                        contract_count: contractCount,
+                    });
+                }
+                if (!normalizedItems.length) {
+                    return { filter: {} };
+                }
+                return {
+                    filter: {
+                        type,
+                        match_mode: 'any_of',
+                        items: normalizedItems,
+                    },
+                };
+            };
+
+            const summarizeExperienceFilter = ({ filter, familyKey }) => {
+                const items = Array.isArray(filter?.items) ? filter.items : [];
+                if (!items.length) return 'Any';
+                return items.map(item => {
+                    const rawLabel = String(item?.[familyKey] || '');
+                    const label = familyKey === 'engine_family'
+                        ? formatEngineFamilyLabel(rawLabel)
+                        : rawLabel.replace(/_/g, ' ');
+                    const suffix = [];
+                    if (item?.minimum_months) suffix.push(`${item.minimum_months}m+`);
+                    if (item?.years_back) suffix.push(`${item.years_back}y`);
+                    if (item?.contract_count) suffix.push(`${item.contract_count}c`);
+                    return [label, suffix.join(' ')].filter(Boolean).join(' ');
+                }).join(' | ');
+            };
+
             const buildVesselTonnageFilter = () => {
                 const minValue = normalizeTonnageInput(vesselTonnageMin);
                 const maxValue = normalizeTonnageInput(vesselTonnageMax);
+                const yearsBack = normalizePositiveIntegerInput(vesselTonnageYearsBack);
                 if (Number.isNaN(minValue) || Number.isNaN(maxValue)) {
                     return { error: 'Vessel tonnage must be a positive whole number.' };
+                }
+                if (Number.isNaN(yearsBack)) {
+                    return { error: 'Vessel tonnage recency must be a positive whole number.' };
                 }
                 if (minValue === null && maxValue === null) {
                     return { filter: {} };
@@ -3557,6 +3684,7 @@
                         min_value: minValue,
                         max_value: maxValue,
                         unit,
+                        years_back: yearsBack,
                     },
                 };
             };
@@ -3569,12 +3697,135 @@
                     gt_grt: 'GT/GRT',
                     dwt: 'DWT',
                 }[filter.unit || 'any'] || 'Any / unspecified';
+                const recency = filter.years_back ? `, last ${filter.years_back} year${filter.years_back === 1 ? '' : 's'}` : '';
                 if (filter.min_value != null && filter.max_value != null) {
-                    return `${filter.min_value.toLocaleString()}-${filter.max_value.toLocaleString()} (${unitLabel})`;
+                    return `${filter.min_value.toLocaleString()}-${filter.max_value.toLocaleString()} (${unitLabel}${recency})`;
                 }
-                if (filter.min_value != null) return `>= ${filter.min_value.toLocaleString()} (${unitLabel})`;
-                return `<= ${filter.max_value.toLocaleString()} (${unitLabel})`;
+                if (filter.min_value != null) return `>= ${filter.min_value.toLocaleString()} (${unitLabel}${recency})`;
+                return `<= ${filter.max_value.toLocaleString()} (${unitLabel}${recency})`;
             };
+
+            const appendExperienceFilterRow = (setter) => {
+                setter(prev => [...prev, createExperienceFilterRow()]);
+                invalidateRefinementForFilterChange();
+            };
+
+            const removeExperienceFilterRow = (setter, index) => {
+                setter(prev => prev.filter((_, rowIndex) => rowIndex !== index));
+                invalidateRefinementForFilterChange();
+            };
+
+            const updateExperienceFilterRow = (setter, index, updater) => {
+                setter(prev => prev.map((row, rowIndex) => (
+                    rowIndex === index ? updater(row) : row
+                )));
+                invalidateRefinementForFilterChange();
+            };
+
+            const renderExperienceFilterRows = ({
+                rows,
+                setter,
+                options,
+                familyLabel,
+                familyPlaceholder,
+                familyInputIdPrefix,
+                locked,
+                optionLabelFormatter,
+            }) => (
+                <div className="space-y-3">
+                    {rows.map((row, index) => (
+                        <div key={`${familyInputIdPrefix}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                                <div className="md:col-span-4">
+                                    <label htmlFor={`${familyInputIdPrefix}-family-${index}`} className="block text-xs font-medium text-gray-600">{familyLabel}</label>
+                                    <select
+                                        id={`${familyInputIdPrefix}-family-${index}`}
+                                        value={row.family}
+                                        onChange={e => updateExperienceFilterRow(setter, index, current => ({ ...current, family: e.target.value }))}
+                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                        disabled={locked}
+                                    >
+                                        <option value="">{familyPlaceholder}</option>
+                                        {options.map(option => (
+                                            <option key={option} value={option}>
+                                                {optionLabelFormatter ? optionLabelFormatter(option) : option}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="md:col-span-3">
+                                    <label htmlFor={`${familyInputIdPrefix}-recency-${index}`} className="block text-xs font-medium text-gray-600">Recency</label>
+                                    <select
+                                        id={`${familyInputIdPrefix}-recency-${index}`}
+                                        value={row.recency_mode}
+                                        onChange={e => updateExperienceFilterRow(setter, index, current => ({ ...current, recency_mode: e.target.value }))}
+                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                        disabled={locked}
+                                    >
+                                        <option value="any_time">Any time</option>
+                                        <option value="years_back">Within last N years</option>
+                                        <option value="contract_count">Across last N contracts</option>
+                                    </select>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label htmlFor={`${familyInputIdPrefix}-window-${index}`} className="block text-xs font-medium text-gray-600">
+                                        {row.recency_mode === 'contract_count' ? 'Contracts' : 'Years'}
+                                    </label>
+                                    <input
+                                        id={`${familyInputIdPrefix}-window-${index}`}
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="1"
+                                        step="1"
+                                        value={row.recency_mode === 'contract_count' ? row.contract_count : row.years_back}
+                                        onChange={e => updateExperienceFilterRow(setter, index, current => (
+                                            row.recency_mode === 'contract_count'
+                                                ? { ...current, contract_count: e.target.value }
+                                                : { ...current, years_back: e.target.value }
+                                        ))}
+                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                        placeholder={row.recency_mode === 'contract_count' ? '3' : '2'}
+                                        disabled={locked || row.recency_mode === 'any_time'}
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label htmlFor={`${familyInputIdPrefix}-months-${index}`} className="block text-xs font-medium text-gray-600">Min months</label>
+                                    <input
+                                        id={`${familyInputIdPrefix}-months-${index}`}
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="1"
+                                        step="1"
+                                        value={row.minimum_months}
+                                        onChange={e => updateExperienceFilterRow(setter, index, current => ({ ...current, minimum_months: e.target.value }))}
+                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                        placeholder="Optional"
+                                        disabled={locked}
+                                    />
+                                </div>
+                                <div className="md:col-span-1 flex items-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => removeExperienceFilterRow(setter, index)}
+                                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                                        disabled={locked}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    <button
+                        type="button"
+                        onClick={() => appendExperienceFilterRow(setter)}
+                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:bg-slate-100 disabled:text-slate-400"
+                        disabled={locked}
+                    >
+                        Add row
+                    </button>
+                </div>
+            );
 
             const startAnalysis = async ({
                 mode = 'root',
@@ -3660,12 +3911,34 @@
                         }
                     } else {
                         const selectedId = selectedRankFolderId();
+                        const experienceShipTypeResult = buildExperienceFilterFromRows({
+                            rows: experienceShipTypeRows,
+                            familyKey: 'ship_family',
+                            type: 'experience_ship_type',
+                        });
+                        const engineExperienceResult = buildExperienceFilterFromRows({
+                            rows: engineExperienceRows,
+                            familyKey: 'engine_family',
+                            type: 'engine_experience',
+                        });
+                        if (experienceShipTypeResult.error || engineExperienceResult.error) {
+                            preserveCompletedResultsAfterFailure();
+                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                            setIsAnalyzeLoading(false);
+                            handleSendMessage('error', experienceShipTypeResult.error || engineExperienceResult.error);
+                            return;
+                        }
                         if (selectedId) {
                             params.set('rank_folder_id', selectedId);
                         }
                         params.set('rank_folder', selectedRankFolder);
                         params.set('applied_ship_type', selectedSearchShipType);
-                        params.set('experienced_ship_type', selectedExperienceShipType);
+                        if (experienceShipTypeResult.filter && Array.isArray(experienceShipTypeResult.filter.items) && experienceShipTypeResult.filter.items.length) {
+                            params.set('experience_ship_type_filter', JSON.stringify(experienceShipTypeResult.filter));
+                        }
+                        if (engineExperienceResult.filter && Array.isArray(engineExperienceResult.filter.items) && engineExperienceResult.filter.items.length) {
+                            params.set('engine_experience_filter', JSON.stringify(engineExperienceResult.filter));
+                        }
                         const tonnageResult = buildVesselTonnageFilter();
                         if (tonnageResult.error) {
                             preserveCompletedResultsAfterFailure();
@@ -4007,7 +4280,16 @@
                     prompt: aiPrompt,
                     selected_rank_folder: selectedRankFolder,
                     applied_ship_type: selectedSearchShipType,
-                    experienced_ship_type: selectedExperienceShipType,
+                    experience_ship_type_filter: buildExperienceFilterFromRows({
+                        rows: experienceShipTypeRows,
+                        familyKey: 'ship_family',
+                        type: 'experience_ship_type',
+                    }).filter || {},
+                    engine_experience_filter: buildExperienceFilterFromRows({
+                        rows: engineExperienceRows,
+                        familyKey: 'engine_family',
+                        type: 'engine_experience',
+                    }).filter || {},
                     vessel_tonnage_filter: buildVesselTonnageFilter().filter || {},
                     refinement_state: refinementState,
                     active_search_step_index: activeSearchStepIndex,
@@ -4055,10 +4337,39 @@
                     const state = draft?.search_state;
                     if (!response.ok || !data.success || !state) return;
                     const restored = aiSearchState.deriveRecoveredSearchState(state);
+                    const restoredExperienceItems = Array.isArray(restored.experienceShipTypeFilter?.items)
+                        ? restored.experienceShipTypeFilter.items
+                        : [];
+                    const restoredEngineItems = Array.isArray(restored.engineExperienceFilter?.items)
+                        ? restored.engineExperienceFilter.items
+                        : [];
                     setAiPrompt(restored.prompt);
                     setSelectedRankFolder(restored.selectedRankFolder);
                     setSelectedSearchShipType(restored.appliedShipType);
-                    setSelectedExperienceShipType(restored.experiencedShipType);
+                    setExperienceShipTypeRows(
+                        restoredExperienceItems.length
+                            ? restoredExperienceItems.map(item => createExperienceFilterRow({
+                                family: item?.ship_family || '',
+                                recency_mode: item?.years_back ? 'years_back' : (item?.contract_count ? 'contract_count' : 'any_time'),
+                                years_back: item?.years_back != null ? String(item.years_back) : '',
+                                contract_count: item?.contract_count != null ? String(item.contract_count) : '3',
+                                minimum_months: item?.minimum_months != null ? String(item.minimum_months) : '',
+                            }))
+                            : (
+                                restored.experiencedShipType
+                                    ? [createExperienceFilterRow({ family: reconcileFamilyOptionValue(restored.experiencedShipType, shipTypes) || restored.experiencedShipType })]
+                                    : []
+                            )
+                    );
+                    setEngineExperienceRows(
+                        restoredEngineItems.map(item => createExperienceFilterRow({
+                            family: item?.engine_family || '',
+                            recency_mode: item?.years_back ? 'years_back' : (item?.contract_count ? 'contract_count' : 'any_time'),
+                            years_back: item?.years_back != null ? String(item.years_back) : '',
+                            contract_count: item?.contract_count != null ? String(item.contract_count) : '3',
+                            minimum_months: item?.minimum_months != null ? String(item.minimum_months) : '',
+                        }))
+                    );
                     setVesselTonnageMin(
                         restored.vesselTonnageFilter?.min_value != null
                             ? String(restored.vesselTonnageFilter.min_value)
@@ -4070,6 +4381,11 @@
                             : ''
                     );
                     setVesselTonnageUnit(restored.vesselTonnageFilter?.unit || 'any');
+                    setVesselTonnageYearsBack(
+                        restored.vesselTonnageFilter?.years_back != null
+                            ? String(restored.vesselTonnageFilter.years_back)
+                            : ''
+                    );
                     setAnalysisResults(restored.restoredResults);
                     analysisResultsRef.current = restored.restoredResults;
                     setSearchChain(restored.restoredChain);
@@ -4171,7 +4487,8 @@
                 return () => clearTimeout(timer);
             }, [
                 authUser, activeTab, aiPrompt, selectedRankFolder, selectedSearchShipType,
-                selectedExperienceShipType, vesselTonnageMin, vesselTonnageMax, vesselTonnageUnit,
+                experienceShipTypeRows, engineExperienceRows,
+                vesselTonnageMin, vesselTonnageMax, vesselTonnageUnit, vesselTonnageYearsBack,
                 refinementState, refinementAvailability,
                 analysisResults, searchChain, activeSearchStepIndex,
             ]);
@@ -4338,29 +4655,138 @@
                 );
             };
 
-            const renderShipTypeEvidence = (match) => {
-                const applied = Array.isArray(match.applied_ship_types) ? match.applied_ship_types.filter(Boolean) : [];
-                const experienced = Array.isArray(match.experienced_ship_types) ? match.experienced_ship_types.filter(Boolean) : [];
-                if (applied.length === 0 && experienced.length === 0) return null;
-                return (
-                    <div className="mt-2 space-y-1">
-                        {applied.length > 0 && (
-                            <p className="text-xs text-slate-500">Applied Ship Type: {applied.join(', ')}</p>
-                        )}
-                        {experienced.length > 0 && (
-                            <p className="text-xs text-slate-500">Experienced Ship Type: {experienced.join(', ')}</p>
-                        )}
-                    </div>
-                );
+            const normalizeReasonDisplayLine = (value) => String(value || '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/[.;\s]+$/g, '')
+                .toLowerCase();
+
+            const humanizeReasonCode = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return '';
+                return text
+                    .toLowerCase()
+                    .replace(/_/g, ' ')
+                    .replace(/\bapi\b/g, 'API')
+                    .replace(/\bcoc\b/g, 'CoC')
+                    .replace(/\bstcw\b/g, 'STCW')
+                    .trim();
             };
 
-            const renderDefaultInsights = (match) => {
+            const ENGINE_FAMILY_LABELS = {
+                man: 'MAN / Everllence',
+                man_b_w: 'MAN B&W',
+                man_b_w_mc: 'MAN B&W MC',
+                man_b_w_me: 'MAN B&W ME',
+                man_b_w_me_b: 'MAN B&W ME-B',
+                man_b_w_me_c: 'MAN B&W ME-C',
+                man_b_w_me_gi: 'MAN B&W ME-GI',
+                man_b_w_me_c_gi: 'MAN B&W ME-C-GI',
+                man_b_w_me_ga: 'MAN B&W ME-GA',
+                man_b_w_me_lgi: 'MAN B&W ME-LGI',
+                man_b_w_me_lgim: 'MAN B&W ME-LGIM',
+                man_b_w_me_lgip: 'MAN B&W ME-LGIP',
+                man_b_w_me_lgia: 'MAN B&W ME-LGIA',
+                man_b_w_me_gie: 'MAN B&W ME-GIE',
+                wingd: 'WinGD',
+                wingd_x_df: 'WinGD X-DF',
+                wingd_x_df_m_e: 'WinGD X-DF-M/E',
+                wingd_x_df_a: 'WinGD X-DF-A',
+                wingd_x_df_hp: 'WinGD X-DF-HP',
+                wingd_x_engines: 'WinGD X engines',
+                wartsila_rta: 'Wartsila / Sulzer RTA',
+                wartsila_dual_fuel: 'Wartsila dual fuel',
+                wartsila_rt_flex: 'Wartsila / Sulzer RT-flex',
+                wartsila: 'Wartsila',
+                sulzer: 'Sulzer',
+                mak: 'MaK',
+                mitsubishi: 'Mitsubishi',
+                mitsubishi_uec: 'Mitsubishi UEC',
+                mitsubishi_uec_lsii: 'Mitsubishi UEC-LSII',
+                mitsubishi_uec_lse: 'Mitsubishi UEC-LSE',
+                mitsubishi_uec_lsh: 'Mitsubishi UEC-LSH',
+                mitsubishi_uec_lsj: 'Mitsubishi UEC-LSJ',
+                yanmar: 'Yanmar',
+                bergen: 'Bergen',
+                caterpillar: 'Caterpillar',
+                pielstick: 'Pielstick',
+                himsen: 'Himsen',
+                daihatsu: 'Daihatsu',
+                niigata: 'Niigata',
+                doosan: 'Doosan',
+                mtu: 'MTU',
+                detroit_diesel: 'Detroit Diesel',
+                electronically_controlled_engine: 'Electronically controlled engine',
+                mechanical_engine: 'Mechanical engine',
+                dual_fuel: 'Dual fuel',
+                methanol_engine: 'Methanol engine',
+                ammonia_engine: 'Ammonia engine',
+            };
+
+            const HARD_FILTER_REASON_PRESENTERS = [
+                { prefix: 'PASSPORT_', label: 'Passport', group: 'matchedFilters' },
+                { prefix: 'VESSEL_TONNAGE_', label: 'Tonnage', group: 'matchedFilters' },
+                { prefix: 'EXPERIENCE_SHIP_TYPE_', label: 'Experienced ship type', group: 'matchedFilters' },
+                { prefix: 'APPLIED_SHIP_TYPE_', label: 'Applied ship type', group: 'matchedFilters' },
+                { prefix: 'RANK_DURATION_', label: 'Rank duration', group: 'matchedFilters' },
+                { prefix: 'RECENT_CONTRACT_', label: 'Contract recency', group: 'matchedFilters' },
+                { prefix: 'ENGINE_EXPERIENCE_', label: 'Engine experience', group: 'matchedFilters' },
+                { prefix: 'ENGINE_VESSEL_EXPERIENCE_', label: 'Engine + vessel experience', group: 'matchedFilters' },
+                { prefix: 'US_VISA_', label: 'US visa', group: 'matchedFilters' },
+                { prefix: 'SCHENGEN_VISA_', label: 'Schengen visa', group: 'matchedFilters' },
+                { prefix: 'AUSTRALIA_VISA_', label: 'Australia visa', group: 'matchedFilters' },
+                { prefix: 'STCW_', label: 'STCW', group: 'matchedFilters' },
+                { prefix: 'CERTIFICATE_', label: 'Certificate', group: 'matchedFilters' },
+                { prefix: 'RANK_MATCH_', label: 'Rank match', group: 'matchedFilters' },
+                { prefix: 'AGE_', label: 'Age', group: 'matchedFilters' },
+            ];
+
+            const REASON_GROUP_META = {
+                matchedFilters: { heading: null, itemClass: 'text-xs text-slate-500' },
+                recruiterChecks: { heading: 'Default Recruiter Checks', itemClass: 'text-xs text-slate-500' },
+                context: { heading: 'Resume Context', itemClass: 'text-xs text-slate-500' },
+                primary: { heading: null, itemClass: 'text-sm text-gray-700' },
+            };
+
+            const splitReasonIntoDisplayLines = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return [];
+                return text
+                    .split(/\s*;\s*/g)
+                    .map(part => part.trim())
+                    .filter(Boolean);
+            };
+
+            const formatEngineFamilyLabel = (value, rawMention = '') => {
+                const key = normalizeFamilyOptionKey(value);
+                if (!key) return String(rawMention || '').trim() || '';
+                return ENGINE_FAMILY_LABELS[key] || String(rawMention || '').trim() || String(value || '').replace(/_/g, ' ');
+            };
+
+            const buildDefaultInsightLines = (match, options = {}) => {
                 const insights = match?.default_insights || {};
                 const lines = [];
-                if (typeof insights.current_rank_months_total === 'number') {
+                if (!options.suppressTonnageSummary) {
+                    if (typeof insights.best_vessel_tonnage_value === 'number') {
+                        const unit = String(insights.best_vessel_tonnage_unit || 'unspecified').toUpperCase();
+                        lines.push(`Vessel tonnage evidence: ${insights.best_vessel_tonnage_value.toLocaleString()} ${unit}`);
+                    } else if (typeof insights.max_vessel_tonnage === 'number') {
+                        const minValue = typeof insights.min_vessel_tonnage === 'number'
+                            ? insights.min_vessel_tonnage
+                            : insights.max_vessel_tonnage;
+                        if (minValue === insights.max_vessel_tonnage) {
+                            lines.push(`Vessel tonnage evidence: ${insights.max_vessel_tonnage.toLocaleString()}`);
+                        } else {
+                            lines.push(
+                                `Vessel tonnage range in resume: ${minValue.toLocaleString()}-${insights.max_vessel_tonnage.toLocaleString()}`
+                            );
+                        }
+                    }
+                }
+                if (!options.suppressCurrentRankSummary && typeof insights.current_rank_months_total === 'number') {
                     lines.push(`Months in current rank: ${insights.current_rank_months_total}`);
                 }
-                if (typeof insights.has_contract_gap_over_6_months === 'boolean') {
+                if (!options.suppressContractGapSummary && typeof insights.has_contract_gap_over_6_months === 'boolean') {
                     if (insights.has_contract_gap_over_6_months) {
                         const approxMonths = typeof insights.max_contract_gap_days === 'number'
                             ? Math.max(1, Math.ceil(insights.max_contract_gap_days / 30))
@@ -4377,26 +4803,141 @@
                         lines.push('Gap > 6 months: No');
                     }
                 }
-                if (lines.length === 0) return null;
+                return lines;
+            };
+
+            const buildShipTypeEvidenceLines = (match, options = {}) => {
+                const applied = Array.isArray(match.applied_ship_types) ? match.applied_ship_types.filter(Boolean) : [];
+                const experienced = Array.isArray(match.experienced_ship_types) ? match.experienced_ship_types.filter(Boolean) : [];
+                const lines = [];
+                if (applied.length > 0 && !options.suppressAppliedShipTypes) {
+                    lines.push(`Applied Ship Type: ${applied.join(', ')}`);
+                }
+                if (experienced.length > 0 && !options.suppressExperiencedShipTypes) {
+                    lines.push(`Experienced Ship Type: ${experienced.join(', ')}`);
+                }
+                return lines;
+            };
+
+            const getHardFilterReasonPresentation = (item) => {
+                const message = String(item?.message || '').trim();
+                const code = String(item?.reason_code || '').trim();
+                if (!message) return null;
+                const presenter = HARD_FILTER_REASON_PRESENTERS.find(entry => code.startsWith(entry.prefix));
+                if (presenter) {
+                    return {
+                        group: presenter.group,
+                        line: `${presenter.label}: ${message}`,
+                    };
+                }
+                return {
+                    group: 'matchedFilters',
+                    line: code ? `${humanizeReasonCode(code)}: ${message}` : message,
+                };
+            };
+
+            const dedupeDisplayLines = (lines, sharedSeen = null) => {
+                const seen = sharedSeen || new Set();
+                return lines.filter(line => {
+                    const normalized = normalizeReasonDisplayLine(line);
+                    if (!normalized || seen.has(normalized)) return false;
+                    seen.add(normalized);
+                    return true;
+                });
+            };
+
+            const buildReasonDisplayModel = (rawMatch) => {
+                const match = rawMatch?.reason !== undefined
+                    ? rawMatch
+                    : { ...rawMatch, reason: rawMatch?.ai_match_reason || '' };
+                const hardFilterReasonItems = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const rawHardFilterLines = hardFilterReasonItems
+                    .map(item => String(item?.message || '').trim())
+                    .filter(Boolean);
+                const presentedHardFilterLines = hardFilterReasonItems
+                    .map(getHardFilterReasonPresentation)
+                    .filter(Boolean);
+                const hardFilterCodes = new Set(hardFilterReasonItems.map(item => String(item?.reason_code || '').trim()).filter(Boolean));
+                const hardFilterLineKeys = new Set([
+                    ...rawHardFilterLines.map(normalizeReasonDisplayLine),
+                    ...presentedHardFilterLines.map(entry => normalizeReasonDisplayLine(entry.line)),
+                ]);
+                const primaryReasonLines = splitReasonIntoDisplayLines(match?.reason).filter(line => {
+                    const normalized = normalizeReasonDisplayLine(line);
+                    return normalized && !hardFilterLineKeys.has(normalized);
+                });
+                const hasTonnageFilter = Array.from(hardFilterCodes).some(code => code.startsWith('VESSEL_TONNAGE_'));
+                const hasExperiencedShipTypeFilter = Array.from(hardFilterCodes).some(code => code.startsWith('EXPERIENCE_SHIP_TYPE_'));
+                const hasAppliedShipTypeFilter = Array.from(hardFilterCodes).some(code => code.startsWith('APPLIED_SHIP_TYPE_'));
+                const supplementaryInsightLines = buildDefaultInsightLines(match, {
+                    suppressTonnageSummary: hasTonnageFilter,
+                });
+                const shipTypeEvidenceLines = buildShipTypeEvidenceLines(match, {
+                    suppressExperiencedShipTypes: hasExperiencedShipTypeFilter,
+                    suppressAppliedShipTypes: hasAppliedShipTypeFilter,
+                });
+                const seen = new Set();
+                const matchedFilterLines = dedupeDisplayLines(
+                    presentedHardFilterLines
+                        .filter(entry => entry.group === 'matchedFilters')
+                        .map(entry => entry.line),
+                    seen,
+                );
+                const recruiterCheckLines = dedupeDisplayLines(supplementaryInsightLines, seen);
+                const contextLines = dedupeDisplayLines(shipTypeEvidenceLines, seen);
+                return {
+                    primary: dedupeDisplayLines(primaryReasonLines, seen),
+                    matchedFilters: matchedFilterLines,
+                    recruiterChecks: recruiterCheckLines,
+                    context: contextLines,
+                };
+            };
+
+            const buildReasonDisplaySummary = (rawMatch) => {
+                const formatted = buildReasonDisplayModel(rawMatch);
+                return [
+                    ...formatted.primary,
+                    ...formatted.matchedFilters,
+                    ...formatted.recruiterChecks,
+                    ...formatted.context,
+                ].join('\n');
+            };
+
+            const renderReasonGroup = (groupKey, lines) => {
+                if (!Array.isArray(lines) || lines.length === 0) return null;
+                const meta = REASON_GROUP_META[groupKey] || REASON_GROUP_META.context;
                 return (
-                    <div className="mt-2 space-y-1">
+                    <div className="space-y-1">
+                        {meta.heading && (
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{meta.heading}</p>
+                        )}
                         {lines.map((line, index) => (
-                            <p key={index} className="text-xs text-slate-500">{line}</p>
+                            <p key={`${groupKey}-${index}`} className={meta.itemClass}>{line}</p>
                         ))}
                     </div>
                 );
             };
 
-            const renderHardFilterReasons = (match) => {
-                const mainReason = String(match?.reason || '').trim();
-                const reasons = (Array.isArray(match.hard_filter_reasons) ? match.hard_filter_reasons : [])
-                    .filter(item => String(item?.message || '').trim() && String(item?.message || '').trim() !== mainReason);
-                if (reasons.length === 0) return null;
+            const renderFormattedReasonBlock = (rawMatch) => {
+                const match = rawMatch?.reason !== undefined
+                    ? rawMatch
+                    : { ...rawMatch, reason: rawMatch?.ai_match_reason || '' };
+                const formatted = buildReasonDisplayModel(match);
+                const primaryLines = formatted.primary;
+                const matchedFilterLines = formatted.matchedFilters;
+                const recruiterCheckLines = formatted.recruiterChecks;
+                const contextLines = formatted.context;
+                if (primaryLines.length === 0 && matchedFilterLines.length === 0 && recruiterCheckLines.length === 0 && contextLines.length === 0) {
+                    return match?.detail_available_after_recovery === false
+                        ? <p>Result summary restored. Run a new search to refresh detailed evidence.</p>
+                        : null;
+                }
                 return (
-                    <div className="mt-2 space-y-1">
-                        {reasons.map((item, index) => (
-                            <p key={index} className="text-xs text-slate-500">{item.message}</p>
-                        ))}
+                    <div className="space-y-2">
+                        {renderReasonGroup('primary', primaryLines)}
+                        {renderReasonGroup('matchedFilters', matchedFilterLines)}
+                        {renderReasonGroup('recruiterChecks', recruiterCheckLines)}
+                        {renderReasonGroup('context', contextLines)}
                     </div>
                 );
             };
@@ -5202,8 +5743,8 @@
                                                             {row.mobile_no}
                                                         </td>
                                                         <td className="px-4 py-3">
-                                                            <div className="truncate-reason" title={row.ai_match_reason}>
-                                                                {row.ai_match_reason}
+                                                            <div className="truncate-reason" title={buildReasonDisplaySummary(row)}>
+                                                                {buildReasonDisplaySummary(row) || '-'}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 whitespace-nowrap">
@@ -5350,7 +5891,9 @@
                                         </div>
                                         <div>
                                             <p className="text-xs uppercase text-gray-500">Match Reason</p>
-                                            <p className="text-gray-700">{drawerCandidate.ai_match_reason || '-'}</p>
+                                            <div className="mt-1">
+                                                {renderFormattedReasonBlock(drawerCandidate)}
+                                            </div>
                                         </div>
 
                                         <div>
@@ -7344,26 +7887,41 @@
                                             <p className="mt-1 text-xs text-gray-500">Uses ship type captured from the Seajobs download filter, not resume-derived vessel experience.</p>
                                         </div>
                                         <div>
-                                            <label htmlFor="experienceShipType" className="block text-sm font-medium text-gray-700 mb-1">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Experienced Ship Type Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
                                             </label>
-                                            <select
-                                                id="experienceShipType"
-                                                value={selectedExperienceShipType}
-                                                onChange={e => { setSelectedExperienceShipType(e.target.value); invalidateRefinementForFilterChange(); }}
-                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
-                                                disabled={refinementMode}
-                                            >
-                                                <option value="">Any experienced ship type</option>
-                                                {shipTypes.map(shipType => <option key={shipType} value={shipType}>{shipType}</option>)}
-                                            </select>
+                                            {renderExperienceFilterRows({
+                                                rows: experienceShipTypeRows,
+                                                setter: setExperienceShipTypeRows,
+                                                options: shipTypes,
+                                                familyLabel: 'Ship type',
+                                                familyPlaceholder: 'Any experienced ship type',
+                                                familyInputIdPrefix: 'experienceShipType',
+                                                locked: refinementMode,
+                                            })}
                                             <p className="mt-1 text-xs text-gray-500">Derived conservatively from resume vessel references. Missing or unclear evidence is treated as needs review.</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Engine Experience Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
+                                            {renderExperienceFilterRows({
+                                                rows: engineExperienceRows,
+                                                setter: setEngineExperienceRows,
+                                                options: configuredEngineFamilies,
+                                                familyLabel: 'Engine family',
+                                                familyPlaceholder: 'Any engine family',
+                                                familyInputIdPrefix: 'engineExperience',
+                                                locked: refinementMode,
+                                                optionLabelFormatter: formatEngineFamilyLabel,
+                                            })}
+                                            <p className="mt-1 text-xs text-gray-500">Matches structured engine evidence from Seamen Experience Details and related extracted resume facts.</p>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Vessel Tonnage Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
                                             </label>
-                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                                                 <div>
                                                     <label htmlFor="vesselTonnageMin" className="block text-xs font-medium text-gray-600">Minimum</label>
                                                     <input
@@ -7408,6 +7966,21 @@
                                                         <option value="gt_grt">GT/GRT only</option>
                                                         <option value="dwt">DWT only</option>
                                                     </select>
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="vesselTonnageYearsBack" className="block text-xs font-medium text-gray-600">Within last N years</label>
+                                                    <input
+                                                        id="vesselTonnageYearsBack"
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        min="1"
+                                                        step="1"
+                                                        value={vesselTonnageYearsBack}
+                                                        onChange={e => { setVesselTonnageYearsBack(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        placeholder="Optional"
+                                                        disabled={refinementMode}
+                                                    />
                                                 </div>
                                             </div>
                                             <p className="mt-1 text-xs text-gray-500">
@@ -7718,7 +8291,7 @@
                                                                         </td>
                                                                         <td className="px-6 py-4 text-sm">{getConfidenceBadge(match.confidence)}</td>
                                                                         <td className="px-6 py-4 text-sm text-gray-500">
-                                                                            <p>{match.reason || (match.detail_available_after_recovery === false ? 'Result summary restored. Run a new search to refresh detailed evidence.' : '')}</p>
+                                                                            {renderFormattedReasonBlock(match)}
                                                                             {match.lineage_warning_codes?.includes('EARLIER_CONDITIONS_NOT_RECERTIFIED') && (
                                                                                 <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
                                                                                     Earlier conditions were not re-certified against this changed resume.
@@ -7731,9 +8304,6 @@
                                                                                     </span>
                                                                                 </div>
                                                                             )}
-                                                                            {renderDefaultInsights(match)}
-                                                                            {renderShipTypeEvidence(match)}
-                                                                            {renderHardFilterReasons(match)}
                                                                         </td>
                                                                     </tr>
                                                                 ))}
@@ -7772,7 +8342,7 @@
                                                                                    className="text-sm font-medium text-blue-600 hover:underline">
                                                                                     {match.filename}
                                                                                 </a>
-                                                                                <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
+                                                                                <div className="mt-1">{renderFormattedReasonBlock(match)}</div>
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
                                                                                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
                                                                                         {getReviewPathLabel(match.review_path_type)}
@@ -7801,9 +8371,6 @@
                                                                                 {match.dob && (
                                                                                     <p className="text-xs text-slate-500 mt-2">DOB: {match.dob}</p>
                                                                                 )}
-                                                                                {renderDefaultInsights(match)}
-                                                                                {renderShipTypeEvidence(match)}
-                                                                                {renderHardFilterReasons(match)}
                                                                             </div>
                                                                             <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
                                                                                 {match.hard_filter_decision}
@@ -7835,10 +8402,7 @@
                                                                            className="text-sm font-medium text-blue-600 hover:underline">
                                                                             {match.filename}
                                                                         </a>
-                                                                        <p className="text-xs text-gray-600 mt-1">{match.reason}</p>
-                                                                        {renderDefaultInsights(match)}
-                                                                        {renderShipTypeEvidence(match)}
-                                                                        {renderHardFilterReasons(match)}
+                                                                        <div className="mt-1">{renderFormattedReasonBlock(match)}</div>
                                                                     </div>
                                                                     {getConfidenceBadge(match.confidence)}
                                                                 </div>
@@ -7919,7 +8483,8 @@
                                     <p><span className="font-medium">New prompt:</span> {pendingRefinementConfirmation.prompt}</p>
                                     <p className="mt-1"><span className="font-medium">Rank:</span> {pendingRefinementConfirmation.preflight.search_context?.rank_folder || selectedRankFolder}</p>
                                     <p className="mt-1"><span className="font-medium">Applied ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.applied_ship_type || 'Any'}</p>
-                                    <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.experienced_ship_type || 'Any'}</p>
+                                    <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.experience_ship_type_filter || {}, familyKey: 'ship_family' })}</p>
+                                    <p className="mt-1"><span className="font-medium">Engine experience:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.engine_experience_filter || {}, familyKey: 'engine_family' })}</p>
                                     <p className="mt-1"><span className="font-medium">Vessel tonnage:</span> {vesselTonnageSummary(pendingRefinementConfirmation.preflight.search_context?.vessel_tonnage_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Next step:</span> Refinement {searchChain.length}</p>
                                 </div>

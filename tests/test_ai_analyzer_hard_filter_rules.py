@@ -689,6 +689,63 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
 
+    def test_engine_experience_rule_matches_specific_subtype_for_generic_methanol_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w_me_lgim"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "methanol_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("methanol_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
+    def test_engine_experience_rule_matches_specific_subtype_for_generic_ammonia_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd_x_df_a"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "ammonia_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("ammonia_engine"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
+    def test_engine_experience_rule_matches_generic_man_b_w_family(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w_mc"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
     def test_engine_experience_rule_fails_when_family_missing(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -707,6 +764,277 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+        self.assertIn("Mitsubishi UEC", result["results"][0]["message"])
+        self.assertNotIn("[", result["results"][0]["message"])
+
+    def test_engine_experience_rule_uses_family_fallback_for_generic_man_b_w(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_uses_family_fallback_for_wingd_family_only_evidence(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd_x_engines"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "wingd_x_df",
+                        "expected_values": self.analyzer._engine_type_expected_values("wingd_x_df"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_uses_manufacturer_fallback_for_wingd_manufacturer_only_evidence(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "wingd_x_df",
+                        "expected_values": self.analyzer._engine_type_expected_values("wingd_x_df"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.6)
+
+    def test_engine_experience_rule_uses_family_fallback_for_man_b_w_dual_fuel_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "dual_fuel",
+                        "expected_values": self.analyzer._engine_type_expected_values("dual_fuel"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_uses_family_fallback_for_dual_fuel_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd_x_engines"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "dual_fuel",
+                        "expected_values": self.analyzer._engine_type_expected_values("dual_fuel"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_returns_unknown_when_parsed_rows_have_no_engine_evidence(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": [],
+                    "service_rows": [
+                        {"engine_types": [], "snippet": "Chief Engineer / Product Tanker 7463"},
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": None},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me"),
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED")
+
+    def test_engine_experience_rule_returns_unknown_when_dated_rows_have_no_engine_evidence(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "engine_types": [],
+                        }
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me"),
+                        "min_months": 3,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED")
+
+    def test_engine_experience_rule_uses_manufacturer_only_fallback_for_electronic_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["wingd"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "electronically_controlled_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("electronically_controlled_engine"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.6)
+
+    def test_engine_experience_rule_uses_family_fallback_for_electronic_bucket(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "electronically_controlled_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("electronically_controlled_engine"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["confidence"], 0.7)
+
+    def test_engine_experience_rule_does_not_treat_sibling_dual_fuel_subtypes_as_fallback_match(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["man_b_w_me_ga"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me_gi",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me_gi"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
+    def test_engine_experience_rule_respects_mechanical_bucket_split(self):
+        pass_result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["mitsubishi_uec_lsii"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "mechanical_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("mechanical_engine"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        fail_result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {"engine_types": ["mitsubishi_uec_lse"]},
+                "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "mechanical_engine",
+                        "expected_values": self.analyzer._engine_type_expected_values("mechanical_engine"),
+                        "min_months": 0,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(pass_result["decision"], "PASS")
+        self.assertEqual(fail_result["decision"], "FAIL")
 
     def test_engine_experience_rule_fails_when_parsed_service_rows_have_no_match(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -733,8 +1061,8 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
                 },
             },
         )
-        self.assertEqual(result["decision"], "FAIL")
-        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED")
 
     def test_vessel_tonnage_rule_passes_when_row_value_matches_minimum(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -760,6 +1088,7 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_MATCH")
         self.assertEqual(result["results"][0]["actual_value"]["matched_evidence"][0]["value"], 58000)
+        self.assertIn("58,000 UNSPECIFIED", result["results"][0]["message"])
 
     def test_vessel_tonnage_rule_prefers_contract_evidence_without_duplicates(self):
         tonnage_entry = {"value": 58000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "Tonnage: 58000"}
@@ -802,6 +1131,8 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_BELOW_MINIMUM")
+        self.assertIn("28,000 UNSPECIFIED", result["results"][0]["message"])
+        self.assertIn("50,000", result["results"][0]["message"])
 
     def test_vessel_tonnage_rule_fails_above_maximum(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -820,6 +1151,8 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_ABOVE_MAXIMUM")
+        self.assertIn("105,000 DWT", result["results"][0]["message"])
+        self.assertIn("80,000 DWT", result["results"][0]["message"])
 
     def test_vessel_tonnage_rule_fails_out_of_range_with_mixed_evidence(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -964,6 +1297,10 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
+        self.assertEqual(
+            result["results"][0]["message"],
+            "Candidate has experienced ship type matching 'lng'.",
+        )
 
     def test_experience_ship_type_items_fail_when_no_in_window_match(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -1003,6 +1340,44 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MISMATCH")
+
+    def test_experience_ship_type_exact_dropdown_value_rolls_up_to_family_matches(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "vessel_types": ["product tanker"],
+                        }
+                    ]
+                },
+                "fact_meta": {
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                    "experience.vessel_types": {"confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["experience_ship_type"],
+                "hard_constraints": {
+                    "experience_ship_type": {
+                        "type": "experience_ship_type",
+                        "match_mode": "any_of",
+                        "items": [
+                            {
+                                "ship_family": "oil tanker",
+                                "minimum_months": None,
+                                "years_back": None,
+                                "contract_count": None,
+                            }
+                        ],
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
 
     def test_experience_ship_type_contract_count_with_fewer_dated_contracts_uses_all(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -1338,6 +1713,48 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_INSUFFICIENT")
         self.assertEqual(result["results"][0]["actual_value"]["matched_months"], 9)
 
+    def test_engine_experience_rule_does_not_count_unknown_fallback_months_toward_minimum(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "engine_types": ["man_b_w"],
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2024, 1, 1),
+                            "sign_out_date": date(2025, 1, 1),
+                            "engine_types": ["man_b_w"],
+                        },
+                        {
+                            "sign_in_date": date(2023, 1, 1),
+                            "sign_out_date": date(2024, 1, 1),
+                            "engine_types": ["man_b_w"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.8},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "engine_type": "man_b_w_me_gi",
+                        "expected_values": self.analyzer._engine_type_expected_values("man_b_w_me_gi"),
+                        "min_months": 12,
+                        "lookback_contracts": 0,
+                    }
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
+        self.assertEqual(result["results"][0]["actual_value"]["matched_months"], 0)
+        self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 0)
+        self.assertEqual(result["results"][0]["actual_value"]["unknown_months"], 24)
+        self.assertEqual(result["results"][0]["actual_value"]["unknown_contracts"], 2)
+
     def test_engine_vessel_experience_rule_requires_same_service_row(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -1409,6 +1826,10 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_VESSEL_EXPERIENCE_MATCH")
         self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 1)
+        self.assertIn("Mitsubishi UEC", result["results"][0]["message"])
+        self.assertIn("tanker", result["results"][0]["message"])
+        self.assertNotIn("mitsubishi_uec", result["results"][0]["message"])
+        self.assertNotIn("product_tanker", result["results"][0]["message"])
 
     def test_engine_vessel_experience_rule_honors_recent_window(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -1500,6 +1921,8 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT")
         self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 2)
         self.assertEqual(result["results"][0]["actual_value"]["required_contracts"], 3)
+        self.assertNotIn("man_b_w_me", result["results"][0]["message"])
+        self.assertNotIn("oil_tanker", result["results"][0]["message"])
 
     def test_engine_vessel_experience_rule_passes_when_all_recent_rows_match(self):
         result = self.analyzer._evaluate_hard_filters(

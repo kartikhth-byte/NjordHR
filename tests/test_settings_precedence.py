@@ -318,6 +318,7 @@ class SettingsPrecedenceTests(unittest.TestCase):
                                                         "email_intake_enabled": True,
                                                         "email_intake_mailbox": "recruitment@example.com",
                                                         "outlook_client_id": "client-123",
+                                                        "outlook_tenant_id": "organizations",
                                                     }
                                                 },
                                             ):
@@ -329,6 +330,7 @@ class SettingsPrecedenceTests(unittest.TestCase):
             self.assertEqual(reread.get("Advanced", "email_intake_enabled"), "true")
             self.assertEqual(reread.get("Advanced", "email_intake_mailbox"), "recruitment@example.com")
             self.assertEqual(reread.get("Advanced", "outlook_client_id"), "client-123")
+            self.assertEqual(reread.get("Advanced", "outlook_tenant_id"), "organizations")
 
             with patch.object(backend_server, "config", reread):
                 with patch.object(backend_server, "settings", reread["Settings"]):
@@ -337,7 +339,67 @@ class SettingsPrecedenceTests(unittest.TestCase):
 
             self.assertEqual(payload["non_secret"]["email_intake_mailbox"], "recruitment@example.com")
             self.assertEqual(payload["non_secret"]["outlook_client_id"], "client-123")
+            self.assertEqual(payload["non_secret"]["outlook_tenant_id"], "organizations")
             self.assertTrue(payload["non_secret"]["email_intake_enabled"])
+
+    def test_settings_payload_preserves_zero_poll_interval_from_local_agent(self):
+        parser = configparser.ConfigParser()
+        parser.read_dict({
+            "Settings": {"Default_Download_Folder": "", "Additional_Local_Folder": "Verified_Resumes"},
+            "Advanced": {},
+            "Credentials": {},
+        })
+        fake_feature_flags = FeatureFlags(False, False, False, True, False)
+        agent_settings = {
+            "email_intake_enabled": True,
+            "email_intake_mailbox": "recruitment@example.com",
+            "email_intake_poll_interval_seconds": 0,
+        }
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"settings": agent_settings}
+
+        with patch.object(backend_server, "config", parser):
+            with patch.object(backend_server, "settings", parser["Settings"]):
+                with patch.object(backend_server, "feature_flags", fake_feature_flags):
+                    with patch.object(backend_server, "_agent_request", return_value=_Resp()):
+                        payload = backend_server._settings_payload()
+
+        self.assertEqual(payload["non_secret"]["email_intake_poll_interval_seconds"], 0)
+
+    def test_settings_payload_preserves_blank_outlook_tenant_id_from_local_agent(self):
+        parser = configparser.ConfigParser()
+        parser.read_dict({
+            "Settings": {"Default_Download_Folder": "", "Additional_Local_Folder": "Verified_Resumes"},
+            "Advanced": {},
+            "Credentials": {},
+        })
+        fake_feature_flags = FeatureFlags(False, False, False, True, False)
+        agent_settings = {
+            "email_intake_enabled": True,
+            "email_intake_mailbox": "recruitment@example.com",
+            "outlook_client_id": "",
+            "outlook_tenant_id": "",
+        }
+
+        class _Resp:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"settings": agent_settings}
+
+        with patch.object(backend_server, "config", parser):
+            with patch.object(backend_server, "settings", parser["Settings"]):
+                with patch.object(backend_server, "feature_flags", fake_feature_flags):
+                    with patch.object(backend_server, "_agent_request", return_value=_Resp()):
+                        payload = backend_server._settings_payload()
+
+        self.assertEqual(payload["non_secret"]["outlook_tenant_id"], "")
 
     def test_save_admin_settings_clears_empty_values_and_reloads(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

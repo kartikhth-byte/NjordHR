@@ -245,9 +245,52 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
 
         verified = [match["filename"] for match in complete_event["verified_matches"]]
         self.assertEqual(verified, ["2nd_Engineer_1001.pdf"])
+        self.assertEqual(
+            complete_event["verified_matches"][0]["default_insights"],
+            {
+                "max_vessel_tonnage": 58000,
+                "min_vessel_tonnage": 58000,
+                "best_vessel_tonnage_value": 58000,
+                "best_vessel_tonnage_unit": "unspecified",
+            },
+        )
         self.assertEqual(len(llm_calls), 0)
         self.assertEqual(complete_event["hard_filter_summary"]["passed"], 1)
         self.assertEqual(complete_event["hard_filter_summary"]["failed"], 1)
+
+    def test_structured_experience_ship_type_filter_overrides_legacy_scalar(self):
+        _write_fake_pdf(self.rank_folder / "2nd_Engineer_1001.pdf")
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {}
+        self.analyzer._extract_job_constraints = lambda *_args, **_kwargs: {
+            "applied_constraints": [],
+            "hard_constraints": {},
+            "logical_groups": [],
+        }
+        captured = {}
+        self.analyzer._build_prompt_observability = (
+            lambda user_prompt, job_constraints, has_semantic_intent=None: captured.setdefault("job_constraints", json.loads(json.dumps(job_constraints))) or {}
+        )
+
+        list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "show candidates",
+            experienced_ship_type="Tanker",
+            experience_ship_type_filter={
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [{"ship_family": "bulk carrier", "minimum_months": 12, "years_back": 3, "contract_count": None}],
+            },
+        ))
+
+        self.assertEqual(
+            captured["job_constraints"]["hard_constraints"]["experience_ship_type"],
+            {
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [{"ship_family": "bulk carrier", "minimum_months": 12, "years_back": 3, "contract_count": None}],
+            },
+        )
+        self.assertIn("experience_ship_type", captured["job_constraints"]["applied_constraints"])
 
     def test_experienced_ship_type_is_extracted_from_resume_text(self):
         vessel_types = self.analyzer._extract_experienced_ship_types_from_text(
@@ -302,7 +345,7 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
             "Main engine: MAN B&W ME-GI dual fuel engine. Sea service on Bulk Carrier."
         )
 
-        self.assertEqual(engine_types, ["man_b_w_me", "man_b_w_me_gi", "dual_fuel"])
+        self.assertEqual(engine_types, ["man_b_w_me_gi", "dual_fuel"])
 
     def test_vessel_engine_or_prompt_populates_any_of_group(self):
         constraints = self.analyzer._extract_job_constraints(
@@ -466,6 +509,12 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertIn("container", expected_values)
         self.assertIn("container vessel", expected_values)
 
+    def test_ship_type_expected_values_expand_configured_label_into_family(self):
+        expected_values = self.analyzer._ship_type_expected_values("Oil Tanker")
+        self.assertIn("oil tanker", expected_values)
+        self.assertIn("tanker", expected_values)
+        self.assertIn("product tanker", expected_values)
+
     def test_engine_experience_family_matches_dual_fuel_aliases(self):
         candidate_facts = {
             "experience": {"engine_types": ["wingd_x_df"]},
@@ -482,6 +531,13 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         })
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+
+    def test_engine_expected_values_expand_generic_manufacturer_families(self):
+        self.assertIn("wartsila_rt_flex", self.analyzer._engine_type_expected_values("wartsila"))
+        self.assertIn("wartsila_dual_fuel", self.analyzer._engine_type_expected_values("wartsila"))
+        self.assertEqual(self.analyzer._engine_type_expected_values("mak"), ["mak"])
+        self.assertEqual(self.analyzer._engine_type_expected_values("yanmar"), ["yanmar"])
+        self.assertEqual(self.analyzer._engine_type_expected_values("bergen"), ["bergen"])
 
     def test_build_candidate_facts_exposes_experienced_ship_types(self):
         self.analyzer._resolve_candidate_age = lambda *args, **kwargs: {

@@ -110,6 +110,35 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             applied_ship_type="Bulk Carrier",
             experienced_ship_type="Tanker",
             prompt="has valid passport",
+            context={
+                "experience_ship_type_filter": {
+                    "type": "experience_ship_type",
+                    "match_mode": "any_of",
+                    "items": [{
+                        "ship_family": "bulk carrier",
+                        "minimum_months": 12,
+                        "years_back": 3,
+                        "contract_count": None,
+                    }],
+                },
+                "engine_experience_filter": {
+                    "type": "engine_experience",
+                    "match_mode": "any_of",
+                    "items": [{
+                        "engine_family": "wingd_x_engines",
+                        "minimum_months": None,
+                        "years_back": None,
+                        "contract_count": 2,
+                    }],
+                },
+                "vessel_tonnage_filter": {
+                    "type": "vessel_tonnage",
+                    "min_value": 30000,
+                    "max_value": None,
+                    "unit": "dwt",
+                    "years_back": 4,
+                },
+            },
             memberships=[{
                 "candidate_scope_id": "candidate-scope-a",
                 "content_hash_at_event": content_hash_at_event,
@@ -583,6 +612,8 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 prompt,
                 applied_ship_type=None,
                 experienced_ship_type=None,
+                experience_ship_type_filter=None,
+                engine_experience_filter=None,
                 **kwargs,
             ):
                 captured.update({
@@ -590,6 +621,8 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "prompt": prompt,
                     "applied_ship_type": applied_ship_type,
                     "experienced_ship_type": experienced_ship_type,
+                    "experience_ship_type_filter": experience_ship_type_filter,
+                    "engine_experience_filter": engine_experience_filter,
                     "candidate_scope_ids": kwargs.get("candidate_scope_ids"),
                     "candidate_scope_memberships": kwargs.get("candidate_scope_memberships"),
                 })
@@ -614,6 +647,32 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(captured["rank_folder"], "Chief_Engineer")
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
         self.assertEqual(captured["experienced_ship_type"], "Tanker")
+        self.assertEqual(
+            captured["experience_ship_type_filter"],
+            {
+                    "type": "experience_ship_type",
+                    "match_mode": "any_of",
+                    "items": [{
+                    "ship_family": "bulk carrier",
+                    "minimum_months": 12,
+                    "years_back": 3,
+                    "contract_count": None,
+                }],
+            },
+        )
+        self.assertEqual(
+            captured["engine_experience_filter"],
+            {
+                "type": "engine_experience",
+                "match_mode": "any_of",
+                "items": [{
+                    "engine_family": "wingd_x_engines",
+                    "minimum_months": None,
+                    "years_back": None,
+                    "contract_count": 2,
+                }],
+            },
+        )
         self.assertEqual(captured["candidate_scope_ids"], ["candidate-scope-a"])
         self.assertEqual(
             captured["candidate_scope_memberships"][0]["candidate_scope_id"],
@@ -882,6 +941,26 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                             "max_value": 80000,
                             "unit": "gt_grt",
                             "ignored": "must-not-survive",
+                            "years_back": 2,
+                        },
+                        "experience_ship_type_filter": {
+                            "type": "experience_ship_type",
+                            "match_mode": "any_of",
+                            "items": [{
+                                "ship_family": "tanker",
+                                "minimum_months": 12,
+                                "years_back": 3,
+                                "ignored": "must-not-survive",
+                            }],
+                        },
+                        "engine_experience_filter": {
+                            "type": "engine_experience",
+                            "match_mode": "any_of",
+                            "items": [{
+                                "engine_family": "wingd_x_engines",
+                                "contract_count": 2,
+                                "ignored": "must-not-survive",
+                            }],
                         },
                         "active_search_step_index": 99,
                         "current_completed_results": {
@@ -889,10 +968,27 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                 "rank_folder": "2nd Engineer",
                                 "applied_ship_type": "Oil Tanker",
                                 "experienced_ship_type": "Any",
+                                "experience_ship_type_filter": {
+                                    "type": "experience_ship_type",
+                                    "match_mode": "any_of",
+                                    "items": [{
+                                        "ship_family": "bulk carrier",
+                                        "contract_count": 3,
+                                    }],
+                                },
+                                "engine_experience_filter": {
+                                    "type": "engine_experience",
+                                    "match_mode": "any_of",
+                                    "items": [{
+                                        "engine_family": "man_b_w_me",
+                                        "years_back": 2,
+                                    }],
+                                },
                                 "vessel_tonnage_filter": {
                                     "min_value": 30000,
                                     "max_value": None,
                                     "unit": "dwt",
+                                    "years_back": 4,
                                 },
                                 "raw_nested": {"secret": "must-not-survive"},
                             },
@@ -928,6 +1024,33 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 "min_value": 50000,
                 "max_value": 80000,
                 "unit": "gt_grt",
+                "years_back": 2,
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["experience_ship_type_filter"],
+            {
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [{
+                    "ship_family": "tanker",
+                    "minimum_months": 12,
+                    "years_back": 3,
+                    "contract_count": None,
+                }],
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["engine_experience_filter"],
+            {
+                "type": "engine_experience",
+                "match_mode": "any_of",
+                "items": [{
+                    "engine_family": "wingd_x_engines",
+                    "minimum_months": None,
+                    "years_back": None,
+                    "contract_count": 2,
+                }],
             },
         )
         self.assertEqual(
@@ -937,6 +1060,33 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 "min_value": 30000,
                 "max_value": None,
                 "unit": "dwt",
+                "years_back": 4,
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["current_completed_results"]["search_context"]["experience_ship_type_filter"],
+            {
+                    "type": "experience_ship_type",
+                    "match_mode": "any_of",
+                    "items": [{
+                    "ship_family": "bulk carrier",
+                    "minimum_months": None,
+                    "years_back": None,
+                    "contract_count": 3,
+                }],
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["current_completed_results"]["search_context"]["engine_experience_filter"],
+            {
+                "type": "engine_experience",
+                "match_mode": "any_of",
+                "items": [{
+                    "engine_family": "man_b_w_me",
+                    "minimum_months": None,
+                    "years_back": 2,
+                    "contract_count": None,
+                }],
             },
         )
         self.assertNotIn(

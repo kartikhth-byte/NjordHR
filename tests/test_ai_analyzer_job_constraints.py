@@ -537,15 +537,24 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
     def test_engine_experience_family_maps_to_structured_constraint(self):
         cases = {
             "with me engine experience": "man_b_w_me",
-            "has MAN B&W experience": "man_b_w_me",
+            "has MAN B&W experience": "man_b_w",
+            "has B&W engine experience": "man_b_w",
             "WinGD X-DF experience": "wingd_x_df",
             "Wartsila 32DF experience": "wartsila_dual_fuel",
+            "has Wartsila experience": "wartsila",
             "has RTFlex engine type experience": "wartsila_rt_flex",
             "has 12RTA96C engine experience": "wartsila_rta",
             "has 6S50MC-C engine experience": "man_b_w_mc",
+            "has MaK engine experience": "mak",
             "has ME-LGIA engine experience": "man_b_w_me_lgia",
+            "has Yanmar engine experience": "yanmar",
+            "has Bergen engine experience": "bergen",
             "has electronic engine experience": "electronically_controlled_engine",
             "has electronically controlled main engine experience": "electronically_controlled_engine",
+            "has mechanical engine experience": "mechanical_engine",
+            "has X-DF-HP engine experience": "wingd_x_df_hp",
+            "has ME-C-GI engine experience": "man_b_w_me_c_gi",
+            "has Everllence B&W experience": "man_b_w",
             "methanol engine experience": "methanol_engine",
             "ammonia engine experience": "ammonia_engine",
         }
@@ -760,7 +769,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ("rt-flex engine type experience", "wartsila_rt_flex", 0, 0),
             ("has experience in rtflex engine", "wartsila_rt_flex", 0, 0),
             ("has experience in ME-GI engine type", "man_b_w_me_gi", 0, 0),
-            ("has 6S60ME-C10.5 engine experience", "man_b_w_me", 0, 0),
+            ("has 6S60ME-C10.5 engine experience", "man_b_w_me_c", 0, 0),
             ("has X52DF engine type experience", "wingd_x_df", 0, 0),
             ("electronically controlled engines in recent 4 vessels", "electronically_controlled_engine", 0, 4),
         ]
@@ -805,7 +814,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
     def test_engine_vessel_experience_preserves_all_recent_contract_mode(self):
         cases = [
-            ("last 3 contracts on oil tanker with MAN B&W engine", "man_b_w_me", "oil tanker", 3),
+            ("last 3 contracts on oil tanker with MAN B&W engine", "man_b_w", "oil tanker", 3),
             ("recent 3 vessels with UEC engine and container experience", "mitsubishi_uec", "container", 3),
         ]
         for prompt, expected_engine_type, expected_vessel_type, expected_contracts in cases:
@@ -1076,7 +1085,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("stcw_endorsement", constraints["applied_constraints"])
         self.assertEqual(
             constraints["hard_constraints"]["engine_experience"]["engine_type"],
-            "man_b_w_me",
+            "man_b_w",
         )
         self.assertEqual(
             constraints["hard_constraints"]["certifications"]["endorsements_required"],

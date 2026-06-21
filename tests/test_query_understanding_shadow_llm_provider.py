@@ -120,6 +120,35 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertIn("PSSR, PST, FPFF, EFA", prompt)
         self.assertIn("Advanced certificates (AFF, MFA, AFA)", prompt)
 
+    def test_build_shadow_llm_prompt_includes_engine_family_rules(self):
+        prompt = build_shadow_llm_prompt("has me engine experience", rank="2nd Engineer")
+        self.assertIn("engine_experience:", prompt)
+        self.assertIn("'MAN B&W' or 'B&W' -> man_b_w", prompt)
+        self.assertIn("'ME engine' -> man_b_w_me", prompt)
+        self.assertIn("'X-DF-HP' -> wingd_x_df_hp", prompt)
+        self.assertIn("'dual fuel engine' -> dual_fuel", prompt)
+        self.assertIn("Fallbacks are evaluator-time only", prompt)
+
+    def test_build_shadow_llm_prompt_includes_experience_ship_type_rules(self):
+        prompt = build_shadow_llm_prompt("oil tanker experience in last 3 years", rank="2nd Engineer")
+        self.assertIn("experience_ship_type:", prompt)
+        self.assertIn("'oil tanker experience' -> ship_family=tanker", prompt)
+        self.assertIn("Cross-family OR with engine/vessel concepts -> logical_groups any_of", prompt)
+
+    def test_build_shadow_llm_prompt_includes_vessel_tonnage_rules(self):
+        prompt = build_shadow_llm_prompt("experience on vessels above 50000 gt", rank="2nd Engineer")
+        self.assertIn("vessel_tonnage:", prompt)
+        self.assertIn("'above 50000 gt', 'between 30000 and 80000 dwt', 'minimum 40000 tonnage' -> min/max/unit", prompt)
+        self.assertIn("GT/GRT normalize to gt_grt", prompt)
+        self.assertIn("keep them as separate constraints", prompt)
+
+    def test_build_shadow_llm_prompt_includes_coc_rules(self):
+        prompt = build_shadow_llm_prompt("Indian CoC required", rank="2nd Engineer")
+        self.assertIn("coc_document_gate / coc_country_match:", prompt)
+        self.assertIn("'valid COC', 'COC required', 'certificate of competency' -> coc_document_gate required=true", prompt)
+        self.assertIn("'Indian CoC', 'UK CoC', 'Honduras-issued CoC' -> coc_country_match countries=[...]", prompt)
+        self.assertIn("Keep country matching separate from document gate", prompt)
+
     def test_build_shadow_llm_query_plan_uses_reasoning_model_name_setting(self):
         config = configparser.ConfigParser()
         config.add_section("Advanced")
@@ -1460,6 +1489,129 @@ class ShadowLLMProviderTests(unittest.TestCase):
             {"type": "vessel_tonnage", "min_value": 50000, "max_value": None, "unit": "gt_grt"},
         )
 
+    def test_build_shadow_llm_query_plan_translates_experience_ship_type_payload(self):
+        prompt = "oil tanker experience in last 3 years"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {
+                    "filter_family": "experience_ship_type",
+                    "parameters": {"ship_family": "tanker", "years_back": 3},
+                    "source_text": "oil tanker experience in last 3 years",
+                }
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["id"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertEqual(
+            applied["experience_ship_type"],
+            {"type": "experience_ship_type", "ship_family": "tanker", "minimum_months": None},
+        )
+
+    def test_build_shadow_llm_query_plan_preserves_engine_specificity_between_family_and_subtype(self):
+        prompt = "has man b&w experience and me engine experience"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {
+                    "filter_family": "engine_experience",
+                    "parameters": {"engine_family": "man_b_w"},
+                    "source_text": "man b&w experience",
+                },
+                {
+                    "filter_family": "engine_experience",
+                    "parameters": {"engine_family": "man_b_w_me"},
+                    "source_text": "me engine experience",
+                },
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["source_text"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertEqual(applied["man b&w experience"]["engine_family"], "man_b_w")
+        self.assertEqual(applied["me engine experience"]["engine_family"], "man_b_w_me")
+
+    def test_build_shadow_llm_query_plan_translates_engine_bucket_and_wingd_subtype(self):
+        prompt = "has dual fuel engine experience and x-df hp engine experience"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {
+                    "filter_family": "engine_experience",
+                    "parameters": {"engine_family": "dual_fuel"},
+                    "source_text": "dual fuel engine experience",
+                },
+                {
+                    "filter_family": "engine_experience",
+                    "parameters": {"engine_family": "wingd_x_df_hp"},
+                    "source_text": "x-df hp engine experience",
+                },
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["source_text"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertEqual(applied["dual fuel engine experience"]["engine_family"], "dual_fuel")
+        self.assertEqual(applied["x-df hp engine experience"]["engine_family"], "wingd_x_df_hp")
+
     def test_build_shadow_llm_query_plan_preserves_legacy_vessel_tonnage_fallback(self):
         prompt = "vessel tonnage between 30000 and 80000"
         plan_payload = {
@@ -1829,6 +1981,43 @@ class ShadowLLMProviderTests(unittest.TestCase):
         self.assertEqual(result["diagnostics"]["status"], "fallback")
         self.assertEqual(result["diagnostics"]["reason"], "schema_invalid")
         self.assertEqual(result["plan"]["normalizer"]["name"], "legacy")
+
+    def test_build_shadow_llm_query_plan_translates_coc_country_match_payload(self):
+        prompt = "Indian CoC required"
+        plan_payload = {
+            "schema_version": "query_plan.v1",
+            "normalizer": {
+                "name": "llm",
+                "model": "gemini-test-model",
+                "prompt_template_version": "query_understanding.shadow_llm.v1",
+                "catalog_version": "query_understanding.catalog.v1",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+            "input": {
+                "raw_prompt": prompt,
+                "rank_context": "2nd Engineer",
+                "ui_filters": {"schema_version": "ui_filters.v1", "filters": []},
+            },
+            "applied_constraints": [
+                {"filter_family": "coc_document_gate", "constraint": "required"},
+                {"filter_family": "coc_country_match", "parameters": {"countries": ["india"]}},
+            ],
+            "unapplied_constraints": [],
+            "semantic_query": "",
+            "unrecognized_residual": [],
+            "warnings": [],
+            "validation": {"status": "valid", "errors": []},
+        }
+
+        result = self._run_shadow_plan(prompt, plan_payload)
+
+        self.assertEqual(result["diagnostics"]["status"], "success")
+        applied = {item["id"]: item["constraint"] for item in result["plan"]["applied_constraints"]}
+        self.assertEqual(applied["coc_document_gate"], {"type": "coc_document_gate", "required": True})
+        self.assertEqual(
+            applied["coc_country_match"],
+            {"type": "coc_country_match", "countries": ["india"], "operator": "contains_any"},
+        )
 
     def test_build_shadow_llm_query_plan_canonicalizes_unsupported_unapplied_ids(self):
         plan_payload = {
