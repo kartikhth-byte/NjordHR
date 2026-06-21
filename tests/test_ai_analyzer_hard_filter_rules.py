@@ -205,6 +205,58 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_combine_any_of_item_results_sanitizes_debug_payload(self):
+        item_results = [
+            {
+                "decision": "PASS",
+                "reason_code": "EXPERIENCE_SHIP_TYPE_MATCH",
+                "message": "Candidate has experienced ship type matching 'container'.",
+                "actual_value": ["container vessel"],
+                "expected_value": {
+                    "family": "container",
+                    "expected_values": ["container", "container vessel"],
+                },
+                "confidence": 0.91,
+                "unknown_reason": None,
+            },
+            {
+                "decision": "FAIL",
+                "reason_code": "EXPERIENCE_SHIP_TYPE_MISMATCH",
+                "message": "Candidate lacks tanker experience.",
+                "actual_value": ["bulk carrier"],
+                "expected_value": {
+                    "family": "tanker",
+                    "expected_values": ["oil tanker", "product tanker"],
+                },
+                "confidence": None,
+                "unknown_reason": None,
+            },
+        ]
+
+        result = self.analyzer._combine_any_of_item_results(
+            item_results,
+            constraint={"items": ["placeholder"]},
+            family_label="experienced ship type",
+            match_code="EXPERIENCE_SHIP_TYPE_MATCH",
+            mismatch_code="EXPERIENCE_SHIP_TYPE_MISMATCH",
+            unknown_code="EXPERIENCE_SHIP_TYPE_UNKNOWN",
+        )
+
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(len(result["actual_value"]), 2)
+        self.assertNotIn("expected_value", result["actual_value"][0])
+        self.assertEqual(
+            result["actual_value"][0],
+            {
+                "decision": "PASS",
+                "reason_code": "EXPERIENCE_SHIP_TYPE_MATCH",
+                "message": "Candidate has experienced ship type matching 'container'.",
+                "confidence": 0.91,
+                "unknown_reason": None,
+                "actual_value": ["container vessel"],
+            },
+        )
+
     def test_rule_skipped_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {

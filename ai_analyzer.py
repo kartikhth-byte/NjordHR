@@ -2347,6 +2347,8 @@ class AIResumeAnalyzer:
             "hong kong": "hong kong",
             "indonesia": "indonesia",
             "indonesian": "indonesia",
+            "iran": "iran",
+            "iranian": "iran",
             "italy": "italy",
             "italian": "italy",
             "japan": "japan",
@@ -2355,10 +2357,14 @@ class AIResumeAnalyzer:
             "korean": "korea",
             "liberia": "liberia",
             "liberian": "liberia",
+            "maldives": "maldives",
+            "maldivian": "maldives",
             "malaysia": "malaysia",
             "malaysian": "malaysia",
             "marshall islands": "marshall islands",
             "marshallese": "marshall islands",
+            "mauritius": "mauritius",
+            "mauritian": "mauritius",
             "netherlands": "netherlands",
             "dutch": "netherlands",
             "norway": "norway",
@@ -2370,6 +2376,8 @@ class AIResumeAnalyzer:
             "philippines": "philippines",
             "philippine": "philippines",
             "filipino": "philippines",
+            "argentina": "argentina",
+            "argentinian": "argentina",
             "poland": "poland",
             "polish": "poland",
             "portugal": "portugal",
@@ -10872,13 +10880,32 @@ class AIResumeAnalyzer:
         )
 
     def _combine_any_of_item_results(self, item_results, *, constraint, family_label, match_code, mismatch_code, unknown_code):
+        def _sanitized_item_results(results):
+            sanitized = []
+            for result in results or []:
+                if not isinstance(result, dict):
+                    sanitized.append(result)
+                    continue
+                sanitized.append(
+                    {
+                        "decision": result.get("decision"),
+                        "reason_code": result.get("reason_code"),
+                        "message": result.get("message"),
+                        "confidence": result.get("confidence"),
+                        "unknown_reason": result.get("unknown_reason"),
+                        "actual_value": result.get("actual_value"),
+                    }
+                )
+            return sanitized
+
+        safe_item_results = _sanitized_item_results(item_results)
         passing_result = next((result for result in item_results if result.get("decision") == "PASS"), None)
         if passing_result:
             return self._base_rule_result(
                 "PASS",
                 match_code,
                 passing_result.get("message") or f"Candidate satisfied one {family_label} item.",
-                actual_value=item_results,
+                actual_value=safe_item_results,
                 expected_value=constraint,
                 confidence=passing_result.get("confidence"),
             )
@@ -10887,7 +10914,7 @@ class AIResumeAnalyzer:
                 "FAIL",
                 mismatch_code,
                 f"Candidate did not satisfy any requested {family_label} item.",
-                actual_value=item_results,
+                actual_value=safe_item_results,
                 expected_value=constraint,
                 confidence=None,
             )
@@ -10895,7 +10922,7 @@ class AIResumeAnalyzer:
             "UNKNOWN",
             unknown_code,
             f"Could not determine whether candidate satisfies any requested {family_label} item.",
-            actual_value=item_results,
+            actual_value=safe_item_results,
             expected_value=constraint,
             confidence=None,
             unknown_reason="FACTUAL_UNKNOWN",

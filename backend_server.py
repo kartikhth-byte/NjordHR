@@ -2235,6 +2235,8 @@ def _settings_payload(include_plain_secrets=False):
                 raw_value = agent_settings.get(name, fallback)
                 if raw_value is None:
                     return int(fallback)
+                if isinstance(raw_value, bool):
+                    return int(fallback)
                 if isinstance(raw_value, str):
                     stripped = raw_value.strip()
                     if stripped == "":
