@@ -2232,7 +2232,15 @@ def _settings_payload(include_plain_secrets=False):
     def _agent_setting_int(name, fallback):
         if _agent_setting_present(name):
             try:
-                return int(agent_settings.get(name, fallback) or fallback)
+                raw_value = agent_settings.get(name, fallback)
+                if raw_value is None:
+                    return int(fallback)
+                if isinstance(raw_value, str):
+                    stripped = raw_value.strip()
+                    if stripped == "":
+                        return int(fallback)
+                    return int(stripped)
+                return int(raw_value)
             except Exception:
                 return int(fallback)
         return _int_setting("Advanced", name, fallback)
@@ -2275,7 +2283,7 @@ def _settings_payload(include_plain_secrets=False):
             ),
             "email_intake_poll_interval_seconds": _agent_setting_int("email_intake_poll_interval_seconds", 60),
             "outlook_client_id": _agent_setting_value("outlook_client_id", ""),
-            "outlook_tenant_id": _agent_setting_value("outlook_tenant_id", "organizations") or "organizations",
+            "outlook_tenant_id": _agent_setting_value("outlook_tenant_id", "organizations"),
         },
         "secrets": {
             "seajob_username": _mask_secret(_seajob_username()),
@@ -4185,6 +4193,29 @@ def save_admin_settings():
         enabled = _payload_bool(payload, "email_intake_enabled")
         _set_config_value_or_clear("Advanced", "email_intake_enabled", "true" if enabled else "false")
         email_intake_payload["email_intake_enabled"] = enabled
+    outlook_auth_keys = ("outlook_client_id", "outlook_tenant_id")
+    def _persisted_outlook_auth_value(name):
+        return normalize_env_value(config.get("Advanced", name, fallback=""))
+    force_clear_outlook_auth = any(
+        key in payload and normalize_env_value(payload.get(key, "")) == ""
+        for key in outlook_auth_keys
+    )
+    if force_clear_outlook_auth:
+        for key in outlook_auth_keys:
+            _set_config_value_or_clear("Advanced", key, "")
+            email_intake_payload[key] = ""
+        _set_config_value_or_clear("Advanced", "email_intake_enabled", "false")
+        email_intake_payload["email_intake_enabled"] = False
+    elif any(key in payload for key in outlook_auth_keys):
+        effective_outlook_values = {
+            key: normalize_env_value(payload.get(key, _persisted_outlook_auth_value(key))) if key in payload else _persisted_outlook_auth_value(key)
+            for key in outlook_auth_keys
+        }
+        if any(effective_outlook_values.values()) and not all(effective_outlook_values.values()):
+            return jsonify({
+                "success": False,
+                "message": "Outlook Client ID and Outlook Tenant ID must both be provided together.",
+            }), 400
     for key in [
         "email_intake_mailbox",
         "email_intake_monitored_folder",
@@ -4194,9 +4225,9 @@ def save_admin_settings():
         "outlook_tenant_id",
     ]:
         if key in payload:
-            value = normalize_env_value(payload.get(key, ""))
-            if not value:
+            if force_clear_outlook_auth and key in outlook_auth_keys:
                 continue
+            value = normalize_env_value(payload.get(key, ""))
             _set_config_value_or_clear("Advanced", key, value)
             email_intake_payload[key] = value
     if "email_intake_poll_interval_seconds" in payload:

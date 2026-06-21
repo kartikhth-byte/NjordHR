@@ -2312,7 +2312,7 @@
                         email_intake_failed_folder: nonSecret.email_intake_failed_folder || 'Inbox/NjordHR Failed',
                         email_intake_poll_interval_seconds: String(nonSecret.email_intake_poll_interval_seconds || '60'),
                         outlook_client_id: nonSecret.outlook_client_id || '',
-                        outlook_tenant_id: nonSecret.outlook_tenant_id || 'organizations',
+                        outlook_tenant_id: nonSecret.outlook_tenant_id ?? 'organizations',
                         seajob_username: secretsPlain.seajob_username || '',
                         seajob_password: secretsPlain.seajob_password || '',
                         gemini_api_key: secretsPlain.gemini_api_key || '',
@@ -4661,10 +4661,17 @@
                 .replace(/[.;\s]+$/g, '')
                 .toLowerCase();
 
-            const humanizeReasonCode = (value) => String(value || '')
-                .toLowerCase()
-                .replace(/_/g, ' ')
-                .trim();
+            const humanizeReasonCode = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return '';
+                return text
+                    .toLowerCase()
+                    .replace(/_/g, ' ')
+                    .replace(/\bapi\b/g, 'API')
+                    .replace(/\bcoc\b/g, 'CoC')
+                    .replace(/\bstcw\b/g, 'STCW')
+                    .trim();
+            };
 
             const ENGINE_FAMILY_LABELS = {
                 man: 'MAN / Everllence',
@@ -4750,10 +4757,10 @@
                     .filter(Boolean);
             };
 
-            const formatEngineFamilyLabel = (value) => {
+            const formatEngineFamilyLabel = (value, rawMention = '') => {
                 const key = normalizeFamilyOptionKey(value);
-                if (!key) return '';
-                return ENGINE_FAMILY_LABELS[key] || String(value || '').replace(/_/g, ' ');
+                if (!key) return String(rawMention || '').trim() || '';
+                return ENGINE_FAMILY_LABELS[key] || String(rawMention || '').trim() || String(value || '').replace(/_/g, ' ');
             };
 
             const buildDefaultInsightLines = (match, options = {}) => {

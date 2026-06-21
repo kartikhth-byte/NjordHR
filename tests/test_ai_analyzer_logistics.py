@@ -284,6 +284,9 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
             ("12RTA96C ENGINE", "wartsila_rta", "Wartsila/Sulzer", "mechanical"),
             ("6S50MC-C ENGINE", "man_b_w_mc", "MAN B&W", "mechanical"),
             ("6S60ME-C10.5 ENGINE", "man_b_w_me_c", "MAN B&W", "electronic"),
+            ("6S60ME-C8.2-GI ENGINE", "man_b_w_me_c_gi", "MAN B&W", "electronic"),
+            ("7G70ME-C9.6-LGIM ENGINE", "man_b_w_me_lgim", "MAN B&W", "electronic"),
+            ("10X92DF-2.0 ENGINE", "wingd_x_df", "WinGD", "electronic"),
         ]
         for engine_text, expected_engine_type, expected_manufacturer, expected_control_type in cases:
             with self.subTest(engine_text=engine_text):
@@ -330,6 +333,37 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
             with self.subTest(raw_text=raw_text):
                 details = self.analyzer._extract_engine_details_from_text(raw_text)
                 self.assertEqual([detail["engine_type"] for detail in details], expected)
+
+    def test_extract_engine_details_skips_negated_engine_mentions(self):
+        cases = [
+            "never operated ME-GI engines",
+            "without RT flex experience",
+            "no methanol engine background",
+        ]
+        for raw_text in cases:
+            with self.subTest(raw_text=raw_text):
+                details = self.analyzer._extract_engine_details_from_text(raw_text)
+                self.assertEqual(details, [])
+
+    def test_extract_engine_experience_constraint_prefers_specific_subtype_over_generic_bucket(self):
+        constraint = self.analyzer._extract_engine_experience_constraint(
+            "has ME-LGIM methanol engine experience"
+        )
+        self.assertIsNotNone(constraint)
+        self.assertEqual(constraint["engine_type"], "man_b_w_me_lgim")
+
+    def test_extract_engine_experience_constraint_uses_generic_bucket_when_no_specific_subtype_exists(self):
+        methanol_constraint = self.analyzer._extract_engine_experience_constraint(
+            "has methanol engine experience"
+        )
+        self.assertIsNotNone(methanol_constraint)
+        self.assertEqual(methanol_constraint["engine_type"], "methanol_engine")
+
+        ammonia_constraint = self.analyzer._extract_engine_experience_constraint(
+            "has ammonia engine experience"
+        )
+        self.assertIsNotNone(ammonia_constraint)
+        self.assertEqual(ammonia_constraint["engine_type"], "ammonia_engine")
 
     def test_extract_seajobs_experience_rows_captures_generic_engine_brands(self):
         cases = [

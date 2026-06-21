@@ -1285,7 +1285,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(resp.get_json()["success"])
         self.assertEqual(captured, [])
 
-    def test_admin_settings_does_not_clear_mailbox_settings_with_blank_form_values(self):
+    def test_admin_settings_clears_mailbox_settings_with_blank_form_values(self):
         backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
         captured = []
 
@@ -1309,7 +1309,70 @@ class BackendEventLogFlowTests(unittest.TestCase):
         put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
         self.assertEqual(len(put_calls), 1)
         agent_payload = put_calls[0][2]
-        self.assertEqual(agent_payload, {"email_intake_enabled": False})
+        self.assertEqual(
+            agent_payload,
+            {
+                "email_intake_enabled": False,
+                "email_intake_mailbox": "",
+                "outlook_client_id": "",
+                "outlook_tenant_id": "",
+            },
+        )
+
+    def test_admin_settings_partially_blank_outlook_auth_clears_auth_and_disables_intake(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+        captured = []
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            captured.append((method, path, json_body))
+            return self._agent_json_response({"success": True, "settings": json_body or {}})
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.post(
+                "/admin/settings",
+                headers={"X-Admin-Token": "test-admin-token"},
+                json={"settings": {
+                    "email_intake_enabled": True,
+                    "email_intake_mailbox": "recruitment@example.com",
+                    "outlook_client_id": "",
+                }},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        put_calls = [call for call in captured if call[0] == "PUT" and call[1] == "/settings"]
+        self.assertEqual(len(put_calls), 1)
+        agent_payload = put_calls[0][2]
+        self.assertEqual(agent_payload["email_intake_enabled"], False)
+        self.assertEqual(agent_payload["email_intake_mailbox"], "recruitment@example.com")
+        self.assertEqual(agent_payload["outlook_client_id"], "")
+        self.assertEqual(agent_payload["outlook_tenant_id"], "")
+
+    def test_admin_settings_rejects_partial_outlook_auth_when_setting_non_blank_values(self):
+        backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)
+
+        def fake_agent_request(method, path, json_body=None, **_kwargs):
+            if method == "GET" and path == "/settings":
+                return self._agent_json_response({
+                    "success": True,
+                    "settings": {
+                        "email_intake_enabled": False,
+                        "outlook_client_id": "",
+                        "outlook_tenant_id": "",
+                    },
+                })
+            self.fail(f"Unexpected agent request: {method} {path}")
+
+        with patch.object(backend_server, "_agent_request", side_effect=fake_agent_request):
+            resp = self.client.post(
+                "/admin/settings",
+                headers={"X-Admin-Token": "test-admin-token"},
+                json={"settings": {
+                    "outlook_client_id": "client-123",
+                }},
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("must both be provided together", resp.get_json()["message"])
 
     def test_mailbox_connect_reports_missing_agent_configuration_before_auth_start(self):
         backend_server.feature_flags = replace(backend_server.feature_flags, use_local_agent=True)

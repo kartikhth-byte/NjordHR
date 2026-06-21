@@ -83,7 +83,7 @@ implementation**.
 | `Needs Review` overlap | Existing UNKNOWN reasons and new engine fallback reasons share the same bucket; `reason_code` is the disambiguator |
 | Propulsion-system, emissions, and architecture concepts | Reserved for a follow-up semantic spec; not implemented in v1 |
 | Extraction context awareness | v1 does **not** distinguish course/training/vessel-spec mentions from sea-time mentions; extracted engine evidence is accepted wherever the normalized engine token is found |
-| Resume-internal negation | v1 does **not** suppress engine evidence based on negation phrases such as `no experience with` or `never operated`; this is a known false-positive risk |
+| Resume-internal negation | v1 suppresses engine evidence when a negation phrase such as `no`, `not`, `never`, or `without` appears within the configured look-behind window before the engine mention |
 | Main vs auxiliary engine role | v1 does not model `engine_role`; all extracted engine evidence is role-agnostic |
 | Empty / unextractable resume outcome | Distinct `no_evidence_extracted` path required; never silently conflate extraction failure with genuine absence |
 | Compatibility expansion timing | Apply at evaluator time to the requested node set; do not rewrite extracted evidence nodes |
@@ -257,12 +257,21 @@ v1 is intentionally token-driven and does not yet model:
 
 - training/course context vs sea-time context
 - vessel-spec blocks vs sea-service blocks
-- negative statements such as `no ME experience` or `never operated RT-flex`
 - observation / familiarization-only phrasing
 
-This is a known false-positive risk and must be surfaced via telemetry. A
-follow-up extraction-hardening spec should add context classification and
-negation handling.
+v1 does suppress straightforward negation before an engine mention, using a
+bounded look-behind window (currently 80 characters and no more than 4
+intervening tokens) for phrases such as:
+
+- `no ME experience`
+- `never operated RT-flex`
+- `without X-DF background`
+
+This reduces a known false-positive class, but it is still heuristic. Cases
+such as unrelated sentence fragments or broad prose near the engine mention may
+still be suppressed incorrectly and should be surfaced via telemetry. A
+follow-up extraction-hardening spec should add stronger context classification
+and sentence-aware negation handling.
 
 ### Explicit rules
 
@@ -867,7 +876,7 @@ under-covered alias maps, and over-broad compatibility rules.
 - Subtype-level deterministic coverage for `himsen`, `daihatsu`, `niigata`,
   `doosan`, `mtu`, or `detroit_diesel`.
 - Context-aware extraction (course/training/vessel-spec separation).
-- Resume-internal negation handling.
+- Sentence-boundary-aware negation handling.
 - Main-engine vs auxiliary-engine role separation.
 - Semantic extraction of all machinery-room concepts from arbitrary prose.
 - Treating broad technical-system terms as hard deterministic engine evidence.

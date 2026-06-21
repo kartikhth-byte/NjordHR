@@ -2786,7 +2786,6 @@ class AIResumeAnalyzer:
             "man_b_w_me_lgim": [
                 "ME-LGIM",
                 "MELGIM",
-                "methanol engine",
                 "methanol dual fuel",
             ],
             "man_b_w_me_lgip": [
@@ -3042,15 +3041,42 @@ class AIResumeAnalyzer:
         if normalized_alias in {"me", "df", "gi", "lgi"}:
             return False
         if normalized_alias in {"me engine", "me engines"}:
-            return bool(re.search(r"\bme\s+engines?\b", normalized_text))
+            for match in re.finditer(r"\bme\s+engines?\b", normalized_text):
+                if not self._engine_match_is_negated(normalized_text, match.start()):
+                    return True
+            return False
         alias_pattern = re.escape(normalized_alias)
         alias_pattern = alias_pattern.replace(r"\ ", r"[\s./()&-]+")
-        if re.search(rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9])", normalized_text):
-            return True
+        for match in re.finditer(rf"(?<![a-z0-9]){alias_pattern}(?![a-z0-9])", normalized_text):
+            if not self._engine_match_is_negated(normalized_text, match.start()):
+                return True
         compact_alias = re.sub(r"[\s./()&-]+", "", normalized_alias)
         compact_text = re.sub(r"[\s./()&-]+", "", normalized_text)
         if len(compact_alias) >= 5 and compact_alias not in {"engine", "engines"}:
-            return bool(re.search(rf"(?<![a-z0-9]){re.escape(compact_alias)}(?![a-z0-9])", compact_text))
+            for match in re.finditer(rf"(?<![a-z0-9]){re.escape(compact_alias)}(?![a-z0-9])", compact_text):
+                if not self._engine_match_is_negated(compact_text, match.start()):
+                    return True
+        return False
+
+    def _engine_negation_patterns(self):
+        return (
+            r"\bno\b",
+            r"\bnot\b",
+            r"\bnever\b",
+            r"\bwithout\b",
+            r"\bdoes\s+not\s+have\b",
+            r"\bdid\s+not\s+operate\b",
+            r"\bnever\s+operated\b",
+        )
+
+    def _engine_match_is_negated(self, text, start_index):
+        prefix = str(text or "")[max(0, start_index - 80):start_index]
+        normalized_prefix = self._normalize_engine_type(prefix)
+        if not normalized_prefix:
+            return False
+        for pattern in self._engine_negation_patterns():
+            if re.search(rf"{pattern}(?:\W+\w+){{0,4}}\W*$", normalized_prefix):
+                return True
         return False
 
     def _engine_manufacturer_nodes(self):
@@ -3176,6 +3202,14 @@ class AIResumeAnalyzer:
                 "wingd_x_df_hp",
                 "wartsila_dual_fuel",
             ],
+            "methanol_engine": [
+                "man_b_w_me_lgim",
+                "wingd_x_df_m_e",
+            ],
+            "ammonia_engine": [
+                "man_b_w_me_lgia",
+                "wingd_x_df_a",
+            ],
             "electronically_controlled_engine": [
                 "man_b_w_me",
                 "wingd_x_engines",
@@ -3216,6 +3250,31 @@ class AIResumeAnalyzer:
 
     def _engine_display_label(self, engine_type):
         return self._engine_display_label_map().get(engine_type) or str(engine_type or "").replace("_", " ").strip()
+
+    def _format_engine_type_list(self, engine_types):
+        labels = []
+        seen = set()
+        for engine_type in engine_types or []:
+            label = self._engine_display_label(engine_type)
+            normalized = str(label or "").strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            labels.append(label)
+        return ", ".join(labels)
+
+    def _format_tonnage_value(self, value, unit=None):
+        if value is None:
+            return ""
+        try:
+            formatted_value = f"{int(value):,}"
+        except Exception:
+            formatted_value = str(value)
+        normalized_unit = str(unit or "").strip().lower()
+        if normalized_unit in {"", "any"}:
+            return formatted_value
+        unit_label = "UNSPECIFIED" if normalized_unit == "unspecified" else normalized_unit.upper()
+        return f"{formatted_value} {unit_label}"
 
     def _engine_is_manufacturer_node(self, engine_type):
         return engine_type in self._engine_manufacturer_nodes()
@@ -3317,21 +3376,29 @@ class AIResumeAnalyzer:
 
     def _canonical_engine_from_model_token(self, token):
         normalized = re.sub(r"[^a-z0-9]+", "", self._normalize_engine_type(token))
-        if re.search(r"mecgi", normalized):
+        if re.search(r"mec(?:\d+(?:\.\d+)?)?gi$", normalized):
             return "man_b_w_me_c_gi"
-        if re.search(r"me(?:lgia|lga)$", normalized):
+        if re.search(r"me(?:\d+(?:\.\d+)?)?(?:lgia|lga)$", normalized):
             return "man_b_w_me_lgia"
+        if re.search(r"mec(?:\d+(?:\.\d+)?)?lgim$", normalized):
+            return "man_b_w_me_lgim"
         if re.search(r"melgim$", normalized):
             return "man_b_w_me_lgim"
+        if re.search(r"mec(?:\d+(?:\.\d+)?)?lgip$", normalized):
+            return "man_b_w_me_lgip"
         if re.search(r"melgip$", normalized):
             return "man_b_w_me_lgip"
+        if re.search(r"mec(?:\d+(?:\.\d+)?)?lgi$", normalized):
+            return "man_b_w_me_lgi"
         if re.search(r"melgi$", normalized):
             return "man_b_w_me_lgi"
+        if re.search(r"mec(?:\d+(?:\.\d+)?)?gie$", normalized):
+            return "man_b_w_me_gie"
         if re.search(r"megie$", normalized):
             return "man_b_w_me_gie"
-        if re.search(r"megi$", normalized):
+        if re.search(r"me(?:\d+(?:\.\d+)?)?gi$", normalized):
             return "man_b_w_me_gi"
-        if re.search(r"mega$", normalized):
+        if re.search(r"me(?:\d+(?:\.\d+)?)?ga$", normalized):
             return "man_b_w_me_ga"
         if re.search(r"mec", normalized):
             return "man_b_w_me_c"
@@ -3355,13 +3422,13 @@ class AIResumeAnalyzer:
             return "wartsila_rta"
         if normalized.startswith("rtflex"):
             return "wartsila_rt_flex"
-        if re.search(r"x\d{2,3}dfhp", normalized):
+        if re.search(r"(?:\d{1,2})?x\d{2,3}dfhp", normalized):
             return "wingd_x_df_hp"
-        if re.search(r"x\d{2,3}df(?:me|m)$", normalized):
+        if re.search(r"(?:\d{1,2})?x\d{2,3}df(?:me|m)$", normalized):
             return "wingd_x_df_m_e"
-        if re.search(r"x\d{2,3}dfa", normalized):
+        if re.search(r"(?:\d{1,2})?x\d{2,3}dfa", normalized):
             return "wingd_x_df_a"
-        if re.search(r"x\d{2,3}df", normalized):
+        if re.search(r"(?:\d{1,2})?x\d{2,3}df", normalized):
             return "wingd_x_df"
         return None
 
@@ -3370,16 +3437,18 @@ class AIResumeAnalyzer:
         if not text:
             return []
         patterns = [
-            r"\b\d{1,2}[SGK]\d{2,3}ME(?:[-\s]?(?:B|C|C-GI|GI|GA|LGI|LGIM|LGIP|LGIA|GIE)(?:\d+(?:\.\d+)?)?)?\b",
+            r"\b\d{1,2}[SGK]\d{2,3}ME(?:[-\s]?(?:C[-\s]?GI|LGIM|LGIP|LGIA|LGI|GIE|GI|GA|B|C)(?:\d+(?:\.\d+)?)?(?:[-\s]?(?:GI|LGIM|LGIP|LGIA|GIE))?)?\b",
             r"\b\d{1,2}[SGK]\d{2,3}MC(?:[-\s]?C)?\b",
             r"\b\d{1,2}RTA\d{2,3}[A-Z]?\b",
             r"\bRT[-\s]?FLEX(?:[-\s]?[A-Z])?\d*[A-Z]?\b",
-            r"\bX\d{2,3}DF(?:[-\s]?(?:M\/E|M|A|HP)|\d(?:\.\d+)?)?\b",
+            r"\b(?:\d{1,2})?X\d{2,3}DF(?:[-\s]?(?:M\/E|HP|M|A)|[-\s]?\d+(?:\.\d+)?)?\b",
             r"\bUEC[-\s]?(?:LSII|LSE|LSH|LSJ)\b",
         ]
         matches = []
         for pattern in patterns:
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                if self._engine_match_is_negated(text, match.start()):
+                    continue
                 token = match.group(0)
                 canonical = self._canonical_engine_from_model_token(token)
                 if canonical:
@@ -3420,6 +3489,8 @@ class AIResumeAnalyzer:
                     and "man_b_w_mc" in seen
                     and normalized_alias in {"man b&w", "man & b&w", "man b and w", "man bw", "man-b&w", "b&w"}
                 ):
+                    continue
+                if canonical_id == "man_b_w_me_gi" and "man_b_w_me_c_gi" in seen:
                     continue
                 if (
                     canonical_id == "wingd_x_df"
@@ -3475,18 +3546,11 @@ class AIResumeAnalyzer:
             for descendant in self._engine_descendants(root):
                 if descendant not in expected_values:
                     expected_values.append(descendant)
-        if requested == "methanol_engine":
-            for value in ("man_b_w_me_lgim", "wingd_x_df_m_e"):
-                if value not in expected_values:
-                    expected_values.append(value)
-        if requested == "ammonia_engine":
-            for value in ("man_b_w_me_lgia", "wingd_x_df_a"):
-                if value not in expected_values:
-                    expected_values.append(value)
         return expected_values
 
     def _engine_bucket_fallback_allowed(self, requested_engine_type):
-        return requested_engine_type in {"dual_fuel", "electronically_controlled_engine"}
+        requested = self._normalize_engine_type(requested_engine_type).replace(" ", "_")
+        return requested in {"dual_fuel", "electronically_controlled_engine"}
 
     def _engine_match_outcome(self, requested_engine_type, candidate_engine_types):
         requested = self._normalize_engine_type(requested_engine_type).replace(" ", "_")
@@ -3604,6 +3668,12 @@ class AIResumeAnalyzer:
             )
         return f"Could not determine engine experience for requested filter '{requested_label}'."
 
+    def _ship_type_display_label(self, ship_type):
+        normalized = self._normalize_ship_type(ship_type)
+        if not normalized:
+            return str(ship_type or "").strip()
+        return normalized.replace("_", " ")
+
     def _engine_matched_evidence(self, match_outcome):
         if not match_outcome:
             return None
@@ -3622,6 +3692,8 @@ class AIResumeAnalyzer:
         strongest = None
         matched_months = 0
         matched_contracts = 0
+        unknown_months = 0
+        unknown_contracts = 0
         parsed_engine_rows = 0
         for row in rows:
             row_engine_types = [
@@ -3638,8 +3710,12 @@ class AIResumeAnalyzer:
             months = self._compute_service_duration_months(row.get("sign_in_date"), row.get("sign_out_date"))
             if months is None:
                 continue
-            matched_months += months
-            matched_contracts += 1
+            if outcome["decision"] == "PASS":
+                matched_months += months
+                matched_contracts += 1
+            elif outcome["decision"] == "UNKNOWN":
+                unknown_months += months
+                unknown_contracts += 1
             if strongest is None or outcome["rank"] > strongest["rank"]:
                 strongest = {
                     **outcome,
@@ -3649,6 +3725,8 @@ class AIResumeAnalyzer:
             "strongest": strongest,
             "matched_months": matched_months,
             "matched_contracts": matched_contracts,
+            "unknown_months": unknown_months,
+            "unknown_contracts": unknown_contracts,
             "parsed_engine_rows": parsed_engine_rows,
         }
 
@@ -3724,10 +3802,6 @@ class AIResumeAnalyzer:
 
         if not matches:
             return None
-        for generic_engine_type in ("methanol_engine", "ammonia_engine"):
-            if generic_engine_type in matches:
-                matches = [generic_engine_type] + [match for match in matches if match != generic_engine_type]
-                break
         engine_type = matches[0]
         contract_patterns = [
             r"\b(?:last|recent|latest)\s+(\d+)\s+(?:contracts?|vessels?|ships?)\b",
@@ -10899,29 +10973,40 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "PASS",
                 "VESSEL_TONNAGE_MATCH",
-                f"Candidate vessel tonnage evidence includes {best['value']} {best['unit']}, matching the requested range.",
+                (
+                    f"Candidate vessel tonnage evidence includes "
+                    f"{self._format_tonnage_value(best['value'], best.get('unit'))}, matching the requested range."
+                ),
                 actual_value={**actual_value, "matched_evidence": passing_rows},
                 expected_value=constraint,
                 confidence=confidence,
             )
 
         if min_value is not None and below_rows and not above_rows:
-            best_value = max(row.get("value") or 0 for row in below_rows)
+            best_row = max(below_rows, key=lambda row: row.get("value") or 0)
             return self._base_rule_result(
                 "FAIL",
                 "VESSEL_TONNAGE_BELOW_MINIMUM",
-                f"Highest vessel tonnage found is {best_value}, below required minimum {min_value}.",
+                (
+                    f"Highest vessel tonnage found is "
+                    f"{self._format_tonnage_value(best_row.get('value'), best_row.get('unit'))}, "
+                    f"below required minimum {self._format_tonnage_value(min_value, requested_unit)}."
+                ),
                 actual_value=actual_value,
                 expected_value=constraint,
                 confidence=confidence,
             )
 
         if max_value is not None and above_rows and not below_rows:
-            lowest_value = min(row.get("value") or 0 for row in above_rows)
+            lowest_row = min(above_rows, key=lambda row: row.get("value") or 0)
             return self._base_rule_result(
                 "FAIL",
                 "VESSEL_TONNAGE_ABOVE_MAXIMUM",
-                f"Lowest vessel tonnage found is {lowest_value}, above required maximum {max_value}.",
+                (
+                    f"Lowest vessel tonnage found is "
+                    f"{self._format_tonnage_value(lowest_row.get('value'), lowest_row.get('unit'))}, "
+                    f"above required maximum {self._format_tonnage_value(max_value, requested_unit)}."
+                ),
                 actual_value=actual_value,
                 expected_value=constraint,
                 confidence=confidence,
@@ -11085,6 +11170,8 @@ class AIResumeAnalyzer:
                     "item": item,
                     "matched_months": row_summary["matched_months"],
                     "matched_contracts": row_summary["matched_contracts"],
+                    "unknown_months": row_summary["unknown_months"],
+                    "unknown_contracts": row_summary["unknown_contracts"],
                     "evaluated_contracts": len(scoped["rows"]),
                     "scope": scoped["scope"],
                     "matched_evidence": self._engine_matched_evidence(row_summary["strongest"]),
@@ -11113,6 +11200,23 @@ class AIResumeAnalyzer:
                         unknown_reason="FACTUAL_UNKNOWN" if strongest["decision"] == "UNKNOWN" else None,
                     ))
                     continue
+                if (
+                    row_summary["strongest"]
+                    and row_summary["strongest"]["decision"] == "UNKNOWN"
+                    and row_summary["matched_contracts"] == 0
+                    and row_summary["unknown_contracts"] > 0
+                ):
+                    strongest = row_summary["strongest"]
+                    item_results.append(self._base_rule_result(
+                        strongest["decision"],
+                        strongest["reason_code"],
+                        self._format_engine_match_message(requested_engine_type, strongest),
+                        actual_value=actual_value,
+                        expected_value=item,
+                        confidence=strongest["confidence"],
+                        unknown_reason="FACTUAL_UNKNOWN",
+                    ))
+                    continue
                 if row_summary["parsed_engine_rows"] == 0:
                     aggregate_outcome = self._engine_match_outcome(requested_engine_type, aggregate_engine_types)
                     if aggregate_outcome:
@@ -11129,7 +11233,10 @@ class AIResumeAnalyzer:
                         item_results.append(self._base_rule_result(
                             "FAIL",
                             "ENGINE_EXPERIENCE_MISMATCH",
-                            f"Candidate engine experience does not match '{self._engine_display_label(requested_engine_type)}'.",
+                            (
+                                f"Candidate engine experience ({self._format_engine_type_list(aggregate_engine_types)}) "
+                                f"does not match '{self._engine_display_label(requested_engine_type)}'."
+                            ),
                             actual_value={**actual_value, "aggregate_engine_types": aggregate_engine_types},
                             expected_value=item,
                             confidence=confidence,
@@ -11211,18 +11318,38 @@ class AIResumeAnalyzer:
             actual_value = {
                 "matched_months": row_summary["matched_months"],
                 "matched_contracts": row_summary["matched_contracts"],
+                "unknown_months": row_summary["unknown_months"],
+                "unknown_contracts": row_summary["unknown_contracts"],
                 "evaluated_contracts": len(evaluated_rows),
                 "matched_evidence": self._engine_matched_evidence(row_summary["strongest"]),
             }
 
             if row_summary["parsed_engine_rows"] == 0:
                 return self._base_rule_result(
-                    "FAIL",
-                    "ENGINE_EXPERIENCE_MISMATCH",
-                    f"Candidate has parsed service rows but no engine evidence matching '{self._engine_display_label(requested_engine_type)}'.",
+                    "UNKNOWN",
+                    "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED",
+                    f"Could not evaluate engine evidence for requested filter '{self._engine_display_label(requested_engine_type)}'.",
                     actual_value=actual_value,
                     expected_value=constraint,
                     confidence=service_rows_confidence or confidence,
+                    unknown_reason="FACTUAL_UNKNOWN",
+                )
+
+            if (
+                row_summary["strongest"]
+                and row_summary["strongest"]["decision"] == "UNKNOWN"
+                and row_summary["matched_contracts"] == 0
+                and row_summary["unknown_contracts"] > 0
+            ):
+                strongest = row_summary["strongest"]
+                return self._base_rule_result(
+                    strongest["decision"],
+                    strongest["reason_code"],
+                    self._format_engine_match_message(requested_engine_type, strongest),
+                    actual_value=actual_value,
+                    expected_value=constraint,
+                    confidence=strongest["confidence"],
+                    unknown_reason="FACTUAL_UNKNOWN",
                 )
 
             if lookback_contracts > 0 and min_months == 0 and recent_contract_match_mode == "all":
@@ -11297,7 +11424,7 @@ class AIResumeAnalyzer:
                 "FAIL",
                 "ENGINE_EXPERIENCE_MISMATCH",
                 (
-                    f"Candidate engine experience {experienced_engine_types} does not match requested "
+                    f"Candidate engine experience ({self._format_engine_type_list(experienced_engine_types)}) does not match requested "
                     f"filter '{self._engine_display_label(requested_engine_type)}'."
                 ),
                 actual_value={"engine_types": experienced_engine_types},
@@ -11330,11 +11457,22 @@ class AIResumeAnalyzer:
 
         service_rows_status = str((fact_meta.get("experience.service_rows") or {}).get("status") or "")
         if service_rows and service_rows_status == "PARSED":
+            if not row_engine_types:
+                return self._base_rule_result(
+                    "UNKNOWN",
+                    "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED",
+                    f"Could not evaluate engine evidence for requested filter '{self._engine_display_label(requested_engine_type)}'.",
+                    actual_value={"engine_types": []},
+                    expected_value=expected_engine_types,
+                    confidence=service_rows_confidence or confidence,
+                    unknown_reason="FACTUAL_UNKNOWN",
+                )
             return self._base_rule_result(
                 "FAIL",
                 "ENGINE_EXPERIENCE_MISMATCH",
                 (
-                    f"Candidate has parsed service rows but no engine evidence matching "
+                    f"Candidate has parsed service rows with engine evidence "
+                    f"({self._format_engine_type_list(row_engine_types)}), but none matching "
                     f"'{self._engine_display_label(requested_engine_type)}'."
                 ),
                 actual_value={"engine_types": row_engine_types},
@@ -11395,6 +11533,9 @@ class AIResumeAnalyzer:
                 confidence=confidence,
                 unknown_reason="FACTUAL_UNKNOWN",
             )
+
+        requested_engine_label = self._engine_display_label(requested_engine_type)
+        requested_vessel_label = self._ship_type_display_label(requested_vessel_type)
 
         valid_rows = []
         for row in service_rows:
@@ -11463,7 +11604,7 @@ class AIResumeAnalyzer:
                     "PASS",
                     "ENGINE_VESSEL_EXPERIENCE_MATCH",
                     (
-                        f"Candidate has '{requested_engine_type}' on '{requested_vessel_type}' "
+                        f"Candidate has '{requested_engine_label}' on '{requested_vessel_label}' "
                         f"in all {lookback_contracts} recent contract(s)."
                     ),
                     actual_value={
@@ -11480,7 +11621,7 @@ class AIResumeAnalyzer:
                 "FAIL",
                 "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT",
                 (
-                    f"Candidate has '{requested_engine_type}' on '{requested_vessel_type}' in "
+                    f"Candidate has '{requested_engine_label}' on '{requested_vessel_label}' in "
                     f"{matched_contracts} of the recent {lookback_contracts} contract(s); "
                     f"all {lookback_contracts} were required."
                 ),
@@ -11500,7 +11641,7 @@ class AIResumeAnalyzer:
                 "PASS",
                 "ENGINE_VESSEL_EXPERIENCE_MATCH",
                 (
-                    f"Candidate has '{requested_engine_type}' on '{requested_vessel_type}' "
+                    f"Candidate has '{requested_engine_label}' on '{requested_vessel_label}' "
                     f"in {matched_contracts} contract(s)."
                 ),
                 actual_value={
@@ -11517,8 +11658,8 @@ class AIResumeAnalyzer:
                 "PASS",
                 "ENGINE_VESSEL_EXPERIENCE_MATCH",
                 (
-                    f"Candidate has {matched_months} month(s) with '{requested_engine_type}' "
-                    f"on '{requested_vessel_type}'."
+                    f"Candidate has {matched_months} month(s) with '{requested_engine_label}' "
+                    f"on '{requested_vessel_label}'."
                 ),
                 actual_value={
                     "matched_months": matched_months,
@@ -11533,8 +11674,8 @@ class AIResumeAnalyzer:
             "FAIL",
             "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT",
             (
-                f"Candidate has only {matched_months} month(s) with '{requested_engine_type}' "
-                f"on '{requested_vessel_type}', below the required {min_months}."
+                f"Candidate has only {matched_months} month(s) with '{requested_engine_label}' "
+                f"on '{requested_vessel_label}', below the required {min_months}."
             ),
             actual_value={
                 "matched_months": matched_months,
