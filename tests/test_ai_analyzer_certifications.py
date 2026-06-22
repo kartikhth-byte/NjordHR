@@ -210,6 +210,24 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
     def test_extract_coc_country_from_snippet_does_not_treat_in_as_india(self):
         self.assertIsNone(self.analyzer._extract_coc_country_from_snippet("COC issued in 2019"))
 
+    def test_extract_coc_country_from_snippet_does_not_treat_us_prose_as_usa(self):
+        for snippet in (
+            "give us coc details",
+            "trust us",
+            "among us crew",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertIsNone(self.analyzer._extract_coc_country_from_snippet(snippet))
+
+    def test_extract_coc_country_from_snippet_still_matches_explicit_usa(self):
+        for snippet in (
+            "USA-issued certificate of competency",
+            "United States coc",
+            "American coc holder",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertEqual(self.analyzer._extract_coc_country_from_snippet(snippet), "usa")
+
     def test_extract_coc_fact_does_not_infer_country_from_adjacent_employer_demonym(self):
         fact = self.analyzer._extract_coc_fact_from_text(
             "Certificate of Competency\n"
