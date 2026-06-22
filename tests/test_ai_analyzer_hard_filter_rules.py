@@ -205,6 +205,128 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_combine_any_of_item_results_sanitizes_debug_payload(self):
+        item_results = [
+            {
+                "decision": "PASS",
+                "reason_code": "EXPERIENCE_SHIP_TYPE_MATCH",
+                "message": "Candidate has experienced ship type matching 'container'.",
+                "actual_value": {
+                    "item": {"ship_type_family": "container", "years_back": 3},
+                    "matched_contracts": 2,
+                    "matched_months": 18,
+                    "matched_evidence": [{"family_id": "container", "engine_type": "man_b_w_me_gi"}],
+                },
+                "expected_value": {
+                    "family": "container",
+                    "expected_values": ["container", "container vessel"],
+                },
+                "confidence": 0.91,
+                "unknown_reason": None,
+            },
+            {
+                "decision": "FAIL",
+                "reason_code": "EXPERIENCE_SHIP_TYPE_MISMATCH",
+                "message": "Candidate lacks tanker experience.",
+                "actual_value": ["bulk carrier"],
+                "expected_value": {
+                    "family": "tanker",
+                    "expected_values": ["oil tanker", "product tanker"],
+                },
+                "confidence": None,
+                "unknown_reason": None,
+            },
+        ]
+
+        result = self.analyzer._combine_any_of_item_results(
+            item_results,
+            constraint={"items": ["placeholder"]},
+            family_label="experienced ship type",
+            match_code="EXPERIENCE_SHIP_TYPE_MATCH",
+            mismatch_code="EXPERIENCE_SHIP_TYPE_MISMATCH",
+            unknown_code="EXPERIENCE_SHIP_TYPE_UNKNOWN",
+        )
+
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(len(result["actual_value"]), 2)
+        self.assertNotIn("expected_value", result["actual_value"][0])
+        self.assertNotIn("actual_value", result["actual_value"][0])
+        self.assertEqual(
+            result["actual_value"][0],
+            {
+                "decision": "PASS",
+                "reason_code": "EXPERIENCE_SHIP_TYPE_MATCH",
+                "message": "Candidate has experienced ship type matching 'container'.",
+                "confidence": 0.91,
+                "unknown_reason": None,
+            },
+        )
+
+    def test_combine_any_of_item_results_sanitizes_fail_and_unknown_payloads(self):
+        fail_result = self.analyzer._combine_any_of_item_results(
+            [
+                {
+                    "decision": "FAIL",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_MISMATCH",
+                    "message": "Candidate lacks tanker experience.",
+                    "actual_value": {"item": {"ship_type_family": "tanker"}, "matched_evidence": [{"family_id": "oil_tanker"}]},
+                    "expected_value": {"family": "tanker"},
+                    "confidence": None,
+                    "unknown_reason": None,
+                }
+            ],
+            constraint={"items": ["placeholder"]},
+            family_label="experienced ship type",
+            match_code="EXPERIENCE_SHIP_TYPE_MATCH",
+            mismatch_code="EXPERIENCE_SHIP_TYPE_MISMATCH",
+            unknown_code="EXPERIENCE_SHIP_TYPE_UNKNOWN",
+        )
+        self.assertEqual(fail_result["decision"], "FAIL")
+        self.assertEqual(
+            fail_result["actual_value"],
+            [
+                {
+                    "decision": "FAIL",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_MISMATCH",
+                    "message": "Candidate lacks tanker experience.",
+                    "confidence": None,
+                    "unknown_reason": None,
+                }
+            ],
+        )
+
+        unknown_result = self.analyzer._combine_any_of_item_results(
+            [
+                {
+                    "decision": "UNKNOWN",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_UNKNOWN",
+                    "message": "Could not determine tanker experience.",
+                    "actual_value": {"matched_evidence": [{"family_id": "tanker"}]},
+                    "expected_value": {"family": "tanker"},
+                    "confidence": None,
+                    "unknown_reason": "FACTUAL_UNKNOWN",
+                }
+            ],
+            constraint={"items": ["placeholder"]},
+            family_label="experienced ship type",
+            match_code="EXPERIENCE_SHIP_TYPE_MATCH",
+            mismatch_code="EXPERIENCE_SHIP_TYPE_MISMATCH",
+            unknown_code="EXPERIENCE_SHIP_TYPE_UNKNOWN",
+        )
+        self.assertEqual(unknown_result["decision"], "UNKNOWN")
+        self.assertEqual(
+            unknown_result["actual_value"],
+            [
+                {
+                    "decision": "UNKNOWN",
+                    "reason_code": "EXPERIENCE_SHIP_TYPE_UNKNOWN",
+                    "message": "Could not determine tanker experience.",
+                    "confidence": None,
+                    "unknown_reason": "FACTUAL_UNKNOWN",
+                }
+            ],
+        )
+
     def test_rule_skipped_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -1691,7 +1813,8 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MATCH")
-        self.assertEqual(result["results"][0]["actual_value"][0]["actual_value"]["evaluated_contracts"], 2)
+        self.assertNotIn("actual_value", result["results"][0]["actual_value"][0])
+        self.assertIn("Candidate has experienced ship type matching", result["results"][0]["actual_value"][0]["message"])
 
     def test_experience_ship_type_contract_count_with_undated_row_needs_review(self):
         result = self.analyzer._evaluate_hard_filters(

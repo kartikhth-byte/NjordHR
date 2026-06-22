@@ -479,6 +479,32 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "ANY_OF_GROUP_MISMATCH")
 
+    def test_vessel_engine_any_of_group_redacts_child_payloads(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Has lng vessel or dual fuel vessel or win gd vessel expereince"
+        )
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "vessel_types": ["bulk carrier"],
+                    "engine_types": ["wingd_x_engines"],
+                },
+                "fact_meta": {
+                    "experience.vessel_types": {"confidence": 0.9},
+                    "experience.engine_types": {"confidence": 0.8},
+                },
+            },
+            constraints,
+        )
+
+        group_result = result["results"][0]
+        self.assertEqual(group_result["decision"], "PASS")
+        self.assertTrue(group_result["actual_value"])
+        self.assertNotIn("expected_value", group_result["actual_value"][0])
+        self.assertNotIn("actual_value", group_result["actual_value"][0])
+        self.assertNotIn("logical_group_child_constraint", group_result["actual_value"][0])
+        self.assertIn("label", group_result["actual_value"][0])
+
     def test_experience_ship_type_hard_filter_is_separate_from_applied_ship_type(self):
         candidate_facts = {
             "application": {"applied_ship_types": ["Bulk Carrier"]},

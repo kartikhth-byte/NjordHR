@@ -2226,7 +2226,27 @@ def _settings_payload(include_plain_secrets=False):
 
     def _agent_setting_bool(name, fallback=False):
         if _agent_setting_present(name):
-            return bool(agent_settings.get(name, fallback))
+            raw_value = agent_settings.get(name, fallback)
+            if isinstance(raw_value, bool):
+                return raw_value
+            if raw_value is None:
+                return bool(fallback)
+            if isinstance(raw_value, str):
+                stripped = raw_value.strip().lower()
+                if stripped == "":
+                    return bool(fallback)
+                if stripped in {"true", "1", "yes", "on"}:
+                    return True
+                if stripped in {"false", "0", "no", "off"}:
+                    return False
+                return bool(fallback)
+            if isinstance(raw_value, int):
+                if raw_value == 0:
+                    return False
+                if raw_value == 1:
+                    return True
+                return bool(fallback)
+            return bool(fallback)
         return _advanced_bool(name, fallback)
 
     def _agent_setting_int(name, fallback):
@@ -2235,12 +2255,18 @@ def _settings_payload(include_plain_secrets=False):
                 raw_value = agent_settings.get(name, fallback)
                 if raw_value is None:
                     return int(fallback)
+                if isinstance(raw_value, bool):
+                    return int(fallback)
+                if isinstance(raw_value, float):
+                    return int(fallback)
                 if isinstance(raw_value, str):
                     stripped = raw_value.strip()
                     if stripped == "":
                         return int(fallback)
                     return int(stripped)
-                return int(raw_value)
+                if isinstance(raw_value, int):
+                    return int(raw_value)
+                return int(fallback)
             except Exception:
                 return int(fallback)
         return _int_setting("Advanced", name, fallback)
