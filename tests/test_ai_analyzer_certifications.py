@@ -109,6 +109,20 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(fact["expiry_date"], date(2029, 4, 22))
         self.assertEqual(fact["expiry_status"], "PARSED")
 
+    def test_extract_coc_fact_from_additional_demonym_country_row(self):
+        fact = self.analyzer._extract_coc_fact_from_text(
+            "Certificate Details\n"
+            "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+            "ZA844428 Second Mate (FG) Iranian 20-Dec-2021 20-Dec-2026 16NL2433"
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["grade"], "2nd_officer")
+        self.assertEqual(fact["country"], "iran")
+        self.assertEqual(fact["issue_authority"], "Iranian")
+        self.assertEqual(fact["certificate_type"], "Second Mate (FG)")
+        self.assertEqual(fact["expiry_date"], date(2026, 12, 20))
+        self.assertEqual(fact["expiry_status"], "PARSED")
+
     def test_extract_coc_fact_from_certificate_table_row_without_explicit_coc_label(self):
         fact = self.analyzer._extract_coc_fact_from_text(
             "D10008212 Chief Officer(FG) Singapore 08-Apr-2025 04-Apr-2030 14HL9555"

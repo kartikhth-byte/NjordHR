@@ -2410,6 +2410,116 @@ class AIResumeAnalyzer:
             return None
         return normalized or None
 
+    def _extract_coc_country_from_snippet(self, value):
+        normalized = str(value or "").strip().lower()
+        if not normalized:
+            return None
+        normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
+        normalized = re.sub(r"\s+", " ", normalized)
+        if not normalized:
+            return None
+        aliases = {
+            "in": "india",
+            "india": "india",
+            "indian": "india",
+            "uk": "uk",
+            "u k": "uk",
+            "gb": "uk",
+            "great britain": "uk",
+            "britain": "uk",
+            "british": "uk",
+            "united kingdom": "uk",
+            "australia": "australia",
+            "australian": "australia",
+            "bahamas": "bahamas",
+            "bahamian": "bahamas",
+            "bangladesh": "bangladesh",
+            "bangladeshi": "bangladesh",
+            "brazil": "brazil",
+            "brazilian": "brazil",
+            "canada": "canada",
+            "canadian": "canada",
+            "china": "china",
+            "chinese": "china",
+            "croatia": "croatia",
+            "croatian": "croatia",
+            "cyprus": "cyprus",
+            "cypriot": "cyprus",
+            "denmark": "denmark",
+            "danish": "denmark",
+            "egypt": "egypt",
+            "egyptian": "egypt",
+            "france": "france",
+            "french": "france",
+            "germany": "germany",
+            "german": "germany",
+            "greece": "greece",
+            "greek": "greece",
+            "hong kong": "hong kong",
+            "indonesia": "indonesia",
+            "indonesian": "indonesia",
+            "iran": "iran",
+            "iranian": "iran",
+            "italy": "italy",
+            "italian": "italy",
+            "japan": "japan",
+            "japanese": "japan",
+            "korea": "korea",
+            "korean": "korea",
+            "liberia": "liberia",
+            "liberian": "liberia",
+            "maldives": "maldives",
+            "maldivian": "maldives",
+            "malaysia": "malaysia",
+            "malaysian": "malaysia",
+            "marshall islands": "marshall islands",
+            "marshallese": "marshall islands",
+            "mauritius": "mauritius",
+            "mauritian": "mauritius",
+            "netherlands": "netherlands",
+            "dutch": "netherlands",
+            "norway": "norway",
+            "norwegian": "norway",
+            "pakistan": "pakistan",
+            "pakistani": "pakistan",
+            "panama": "panama",
+            "panamanian": "panama",
+            "philippines": "philippines",
+            "philippine": "philippines",
+            "filipino": "philippines",
+            "argentina": "argentina",
+            "argentinian": "argentina",
+            "poland": "poland",
+            "polish": "poland",
+            "portugal": "portugal",
+            "portuguese": "portugal",
+            "romania": "romania",
+            "romanian": "romania",
+            "russia": "russia",
+            "russian": "russia",
+            "singapore": "singapore",
+            "singaporean": "singapore",
+            "spain": "spain",
+            "spanish": "spain",
+            "sri lanka": "sri lanka",
+            "sri lankan": "sri lanka",
+            "turkey": "turkey",
+            "turkish": "turkey",
+            "ukraine": "ukraine",
+            "ukrainian": "ukraine",
+            "usa": "usa",
+            "us": "usa",
+            "u s": "usa",
+            "united states": "usa",
+            "american": "usa",
+            "vietnam": "vietnam",
+            "vietnamese": "vietnam",
+        }
+        for alias in sorted(aliases, key=len, reverse=True):
+            if re.search(rf"\b{re.escape(alias)}\b", normalized):
+                return aliases[alias]
+        return None
+
     def _is_coc_country_phrase_candidate(self, value):
         phrase = re.sub(r"\s+", " ", str(value or "").strip().lower())
         phrase = re.sub(r"^(?:a|an|the)\s+", "", phrase)
@@ -2418,6 +2528,13 @@ class AIResumeAnalyzer:
         phrase = re.sub(r"^(?:and|or|for|with)\s+", "", phrase).strip(" -")
         if not phrase:
             return None
+        alias_candidate = self._extract_coc_country_from_snippet(phrase)
+        if alias_candidate:
+            for token in re.split(r"[\s/-]+", phrase):
+                normalized_token = self._normalize_coc_country(token)
+                if normalized_token == alias_candidate:
+                    return token
+            return phrase
         if phrase in {"and", "or", "for", "with"} or re.search(r"\b(?:and|or|for|with)\b", phrase):
             return None
         if phrase in {"coc", "certificate", "certificate of competency"}:
@@ -8334,17 +8451,8 @@ class AIResumeAnalyzer:
             coc_country = table_fields.get("country")
             issue_authority = table_fields.get("issue_authority")
             certificate_type = table_fields.get("certificate_type")
-            for country_match in re.finditer(
-                r"\b(?:india|indian|uk|u\.?\s*k\.?|united\s+kingdom|british)\b",
-                snippet,
-                flags=re.IGNORECASE,
-            ):
-                if coc_country:
-                    break
-                candidate_country = self._normalize_coc_country(country_match.group(0))
-                if candidate_country:
-                    coc_country = candidate_country
-                    break
+            if not coc_country:
+                coc_country = self._extract_coc_country_from_snippet(snippet)
 
             if expiry_fact.get("status") == "PARSED":
                 return {
@@ -10879,26 +10987,26 @@ class AIResumeAnalyzer:
             confidence=confidence,
         )
 
-    def _combine_any_of_item_results(self, item_results, *, constraint, family_label, match_code, mismatch_code, unknown_code):
-        def _sanitized_item_results(results):
-            sanitized = []
-            for result in results or []:
-                if not isinstance(result, dict):
-                    sanitized.append(result)
-                    continue
-                sanitized.append(
-                    {
-                        "decision": result.get("decision"),
-                        "reason_code": result.get("reason_code"),
-                        "message": result.get("message"),
-                        "confidence": result.get("confidence"),
-                        "unknown_reason": result.get("unknown_reason"),
-                        "actual_value": result.get("actual_value"),
-                    }
-                )
-            return sanitized
+    def _redacted_group_child_results(self, results):
+        redacted = []
+        for result in results or []:
+            if not isinstance(result, dict):
+                continue
+            item = {
+                "decision": result.get("decision"),
+                "reason_code": result.get("reason_code"),
+                "message": result.get("message"),
+                "confidence": result.get("confidence"),
+                "unknown_reason": result.get("unknown_reason"),
+            }
+            label = str(result.get("logical_group_child_label") or "").strip()
+            if label:
+                item["label"] = label
+            redacted.append(item)
+        return redacted
 
-        safe_item_results = _sanitized_item_results(item_results)
+    def _combine_any_of_item_results(self, item_results, *, constraint, family_label, match_code, mismatch_code, unknown_code):
+        safe_item_results = self._redacted_group_child_results(item_results)
         passing_result = next((result for result in item_results if result.get("decision") == "PASS"), None)
         if passing_result:
             return self._base_rule_result(
@@ -11908,7 +12016,7 @@ class AIResumeAnalyzer:
                 "PASS",
                 "ANY_OF_GROUP_MATCH",
                 f"Matched because candidate satisfied one of: {', '.join(labels) or label}.",
-                actual_value=child_results,
+                actual_value=self._redacted_group_child_results(child_results),
                 expected_value=group,
                 confidence=None,
             )
@@ -11917,7 +12025,7 @@ class AIResumeAnalyzer:
                 "FAIL",
                 "ANY_OF_GROUP_MISMATCH",
                 f"Candidate did not satisfy any of: {', '.join(labels) or label}.",
-                actual_value=child_results,
+                actual_value=self._redacted_group_child_results(child_results),
                 expected_value=group,
                 confidence=None,
             )
@@ -11925,7 +12033,7 @@ class AIResumeAnalyzer:
             "UNKNOWN",
             "ANY_OF_GROUP_UNKNOWN",
             f"Could not determine whether candidate satisfies any of: {', '.join(labels) or label}.",
-            actual_value=child_results,
+            actual_value=self._redacted_group_child_results(child_results),
             expected_value=group,
             confidence=None,
             unknown_reason="FACTUAL_UNKNOWN",

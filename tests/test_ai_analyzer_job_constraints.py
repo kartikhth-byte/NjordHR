@@ -1230,6 +1230,14 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     [expected_country],
                 )
 
+    def test_coc_country_prompt_normalizes_demonym_with_grade_words(self):
+        constraints = self.analyzer._extract_job_constraints("has Iranian master coc", rank=self.rank)
+        self.assertIn("coc_country_match", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["coc_country"]["countries"],
+            ["iran"],
+        )
+
     def test_coc_country_prompt_rejects_structural_phantom_countries(self):
         for prompt in (
             "Section II coc",
