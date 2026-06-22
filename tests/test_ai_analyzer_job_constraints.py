@@ -1220,6 +1220,31 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "has Mauritian coc": "mauritius",
             "has Maldivian coc": "maldives",
             "has Argentinian coc": "argentina",
+            "has Colombian coc": "colombia",
+            "has Bolivian coc": "bolivia",
+            "has Peruvian coc": "peru",
+            "has Venezuelan coc": "venezuela",
+            "has Ecuadorian coc": "ecuador",
+            "has Algerian coc": "algeria",
+            "has Tunisian coc": "tunisia",
+            "has Libyan coc": "libya",
+            "has Moroccan coc": "morocco",
+            "has Serbian coc": "serbia",
+            "has Bulgarian coc": "bulgaria",
+            "has Hungarian coc": "hungary",
+            "has Belarusian coc": "belarus",
+            "has Estonian coc": "estonia",
+            "has Latvian coc": "latvia",
+            "has Lithuanian coc": "lithuania",
+            "has Thai coc": "thailand",
+            "has Saudi coc": "saudi arabia",
+            "has Bahraini coc": "bahrain",
+            "has Omani coc": "oman",
+            "has Qatari coc": "qatar",
+            "has Emirati coc": "uae",
+            "has Nigerian coc": "nigeria",
+            "has Kenyan coc": "kenya",
+            "has South African coc": "south africa",
         }
         for prompt, expected_country in cases.items():
             with self.subTest(prompt=prompt):
@@ -1238,6 +1263,17 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ["iran"],
         )
 
+    def test_coc_country_prompt_normalizes_multiword_demonym_with_grade_words(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "has South African chief officer coc",
+            rank=self.rank,
+        )
+        self.assertIn("coc_country_match", constraints["applied_constraints"])
+        self.assertEqual(
+            constraints["hard_constraints"]["coc_country"]["countries"],
+            ["south africa"],
+        )
+
     def test_coc_country_prompt_rejects_structural_phantom_countries(self):
         for prompt in (
             "Section II coc",
@@ -1247,6 +1283,15 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "has Pacific coc",
             "has Atlantic coc",
             "has Asia Pacific coc",
+        ):
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertNotIn("coc_country_match", constraints["applied_constraints"])
+
+    def test_coc_country_prompt_rejects_unknown_suffix_and_region_phantoms(self):
+        for prompt in (
+            "has European coc",
+            "has Martian coc",
         ):
             with self.subTest(prompt=prompt):
                 constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)

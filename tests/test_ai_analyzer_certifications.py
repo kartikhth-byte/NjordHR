@@ -123,6 +123,103 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
         self.assertEqual(fact["expiry_date"], date(2026, 12, 20))
         self.assertEqual(fact["expiry_status"], "PARSED")
 
+    def test_extract_coc_fact_from_long_tail_demonym_country_rows(self):
+        cases = {
+            "Colombian": "colombia",
+            "Bolivian": "bolivia",
+            "Peruvian": "peru",
+            "Venezuelan": "venezuela",
+            "Ecuadorian": "ecuador",
+            "Algerian": "algeria",
+            "Tunisian": "tunisia",
+            "Libyan": "libya",
+            "Moroccan": "morocco",
+            "Serbian": "serbia",
+            "Bulgarian": "bulgaria",
+            "Hungarian": "hungary",
+            "Belarusian": "belarus",
+            "Estonian": "estonia",
+            "Latvian": "latvia",
+            "Lithuanian": "lithuania",
+            "Thai": "thailand",
+            "Saudi": "saudi arabia",
+            "Bahraini": "bahrain",
+            "Omani": "oman",
+            "Qatari": "qatar",
+            "Emirati": "uae",
+            "Nigerian": "nigeria",
+            "Kenyan": "kenya",
+            "South African": "south africa",
+        }
+        for issue_authority, expected_country in cases.items():
+            with self.subTest(issue_authority=issue_authority):
+                fact = self.analyzer._extract_coc_fact_from_text(
+                    "Certificate Details\n"
+                    "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+                    f"ZA844428 Second Mate (FG) {issue_authority} 20-Dec-2021 20-Dec-2026 16NL2433"
+                )
+                self.assertEqual(fact["status"], "PARSED")
+                self.assertEqual(fact["grade"], "2nd_officer")
+                self.assertEqual(fact["country"], expected_country)
+                self.assertEqual(fact["issue_authority"], issue_authority)
+                self.assertEqual(fact["certificate_type"], "Second Mate (FG)")
+                self.assertEqual(fact["expiry_date"], date(2026, 12, 20))
+                self.assertEqual(fact["expiry_status"], "PARSED")
+
+    def test_extract_coc_fact_from_long_tail_maritime_demonym_rows(self):
+        cases = {
+            "Maltese": "malta",
+            "Lebanese": "lebanon",
+            "Burmese": "myanmar",
+            "Nepalese": "nepal",
+            "Sudanese": "sudan",
+            "Taiwanese": "taiwan",
+            "Iraqi": "iraq",
+            "Kuwaiti": "kuwait",
+            "Yemeni": "yemen",
+        }
+        for issue_authority, expected_country in cases.items():
+            with self.subTest(issue_authority=issue_authority):
+                fact = self.analyzer._extract_coc_fact_from_text(
+                    "Certificate Details\n"
+                    "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+                    f"ZA844428 Second Mate (FG) {issue_authority} 20-Dec-2021 20-Dec-2026 16NL2433"
+                )
+                self.assertEqual(fact["country"], expected_country)
+
+    def test_extract_coc_fact_from_multitoken_issue_authority_rows(self):
+        cases = {
+            "DG Shipping": "india",
+            "Government of India": "india",
+            "Republic of Liberia": "liberia",
+            "Bahamas Maritime Authority": "bahamas",
+            "Marshall Islands Registry": "marshall islands",
+            "Transport Malta": "malta",
+        }
+        for issue_authority, expected_country in cases.items():
+            with self.subTest(issue_authority=issue_authority):
+                fact = self.analyzer._extract_coc_fact_from_text(
+                    "Certificate Details\n"
+                    "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+                    f"ZA844428 Second Mate (FG) {issue_authority} 20-Dec-2021 20-Dec-2026 16NL2433"
+                )
+                self.assertEqual(fact["status"], "PARSED")
+                self.assertEqual(fact["country"], expected_country)
+                self.assertEqual(fact["issue_authority"], issue_authority)
+
+    def test_extract_coc_country_from_snippet_does_not_treat_in_as_india(self):
+        self.assertIsNone(self.analyzer._extract_coc_country_from_snippet("COC issued in 2019"))
+
+    def test_extract_coc_fact_does_not_infer_country_from_adjacent_employer_demonym(self):
+        fact = self.analyzer._extract_coc_fact_from_text(
+            "Certificate of Competency\n"
+            "Chief Officer\n"
+            "Expiry Date 20-Dec-2026\n"
+            "Employer: South African Marine Corporation"
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertIsNone(fact["country"])
+
     def test_extract_coc_fact_from_certificate_table_row_without_explicit_coc_label(self):
         fact = self.analyzer._extract_coc_fact_from_text(
             "D10008212 Chief Officer(FG) Singapore 08-Apr-2025 04-Apr-2030 14HL9555"
