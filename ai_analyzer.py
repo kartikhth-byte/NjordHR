@@ -2301,24 +2301,29 @@ class AIResumeAnalyzer:
             }
         return None
 
-    def _normalize_coc_country(self, value):
+    def _normalize_coc_country_text(self, value):
         normalized = str(value or "").strip().lower()
         if not normalized:
-            return None
+            return ""
+        normalized = unicodedata.normalize("NFKD", normalized)
+        normalized = "".join(char for char in normalized if not unicodedata.combining(char))
         normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
         normalized = re.sub(r"\s+", " ", normalized)
-        aliases = self._coc_country_aliases()
-        if normalized in aliases:
-            return aliases[normalized]
-        if normalized.endswith("ian"):
-            return None
-        return normalized or None
+        return normalized
 
-    def _coc_country_aliases(self):
-        return {
-            "in": "india",
+    def _normalize_coc_country(self, value):
+        normalized = self._normalize_coc_country_text(value)
+        if not normalized:
+            return None
+        aliases = self._coc_country_aliases()
+        return aliases.get(normalized)
+
+    def _coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
+        aliases = {
             "india": "india",
             "indian": "india",
+            "dg shipping": "india",
+            "directorate general of shipping": "india",
             "uk": "uk",
             "u k": "uk",
             "gb": "uk",
@@ -2369,6 +2374,8 @@ class AIResumeAnalyzer:
             "indonesian": "indonesia",
             "iran": "iran",
             "iranian": "iran",
+            "iraq": "iraq",
+            "iraqi": "iraq",
             "italy": "italy",
             "italian": "italy",
             "japan": "japan",
@@ -2381,8 +2388,12 @@ class AIResumeAnalyzer:
             "liberian": "liberia",
             "latvia": "latvia",
             "latvian": "latvia",
+            "lebanon": "lebanon",
+            "lebanese": "lebanon",
             "lithuania": "lithuania",
             "lithuanian": "lithuania",
+            "malta": "malta",
+            "maltese": "malta",
             "maldives": "maldives",
             "maldivian": "maldives",
             "malaysia": "malaysia",
@@ -2391,6 +2402,11 @@ class AIResumeAnalyzer:
             "marshallese": "marshall islands",
             "mauritius": "mauritius",
             "mauritian": "mauritius",
+            "myanmar": "myanmar",
+            "burma": "myanmar",
+            "burmese": "myanmar",
+            "nepal": "nepal",
+            "nepalese": "nepal",
             "netherlands": "netherlands",
             "dutch": "netherlands",
             "nigeria": "nigeria",
@@ -2434,9 +2450,14 @@ class AIResumeAnalyzer:
             "sri lankan": "sri lanka",
             "south africa": "south africa",
             "south african": "south africa",
+            "sudan": "sudan",
+            "sudanese": "sudan",
+            "taiwan": "taiwan",
+            "taiwanese": "taiwan",
             "thailand": "thailand",
             "thai": "thailand",
             "turkey": "turkey",
+            "turkiye": "turkey",
             "turkish": "turkey",
             "ukraine": "ukraine",
             "ukrainian": "ukraine",
@@ -2463,17 +2484,20 @@ class AIResumeAnalyzer:
             "estonian": "estonia",
             "hungary": "hungary",
             "hungarian": "hungary",
+            "kuwait": "kuwait",
+            "kuwaiti": "kuwait",
+            "yemen": "yemen",
+            "yemeni": "yemen",
         }
+        if include_ambiguous_shortcuts:
+            aliases["in"] = "india"
+        return aliases
 
     def _extract_coc_country_from_snippet(self, value):
-        normalized = str(value or "").strip().lower()
+        normalized = self._normalize_coc_country_text(value)
         if not normalized:
             return None
-        normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
-        normalized = re.sub(r"\s+", " ", normalized)
-        if not normalized:
-            return None
-        aliases = self._coc_country_aliases()
+        aliases = self._coc_country_aliases(include_ambiguous_shortcuts=False)
         for alias in sorted(aliases, key=len, reverse=True):
             if re.search(rf"\b{re.escape(alias)}\b", normalized):
                 return aliases[alias]
@@ -2493,7 +2517,7 @@ class AIResumeAnalyzer:
                 normalized_token = self._normalize_coc_country(token)
                 if normalized_token == alias_candidate:
                     return token
-            return phrase
+            return alias_candidate
         if phrase in {"and", "or", "for", "with"} or re.search(r"\b(?:and|or|for|with)\b", phrase):
             return None
         if phrase in {"coc", "certificate", "certificate of competency"}:
@@ -8288,7 +8312,7 @@ class AIResumeAnalyzer:
             return {
                 "certificate_type": certificate_type,
                 "issue_authority": issue_authority,
-                "country": self._normalize_coc_country(issue_authority),
+                "country": self._extract_coc_country_from_snippet(issue_authority),
             }
         return {}
 
@@ -8411,7 +8435,8 @@ class AIResumeAnalyzer:
             issue_authority = table_fields.get("issue_authority")
             certificate_type = table_fields.get("certificate_type")
             if not coc_country:
-                coc_country = self._extract_coc_country_from_snippet(snippet)
+                pre_date_snippet = re.split(date_token_pattern, snippet, maxsplit=1, flags=re.IGNORECASE)[0]
+                coc_country = self._extract_coc_country_from_snippet(pre_date_snippet or snippet)
 
             if expiry_fact.get("status") == "PARSED":
                 return {
