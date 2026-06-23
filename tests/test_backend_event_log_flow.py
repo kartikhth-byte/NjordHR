@@ -49,6 +49,10 @@ def _stub_external_modules():
                 return None
 
         analyzer_module.Analyzer = DummyAnalyzer
+        analyzer_module.engine_family_option_catalog = lambda: [
+            {"value": "man_b_w", "label": "MAN B&W"},
+            {"value": "caterpillar", "label": "Caterpillar"},
+        ]
         sys.modules['ai_analyzer'] = analyzer_module
 
 
@@ -2042,6 +2046,23 @@ class BackendEventLogFlowTests(unittest.TestCase):
         finally:
             if old_token is not None:
                 os.environ["NJORDHR_ADMIN_TOKEN"] = old_token
+
+    def test_get_config_engine_families_returns_labeled_options(self):
+        response = self.client.get("/get_config_engine_families")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertTrue(body["success"])
+        options_by_value = {item["value"]: item["label"] for item in body["engine_families"]}
+        self.assertGreaterEqual(len(options_by_value), 10)
+        self.assertEqual(options_by_value["man_b_w"], "MAN B&W")
+        self.assertEqual(options_by_value["man_b_w_mc"], "MAN B&W MC")
+        self.assertEqual(options_by_value["man_b_w_me"], "MAN B&W ME")
+        self.assertEqual(options_by_value["caterpillar"], "Caterpillar")
+        self.assertEqual(
+            options_by_value["electronically_controlled_engine"],
+            "Electronically controlled engine",
+        )
+        self.assertNotIn("man_b_w_mc", options_by_value.values())
 
     def test_cloud_auth_login_uses_password_hash(self):
         with patch.object(

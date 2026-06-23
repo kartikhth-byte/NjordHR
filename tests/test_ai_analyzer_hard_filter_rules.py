@@ -948,6 +948,8 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_FAMILY_FALLBACK")
         self.assertEqual(result["results"][0]["confidence"], 0.7)
+        self.assertIn("broader engine family MAN B&W", result["results"][0]["message"])
+        self.assertIn("reduced confidence", result["results"][0]["message"])
 
     def test_engine_experience_rule_uses_family_fallback_for_wingd_family_only_evidence(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -992,6 +994,37 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK")
         self.assertEqual(result["results"][0]["confidence"], 0.6)
+        self.assertIn("engine manufacturer WinGD", result["results"][0]["message"])
+        self.assertIn("reduced confidence", result["results"][0]["message"])
+
+    def test_engine_experience_rule_matches_new_generic_engine_manufacturers(self):
+        cases = [
+            ("mitsui", "Mitsui"),
+            ("nohab", "Nohab"),
+            ("gotaverken", "Gotaverken"),
+        ]
+        for engine_type, expected_label in cases:
+            with self.subTest(engine_type=engine_type):
+                result = self.analyzer._evaluate_hard_filters(
+                    {
+                        "experience": {"engine_types": [engine_type]},
+                        "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+                    },
+                    {
+                        "applied_constraints": ["engine_experience"],
+                        "hard_constraints": {
+                            "engine_experience": {
+                                "engine_type": engine_type,
+                                "expected_values": self.analyzer._engine_type_expected_values(engine_type),
+                                "min_months": 0,
+                                "lookback_contracts": 0,
+                            }
+                        },
+                    },
+                )
+                self.assertEqual(result["decision"], "PASS")
+                self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
+                self.assertIn(expected_label, result["results"][0]["message"])
 
     def test_engine_experience_rule_uses_family_fallback_for_man_b_w_dual_fuel_bucket(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -1249,7 +1282,7 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
             },
         )
         self.assertEqual(result["decision"], "UNKNOWN")
-        self.assertIn("requested engine detail 'Methanol engine'", result["results"][0]["message"])
+        self.assertIn("requested engine filter 'Methanol engine'", result["results"][0]["message"])
 
     def test_engine_experience_rule_manufacturer_fallback_message_uses_engine_detail_wording(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -1269,7 +1302,7 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK")
-        self.assertIn("requested engine detail 'Electronically controlled engine'", result["results"][0]["message"])
+        self.assertIn("requested engine filter 'Electronically controlled engine'", result["results"][0]["message"])
 
     def test_engine_experience_rule_returns_unknown_when_parsed_rows_have_no_engine_evidence(self):
         result = self.analyzer._evaluate_hard_filters(

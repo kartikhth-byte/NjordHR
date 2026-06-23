@@ -436,6 +436,14 @@
                     .trim();
             };
 
+            const formatUnknownReasonType = (value) => {
+                const code = String(value || '').trim().toUpperCase();
+                if (!code) return '';
+                if (code === 'FACTUAL_UNKNOWN') return 'Evidence too weak for automation to decide';
+                if (code === 'VERSION_MISMATCH_UNKNOWN') return 'Resume facts need refresh before this filter can be evaluated';
+                return humanizeReasonCode(code);
+            };
+
             const HARD_FILTER_REASON_PRESENTERS = [
                 { prefix: 'PASSPORT_', group: 'matchedFilters' },
                 { prefix: 'VESSEL_TONNAGE_', group: 'matchedFilters' },
@@ -514,6 +522,153 @@
                 );
             };
 
+            const extractQuotedPhrases = (value) => {
+                const matches = [];
+                String(value || '').replace(/'([^']+)'/g, (_, captured) => {
+                    matches.push(captured);
+                    return _;
+                });
+                return matches;
+            };
+
+            const engineRequestedLabel = (item) => {
+                const fromMessage = extractQuotedPhrases(item?.message)[0];
+                if (fromMessage) return fromMessage;
+                const expectedValue = item?.expected_value;
+                if (expectedValue && typeof expectedValue === 'object') {
+                    return String(
+                        expectedValue.engine_type
+                        || expectedValue.engine_family
+                        || expectedValue.requested_engine_type
+                        || ''
+                    ).trim().replace(/_/g, ' ');
+                }
+                return '';
+            };
+
+            const engineEvidenceLabel = (item) => {
+                const matchedEvidence = item?.actual_value?.matched_evidence || {};
+                const displayLabel = String(matchedEvidence.display_label || '').trim();
+                if (displayLabel) return displayLabel;
+                const actualValue = item?.actual_value || {};
+                const engineTypes = Array.isArray(actualValue.engine_types) ? actualValue.engine_types.filter(Boolean) : [];
+                if (engineTypes.length > 0) {
+                    return engineTypes.map(value => String(value).replace(/_/g, ' ')).join(', ');
+                }
+                const aggregateEngineTypes = Array.isArray(actualValue.aggregate_engine_types) ? actualValue.aggregate_engine_types.filter(Boolean) : [];
+                if (aggregateEngineTypes.length > 0) {
+                    return aggregateEngineTypes.map(value => String(value).replace(/_/g, ' ')).join(', ');
+                }
+                return '';
+            };
+
+            const formatEngineExperienceMessage = (item) => {
+                const code = String(item?.reason_code || '').trim();
+                const message = String(item?.message || '').trim();
+                const requested = engineRequestedLabel(item);
+                const evidence = engineEvidenceLabel(item);
+                const actualValue = item?.actual_value || {};
+                const matchedContracts = Number(actualValue.matched_contracts || 0);
+                const matchedMonths = Number(actualValue.matched_months || 0);
+                if (!message) return '';
+
+                if (code === 'ENGINE_EXPERIENCE_MATCH') {
+                    if (matchedMonths > 0 && matchedContracts > 0) {
+                        return `Engine experience matches '${requested || evidence}' with ${matchedMonths} month(s) across ${matchedContracts} contract(s).`;
+                    }
+                    if (evidence && requested) {
+                        return `Engine experience matches '${requested}' via '${evidence}'.`;
+                    }
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_FAMILY_FALLBACK') {
+                    return `Broader engine family '${evidence || 'resume evidence'}' was found, but '${requested || 'the requested engine type'}' is not confirmed. Included for recruiter review at reduced confidence.`;
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK') {
+                    return `Engine maker '${evidence || 'resume evidence'}' was found, but '${requested || 'the requested engine type'}' is not confirmed. Included for recruiter review at reduced confidence.`;
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_INSUFFICIENT') {
+                    if (requested && matchedMonths > 0) {
+                        return `Engine experience for '${requested}' is below the requested minimum (${matchedMonths} month(s) found).`;
+                    }
+                    return ensureSentence(
+                        message
+                            .replace(/^Candidate has only\s+/i, "Engine experience is below the requested minimum: ")
+                    );
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_MISMATCH') {
+                    if (requested && evidence) {
+                        return `Engine evidence '${evidence}' does not match '${requested}'.`;
+                    }
+                    return ensureSentence(
+                        message
+                            .replace(/^Candidate engine experience\s+/i, 'Engine evidence ')
+                    );
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_NEEDS_DATE_REVIEW') {
+                    return 'Engine recency could not be confirmed because one or more contract dates are missing.';
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED') {
+                    return `Engine evidence could not be extracted for '${requested || 'the requested engine type'}'.`;
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_ROWS_MISSING') {
+                    return 'Contract-level engine evidence could not be confirmed from this resume.';
+                }
+
+                return ensureSentence(message);
+            };
+
+            const formatEngineVesselExperienceMessage = (item) => {
+                const code = String(item?.reason_code || '').trim();
+                const message = String(item?.message || '').trim();
+                const actualValue = item?.actual_value || {};
+                const quoted = extractQuotedPhrases(message);
+                const engineLabel = quoted[0] || '';
+                const vesselLabel = quoted[1] || '';
+                const matchedContracts = Number(actualValue.matched_contracts || 0);
+                const matchedMonths = Number(actualValue.matched_months || 0);
+                const requiredContracts = Number(actualValue.required_contracts || 0);
+                if (!message) return '';
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_MATCH') {
+                    if (matchedMonths > 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience matches: ${matchedMonths} month(s) with '${engineLabel}' on '${vesselLabel}'.`;
+                    }
+                    if (matchedContracts > 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience matches: '${engineLabel}' on '${vesselLabel}' in ${matchedContracts} contract(s).`;
+                    }
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT') {
+                    if (requiredContracts > 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience is below the requested recency window for '${engineLabel}' on '${vesselLabel}' (${matchedContracts} of ${requiredContracts} recent contract(s) matched).`;
+                    }
+                    if (matchedMonths >= 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience is below the requested minimum for '${engineLabel}' on '${vesselLabel}' (${matchedMonths} month(s) found).`;
+                    }
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_UNPARSED') {
+                    return 'Engine or vessel evidence could not be extracted from the candidate contract rows.';
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_ROWS_MISSING') {
+                    return 'Contract-level engine and vessel evidence could not be confirmed from this resume.';
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_SOURCE_EXCLUDED') {
+                    return 'Engine + vessel matching needs parsed service rows from a supported resume layout.';
+                }
+
+                return ensureSentence(message);
+            };
+
             const formatHardFilterMessage = (item) => {
                 const code = String(item?.reason_code || '').trim();
                 const message = String(item?.message || '').trim();
@@ -572,6 +727,14 @@
 
                 if (code === 'APPLIED_SHIP_TYPE_MATCH') {
                     return formatShipTypeMatchMessage(message, 'Applied ship type');
+                }
+
+                if (code.startsWith('ENGINE_EXPERIENCE_')) {
+                    return formatEngineExperienceMessage(item);
+                }
+
+                if (code.startsWith('ENGINE_VESSEL_EXPERIENCE_')) {
+                    return formatEngineVesselExperienceMessage(item);
                 }
 
                 return ensureSentence(message);
@@ -725,6 +888,7 @@
                 REASON_GROUP_META,
                 normalizeReasonDisplayLine,
                 humanizeReasonCode,
+                formatUnknownReasonType,
                 formatEngineFamilyLabel,
                 buildReasonDisplayModel,
                 buildReasonDisplaySummary,
@@ -5015,6 +5179,8 @@
 
             const buildReasonDisplaySummary = (rawMatch) => reasonFormatting.buildReasonDisplaySummary(rawMatch);
 
+            const formatUnknownReasonType = (value) => reasonFormatting.formatUnknownReasonType(value);
+
             const renderReasonGroup = (groupKey, lines) => {
                 if (!Array.isArray(lines) || lines.length === 0) return null;
                 const meta = REASON_GROUP_META[groupKey] || REASON_GROUP_META.context;
@@ -5064,6 +5230,11 @@
                 if (reviewPathType === 'factual_unknown') return 'bg-amber-100 text-amber-800 border border-amber-200';
                 if (reviewPathType === 'version_mismatch_unknown') return 'bg-blue-100 text-blue-800 border border-blue-200';
                 return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+            };
+
+            const getNeedsReviewPathType = (match) => {
+                const explicitType = String(match?.review_path_type || '').trim();
+                return explicitType && explicitType !== 'none' ? explicitType : 'factual_unknown';
             };
 
             const getEvidenceReviewStateLabel = (evidenceReviewState) => {
@@ -8411,8 +8582,8 @@
                                                                             )}
                                                                             {match.review_path_type && match.review_path_type !== 'none' && (
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
-                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
-                                                                                        {getReviewPathLabel(match.review_path_type)}
+                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(getNeedsReviewPathType(match))}`}>
+                                                                                        {getReviewPathLabel(getNeedsReviewPathType(match))}
                                                                                     </span>
                                                                                 </div>
                                                                             )}
@@ -8456,8 +8627,8 @@
                                                                                 </a>
                                                                                 <div className="mt-1">{renderFormattedReasonBlock(match)}</div>
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
-                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
-                                                                                        {getReviewPathLabel(match.review_path_type)}
+                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(getNeedsReviewPathType(match))}`}>
+                                                                                        {getReviewPathLabel(getNeedsReviewPathType(match))}
                                                                                     </span>
                                                                                     {match.evidence_review_state && (
                                                                                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-700 border border-slate-200">
@@ -8477,7 +8648,7 @@
                                                                                 )}
                                                                                 {match.unknown_reason_types && match.unknown_reason_types.length > 0 && (
                                                                                     <p className="text-xs text-slate-500 mt-2">
-                                                                                        Unknown reason: {match.unknown_reason_types.join(', ')}
+                                                                                        Review reason: {match.unknown_reason_types.map(formatUnknownReasonType).filter(Boolean).join(', ')}
                                                                                     </p>
                                                                                 )}
                                                                                 {match.dob && (

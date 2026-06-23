@@ -110,3 +110,71 @@ test("formatter humanizes unmatched hard-filter messages with reason code fallba
     "unmapped reason code: Backend left a plain diagnostic message.",
   ]);
 });
+
+test("formatter humanizes unknown review reason codes", () => {
+  assert.equal(
+    helpers.formatUnknownReasonType("FACTUAL_UNKNOWN"),
+    "Evidence too weak for automation to decide",
+  );
+  assert.equal(
+    helpers.formatUnknownReasonType("VERSION_MISMATCH_UNKNOWN"),
+    "Resume facts need refresh before this filter can be evaluated",
+  );
+  assert.equal(helpers.formatUnknownReasonType("CUSTOM_UNKNOWN"), "custom unknown");
+});
+
+test("formatter rewrites engine fallback and engine+vessel messages into recruiter-facing phrasing", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    hard_filter_reasons: [
+      {
+        reason_code: "ENGINE_EXPERIENCE_FAMILY_FALLBACK",
+        message: "Resume mentions broader engine family MAN B&W ME, but does not confirm the requested engine filter 'MAN B&W ME-GI'. Included for recruiter review at reduced confidence.",
+        actual_value: {
+          matched_evidence: {
+            display_label: "MAN B&W ME",
+          },
+        },
+        expected_value: {
+          engine_type: "man_b_w_me_gi",
+        },
+      },
+      {
+        reason_code: "ENGINE_EXPERIENCE_MATCH",
+        message: "Candidate has MAN B&W ME-C experience matching 'MAN B&W ME'.",
+        actual_value: {
+          matched_months: 18,
+          matched_contracts: 2,
+          matched_evidence: {
+            display_label: "MAN B&W ME-C",
+          },
+        },
+        expected_value: {
+          engine_type: "man_b_w_me",
+        },
+      },
+      {
+        reason_code: "ENGINE_VESSEL_EXPERIENCE_MATCH",
+        message: "Candidate has 'MAN B&W ME-GI' on 'lng carrier' in 3 contract(s).",
+        actual_value: {
+          matched_months: 22,
+          matched_contracts: 3,
+        },
+      },
+      {
+        reason_code: "ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT",
+        message: "Candidate has only 4 month(s) with 'MAN B&W ME-GI' on 'lng carrier', below the required 6.",
+        actual_value: {
+          matched_months: 4,
+          matched_contracts: 1,
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
+    "Broader engine family 'MAN B&W ME' was found, but 'MAN B&W ME-GI' is not confirmed. Included for recruiter review at reduced confidence.",
+    "Engine experience matches 'MAN B&W ME' with 18 month(s) across 2 contract(s).",
+    "Engine + vessel experience matches: 22 month(s) with 'MAN B&W ME-GI' on 'lng carrier'.",
+    "Engine + vessel experience is below the requested minimum for 'MAN B&W ME-GI' on 'lng carrier' (4 month(s) found).",
+  ]);
+});
