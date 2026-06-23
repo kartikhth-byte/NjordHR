@@ -2491,6 +2491,9 @@ class AIResumeAnalyzer:
         }
         if include_ambiguous_shortcuts:
             aliases["in"] = "india"
+        else:
+            aliases.pop("us", None)
+            aliases.pop("u s", None)
         return aliases
 
     def _extract_coc_country_from_snippet(self, value):
