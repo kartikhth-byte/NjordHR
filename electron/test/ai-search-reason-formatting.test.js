@@ -16,6 +16,22 @@ function loadReasonFormattingHelpers() {
 
 const helpers = loadReasonFormattingHelpers();
 
+function flattenedReasonLines(match) {
+  const formatted = helpers.buildReasonDisplayModel(match);
+  return [
+    ...formatted.primary,
+    ...formatted.matchedFilters,
+    ...formatted.recruiterChecks,
+    ...formatted.context,
+  ];
+}
+
+function assertNoCanonicalIds(lines) {
+  const text = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+  assert.doesNotMatch(text, /\b[a-z]+(?:_[a-z0-9]+)+\b/);
+  assert.doesNotMatch(text, /\blng carrier\b/);
+}
+
 test("reason display model groups matched filters, recruiter checks, and resume context cleanly", () => {
   const match = {
     reason: [
@@ -124,7 +140,7 @@ test("formatter humanizes unknown review reason codes", () => {
 });
 
 test("formatter rewrites engine fallback and engine+vessel messages into recruiter-facing phrasing", () => {
-  const formatted = helpers.buildReasonDisplayModel({
+  const match = {
     hard_filter_reasons: [
       {
         reason_code: "ENGINE_EXPERIENCE_FAMILY_FALLBACK",
@@ -153,6 +169,23 @@ test("formatter rewrites engine fallback and engine+vessel messages into recruit
         },
       },
       {
+        reason_code: "ENGINE_EXPERIENCE_MISMATCH",
+        message: "Candidate engine experience (Mitsubishi UEC-LSE) does not match 'MAN B&W ME-GI'.",
+        actual_value: {
+          aggregate_engine_types: ["mitsubishi_uec_lse"],
+        },
+        expected_value: {
+          engine_type: "man_b_w_me_gi",
+        },
+      },
+      {
+        reason_code: "ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED",
+        message: "Could not evaluate engine evidence for requested filter 'MAN B&W ME-GI'.",
+        expected_value: {
+          engine_type: "man_b_w_me_gi",
+        },
+      },
+      {
         reason_code: "ENGINE_VESSEL_EXPERIENCE_MATCH",
         message: "Candidate has 'MAN B&W ME-GI' on 'lng carrier' in 3 contract(s).",
         actual_value: {
@@ -169,12 +202,80 @@ test("formatter rewrites engine fallback and engine+vessel messages into recruit
         },
       },
     ],
-  });
+  };
+  const formatted = helpers.buildReasonDisplayModel(match);
 
   assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
     "Broader engine family 'MAN B&W ME' was found, but 'MAN B&W ME-GI' is not confirmed. Included for recruiter review at reduced confidence.",
     "Engine experience matches 'MAN B&W ME' with 18 month(s) across 2 contract(s).",
-    "Engine + vessel experience matches: 22 month(s) with 'MAN B&W ME-GI' on 'lng carrier'.",
-    "Engine + vessel experience is below the requested minimum for 'MAN B&W ME-GI' on 'lng carrier' (4 month(s) found).",
+    "Engine evidence (Mitsubishi UEC-LSE) does not match 'MAN B&W ME-GI'.",
+    "Engine evidence could not be extracted for 'MAN B&W ME-GI'.",
+    "Engine + vessel experience matches: 22 month(s) with 'MAN B&W ME-GI' on 'LNG carrier'.",
+    "Engine + vessel experience is below the requested minimum for 'MAN B&W ME-GI' on 'LNG carrier' (4 month(s) found).",
   ]);
+  assertNoCanonicalIds(flattenedReasonLines(match));
+});
+
+test("experience filter summaries use configured labels and ship display labels", () => {
+  assert.equal(
+    helpers.summarizeExperienceFilter({
+      filter: {
+        items: [
+          {
+            engine_family: "man_b_w_me_lgim",
+            minimum_months: 12,
+            years_back: 3,
+          },
+        ],
+      },
+      familyKey: "engine_family",
+      configuredEngineFamilies: [
+        { value: "man_b_w_me_lgim", label: "MAN B&W ME-LGIM" },
+      ],
+    }),
+    "MAN B&W ME-LGIM 12m+ 3y",
+  );
+
+  assert.equal(
+    helpers.summarizeExperienceFilter({
+      filter: {
+        items: [
+          {
+            ship_family: "lng_carrier",
+            minimum_months: 12,
+            contract_count: 2,
+          },
+        ],
+      },
+      familyKey: "ship_family",
+    }),
+    "LNG carrier 12m+ 2c",
+  );
+});
+
+test("formatter rejects canonical id leaks in grouped recruiter-facing output", () => {
+  const lines = flattenedReasonLines({
+    hard_filter_reasons: [
+      {
+        reason_code: "ENGINE_EXPERIENCE_MISMATCH",
+        message: "Candidate engine experience (Mitsubishi UEC-LSE) does not match 'MAN B&W ME-GI'.",
+        actual_value: {
+          aggregate_engine_types: ["mitsubishi_uec_lse"],
+        },
+        expected_value: {
+          engine_type: "man_b_w_me_gi",
+        },
+      },
+      {
+        reason_code: "ENGINE_VESSEL_EXPERIENCE_MATCH",
+        message: "Candidate has 'MAN B&W ME-GI' on 'lng carrier' in 3 contract(s).",
+        actual_value: {
+          matched_months: 22,
+          matched_contracts: 3,
+        },
+      },
+    ],
+  });
+
+  assertNoCanonicalIds(lines);
 });

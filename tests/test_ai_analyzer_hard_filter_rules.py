@@ -2255,9 +2255,14 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_VESSEL_EXPERIENCE_MATCH")
         self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 1)
         self.assertIn("Mitsubishi UEC", result["results"][0]["message"])
-        self.assertIn("tanker", result["results"][0]["message"])
+        self.assertIn("Tanker", result["results"][0]["message"])
         self.assertNotIn("mitsubishi_uec", result["results"][0]["message"])
         self.assertNotIn("product_tanker", result["results"][0]["message"])
+
+    def test_ship_type_display_label_humanizes_canonical_ship_ids(self):
+        self.assertEqual(self.analyzer._ship_type_display_label("lng_carrier"), "LNG carrier")
+        self.assertEqual(self.analyzer._ship_type_display_label("chemical_tanker"), "Chemical tanker")
+        self.assertEqual(self.analyzer._ship_type_display_label("bulk_carrier"), "Bulk carrier")
 
     def test_engine_vessel_experience_rule_honors_recent_window(self):
         result = self.analyzer._evaluate_hard_filters(

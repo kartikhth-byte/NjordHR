@@ -113,6 +113,47 @@ ENGINE_DISPLAY_LABEL_MAP = {
 }
 
 
+SHIP_TYPE_DISPLAY_LABEL_MAP = {
+    "aht": "AHT",
+    "ahts": "AHTS",
+    "barge": "Barge",
+    "bulk carrier": "Bulk carrier",
+    "car carrier": "Car carrier",
+    "chemical tanker": "Chemical tanker",
+    "container": "Container",
+    "container ship": "Container ship",
+    "container vessel": "Container vessel",
+    "crude oil tanker": "Crude oil tanker",
+    "crude tanker": "Crude tanker",
+    "dp i": "DP I",
+    "dp ii": "DP II",
+    "dp iii": "DP III",
+    "dredger": "Dredger",
+    "dry cargo": "Dry cargo",
+    "gas carrier": "Gas carrier",
+    "general cargo": "General cargo",
+    "lng": "LNG",
+    "lng carrier": "LNG carrier",
+    "lpg": "LPG",
+    "lpg carrier": "LPG carrier",
+    "offshore": "Offshore",
+    "oil chem tanker": "Oil/chemical tanker",
+    "oil tanker": "Oil tanker",
+    "passenger": "Passenger",
+    "product tanker": "Product tanker",
+    "psv": "PSV",
+    "reefer": "Reefer",
+    "ro ro": "Ro-Ro",
+    "ro-ro": "Ro-Ro",
+    "roro": "Ro-Ro",
+    "survey vessel": "Survey vessel",
+    "tanker": "Tanker",
+    "tug": "Tug",
+    "vlgc": "VLGC",
+    "vlcc": "VLCC",
+}
+
+
 def engine_family_option_catalog():
     return [
         {
@@ -3958,7 +3999,7 @@ class AIResumeAnalyzer:
         normalized = self._normalize_ship_type(ship_type)
         if not normalized:
             return str(ship_type or "").strip()
-        return normalized.replace("_", " ")
+        return SHIP_TYPE_DISPLAY_LABEL_MAP.get(normalized, str(ship_type or "").strip())
 
     def _engine_matched_evidence(self, match_outcome):
         if not match_outcome:
