@@ -7,7 +7,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, NamedTuple
 
 
 ALIAS_FILE = Path(__file__).with_name("coc_issue_authority.json")
@@ -33,10 +33,82 @@ class CocIssueAuthorityAliases:
     country_by_authority: Mapping[str, str]
 
 
+class _AliasEntry(NamedTuple):
+    alias: str
+    authority_id: str
+    country: str
+    path: str
+
+
 def _validate_required_mapping(value: Any, path: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{path} must be an object")
     return value
+
+
+def _alias_has_country_qualifier(alias: str, country: str, country_aliases: Mapping[str, str]) -> bool:
+    country_tokens = {
+        normalized_alias
+        for normalized_alias, canonical in (country_aliases or {}).items()
+        if canonical == country and normalized_alias
+    }
+    return any(re.search(rf"\b{re.escape(country_alias)}\b", alias) for country_alias in country_tokens)
+
+
+def _alias_tokens(alias: str) -> set[str]:
+    return set(str(alias or "").split())
+
+
+def _alias_contains_bare_alias(bare_alias: str, other_alias: str) -> bool:
+    bare_tokens = str(bare_alias or "").split()
+    other_tokens = str(other_alias or "").split()
+    if not bare_tokens or not other_tokens:
+        return False
+    if set(bare_tokens).issubset(set(other_tokens)):
+        return True
+    return _alias_contains_bare_abbreviation(bare_tokens, other_tokens)
+
+
+def _alias_contains_bare_abbreviation(bare_tokens: list[str], other_tokens: list[str]) -> bool:
+    if len(bare_tokens) == 1 and len(bare_tokens[0]) > 1:
+        target = bare_tokens[0]
+        target_len = len(target)
+        for index in range(0, len(other_tokens) - target_len + 1):
+            window = other_tokens[index:index + target_len]
+            if all(len(token) == 1 for token in window) and "".join(window) == target:
+                return True
+    return False
+
+
+def _validate_cross_canonical_bare_aliases(alias_entries: list[_AliasEntry], country_aliases: Mapping[str, str]) -> None:
+    bare_aliases = [
+        entry
+        for entry in alias_entries
+        if not _alias_has_country_qualifier(entry.alias, entry.country, country_aliases)
+    ]
+    for bare_entry in bare_aliases:
+        if not bare_entry.alias:
+            continue
+        if not _alias_tokens(bare_entry.alias):
+            continue
+        bare_tokens = bare_entry.alias.split()
+        for other_entry in alias_entries:
+            if other_entry.authority_id == bare_entry.authority_id:
+                continue
+            if other_entry.alias == bare_entry.alias:
+                continue
+            other_tokens = other_entry.alias.split()
+            abbreviation_match = _alias_contains_bare_abbreviation(bare_tokens, other_tokens)
+            if _alias_has_country_qualifier(other_entry.alias, other_entry.country, country_aliases) and not abbreviation_match:
+                continue
+            if not _alias_contains_bare_alias(bare_entry.alias, other_entry.alias):
+                continue
+            raise ValueError(
+                "ambiguous bare CoC authority alias across canonicals: "
+                f"'{bare_entry.alias}' at {bare_entry.path} ({bare_entry.authority_id}/{bare_entry.country}) "
+                f"conflicts with '{other_entry.alias}' at {other_entry.path} "
+                f"({other_entry.authority_id}/{other_entry.country})"
+            )
 
 
 def load_coc_issue_authority_aliases(path: Path = ALIAS_FILE, *, country_aliases: Mapping[str, str]) -> CocIssueAuthorityAliases:
@@ -62,6 +134,7 @@ def load_coc_issue_authority_aliases(path: Path = ALIAS_FILE, *, country_aliases
     display_labels: Dict[str, str] = {}
     country_by_authority: Dict[str, str] = {}
     seen_authorities: set[str] = set()
+    alias_entries: list[_AliasEntry] = []
 
     for country_key, country_entry_value in authorities_by_country.items():
         country_path = f"coc_issue_authority.authorities.{country_key}"
@@ -104,6 +177,16 @@ def load_coc_issue_authority_aliases(path: Path = ALIAS_FILE, *, country_aliases
                     raise ValueError(f"duplicate CoC authority alias after normalization: {normalized_alias}")
                 alias_owner[normalized_alias] = authority_id
                 alias_map[normalized_alias] = authority_id
+                alias_entries.append(
+                    _AliasEntry(
+                        alias=normalized_alias,
+                        authority_id=authority_id,
+                        country=country_canonical,
+                        path=f"{authority_path}.aliases",
+                    )
+                )
+
+    _validate_cross_canonical_bare_aliases(alias_entries, normalized_country_aliases)
 
     return CocIssueAuthorityAliases(
         version=version,
@@ -112,4 +195,3 @@ def load_coc_issue_authority_aliases(path: Path = ALIAS_FILE, *, country_aliases
         display_labels=display_labels,
         country_by_authority=country_by_authority,
     )
-

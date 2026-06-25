@@ -2419,6 +2419,45 @@ class AIResumeAnalyzer:
             "operator": "contains_any",
         }
 
+    def _apply_picker_with_prompt_suppression(
+        self,
+        constraints,
+        *,
+        family,
+        hard_constraint_key,
+        picker_constraint=None,
+        prompt_constraint=None,
+        reason="picker_override",
+        record_observability_constraint=True,
+        record_observability_reason=True,
+    ):
+        """Apply picker constraints and route suppressed prompt constraints.
+
+        Call once per picker family with both picker_constraint and
+        prompt_constraint when a picker overrides a prompt-derived constraint.
+        Passing both writes the picker value to hard_constraints/applied_constraints
+        and writes the prompt value to observability_* fields. For legacy
+        families that only exposed the suppressed family name, pass
+        record_observability_constraint=False and record_observability_reason=False.
+        applied_constraints keeps insertion order for downstream rendering.
+        """
+        if picker_constraint is None and prompt_constraint is None:
+            raise ValueError("picker_constraint or prompt_constraint is required")
+        if picker_constraint is not None:
+            constraints.setdefault("hard_constraints", {})[hard_constraint_key] = picker_constraint
+            applied_constraints = constraints.setdefault("applied_constraints", [])
+            if family not in applied_constraints:
+                applied_constraints.append(family)
+        if prompt_constraint is not None:
+            observability_applied = constraints.setdefault("observability_applied_constraints", [])
+            if family not in observability_applied:
+                observability_applied.append(family)
+            if record_observability_constraint:
+                constraints.setdefault("observability_constraints", {})[hard_constraint_key] = prompt_constraint
+            if record_observability_reason:
+                constraints.setdefault("observability_constraint_reasons", {})[family] = reason
+        return constraints
+
     def _extract_coc_requirement_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
         registry = self._prompt_parsing_registry()["coc_requirement"]
@@ -4870,7 +4909,14 @@ class AIResumeAnalyzer:
                 constraints["hard_constraints"]["rank"] = rank_constraint
                 constraints["applied_constraints"].append("rank_match")
             else:
-                constraints.setdefault("observability_applied_constraints", []).append("rank_match")
+                self._apply_picker_with_prompt_suppression(
+                    constraints,
+                    family="rank_match",
+                    hard_constraint_key="rank",
+                    prompt_constraint=rank_constraint,
+                    record_observability_constraint=False,
+                    record_observability_reason=False,
+                )
 
         visa_constraint = self._extract_us_visa_constraint(user_prompt)
         if visa_constraint:
@@ -4909,9 +4955,12 @@ class AIResumeAnalyzer:
                 constraints["hard_constraints"]["coc_issue_authority"] = coc_issue_authority_constraint
                 constraints["applied_constraints"].append("coc_issue_authority_match")
             else:
-                constraints.setdefault("observability_applied_constraints", []).append("coc_issue_authority_match")
-                constraints.setdefault("observability_constraints", {})["coc_issue_authority"] = coc_issue_authority_constraint
-                constraints.setdefault("observability_constraint_reasons", {})["coc_issue_authority_match"] = "picker_override"
+                self._apply_picker_with_prompt_suppression(
+                    constraints,
+                    family="coc_issue_authority_match",
+                    hard_constraint_key="coc_issue_authority",
+                    prompt_constraint=coc_issue_authority_constraint,
+                )
 
         if coc_grade_constraint:
             coc_grade_constraint = dict(coc_grade_constraint)
@@ -13583,13 +13632,18 @@ Examples of GOOD responses:
                         "error_code": "PRESENT_RANK_INVALID",
                     }
                     return
-                job_constraints.setdefault("hard_constraints", {})["rank"] = {
-                    "present_rank_normalized": [present_rank_id],
-                    "operator": "contains_any",
-                    "requested_label": present_rank_value,
-                }
-                if "rank_match" not in job_constraints.setdefault("applied_constraints", []):
-                    job_constraints["applied_constraints"].append("rank_match")
+                self._apply_picker_with_prompt_suppression(
+                    job_constraints,
+                    family="rank_match",
+                    hard_constraint_key="rank",
+                    picker_constraint={
+                        "present_rank_normalized": [present_rank_id],
+                        "operator": "contains_any",
+                        "requested_label": present_rank_value,
+                    },
+                )
+            # These picker families currently have no same-family prompt suppression
+            # semantics; use the shared helper when such arbitration is introduced.
             if str(applied_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
                 if "applied_ship_type" not in job_constraints.setdefault("applied_constraints", []):
@@ -13649,17 +13703,20 @@ Examples of GOOD responses:
                     if self._is_known_coc_issue_authority(authority)
                 ))
                 if authorities:
-                    job_constraints.setdefault("hard_constraints", {})["coc_issue_authority"] = {
-                        "authorities": authorities,
-                        "operator": "contains_any",
-                        "display_value": " or ".join(
-                            label
-                            for label in (self._coc_issue_authority_display_label(authority) for authority in authorities)
-                            if label
-                        ),
-                    }
-                    if "coc_issue_authority_match" not in job_constraints.setdefault("applied_constraints", []):
-                        job_constraints["applied_constraints"].append("coc_issue_authority_match")
+                    self._apply_picker_with_prompt_suppression(
+                        job_constraints,
+                        family="coc_issue_authority_match",
+                        hard_constraint_key="coc_issue_authority",
+                        picker_constraint={
+                            "authorities": authorities,
+                            "operator": "contains_any",
+                            "display_value": " or ".join(
+                                label
+                                for label in (self._coc_issue_authority_display_label(authority) for authority in authorities)
+                                if label
+                            ),
+                        },
+                    )
             prompt_observability_probe = self._build_prompt_observability(
                 user_prompt,
                 job_constraints,
