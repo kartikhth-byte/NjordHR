@@ -1,0 +1,417 @@
+{
+  "version": "0.1.0",
+  "last_updated": "2026-06-25",
+  "source": "Seeded from IMO STCW administration names and NjordHR corpus-facing aliases",
+  "authorities": {
+    "india": {
+      "country_canonical": "india",
+      "authorities": {
+        "india_dg_shipping": {
+          "display_label": "Directorate General of Shipping, India",
+          "aliases": [
+            "dg shipping",
+            "dg shipping india",
+            "directorate general of shipping",
+            "directorate general of shipping mumbai",
+            "directorate general of shipping india",
+            "dgs",
+            "mmd",
+            "mmd mumbai",
+            "mercantile marine department",
+            "indian maritime administration"
+          ]
+        }
+      }
+    },
+    "uk": {
+      "country_canonical": "uk",
+      "authorities": {
+        "uk_mca": {
+          "display_label": "Maritime and Coastguard Agency (UK)",
+          "aliases": [
+            "mca",
+            "mca uk",
+            "maritime and coastguard agency",
+            "maritime coastguard agency",
+            "uk maritime and coastguard agency",
+            "british maritime and coastguard agency"
+          ]
+        }
+      }
+    },
+    "singapore": {
+      "country_canonical": "singapore",
+      "authorities": {
+        "singapore_mpa": {
+          "display_label": "Maritime and Port Authority of Singapore",
+          "aliases": [
+            "mpa singapore",
+            "maritime and port authority of singapore",
+            "maritime port authority singapore",
+            "singapore maritime administration"
+          ]
+        }
+      }
+    },
+    "panama": {
+      "country_canonical": "panama",
+      "authorities": {
+        "panama_maritime_authority": {
+          "display_label": "Panama Maritime Authority",
+          "aliases": [
+            "panama maritime authority",
+            "autoridad maritima de panama",
+            "pma panama",
+            "panamanian maritime authority"
+          ]
+        }
+      }
+    },
+    "liberia": {
+      "country_canonical": "liberia",
+      "authorities": {
+        "liberia_maritime_authority": {
+          "display_label": "Liberia Maritime Authority",
+          "aliases": [
+            "liberia maritime authority",
+            "liberian maritime authority",
+            "liberian international ship and corporate registry",
+            "liscr"
+          ]
+        }
+      }
+    },
+    "marshall islands": {
+      "country_canonical": "marshall islands",
+      "authorities": {
+        "marshall_islands_maritime_administrator": {
+          "display_label": "Republic of the Marshall Islands Maritime Administrator",
+          "aliases": [
+            "marshall islands maritime administrator",
+            "republic of the marshall islands maritime administrator",
+            "rmi maritime administrator",
+            "international registries inc",
+            "iri marshall islands"
+          ]
+        }
+      }
+    },
+    "malta": {
+      "country_canonical": "malta",
+      "authorities": {
+        "malta_transport_malta": {
+          "display_label": "Transport Malta",
+          "aliases": [
+            "transport malta",
+            "merchant shipping directorate malta",
+            "malta maritime administration"
+          ]
+        }
+      }
+    },
+    "bahamas": {
+      "country_canonical": "bahamas",
+      "authorities": {
+        "bahamas_maritime_authority": {
+          "display_label": "Bahamas Maritime Authority",
+          "aliases": [
+            "bahamas maritime authority",
+            "bahamian maritime authority",
+            "bma bahamas"
+          ]
+        }
+      }
+    },
+    "cyprus": {
+      "country_canonical": "cyprus",
+      "authorities": {
+        "cyprus_shipping_deputy_ministry": {
+          "display_label": "Shipping Deputy Ministry of Cyprus",
+          "aliases": [
+            "shipping deputy ministry",
+            "shipping deputy ministry of cyprus",
+            "cyprus shipping deputy ministry",
+            "department of merchant shipping cyprus"
+          ]
+        }
+      }
+    },
+    "hong kong": {
+      "country_canonical": "hong kong",
+      "authorities": {
+        "hong_kong_marine_department": {
+          "display_label": "Hong Kong Marine Department",
+          "aliases": [
+            "hong kong marine department",
+            "marine department hong kong",
+            "hong kong maritime administration"
+          ]
+        }
+      }
+    },
+    "philippines": {
+      "country_canonical": "philippines",
+      "authorities": {
+        "philippines_marina": {
+          "display_label": "Maritime Industry Authority (Philippines)",
+          "aliases": [
+            "marina",
+            "marina philippines",
+            "maritime industry authority",
+            "maritime industry authority philippines",
+            "philippine maritime industry authority"
+          ]
+        }
+      }
+    },
+    "australia": {
+      "country_canonical": "australia",
+      "authorities": {
+        "australia_amsa": {
+          "display_label": "Australian Maritime Safety Authority",
+          "aliases": [
+            "amsa",
+            "amsa australia",
+            "australian maritime safety authority"
+          ]
+        }
+      }
+    },
+    "new zealand": {
+      "country_canonical": "new zealand",
+      "authorities": {
+        "new_zealand_maritime_nz": {
+          "display_label": "Maritime New Zealand",
+          "aliases": [
+            "maritime new zealand",
+            "maritime nz",
+            "new zealand maritime authority"
+          ]
+        }
+      }
+    },
+    "denmark": {
+      "country_canonical": "denmark",
+      "authorities": {
+        "denmark_dma": {
+          "display_label": "Danish Maritime Authority",
+          "aliases": [
+            "danish maritime authority",
+            "dma denmark",
+            "denmark maritime authority"
+          ]
+        }
+      }
+    },
+    "norway": {
+      "country_canonical": "norway",
+      "authorities": {
+        "norway_maritime_authority": {
+          "display_label": "Norwegian Maritime Authority",
+          "aliases": [
+            "norwegian maritime authority",
+            "norway maritime authority",
+            "nma norway"
+          ]
+        }
+      }
+    },
+    "netherlands": {
+      "country_canonical": "netherlands",
+      "authorities": {
+        "netherlands_inspectie_leefomgeving": {
+          "display_label": "Netherlands Shipping Inspectorate",
+          "aliases": [
+            "netherlands shipping inspectorate",
+            "dutch shipping inspectorate",
+            "inspectie leefomgeving en transport",
+            "ilt netherlands"
+          ]
+        }
+      }
+    },
+    "greece": {
+      "country_canonical": "greece",
+      "authorities": {
+        "greece_hellenic_coast_guard": {
+          "display_label": "Hellenic Coast Guard",
+          "aliases": [
+            "hellenic coast guard",
+            "greek maritime administration",
+            "ministry of maritime affairs greece"
+          ]
+        }
+      }
+    },
+    "croatia": {
+      "country_canonical": "croatia",
+      "authorities": {
+        "croatia_ministry_sea_transport": {
+          "display_label": "Ministry of the Sea, Transport and Infrastructure (Croatia)",
+          "aliases": [
+            "ministry of the sea transport and infrastructure",
+            "croatia ministry of sea transport and infrastructure",
+            "croatian maritime administration"
+          ]
+        }
+      }
+    },
+    "russia": {
+      "country_canonical": "russia",
+      "authorities": {
+        "russia_ministry_transport": {
+          "display_label": "Ministry of Transport of the Russian Federation",
+          "aliases": [
+            "ministry of transport russian federation",
+            "ministry of transport of the russian federation",
+            "russian maritime administration"
+          ]
+        }
+      }
+    },
+    "ukraine": {
+      "country_canonical": "ukraine",
+      "authorities": {
+        "ukraine_shipping_administration": {
+          "display_label": "Shipping Administration of Ukraine",
+          "aliases": [
+            "shipping administration of ukraine",
+            "ukraine shipping administration",
+            "ukrainian maritime administration"
+          ]
+        }
+      }
+    },
+    "china": {
+      "country_canonical": "china",
+      "authorities": {
+        "china_msa": {
+          "display_label": "Maritime Safety Administration of China",
+          "aliases": [
+            "china msa",
+            "msa china",
+            "maritime safety administration of china",
+            "chinese maritime safety administration"
+          ]
+        }
+      }
+    },
+    "japan": {
+      "country_canonical": "japan",
+      "authorities": {
+        "japan_mlit": {
+          "display_label": "Ministry of Land, Infrastructure, Transport and Tourism (Japan)",
+          "aliases": [
+            "mlit japan",
+            "ministry of land infrastructure transport and tourism",
+            "japan maritime administration"
+          ]
+        }
+      }
+    },
+    "korea": {
+      "country_canonical": "korea",
+      "authorities": {
+        "korea_mof": {
+          "display_label": "Ministry of Oceans and Fisheries (Korea)",
+          "aliases": [
+            "ministry of oceans and fisheries",
+            "korea ministry of oceans and fisheries",
+            "korean maritime administration"
+          ]
+        }
+      }
+    },
+    "malaysia": {
+      "country_canonical": "malaysia",
+      "authorities": {
+        "malaysia_marine_department": {
+          "display_label": "Marine Department Malaysia",
+          "aliases": [
+            "marine department malaysia",
+            "malaysian marine department",
+            "jabatan laut malaysia"
+          ]
+        }
+      }
+    },
+    "indonesia": {
+      "country_canonical": "indonesia",
+      "authorities": {
+        "indonesia_dg_sea_transportation": {
+          "display_label": "Directorate General of Sea Transportation (Indonesia)",
+          "aliases": [
+            "directorate general of sea transportation",
+            "dg sea transportation indonesia",
+            "indonesian maritime administration"
+          ]
+        }
+      }
+    },
+    "myanmar": {
+      "country_canonical": "myanmar",
+      "authorities": {
+        "myanmar_dma": {
+          "display_label": "Department of Marine Administration (Myanmar)",
+          "aliases": [
+            "department of marine administration",
+            "department of marine administration myanmar",
+            "myanmar marine administration"
+          ]
+        }
+      }
+    },
+    "bangladesh": {
+      "country_canonical": "bangladesh",
+      "authorities": {
+        "bangladesh_dos": {
+          "display_label": "Department of Shipping, Bangladesh",
+          "aliases": [
+            "department of shipping bangladesh",
+            "bangladesh department of shipping",
+            "dos bangladesh"
+          ]
+        }
+      }
+    },
+    "pakistan": {
+      "country_canonical": "pakistan",
+      "authorities": {
+        "pakistan_mmd": {
+          "display_label": "Mercantile Marine Department, Pakistan",
+          "aliases": [
+            "mercantile marine department pakistan",
+            "mmd pakistan",
+            "pakistan maritime administration"
+          ]
+        }
+      }
+    },
+    "sri lanka": {
+      "country_canonical": "sri lanka",
+      "authorities": {
+        "sri_lanka_merchant_shipping_secretariat": {
+          "display_label": "Merchant Shipping Secretariat, Sri Lanka",
+          "aliases": [
+            "merchant shipping secretariat",
+            "merchant shipping secretariat sri lanka",
+            "sri lanka merchant shipping secretariat"
+          ]
+        }
+      }
+    },
+    "south africa": {
+      "country_canonical": "south africa",
+      "authorities": {
+        "south_africa_samsa": {
+          "display_label": "South African Maritime Safety Authority",
+          "aliases": [
+            "samsa",
+            "samsa south africa",
+            "south african maritime safety authority"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -50,6 +50,56 @@ class QueryUnderstandingSchemaTests(unittest.TestCase):
         self.assertEqual(validated["validation"]["status"], "valid")
         self.assertEqual(validated["applied_constraints"][0]["constraint"]["rank"], "2nd_engineer")
 
+    def test_coc_issue_authority_constraint_is_valid(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "coc_issue_authority_match",
+                "mode": "required",
+                "constraint": {
+                    "type": "coc_issue_authority_match",
+                    "authorities": ["india_dg_shipping", "uk_mca"],
+                    "operator": "contains_any",
+                },
+                "source_text": "CoC issued by DG Shipping or MCA",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "coc_issue_authority",
+                    "legacy_applied_constraint_id": "coc_issue_authority_match",
+                },
+            }
+        ]
+
+        validated = validate_query_plan_v1(plan)
+        self.assertEqual(validated["validation"]["status"], "valid")
+        self.assertEqual(
+            validated["applied_constraints"][0]["constraint"]["authorities"],
+            ["india_dg_shipping", "uk_mca"],
+        )
+
+    def test_invalid_coc_issue_authority_constraint_is_demoted(self):
+        plan = _valid_plan()
+        plan["applied_constraints"] = [
+            {
+                "id": "coc_issue_authority_match",
+                "mode": "required",
+                "constraint": {
+                    "type": "coc_issue_authority_match",
+                    "authorities": ["India DG Shipping"],
+                },
+                "source_text": "CoC issued by DG Shipping",
+                "confidence": "high",
+                "compatibility": {
+                    "legacy_hard_constraints_key": "coc_issue_authority",
+                    "legacy_applied_constraint_id": "coc_issue_authority_match",
+                },
+            }
+        ]
+
+        validated = validate_query_plan_v1(plan)
+        self.assertEqual(validated["applied_constraints"], [])
+        self.assertEqual(validated["unapplied_constraints"][0]["id"], "coc_issue_authority_match")
+
     def test_valid_any_of_logical_group_passes_validation(self):
         plan = _valid_plan()
         plan["applied_constraints"] = []

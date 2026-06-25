@@ -1507,7 +1507,7 @@ def _family_to_canonical_items(
         ], [], [grade.replace("_", " ")]
 
     if family == "coc_country_match":
-        raw_countries = parameters.get("countries") or parameters.get("country") or parameters.get("issue_authority")
+        raw_countries = parameters.get("countries") or parameters.get("country")
         if isinstance(raw_countries, str):
             raw_countries = [raw_countries]
         countries = [
@@ -1538,6 +1538,43 @@ def _family_to_canonical_items(
                 confidence=confidence,
             )
         ], [], countries
+
+    if family == "coc_issue_authority_match":
+        raw_authorities = parameters.get("authorities") or parameters.get("authority") or parameters.get("issue_authority")
+        if isinstance(raw_authorities, str):
+            raw_authorities = [raw_authorities]
+        authorities = []
+        normalize_authority = getattr(analyzer, "_normalize_coc_issue_authority", None)
+        for authority in raw_authorities or []:
+            authority_text = str(authority or "").strip()
+            if not authority_text:
+                continue
+            canonical = normalize_authority(authority_text) if callable(normalize_authority) else None
+            authorities.append(canonical or authority_text)
+        if not authorities:
+            extract_coc_issue_authority = getattr(analyzer, "_extract_coc_issue_authority_constraint", None)
+            if callable(extract_coc_issue_authority):
+                try:
+                    coc_issue_authority = extract_coc_issue_authority(prompt_text)
+                except Exception:
+                    coc_issue_authority = None
+                if isinstance(coc_issue_authority, Mapping):
+                    authorities = [
+                        str(authority or "").strip()
+                        for authority in (coc_issue_authority.get("authorities") or [])
+                        if str(authority or "").strip()
+                    ]
+        if not authorities:
+            return [], [], []
+        authorities = list(dict.fromkeys(authorities))
+        return [
+            _make_applied_constraint(
+                "coc_issue_authority_match",
+                {"type": "coc_issue_authority_match", "authorities": authorities, "operator": "contains_any"},
+                source_text=source_text,
+                confidence=confidence,
+            )
+        ], [], authorities
 
     if family == "stcw_basic":
         required_value = _first_present(parameters.get("required"), parameters.get("validity"), parameters.get("must_have"))
@@ -2355,6 +2392,30 @@ def _translate_model_payload(
                         )
                     )
                     semantic_fragments.extend(countries)
+
+    if not any(constraint.get("id") == "coc_issue_authority_match" for constraint in applied_constraints):
+        extract_coc_issue_authority_constraint = getattr(analyzer, "_extract_coc_issue_authority_constraint", None)
+        if callable(extract_coc_issue_authority_constraint):
+            try:
+                coc_issue_authority = extract_coc_issue_authority_constraint(prompt_text)
+            except Exception:
+                coc_issue_authority = None
+            if isinstance(coc_issue_authority, Mapping):
+                authorities = [
+                    str(authority or "").strip()
+                    for authority in (coc_issue_authority.get("authorities") or [])
+                    if str(authority or "").strip()
+                ]
+                if authorities:
+                    applied_constraints.append(
+                        _make_applied_constraint(
+                            "coc_issue_authority_match",
+                            {"type": "coc_issue_authority_match", "authorities": authorities, "operator": "contains_any"},
+                            source_text=_first_string(coc_issue_authority.get("display_value"), prompt_text) or prompt_text,
+                            confidence="high",
+                        )
+                    )
+                    semantic_fragments.extend(authorities)
 
     if not any(constraint.get("id") == "recent_contract_vessel_experience" for constraint in applied_constraints):
         shadow_recent = _extract_shadow_recent_contract_vessel_experience(prompt_text)

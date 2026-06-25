@@ -18,6 +18,7 @@ ACTIVE_FAMILY_IDS = (
     "rank_match",
     "coc_document_gate",
     "coc_country_match",
+    "coc_issue_authority_match",
     "coc_grade_match",
     "stcw_basic",
     "us_visa",
@@ -63,6 +64,11 @@ FAMILY_CATALOG: Dict[str, Dict[str, object]] = {
         "status": ACTIVE,
         "legacy_hard_constraints_key": "coc_country",
         "legacy_applied_constraint_id": "coc_country_match",
+    },
+    "coc_issue_authority_match": {
+        "status": ACTIVE,
+        "legacy_hard_constraints_key": "coc_issue_authority",
+        "legacy_applied_constraint_id": "coc_issue_authority_match",
     },
     "coc_grade_match": {
         "status": ACTIVE,

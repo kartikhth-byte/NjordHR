@@ -1327,6 +1327,46 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                     ["uk"],
                 )
 
+    def test_coc_issue_authority_prompt_maps_to_authority_rule(self):
+        cases = {
+            "DG Shipping India CoC": "india_dg_shipping",
+            "CoC issued by MCA": "uk_mca",
+            "has Maritime and Port Authority of Singapore CoC": "singapore_mpa",
+        }
+        for prompt, expected_authority in cases.items():
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("coc_document_gate", constraints["applied_constraints"])
+                self.assertIn("coc_issue_authority_match", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["coc_issue_authority"]["authorities"],
+                    [expected_authority],
+                )
+
+    def test_coc_issue_authority_prompt_does_not_become_country_prompt(self):
+        constraints = self.analyzer._extract_job_constraints("DG Shipping India CoC", rank=self.rank)
+        self.assertIn("coc_issue_authority_match", constraints["applied_constraints"])
+        self.assertNotIn("coc_country_match", constraints["applied_constraints"])
+
+    def test_coc_issue_authority_prompt_supports_multi_authority_or(self):
+        constraints = self.analyzer._extract_job_constraints("CoC issued by DG Shipping or MCA", rank=self.rank)
+        self.assertEqual(
+            constraints["hard_constraints"]["coc_issue_authority"]["authorities"],
+            ["india_dg_shipping", "uk_mca"],
+        )
+
+    def test_indian_issued_coc_remains_country_prompt(self):
+        constraints = self.analyzer._extract_job_constraints("Indian-issued CoC", rank=self.rank)
+        self.assertIn("coc_country_match", constraints["applied_constraints"])
+        self.assertNotIn("coc_issue_authority_match", constraints["applied_constraints"])
+
+    def test_coc_country_and_issue_authority_prompt_can_and_together(self):
+        constraints = self.analyzer._extract_job_constraints("Indian CoC issued by DG Shipping", rank=self.rank)
+        self.assertIn("coc_country_match", constraints["applied_constraints"])
+        self.assertIn("coc_issue_authority_match", constraints["applied_constraints"])
+        self.assertEqual(constraints["hard_constraints"]["coc_country"]["countries"], ["india"])
+        self.assertEqual(constraints["hard_constraints"]["coc_issue_authority"]["authorities"], ["india_dg_shipping"])
+
     def test_coc_country_prompt_normalizes_additional_demonyms(self):
         cases = {
             "has Iranian coc": "iran",
