@@ -10912,6 +10912,45 @@ class AIResumeAnalyzer:
             "needs_date_review": False,
         }
 
+    def _experience_item_out_of_scope_match_count(self, service_rows, item, *, row_field, expected_values, today=None):
+        today = today or date.today()
+        rows = [row for row in (service_rows or []) if isinstance(row, dict)]
+        expected_values = {value for value in expected_values if value}
+
+        def row_matches(row):
+            row_values = {
+                value
+                for value in (
+                    self._normalize_ship_type(raw) if row_field == "vessel_types" else self._normalize_engine_type(raw).replace(" ", "_")
+                    for raw in (row.get(row_field) or [])
+                    if raw
+                )
+                if value
+            }
+            return bool(row_values & expected_values)
+
+        years_back = (item or {}).get("years_back")
+        if years_back:
+            window_start = today - timedelta(days=365 * int(years_back))
+            return sum(
+                1
+                for row in rows
+                if row_matches(row) and not self._service_row_overlaps_window(row, window_start, today)
+            )
+
+        contract_count = (item or {}).get("contract_count")
+        if contract_count:
+            dated_rows = []
+            for row in rows:
+                sign_in_date, sign_out_date = self._service_row_date_range(row, today=today)
+                if not sign_in_date or not sign_out_date:
+                    continue
+                dated_rows.append({**row, "_sort_sign_in_date": sign_in_date, "_sort_sign_out_date": sign_out_date})
+            dated_rows.sort(key=lambda row: (row.get("_sort_sign_out_date"), row.get("_sort_sign_in_date")), reverse=True)
+            return sum(1 for row in dated_rows[int(contract_count):] if row_matches(row))
+
+        return 0
+
     def _months_in_scoped_row(self, row, item, *, today=None):
         today = today or date.today()
         sign_in_date, sign_out_date = self._service_row_date_range(row, today=today)
@@ -10990,6 +11029,11 @@ class AIResumeAnalyzer:
             "evaluated_contracts": len(rows),
             "scope": scoped["scope"],
         }
+        requested_label = (
+            self._ship_type_display_label(item.get(value_field))
+            if row_field == "vessel_types"
+            else self._engine_display_label(str(item.get(value_field) or "").replace(" ", "_"))
+        )
 
         if scoped["needs_date_review"] or (item.get("years_back") and matched_contracts == 0 and undated_match_count):
             return self._base_rule_result(
@@ -11047,6 +11091,29 @@ class AIResumeAnalyzer:
                 confidence=confidence,
             )
 
+        out_of_scope_matches = self._experience_item_out_of_scope_match_count(
+            service_rows,
+            item,
+            row_field=row_field,
+            expected_values=expected_values,
+            today=today,
+        )
+        if matched_contracts == 0 and out_of_scope_matches:
+            recency_message = ""
+            if item.get("years_back"):
+                recency_message = f"but not within the requested {int(item.get('years_back'))}-year window"
+            elif item.get("contract_count"):
+                recency_message = "but not in the requested recent contract window"
+            if recency_message:
+                return self._base_rule_result(
+                    "FAIL",
+                    insufficient_reason_code,
+                    f"Candidate has {family_label} matching '{requested_label}', {recency_message}.",
+                    actual_value={**actual_value, "out_of_scope_matching_contracts": out_of_scope_matches},
+                    expected_value=item,
+                    confidence=confidence,
+                )
+
         return self._base_rule_result(
             "FAIL",
             insufficient_reason_code,
@@ -11087,10 +11154,14 @@ class AIResumeAnalyzer:
                 confidence=passing_result.get("confidence"),
             )
         if item_results and all(result.get("decision") == "FAIL" for result in item_results):
+            if len(item_results) == 1 and item_results[0].get("message"):
+                message = item_results[0].get("message")
+            else:
+                message = f"Candidate did not satisfy any requested {family_label} item."
             return self._base_rule_result(
                 "FAIL",
                 mismatch_code,
-                f"Candidate did not satisfy any requested {family_label} item.",
+                message,
                 actual_value=safe_item_results,
                 expected_value=constraint,
                 confidence=None,
@@ -11255,7 +11326,8 @@ class AIResumeAnalyzer:
                 unknown_reason="FACTUAL_UNKNOWN",
             )
 
-        evidence_rows = self._collect_vessel_tonnage_evidence(candidate_facts)
+        all_evidence_rows = self._collect_vessel_tonnage_evidence(candidate_facts)
+        evidence_rows = all_evidence_rows
         years_back = (constraint or {}).get("years_back")
         if years_back:
             today = today or date.today()
@@ -11273,6 +11345,16 @@ class AIResumeAnalyzer:
             "matching_unit_evidence": matching_unit_rows,
         }
         if not evidence_rows:
+            if years_back and all_evidence_rows:
+                return self._base_rule_result(
+                    "UNKNOWN",
+                    "VESSEL_TONNAGE_NOT_FOUND",
+                    f"Vessel tonnage evidence exists, but not within the requested {int(years_back)}-year window.",
+                    actual_value={**actual_value, "out_of_scope_evidence": all_evidence_rows},
+                    expected_value=constraint,
+                    confidence=confidence,
+                    unknown_reason="FACTUAL_UNKNOWN",
+                )
             return self._base_rule_result(
                 "UNKNOWN",
                 "VESSEL_TONNAGE_NOT_FOUND",
@@ -11590,6 +11672,32 @@ class AIResumeAnalyzer:
                             unknown_reason="FACTUAL_UNKNOWN",
                         ))
                     continue
+                out_of_scope_matches = self._experience_item_out_of_scope_match_count(
+                    service_rows,
+                    item,
+                    row_field="engine_types",
+                    expected_values=self._engine_type_expected_values(requested_engine_type),
+                    today=today,
+                )
+                if row_summary["matched_contracts"] == 0 and out_of_scope_matches:
+                    recency_message = ""
+                    if (item or {}).get("years_back"):
+                        recency_message = f"but not within the requested {int((item or {}).get('years_back'))}-year window"
+                    elif (item or {}).get("contract_count"):
+                        recency_message = "but not in the requested recent contract window"
+                    if recency_message:
+                        item_results.append(self._base_rule_result(
+                            "FAIL",
+                            "ENGINE_EXPERIENCE_MISMATCH" if minimum_months == 0 else "ENGINE_EXPERIENCE_INSUFFICIENT",
+                            (
+                                f"Candidate has engine experience matching '{self._engine_display_label(requested_engine_type)}', "
+                                f"{recency_message}."
+                            ),
+                            actual_value={**actual_value, "out_of_scope_matching_contracts": out_of_scope_matches},
+                            expected_value=item,
+                            confidence=service_rows_confidence or confidence,
+                        ))
+                        continue
                 item_results.append(self._base_rule_result(
                     "FAIL",
                     "ENGINE_EXPERIENCE_MISMATCH" if minimum_months == 0 else "ENGINE_EXPERIENCE_INSUFFICIENT",

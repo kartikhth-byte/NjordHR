@@ -325,6 +325,34 @@ test("formatter humanizes engine resume context from extracted engine ids", () =
   }));
 });
 
+test("formatter preserves recency-miss explanations for engine, ship type, and tonnage", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    hard_filter_reasons: [
+      {
+        reason_code: "ENGINE_EXPERIENCE_MISMATCH",
+        message: "Candidate has engine experience matching 'Pielstick', but not within the requested 2-year window.",
+      },
+      {
+        reason_code: "EXPERIENCE_SHIP_TYPE_MISMATCH",
+        message: "Candidate has experienced ship type matching 'container', but not in the requested recent contract window.",
+      },
+      {
+        reason_code: "VESSEL_TONNAGE_NOT_FOUND",
+        message: "Vessel tonnage evidence exists, but not within the requested 5-year window.",
+        actual_value: {
+          out_of_scope_evidence: [{ value: 83000, unit: "unspecified" }],
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
+    "Engine experience matching 'Pielstick', but not within the requested 2-year window.",
+    "Experienced ship type matching 'container', but not in the requested recent contract window.",
+    "Tonnage evidence exists, but not within the requested 5-year window.",
+  ]);
+});
+
 test("experience filter summaries use configured labels and ship display labels", () => {
   assert.equal(
     helpers.summarizeExperienceFilter({

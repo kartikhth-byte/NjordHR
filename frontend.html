@@ -620,6 +620,11 @@
                 if (uniqueChildLabels.length === 1) {
                     return `${normalizedPrefix} matches '${uniqueChildLabels[0]}'.`;
                 }
+                if (/but not (?:within|in) the requested/i.test(normalizedMessage)) {
+                    return ensureSentence(
+                        normalizedMessage.replace(/^Candidate has\s+(?:experienced ship type\s+)?/i, `${normalizedPrefix} `)
+                    );
+                }
                 const exactMatch = normalizedMessage.match(/matching\s+'([^']+)'/i);
                 if (exactMatch) {
                     return `${normalizedPrefix} matches '${exactMatch[1]}'.`;
@@ -713,6 +718,11 @@
                 }
 
                 if (code === 'ENGINE_EXPERIENCE_MISMATCH') {
+                    if (/but not (?:within|in) the requested/i.test(message)) {
+                        return ensureSentence(
+                            message.replace(/^Candidate has\s+(?:engine experience\s+)?/i, 'Engine experience ')
+                        );
+                    }
                     if (requested && evidence) {
                         return `Engine evidence '${evidence}' does not match '${requested}'.`;
                     }
@@ -834,7 +844,11 @@
                     return 'Tonnage does not fall within the requested range.';
                 }
 
-                if (code === 'EXPERIENCE_SHIP_TYPE_MATCH') {
+                if (code === 'VESSEL_TONNAGE_NOT_FOUND' && actualValue?.out_of_scope_evidence) {
+                    return ensureSentence(message.replace(/^Vessel tonnage evidence exists/i, 'Tonnage evidence exists'));
+                }
+
+                if (code.startsWith('EXPERIENCE_SHIP_TYPE_')) {
                     return formatShipTypeMatchMessage(message, 'Experienced ship type', actualValue);
                 }
 

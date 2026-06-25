@@ -1690,6 +1690,31 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_BELOW_MINIMUM")
         self.assertEqual(len(result["results"][0]["actual_value"]["evidence"]), 1)
 
+    def test_vessel_tonnage_rule_explains_evidence_outside_years_back_window(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2021, 1, 1),
+                            "sign_out_date": date(2021, 6, 1),
+                            "vessel_tonnage": [{"value": 80000, "unit": "unspecified", "confidence": 0.9, "evidence_text": "80000"}],
+                        },
+                    ],
+                },
+                "fact_meta": {"experience.service_rows": {"status": "PARSED", "confidence": 0.9}},
+            },
+            {
+                "applied_constraints": ["vessel_tonnage"],
+                "hard_constraints": {"vessel_tonnage": {"min_value": 75000, "max_value": None, "unit": "any", "years_back": 2}},
+            },
+            today=self.today,
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["results"][0]["reason_code"], "VESSEL_TONNAGE_NOT_FOUND")
+        self.assertIn("not within the requested 2-year window", result["results"][0]["message"])
+        self.assertEqual(len(result["results"][0]["actual_value"]["out_of_scope_evidence"]), 1)
+
     def test_experience_ship_type_items_pass_with_years_back_window(self):
         result = self.analyzer._evaluate_hard_filters(
             {
@@ -1767,6 +1792,7 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "EXPERIENCE_SHIP_TYPE_MISMATCH")
+        self.assertIn("not within the requested 2-year window", result["results"][0]["message"])
 
     def test_experience_ship_type_exact_dropdown_value_rolls_up_to_family_matches(self):
         result = self.analyzer._evaluate_hard_filters(
@@ -2015,6 +2041,46 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_INSUFFICIENT")
         self.assertEqual(result["results"][0]["actual_value"]["matched_contracts"], 0)
         self.assertEqual(result["results"][0]["actual_value"]["evaluated_contracts"], 3)
+
+    def test_engine_experience_items_explain_evidence_outside_years_back_window(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "experience": {
+                    "service_rows": [
+                        {
+                            "sign_in_date": date(2023, 1, 1),
+                            "sign_out_date": date(2023, 6, 1),
+                            "engine_types": ["pielstick"],
+                        },
+                        {
+                            "sign_in_date": date(2025, 1, 1),
+                            "sign_out_date": date(2025, 6, 1),
+                            "engine_types": ["man_b_w"],
+                        },
+                    ],
+                },
+                "fact_meta": {
+                    "experience.engine_types": {"confidence": 0.9},
+                    "experience.service_rows": {"status": "PARSED", "confidence": 0.9},
+                },
+            },
+            {
+                "applied_constraints": ["engine_experience"],
+                "hard_constraints": {
+                    "engine_experience": {
+                        "type": "engine_experience",
+                        "match_mode": "any_of",
+                        "items": [
+                            {"engine_family": "pielstick", "minimum_months": None, "years_back": 2, "contract_count": None},
+                        ],
+                    }
+                },
+            },
+            today=self.today,
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+        self.assertIn("not within the requested 2-year window", result["results"][0]["message"])
 
     def test_engine_experience_rule_requires_all_recent_contracts_when_requested(self):
         result = self.analyzer._evaluate_hard_filters(
