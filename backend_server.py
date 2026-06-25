@@ -40,7 +40,7 @@ from repositories.repo_factory import build_candidate_event_repo
 from repositories.search_scope_repo import SQLiteSearchScopeRepository
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import config_value, normalize_env_value, normalized_url
-from ai_analyzer import Analyzer
+from ai_analyzer import Analyzer, engine_family_option_catalog
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
 from query_understanding import build_shadow_audit_entry, build_shadow_llm_query_plan
@@ -4933,7 +4933,10 @@ def get_config_engine_families():
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
     try:
-        return jsonify({"success": True, "engine_families": sorted(canonical_engine_family_values())})
+        return jsonify({
+            "success": True,
+            "engine_families": engine_family_option_catalog(),
+        })
     except Exception as e:
         return jsonify({"success": False, "message": str(e), "engine_families": []}), 500
 

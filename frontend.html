@@ -398,9 +398,559 @@
         })();
     </script>
 
+    <script>
+        window.NjordReasonFormatting = (() => {
+            const familyOptionValue = (option) => (
+                option && typeof option === 'object'
+                    ? String(option.value || '')
+                    : String(option || '')
+            );
+
+            const familyOptionLabel = (option) => (
+                option && typeof option === 'object'
+                    ? String(option.label || option.value || '')
+                    : String(option || '')
+            );
+
+            const normalizeFamilyOptionKey = (value) => String(value || '')
+                .trim()
+                .toLowerCase()
+                .replace(/-/g, '_')
+                .replace(/\s+/g, '_');
+
+            const normalizeReasonDisplayLine = (value) => String(value || '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .replace(/[.;\s]+$/g, '')
+                .toLowerCase();
+
+            const humanizeReasonCode = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return '';
+                return text
+                    .toLowerCase()
+                    .replace(/_/g, ' ')
+                    .replace(/\bapi\b/g, 'API')
+                    .replace(/\bcoc\b/g, 'CoC')
+                    .replace(/\bstcw\b/g, 'STCW')
+                    .trim();
+            };
+
+            const formatUnknownReasonType = (value) => {
+                const code = String(value || '').trim().toUpperCase();
+                if (!code) return '';
+                if (code === 'FACTUAL_UNKNOWN') return 'Evidence too weak for automation to decide';
+                if (code === 'VERSION_MISMATCH_UNKNOWN') return 'Resume facts need refresh before this filter can be evaluated';
+                return humanizeReasonCode(code);
+            };
+
+            const HARD_FILTER_REASON_PRESENTERS = [
+                { prefix: 'PASSPORT_', group: 'matchedFilters' },
+                { prefix: 'VESSEL_TONNAGE_', group: 'matchedFilters' },
+                { prefix: 'EXPERIENCE_SHIP_TYPE_', group: 'matchedFilters' },
+                { prefix: 'APPLIED_SHIP_TYPE_', group: 'matchedFilters' },
+                { prefix: 'RANK_DURATION_', group: 'matchedFilters' },
+                { prefix: 'RECENT_CONTRACT_', group: 'matchedFilters' },
+                { prefix: 'ENGINE_EXPERIENCE_', group: 'matchedFilters' },
+                { prefix: 'ENGINE_VESSEL_EXPERIENCE_', group: 'matchedFilters' },
+                { prefix: 'US_VISA_', group: 'matchedFilters' },
+                { prefix: 'SCHENGEN_VISA_', group: 'matchedFilters' },
+                { prefix: 'AUSTRALIA_VISA_', group: 'matchedFilters' },
+                { prefix: 'STCW_', group: 'matchedFilters' },
+                { prefix: 'CERTIFICATE_', group: 'matchedFilters' },
+                { prefix: 'RANK_MATCH_', group: 'matchedFilters' },
+                { prefix: 'AGE_', group: 'matchedFilters' },
+            ];
+
+            const REASON_GROUP_META = {
+                primary: { heading: 'AI Match Summary', itemClass: 'text-sm text-gray-700' },
+                matchedFilters: { heading: 'Matched Filters', itemClass: 'text-xs text-slate-500' },
+                recruiterChecks: { heading: 'Default Recruiter Checks', itemClass: 'text-xs text-slate-500' },
+                context: { heading: 'Resume Context', itemClass: 'text-xs text-slate-500' },
+            };
+
+            const SHIP_TYPE_DISPLAY_LABEL_MAP = {
+                aht: 'AHT',
+                ahts: 'AHTS',
+                barge: 'Barge',
+                bulk_carrier: 'Bulk carrier',
+                car_carrier: 'Car carrier',
+                chemical_tanker: 'Chemical tanker',
+                container: 'Container',
+                container_ship: 'Container ship',
+                container_vessel: 'Container vessel',
+                crude_oil_tanker: 'Crude oil tanker',
+                crude_tanker: 'Crude tanker',
+                dp_i: 'DP I',
+                dp_ii: 'DP II',
+                dp_iii: 'DP III',
+                dredger: 'Dredger',
+                dry_cargo: 'Dry cargo',
+                gas_carrier: 'Gas carrier',
+                general_cargo: 'General cargo',
+                lng: 'LNG',
+                lng_carrier: 'LNG carrier',
+                lpg: 'LPG',
+                lpg_carrier: 'LPG carrier',
+                offshore: 'Offshore',
+                oil_chem_tanker: 'Oil/chemical tanker',
+                oil_tanker: 'Oil tanker',
+                passenger: 'Passenger',
+                product_tanker: 'Product tanker',
+                psv: 'PSV',
+                reefer: 'Reefer',
+                ro_ro: 'Ro-Ro',
+                roro: 'Ro-Ro',
+                survey_vessel: 'Survey vessel',
+                tanker: 'Tanker',
+                tug: 'Tug',
+                vlgc: 'VLGC',
+                vlcc: 'VLCC',
+            };
+
+            const splitReasonIntoDisplayLines = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return [];
+                return text
+                    .split(/\s*;\s*/g)
+                    .map(part => part.trim())
+                    .filter(Boolean);
+            };
+
+            const ensureSentence = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return '';
+                return /[.!?]$/.test(text) ? text : `${text}.`;
+            };
+
+            const stripRequestedFilterSuffix = (value) => String(value || '')
+                .replace(/\s+for requested filter\s+'[^']+'\.*$/i, '')
+                .trim();
+
+            const formatTonnageNumber = (value) => {
+                if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+                return value.toLocaleString();
+            };
+
+            const formatTonnageUnitSuffix = (unit) => {
+                const normalized = String(unit || 'unspecified').trim().toLowerCase();
+                if (!normalized || normalized === 'any' || normalized === 'unspecified') return '(unit unspecified)';
+                if (normalized === 'gt_grt') return 'GT/GRT';
+                if (normalized === 'dwt') return 'DWT';
+                return normalized.toUpperCase();
+            };
+
+            const formatTonnageValueForDisplay = (value, unit) => {
+                const formattedNumber = formatTonnageNumber(value);
+                if (!formattedNumber) return '';
+                return `${formattedNumber} ${formatTonnageUnitSuffix(unit)}`.trim();
+            };
+
+            const formatShipTypeMatchMessage = (message, prefix) => {
+                const normalizedPrefix = String(prefix || '').trim();
+                const normalizedMessage = String(message || '').trim();
+                if (!normalizedMessage) return '';
+                const exactMatch = normalizedMessage.match(/matching\s+'([^']+)'/i);
+                if (exactMatch) {
+                    return `${normalizedPrefix} matches '${exactMatch[1]}'.`;
+                }
+                return ensureSentence(
+                    normalizedMessage
+                        .replace(/^Candidate has\s+/i, `${normalizedPrefix} `)
+                        .replace(/^Candidate does not meet the requested\s+/i, `${normalizedPrefix} does not meet the requested `)
+                );
+            };
+
+            const extractQuotedPhrases = (value) => {
+                const matches = [];
+                String(value || '').replace(/'([^']+)'/g, (_, captured) => {
+                    matches.push(captured);
+                    return _;
+                });
+                return matches;
+            };
+
+            const engineRequestedLabel = (item) => {
+                const fromMessage = extractQuotedPhrases(item?.message)[0];
+                if (fromMessage) return fromMessage;
+                return '';
+            };
+
+            const engineEvidenceLabel = (item) => {
+                const matchedEvidence = item?.actual_value?.matched_evidence || {};
+                const displayLabel = String(matchedEvidence.display_label || '').trim();
+                if (displayLabel) return displayLabel;
+                return '';
+            };
+
+            const formatEngineExperienceMessage = (item) => {
+                const code = String(item?.reason_code || '').trim();
+                const message = String(item?.message || '').trim();
+                const requested = engineRequestedLabel(item);
+                const evidence = engineEvidenceLabel(item);
+                const actualValue = item?.actual_value || {};
+                const matchedContracts = Number(actualValue.matched_contracts || 0);
+                const matchedMonths = Number(actualValue.matched_months || 0);
+                if (!message) return '';
+
+                if (code === 'ENGINE_EXPERIENCE_MATCH') {
+                    if (matchedMonths > 0 && matchedContracts > 0) {
+                        return `Engine experience matches '${requested || evidence}' with ${matchedMonths} month(s) across ${matchedContracts} contract(s).`;
+                    }
+                    if (evidence && requested) {
+                        return `Engine experience matches '${requested}' via '${evidence}'.`;
+                    }
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_FAMILY_FALLBACK') {
+                    return `Broader engine family '${evidence || 'resume evidence'}' was found, but '${requested || 'the requested engine type'}' is not confirmed. Included for recruiter review at reduced confidence.`;
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_MANUFACTURER_FALLBACK') {
+                    return `Engine maker '${evidence || 'resume evidence'}' was found, but '${requested || 'the requested engine type'}' is not confirmed. Included for recruiter review at reduced confidence.`;
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_INSUFFICIENT') {
+                    if (requested && matchedMonths > 0) {
+                        return `Engine experience for '${requested}' is below the requested minimum (${matchedMonths} month(s) found).`;
+                    }
+                    return ensureSentence(
+                        message
+                            .replace(/^Candidate has only\s+/i, "Engine experience is below the requested minimum: ")
+                    );
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_MISMATCH') {
+                    if (requested && evidence) {
+                        return `Engine evidence '${evidence}' does not match '${requested}'.`;
+                    }
+                    return ensureSentence(
+                        message
+                            .replace(/^Candidate engine experience\s+/i, 'Engine evidence ')
+                    );
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_NEEDS_DATE_REVIEW') {
+                    return 'Engine recency could not be confirmed because one or more contract dates are missing.';
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_NO_EVIDENCE_EXTRACTED') {
+                    return `Engine evidence could not be extracted for '${requested || 'the requested engine type'}'.`;
+                }
+
+                if (code === 'ENGINE_EXPERIENCE_ROWS_MISSING') {
+                    return 'Contract-level engine evidence could not be confirmed from this resume.';
+                }
+
+                return ensureSentence(message);
+            };
+
+            const formatEngineVesselExperienceMessage = (item) => {
+                const code = String(item?.reason_code || '').trim();
+                const message = String(item?.message || '').trim();
+                const actualValue = item?.actual_value || {};
+                const quoted = extractQuotedPhrases(message);
+                const engineLabel = quoted[0] || '';
+                const vesselLabel = formatShipFamilyLabel(quoted[1] || '') || quoted[1] || '';
+                const matchedContracts = Number(actualValue.matched_contracts || 0);
+                const matchedMonths = Number(actualValue.matched_months || 0);
+                const requiredContracts = Number(actualValue.required_contracts || 0);
+                if (!message) return '';
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_MATCH') {
+                    if (matchedMonths > 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience matches: ${matchedMonths} month(s) with '${engineLabel}' on '${vesselLabel}'.`;
+                    }
+                    if (matchedContracts > 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience matches: '${engineLabel}' on '${vesselLabel}' in ${matchedContracts} contract(s).`;
+                    }
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_INSUFFICIENT') {
+                    if (requiredContracts > 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience is below the requested recency window for '${engineLabel}' on '${vesselLabel}' (${matchedContracts} of ${requiredContracts} recent contract(s) matched).`;
+                    }
+                    if (matchedMonths >= 0 && engineLabel && vesselLabel) {
+                        return `Engine + vessel experience is below the requested minimum for '${engineLabel}' on '${vesselLabel}' (${matchedMonths} month(s) found).`;
+                    }
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_UNPARSED') {
+                    return 'Engine or vessel evidence could not be extracted from the candidate contract rows.';
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_ROWS_MISSING') {
+                    return 'Contract-level engine and vessel evidence could not be confirmed from this resume.';
+                }
+
+                if (code === 'ENGINE_VESSEL_EXPERIENCE_SOURCE_EXCLUDED') {
+                    return 'Engine + vessel matching needs parsed service rows from a supported resume layout.';
+                }
+
+                return ensureSentence(message);
+            };
+
+            const formatHardFilterMessage = (item) => {
+                const code = String(item?.reason_code || '').trim();
+                const message = String(item?.message || '').trim();
+                const actualValue = item?.actual_value || {};
+                if (!message) return '';
+
+                if (code === 'PASSPORT_VALID') {
+                    return ensureSentence(
+                        stripRequestedFilterSuffix(message)
+                            .replace(/^Passport is valid/i, 'Passport valid')
+                    );
+                }
+
+                if (code === 'PASSPORT_VALIDITY_WINDOW_TOO_SHORT') {
+                    return ensureSentence(
+                        stripRequestedFilterSuffix(message)
+                            .replace(/^Passport is valid/i, 'Passport valid')
+                            .replace(/\s+remaining for requested filter\s+'[^']+'\.*$/i, ' remaining')
+                    );
+                }
+
+                if (code === 'PASSPORT_MISSING') {
+                    return 'Passport evidence could not be confirmed.';
+                }
+
+                if (code === 'VESSEL_TONNAGE_MATCH') {
+                    const matchedEvidence = Array.isArray(actualValue?.matched_evidence) ? actualValue.matched_evidence : [];
+                    const best = matchedEvidence[0];
+                    if (best && typeof best.value === 'number') {
+                        return `Tonnage matches requested range: ${formatTonnageValueForDisplay(best.value, best.unit)}.`;
+                    }
+                    return ensureSentence(
+                        message.replace(/^Candidate vessel tonnage evidence includes\s+/i, 'Tonnage matches requested range: ')
+                    );
+                }
+
+                if (code === 'VESSEL_TONNAGE_BELOW_MINIMUM') {
+                    return ensureSentence(
+                        message.replace(/^Highest vessel tonnage found is\s+/i, 'Tonnage below minimum: highest evidence is ')
+                    );
+                }
+
+                if (code === 'VESSEL_TONNAGE_ABOVE_MAXIMUM') {
+                    return ensureSentence(
+                        message.replace(/^Lowest vessel tonnage found is\s+/i, 'Tonnage above maximum: lowest evidence is ')
+                    );
+                }
+
+                if (code === 'VESSEL_TONNAGE_OUT_OF_RANGE') {
+                    return 'Tonnage does not fall within the requested range.';
+                }
+
+                if (code === 'EXPERIENCE_SHIP_TYPE_MATCH') {
+                    return formatShipTypeMatchMessage(message, 'Experienced ship type');
+                }
+
+                if (code === 'APPLIED_SHIP_TYPE_MATCH') {
+                    return formatShipTypeMatchMessage(message, 'Applied ship type');
+                }
+
+                if (code.startsWith('ENGINE_EXPERIENCE_')) {
+                    return formatEngineExperienceMessage(item);
+                }
+
+                if (code.startsWith('ENGINE_VESSEL_EXPERIENCE_')) {
+                    return formatEngineVesselExperienceMessage(item);
+                }
+
+                return ensureSentence(message);
+            };
+
+            const formatEngineFamilyLabel = (value, { rawMention = '', configuredEngineFamilies = [] } = {}) => {
+                const key = normalizeFamilyOptionKey(value);
+                if (!key) return String(rawMention || '').trim() || '';
+                const configuredOption = configuredEngineFamilies.find(
+                    option => normalizeFamilyOptionKey(familyOptionValue(option)) === key
+                );
+                return familyOptionLabel(configuredOption) || String(rawMention || '').trim() || '';
+            };
+
+            const formatShipFamilyLabel = (value, { rawMention = '', configuredShipTypes = [] } = {}) => {
+                const key = normalizeFamilyOptionKey(value);
+                if (!key) return String(rawMention || '').trim() || '';
+                const configuredOption = configuredShipTypes.find(
+                    option => normalizeFamilyOptionKey(familyOptionValue(option)) === key
+                );
+                return familyOptionLabel(configuredOption)
+                    || SHIP_TYPE_DISPLAY_LABEL_MAP[key]
+                    || String(rawMention || '').trim()
+                    || '';
+            };
+
+            const summarizeExperienceFilter = ({ filter, familyKey, configuredEngineFamilies = [], configuredShipTypes = [] }) => {
+                const items = Array.isArray(filter?.items) ? filter.items : [];
+                if (!items.length) return 'Any';
+                return items.map(item => {
+                    const rawLabel = String(item?.[familyKey] || '');
+                    const label = familyKey === 'engine_family'
+                        ? formatEngineFamilyLabel(rawLabel, { configuredEngineFamilies })
+                        : formatShipFamilyLabel(rawLabel, { configuredShipTypes });
+                    const suffix = [];
+                    if (item?.minimum_months) suffix.push(`${item.minimum_months}m+`);
+                    if (item?.years_back) suffix.push(`${item.years_back}y`);
+                    if (item?.contract_count) suffix.push(`${item.contract_count}c`);
+                    return [label, suffix.join(' ')].filter(Boolean).join(' ');
+                }).filter(Boolean).join(' | ') || 'Any';
+            };
+
+            const buildRecruiterCheckLines = (match) => {
+                const insights = match?.default_insights || {};
+                const lines = [];
+                if (typeof insights.current_rank_months_total === 'number') {
+                    lines.push(`Months in current rank: ${insights.current_rank_months_total}`);
+                }
+                if (typeof insights.has_contract_gap_over_6_months === 'boolean') {
+                    if (insights.has_contract_gap_over_6_months) {
+                        const approxMonths = typeof insights.max_contract_gap_days === 'number'
+                            ? Math.max(1, Math.ceil(insights.max_contract_gap_days / 30))
+                            : null;
+                        const gapTimeline = insights.max_contract_gap_start && insights.max_contract_gap_end
+                            ? `${insights.max_contract_gap_start} to ${insights.max_contract_gap_end}`
+                            : '';
+                        lines.push(
+                            approxMonths
+                                ? `Gap > 6 months: Yes (${approxMonths} months${gapTimeline ? `, ${gapTimeline}` : ''})`
+                                : 'Gap > 6 months: Yes'
+                        );
+                    } else {
+                        lines.push('Gap > 6 months: No');
+                    }
+                }
+                return lines;
+            };
+
+            const buildResumeContextLines = (match, options = {}) => {
+                const insights = match?.default_insights || {};
+                const lines = [];
+                if (!options.suppressTonnageSummary) {
+                    if (typeof insights.best_vessel_tonnage_value === 'number') {
+                        lines.push(
+                            `Vessel tonnage evidence: ${formatTonnageValueForDisplay(
+                                insights.best_vessel_tonnage_value,
+                                insights.best_vessel_tonnage_unit,
+                            )}.`
+                        );
+                    } else if (typeof insights.max_vessel_tonnage === 'number') {
+                        const minValue = typeof insights.min_vessel_tonnage === 'number'
+                            ? insights.min_vessel_tonnage
+                            : insights.max_vessel_tonnage;
+                        if (minValue === insights.max_vessel_tonnage) {
+                            lines.push(`Vessel tonnage evidence: ${insights.max_vessel_tonnage.toLocaleString()}.`);
+                        } else {
+                            lines.push(
+                                `Vessel tonnage range in resume: ${minValue.toLocaleString()}-${insights.max_vessel_tonnage.toLocaleString()}.`
+                            );
+                        }
+                    }
+                }
+
+                const applied = Array.isArray(match?.applied_ship_types) ? match.applied_ship_types.filter(Boolean) : [];
+                const experienced = Array.isArray(match?.experienced_ship_types) ? match.experienced_ship_types.filter(Boolean) : [];
+                if (applied.length > 0 && !options.suppressAppliedShipTypes) {
+                    lines.push(`Applied Ship Type: ${applied.join(', ')}`);
+                }
+                if (experienced.length > 0 && !options.suppressExperiencedShipTypes) {
+                    lines.push(`Experienced Ship Type: ${experienced.join(', ')}`);
+                }
+                return lines;
+            };
+
+            const getHardFilterReasonPresentation = (item) => {
+                const message = String(item?.message || '').trim();
+                const code = String(item?.reason_code || '').trim();
+                if (!message) return null;
+                const presenter = HARD_FILTER_REASON_PRESENTERS.find(entry => code.startsWith(entry.prefix));
+                if (presenter) {
+                    return {
+                        group: presenter.group,
+                        line: formatHardFilterMessage(item),
+                    };
+                }
+                return {
+                    group: 'matchedFilters',
+                    line: code ? `${humanizeReasonCode(code)}: ${ensureSentence(message)}` : ensureSentence(message),
+                };
+            };
+
+            const dedupeDisplayLines = (lines, sharedSeen = null) => {
+                const seen = sharedSeen || new Set();
+                return lines.filter(line => {
+                    const normalized = normalizeReasonDisplayLine(line);
+                    if (!normalized || seen.has(normalized)) return false;
+                    seen.add(normalized);
+                    return true;
+                });
+            };
+
+            const buildReasonDisplayModel = (rawMatch) => {
+                const match = rawMatch?.reason !== undefined
+                    ? rawMatch
+                    : { ...rawMatch, reason: rawMatch?.ai_match_reason || '' };
+                const hardFilterReasonItems = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const rawHardFilterLines = hardFilterReasonItems
+                    .map(item => String(item?.message || '').trim())
+                    .filter(Boolean);
+                const presentedHardFilterLines = hardFilterReasonItems
+                    .map(getHardFilterReasonPresentation)
+                    .filter(Boolean);
+                const hardFilterLineKeys = new Set([
+                    ...rawHardFilterLines.map(normalizeReasonDisplayLine),
+                    ...presentedHardFilterLines.map(entry => normalizeReasonDisplayLine(entry.line)),
+                ]);
+                const primaryReasonLines = splitReasonIntoDisplayLines(match?.reason).filter(line => {
+                    const normalized = normalizeReasonDisplayLine(line);
+                    return normalized && !hardFilterLineKeys.has(normalized);
+                });
+                const recruiterCheckLines = buildRecruiterCheckLines(match);
+                const contextLines = buildResumeContextLines(match);
+                const seen = new Set();
+                const matchedFilterLines = dedupeDisplayLines(
+                    presentedHardFilterLines
+                        .filter(entry => entry.group === 'matchedFilters')
+                        .map(entry => entry.line),
+                    seen,
+                );
+                return {
+                    primary: dedupeDisplayLines(primaryReasonLines, seen),
+                    matchedFilters: matchedFilterLines,
+                    recruiterChecks: dedupeDisplayLines(recruiterCheckLines, seen),
+                    context: dedupeDisplayLines(contextLines, seen),
+                };
+            };
+
+            const buildReasonDisplaySummary = (rawMatch) => {
+                const formatted = buildReasonDisplayModel(rawMatch);
+                return [
+                    ...formatted.primary,
+                    ...formatted.matchedFilters,
+                    ...formatted.recruiterChecks,
+                    ...formatted.context,
+                ].join('\n');
+            };
+
+            return {
+                REASON_GROUP_META,
+                normalizeReasonDisplayLine,
+                humanizeReasonCode,
+                formatUnknownReasonType,
+                formatEngineFamilyLabel,
+                formatShipFamilyLabel,
+                summarizeExperienceFilter,
+                buildReasonDisplayModel,
+                buildReasonDisplaySummary,
+            };
+        })();
+    </script>
+
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         const aiSearchState = window.NjordAiSearchState;
+        const reasonFormatting = window.NjordReasonFormatting;
         const DEFAULT_EXPERIENCE_FILTER_ROW = Object.freeze({
             family: '',
             recency_mode: 'any_time',
@@ -1998,7 +2548,7 @@
                     const response = await fetch(`${API_BASE_URL}/get_config_engine_families`);
                     const data = await response.json();
                     if (data.success) {
-                        const nextFamilies = data.engine_families || [];
+                        const nextFamilies = Array.isArray(data.engine_families) ? data.engine_families : [];
                         setConfiguredEngineFamilies(nextFamilies);
                         setEngineExperienceRows(prev => prev.map(row => (
                             row.family
@@ -3581,6 +4131,18 @@
                 ...overrides,
             });
 
+            const familyOptionValue = (option) => (
+                option && typeof option === 'object'
+                    ? String(option.value || '')
+                    : String(option || '')
+            );
+
+            const familyOptionLabel = (option) => (
+                option && typeof option === 'object'
+                    ? String(option.label || option.value || '')
+                    : String(option || '')
+            );
+
             const normalizeFamilyOptionKey = (value) => String(value || '')
                 .trim()
                 .toLowerCase()
@@ -3591,8 +4153,8 @@
                 const requestedKey = normalizeFamilyOptionKey(value);
                 if (!requestedKey) return '';
                 const candidates = Array.isArray(options) ? options : [];
-                const resolved = candidates.find(option => normalizeFamilyOptionKey(option) === requestedKey);
-                return resolved || '';
+                const resolved = candidates.find(option => normalizeFamilyOptionKey(familyOptionValue(option)) === requestedKey);
+                return resolved ? familyOptionValue(resolved) : '';
             };
 
             const normalizePositiveIntegerInput = (value) => {
@@ -3643,21 +4205,12 @@
                 };
             };
 
-            const summarizeExperienceFilter = ({ filter, familyKey }) => {
-                const items = Array.isArray(filter?.items) ? filter.items : [];
-                if (!items.length) return 'Any';
-                return items.map(item => {
-                    const rawLabel = String(item?.[familyKey] || '');
-                    const label = familyKey === 'engine_family'
-                        ? formatEngineFamilyLabel(rawLabel)
-                        : rawLabel.replace(/_/g, ' ');
-                    const suffix = [];
-                    if (item?.minimum_months) suffix.push(`${item.minimum_months}m+`);
-                    if (item?.years_back) suffix.push(`${item.years_back}y`);
-                    if (item?.contract_count) suffix.push(`${item.contract_count}c`);
-                    return [label, suffix.join(' ')].filter(Boolean).join(' ');
-                }).join(' | ');
-            };
+            const summarizeExperienceFilter = ({ filter, familyKey }) => reasonFormatting.summarizeExperienceFilter({
+                filter,
+                familyKey,
+                configuredEngineFamilies,
+                configuredShipTypes: shipTypes,
+            });
 
             const buildVesselTonnageFilter = () => {
                 const minValue = normalizeTonnageInput(vesselTonnageMin);
@@ -3747,8 +4300,8 @@
                                     >
                                         <option value="">{familyPlaceholder}</option>
                                         {options.map(option => (
-                                            <option key={option} value={option}>
-                                                {optionLabelFormatter ? optionLabelFormatter(option) : option}
+                                            <option key={familyOptionValue(option)} value={familyOptionValue(option)}>
+                                                {optionLabelFormatter ? optionLabelFormatter(familyOptionValue(option), familyOptionLabel(option)) : familyOptionLabel(option)}
                                             </option>
                                         ))}
                                     </select>
@@ -4655,253 +5208,20 @@
                 );
             };
 
-            const normalizeReasonDisplayLine = (value) => String(value || '')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .replace(/[.;\s]+$/g, '')
-                .toLowerCase();
-
-            const humanizeReasonCode = (value) => {
-                const text = String(value || '').trim();
-                if (!text) return '';
-                return text
-                    .toLowerCase()
-                    .replace(/_/g, ' ')
-                    .replace(/\bapi\b/g, 'API')
-                    .replace(/\bcoc\b/g, 'CoC')
-                    .replace(/\bstcw\b/g, 'STCW')
-                    .trim();
-            };
-
-            const ENGINE_FAMILY_LABELS = {
-                man: 'MAN / Everllence',
-                man_b_w: 'MAN B&W',
-                man_b_w_mc: 'MAN B&W MC',
-                man_b_w_me: 'MAN B&W ME',
-                man_b_w_me_b: 'MAN B&W ME-B',
-                man_b_w_me_c: 'MAN B&W ME-C',
-                man_b_w_me_gi: 'MAN B&W ME-GI',
-                man_b_w_me_c_gi: 'MAN B&W ME-C-GI',
-                man_b_w_me_ga: 'MAN B&W ME-GA',
-                man_b_w_me_lgi: 'MAN B&W ME-LGI',
-                man_b_w_me_lgim: 'MAN B&W ME-LGIM',
-                man_b_w_me_lgip: 'MAN B&W ME-LGIP',
-                man_b_w_me_lgia: 'MAN B&W ME-LGIA',
-                man_b_w_me_gie: 'MAN B&W ME-GIE',
-                wingd: 'WinGD',
-                wingd_x_df: 'WinGD X-DF',
-                wingd_x_df_m_e: 'WinGD X-DF-M/E',
-                wingd_x_df_a: 'WinGD X-DF-A',
-                wingd_x_df_hp: 'WinGD X-DF-HP',
-                wingd_x_engines: 'WinGD X engines',
-                wartsila_rta: 'Wartsila / Sulzer RTA',
-                wartsila_dual_fuel: 'Wartsila dual fuel',
-                wartsila_rt_flex: 'Wartsila / Sulzer RT-flex',
-                wartsila: 'Wartsila',
-                sulzer: 'Sulzer',
-                mak: 'MaK',
-                mitsubishi: 'Mitsubishi',
-                mitsubishi_uec: 'Mitsubishi UEC',
-                mitsubishi_uec_lsii: 'Mitsubishi UEC-LSII',
-                mitsubishi_uec_lse: 'Mitsubishi UEC-LSE',
-                mitsubishi_uec_lsh: 'Mitsubishi UEC-LSH',
-                mitsubishi_uec_lsj: 'Mitsubishi UEC-LSJ',
-                yanmar: 'Yanmar',
-                bergen: 'Bergen',
-                caterpillar: 'Caterpillar',
-                pielstick: 'Pielstick',
-                himsen: 'Himsen',
-                daihatsu: 'Daihatsu',
-                niigata: 'Niigata',
-                doosan: 'Doosan',
-                mtu: 'MTU',
-                detroit_diesel: 'Detroit Diesel',
-                electronically_controlled_engine: 'Electronically controlled engine',
-                mechanical_engine: 'Mechanical engine',
-                dual_fuel: 'Dual fuel',
-                methanol_engine: 'Methanol engine',
-                ammonia_engine: 'Ammonia engine',
-            };
-
-            const HARD_FILTER_REASON_PRESENTERS = [
-                { prefix: 'PASSPORT_', label: 'Passport', group: 'matchedFilters' },
-                { prefix: 'VESSEL_TONNAGE_', label: 'Tonnage', group: 'matchedFilters' },
-                { prefix: 'EXPERIENCE_SHIP_TYPE_', label: 'Experienced ship type', group: 'matchedFilters' },
-                { prefix: 'APPLIED_SHIP_TYPE_', label: 'Applied ship type', group: 'matchedFilters' },
-                { prefix: 'RANK_DURATION_', label: 'Rank duration', group: 'matchedFilters' },
-                { prefix: 'RECENT_CONTRACT_', label: 'Contract recency', group: 'matchedFilters' },
-                { prefix: 'ENGINE_EXPERIENCE_', label: 'Engine experience', group: 'matchedFilters' },
-                { prefix: 'ENGINE_VESSEL_EXPERIENCE_', label: 'Engine + vessel experience', group: 'matchedFilters' },
-                { prefix: 'US_VISA_', label: 'US visa', group: 'matchedFilters' },
-                { prefix: 'SCHENGEN_VISA_', label: 'Schengen visa', group: 'matchedFilters' },
-                { prefix: 'AUSTRALIA_VISA_', label: 'Australia visa', group: 'matchedFilters' },
-                { prefix: 'STCW_', label: 'STCW', group: 'matchedFilters' },
-                { prefix: 'CERTIFICATE_', label: 'Certificate', group: 'matchedFilters' },
-                { prefix: 'RANK_MATCH_', label: 'Rank match', group: 'matchedFilters' },
-                { prefix: 'AGE_', label: 'Age', group: 'matchedFilters' },
-            ];
-
-            const REASON_GROUP_META = {
-                matchedFilters: { heading: null, itemClass: 'text-xs text-slate-500' },
-                recruiterChecks: { heading: 'Default Recruiter Checks', itemClass: 'text-xs text-slate-500' },
-                context: { heading: 'Resume Context', itemClass: 'text-xs text-slate-500' },
-                primary: { heading: null, itemClass: 'text-sm text-gray-700' },
-            };
-
-            const splitReasonIntoDisplayLines = (value) => {
-                const text = String(value || '').trim();
-                if (!text) return [];
-                return text
-                    .split(/\s*;\s*/g)
-                    .map(part => part.trim())
-                    .filter(Boolean);
-            };
-
             const formatEngineFamilyLabel = (value, rawMention = '') => {
-                const key = normalizeFamilyOptionKey(value);
-                if (!key) return String(rawMention || '').trim() || '';
-                return ENGINE_FAMILY_LABELS[key] || String(rawMention || '').trim() || String(value || '').replace(/_/g, ' ');
-            };
-
-            const buildDefaultInsightLines = (match, options = {}) => {
-                const insights = match?.default_insights || {};
-                const lines = [];
-                if (!options.suppressTonnageSummary) {
-                    if (typeof insights.best_vessel_tonnage_value === 'number') {
-                        const unit = String(insights.best_vessel_tonnage_unit || 'unspecified').toUpperCase();
-                        lines.push(`Vessel tonnage evidence: ${insights.best_vessel_tonnage_value.toLocaleString()} ${unit}`);
-                    } else if (typeof insights.max_vessel_tonnage === 'number') {
-                        const minValue = typeof insights.min_vessel_tonnage === 'number'
-                            ? insights.min_vessel_tonnage
-                            : insights.max_vessel_tonnage;
-                        if (minValue === insights.max_vessel_tonnage) {
-                            lines.push(`Vessel tonnage evidence: ${insights.max_vessel_tonnage.toLocaleString()}`);
-                        } else {
-                            lines.push(
-                                `Vessel tonnage range in resume: ${minValue.toLocaleString()}-${insights.max_vessel_tonnage.toLocaleString()}`
-                            );
-                        }
-                    }
-                }
-                if (!options.suppressCurrentRankSummary && typeof insights.current_rank_months_total === 'number') {
-                    lines.push(`Months in current rank: ${insights.current_rank_months_total}`);
-                }
-                if (!options.suppressContractGapSummary && typeof insights.has_contract_gap_over_6_months === 'boolean') {
-                    if (insights.has_contract_gap_over_6_months) {
-                        const approxMonths = typeof insights.max_contract_gap_days === 'number'
-                            ? Math.max(1, Math.ceil(insights.max_contract_gap_days / 30))
-                            : null;
-                        const gapTimeline = insights.max_contract_gap_start && insights.max_contract_gap_end
-                            ? `${insights.max_contract_gap_start} to ${insights.max_contract_gap_end}`
-                            : '';
-                        lines.push(
-                            approxMonths
-                                ? `Gap > 6 months: Yes (${approxMonths} months${gapTimeline ? `, ${gapTimeline}` : ''})`
-                                : 'Gap > 6 months: Yes'
-                        );
-                    } else {
-                        lines.push('Gap > 6 months: No');
-                    }
-                }
-                return lines;
-            };
-
-            const buildShipTypeEvidenceLines = (match, options = {}) => {
-                const applied = Array.isArray(match.applied_ship_types) ? match.applied_ship_types.filter(Boolean) : [];
-                const experienced = Array.isArray(match.experienced_ship_types) ? match.experienced_ship_types.filter(Boolean) : [];
-                const lines = [];
-                if (applied.length > 0 && !options.suppressAppliedShipTypes) {
-                    lines.push(`Applied Ship Type: ${applied.join(', ')}`);
-                }
-                if (experienced.length > 0 && !options.suppressExperiencedShipTypes) {
-                    lines.push(`Experienced Ship Type: ${experienced.join(', ')}`);
-                }
-                return lines;
-            };
-
-            const getHardFilterReasonPresentation = (item) => {
-                const message = String(item?.message || '').trim();
-                const code = String(item?.reason_code || '').trim();
-                if (!message) return null;
-                const presenter = HARD_FILTER_REASON_PRESENTERS.find(entry => code.startsWith(entry.prefix));
-                if (presenter) {
-                    return {
-                        group: presenter.group,
-                        line: `${presenter.label}: ${message}`,
-                    };
-                }
-                return {
-                    group: 'matchedFilters',
-                    line: code ? `${humanizeReasonCode(code)}: ${message}` : message,
-                };
-            };
-
-            const dedupeDisplayLines = (lines, sharedSeen = null) => {
-                const seen = sharedSeen || new Set();
-                return lines.filter(line => {
-                    const normalized = normalizeReasonDisplayLine(line);
-                    if (!normalized || seen.has(normalized)) return false;
-                    seen.add(normalized);
-                    return true;
+                return reasonFormatting.formatEngineFamilyLabel(value, {
+                    rawMention,
+                    configuredEngineFamilies,
                 });
             };
 
-            const buildReasonDisplayModel = (rawMatch) => {
-                const match = rawMatch?.reason !== undefined
-                    ? rawMatch
-                    : { ...rawMatch, reason: rawMatch?.ai_match_reason || '' };
-                const hardFilterReasonItems = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
-                const rawHardFilterLines = hardFilterReasonItems
-                    .map(item => String(item?.message || '').trim())
-                    .filter(Boolean);
-                const presentedHardFilterLines = hardFilterReasonItems
-                    .map(getHardFilterReasonPresentation)
-                    .filter(Boolean);
-                const hardFilterCodes = new Set(hardFilterReasonItems.map(item => String(item?.reason_code || '').trim()).filter(Boolean));
-                const hardFilterLineKeys = new Set([
-                    ...rawHardFilterLines.map(normalizeReasonDisplayLine),
-                    ...presentedHardFilterLines.map(entry => normalizeReasonDisplayLine(entry.line)),
-                ]);
-                const primaryReasonLines = splitReasonIntoDisplayLines(match?.reason).filter(line => {
-                    const normalized = normalizeReasonDisplayLine(line);
-                    return normalized && !hardFilterLineKeys.has(normalized);
-                });
-                const hasTonnageFilter = Array.from(hardFilterCodes).some(code => code.startsWith('VESSEL_TONNAGE_'));
-                const hasExperiencedShipTypeFilter = Array.from(hardFilterCodes).some(code => code.startsWith('EXPERIENCE_SHIP_TYPE_'));
-                const hasAppliedShipTypeFilter = Array.from(hardFilterCodes).some(code => code.startsWith('APPLIED_SHIP_TYPE_'));
-                const supplementaryInsightLines = buildDefaultInsightLines(match, {
-                    suppressTonnageSummary: hasTonnageFilter,
-                });
-                const shipTypeEvidenceLines = buildShipTypeEvidenceLines(match, {
-                    suppressExperiencedShipTypes: hasExperiencedShipTypeFilter,
-                    suppressAppliedShipTypes: hasAppliedShipTypeFilter,
-                });
-                const seen = new Set();
-                const matchedFilterLines = dedupeDisplayLines(
-                    presentedHardFilterLines
-                        .filter(entry => entry.group === 'matchedFilters')
-                        .map(entry => entry.line),
-                    seen,
-                );
-                const recruiterCheckLines = dedupeDisplayLines(supplementaryInsightLines, seen);
-                const contextLines = dedupeDisplayLines(shipTypeEvidenceLines, seen);
-                return {
-                    primary: dedupeDisplayLines(primaryReasonLines, seen),
-                    matchedFilters: matchedFilterLines,
-                    recruiterChecks: recruiterCheckLines,
-                    context: contextLines,
-                };
-            };
+            const REASON_GROUP_META = reasonFormatting.REASON_GROUP_META;
 
-            const buildReasonDisplaySummary = (rawMatch) => {
-                const formatted = buildReasonDisplayModel(rawMatch);
-                return [
-                    ...formatted.primary,
-                    ...formatted.matchedFilters,
-                    ...formatted.recruiterChecks,
-                    ...formatted.context,
-                ].join('\n');
-            };
+            const buildReasonDisplayModel = (rawMatch) => reasonFormatting.buildReasonDisplayModel(rawMatch);
+
+            const buildReasonDisplaySummary = (rawMatch) => reasonFormatting.buildReasonDisplaySummary(rawMatch);
+
+            const formatUnknownReasonType = (value) => reasonFormatting.formatUnknownReasonType(value);
 
             const renderReasonGroup = (groupKey, lines) => {
                 if (!Array.isArray(lines) || lines.length === 0) return null;
@@ -4952,6 +5272,11 @@
                 if (reviewPathType === 'factual_unknown') return 'bg-amber-100 text-amber-800 border border-amber-200';
                 if (reviewPathType === 'version_mismatch_unknown') return 'bg-blue-100 text-blue-800 border border-blue-200';
                 return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+            };
+
+            const getNeedsReviewPathType = (match) => {
+                const explicitType = String(match?.review_path_type || '').trim();
+                return explicitType && explicitType !== 'none' ? explicitType : 'factual_unknown';
             };
 
             const getEvidenceReviewStateLabel = (evidenceReviewState) => {
@@ -8299,8 +8624,8 @@
                                                                             )}
                                                                             {match.review_path_type && match.review_path_type !== 'none' && (
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
-                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
-                                                                                        {getReviewPathLabel(match.review_path_type)}
+                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(getNeedsReviewPathType(match))}`}>
+                                                                                        {getReviewPathLabel(getNeedsReviewPathType(match))}
                                                                                     </span>
                                                                                 </div>
                                                                             )}
@@ -8344,8 +8669,8 @@
                                                                                 </a>
                                                                                 <div className="mt-1">{renderFormattedReasonBlock(match)}</div>
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
-                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(match.review_path_type)}`}>
-                                                                                        {getReviewPathLabel(match.review_path_type)}
+                                                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(getNeedsReviewPathType(match))}`}>
+                                                                                        {getReviewPathLabel(getNeedsReviewPathType(match))}
                                                                                     </span>
                                                                                     {match.evidence_review_state && (
                                                                                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-700 border border-slate-200">
@@ -8365,7 +8690,7 @@
                                                                                 )}
                                                                                 {match.unknown_reason_types && match.unknown_reason_types.length > 0 && (
                                                                                     <p className="text-xs text-slate-500 mt-2">
-                                                                                        Unknown reason: {match.unknown_reason_types.join(', ')}
+                                                                                        Review reason: {match.unknown_reason_types.map(formatUnknownReasonType).filter(Boolean).join(', ')}
                                                                                     </p>
                                                                                 )}
                                                                                 {match.dob && (

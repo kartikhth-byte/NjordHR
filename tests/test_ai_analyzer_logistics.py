@@ -326,6 +326,7 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         cases = [
             ("Everllence B&W", ["man_b_w"]),
             ("MAN B&W LMC", ["man_b_w_mc"]),
+            ("B&W Mc", ["man_b_w_mc"]),
             ("X92DF-HP", ["wingd_x_df_hp"]),
             ("X-DF-P", []),
             ("X-DF-E", []),
@@ -399,8 +400,12 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         cases = [
             ("Wartsila", "wartsila"),
             ("Caterpillar", "caterpillar"),
+            ("Caterpilliar", "caterpillar"),
+            ("Mitsui", "mitsui"),
             ("MaK", "mak"),
             ("Pielstick", "pielstick"),
+            ("Nohab", "nohab"),
+            ("Gotaverken", "gotaverken"),
             ("Sulzer", "sulzer"),
             ("Mitsubishi", "mitsubishi"),
             ("Yanmar", "yanmar"),
@@ -780,7 +785,7 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["rows"][0]["sign_out_date"], date(2025, 10, 1))
         self.assertEqual(fact["rows"][0]["rank_normalized"], "2nd_engineer")
         self.assertEqual(fact["rows"][0]["vessel_types"], ["tanker"])
-        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w"])
+        self.assertEqual(fact["rows"][0]["engine_types"], ["man_b_w_mc"])
         self.assertEqual(fact["rows"][1]["sign_in_date"], date(2023, 7, 18))
         self.assertEqual(fact["rows"][1]["sign_out_date"], date(2024, 2, 12))
         self.assertEqual(fact["rows"][1]["rank_normalized"], "chief_engineer")

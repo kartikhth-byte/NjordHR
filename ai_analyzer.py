@@ -42,7 +42,11 @@ from repositories.resume_identity import (
 from runtime_env import config_value, normalize_env_value, normalized_url
 from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candidate_facts_contract_v1
 from candidate_facts.review_summary import build_candidate_facts_review_summary
-from query_understanding.hard_filter_catalog import UNAPPLIED_FAMILY_IDS, SUPPORTED_FAMILY_IDS
+from query_understanding.hard_filter_catalog import (
+    UNAPPLIED_FAMILY_IDS,
+    SUPPORTED_FAMILY_IDS,
+    canonical_engine_family_values,
+)
 
 _PROMOTION_STAGE_FAMILIES = [
     "certificate_requirement",
@@ -54,6 +58,110 @@ _PROMOTION_STAGE_FAMILIES = [
 _MAX_PROMOTION_STAGE = 5
 _DEFAULT_PROMOTION_STAGE = 0  # opt-in only — existing installs unchanged on upgrade
 _ENGINE_MAP_VERSION = "engine-map-2026-06-19"
+
+ENGINE_DISPLAY_LABEL_MAP = {
+    "man": "MAN / Everllence",
+    "man_b_w": "MAN B&W",
+    "man_b_w_mc": "MAN B&W MC",
+    "man_b_w_me": "MAN B&W ME",
+    "man_b_w_me_b": "MAN B&W ME-B",
+    "man_b_w_me_c": "MAN B&W ME-C",
+    "man_b_w_me_gi": "MAN B&W ME-GI",
+    "man_b_w_me_c_gi": "MAN B&W ME-C-GI",
+    "man_b_w_me_ga": "MAN B&W ME-GA",
+    "man_b_w_me_lgi": "MAN B&W ME-LGI",
+    "man_b_w_me_lgim": "MAN B&W ME-LGIM",
+    "man_b_w_me_lgip": "MAN B&W ME-LGIP",
+    "man_b_w_me_lgia": "MAN B&W ME-LGIA",
+    "man_b_w_me_gie": "MAN B&W ME-GIE",
+    "wingd": "WinGD",
+    "wingd_x_engines": "WinGD X engines",
+    "wingd_x_df": "WinGD X-DF",
+    "wingd_x_df_m_e": "WinGD X-DF-M/E",
+    "wingd_x_df_a": "WinGD X-DF-A",
+    "wingd_x_df_hp": "WinGD X-DF-HP",
+    "wartsila": "Wartsila",
+    "wartsila_rta": "Wartsila / Sulzer RTA",
+    "wartsila_rt_flex": "Wartsila / Sulzer RT-flex",
+    "wartsila_dual_fuel": "Wartsila dual fuel",
+    "sulzer": "Sulzer",
+    "mitsubishi": "Mitsubishi",
+    "mitsubishi_uec": "Mitsubishi UEC",
+    "mitsubishi_uec_lsii": "Mitsubishi UEC-LSII",
+    "mitsubishi_uec_lse": "Mitsubishi UEC-LSE",
+    "mitsubishi_uec_lsh": "Mitsubishi UEC-LSH",
+    "mitsubishi_uec_lsj": "Mitsubishi UEC-LSJ",
+    "mitsui": "Mitsui",
+    "mak": "MaK",
+    "yanmar": "Yanmar",
+    "bergen": "Bergen",
+    "caterpillar": "Caterpillar",
+    "pielstick": "Pielstick",
+    "nohab": "Nohab",
+    "gotaverken": "Gotaverken",
+    "himsen": "Himsen",
+    "daihatsu": "Daihatsu",
+    "niigata": "Niigata",
+    "doosan": "Doosan",
+    "mtu": "MTU",
+    "detroit_diesel": "Detroit Diesel",
+    "electronically_controlled_engine": "Electronically controlled engine",
+    "mechanical_engine": "Mechanical engine",
+    "dual_fuel": "Dual fuel",
+    "methanol_engine": "Methanol engine",
+    "ammonia_engine": "Ammonia engine",
+}
+
+
+SHIP_TYPE_DISPLAY_LABEL_MAP = {
+    "aht": "AHT",
+    "ahts": "AHTS",
+    "barge": "Barge",
+    "bulk carrier": "Bulk carrier",
+    "car carrier": "Car carrier",
+    "chemical tanker": "Chemical tanker",
+    "container": "Container",
+    "container ship": "Container ship",
+    "container vessel": "Container vessel",
+    "crude oil tanker": "Crude oil tanker",
+    "crude tanker": "Crude tanker",
+    "dp i": "DP I",
+    "dp ii": "DP II",
+    "dp iii": "DP III",
+    "dredger": "Dredger",
+    "dry cargo": "Dry cargo",
+    "gas carrier": "Gas carrier",
+    "general cargo": "General cargo",
+    "lng": "LNG",
+    "lng carrier": "LNG carrier",
+    "lpg": "LPG",
+    "lpg carrier": "LPG carrier",
+    "offshore": "Offshore",
+    "oil chem tanker": "Oil/chemical tanker",
+    "oil tanker": "Oil tanker",
+    "passenger": "Passenger",
+    "product tanker": "Product tanker",
+    "psv": "PSV",
+    "reefer": "Reefer",
+    "ro ro": "Ro-Ro",
+    "ro-ro": "Ro-Ro",
+    "roro": "Ro-Ro",
+    "survey vessel": "Survey vessel",
+    "tanker": "Tanker",
+    "tug": "Tug",
+    "vlgc": "VLGC",
+    "vlcc": "VLCC",
+}
+
+
+def engine_family_option_catalog():
+    return [
+        {
+            "value": engine_family,
+            "label": ENGINE_DISPLAY_LABEL_MAP.get(engine_family, engine_family.replace("_", " ")),
+        }
+        for engine_family in sorted(canonical_engine_family_values())
+    ]
 
 
 @dataclass(frozen=True)
@@ -2846,6 +2954,8 @@ class AIResumeAnalyzer:
                 "MAN B&W MC",
                 "MAN B&W LMC",
                 "MAN BW MC",
+                "B&W MC",
+                "B&W Mc",
                 "MAN MC",
                 "MC engine",
                 "MC engines",
@@ -3047,6 +3157,11 @@ class AIResumeAnalyzer:
                 "UEC-LSJ",
                 "UECLSJ",
             ],
+            "mitsui": [
+                "Mitsui",
+                "Mitsui engine",
+                "Mitsui main engine",
+            ],
             "yanmar": [
                 "Yanmar",
                 "Yanmar engine",
@@ -3059,6 +3174,7 @@ class AIResumeAnalyzer:
             ],
             "caterpillar": [
                 "Caterpillar",
+                "Caterpilliar",
                 "CAT engine",
                 "CAT main engine",
             ],
@@ -3066,6 +3182,17 @@ class AIResumeAnalyzer:
                 "Pielstick",
                 "SEMT Pielstick",
                 "SEMT-Pielstick",
+            ],
+            "nohab": [
+                "Nohab",
+                "Nohab engine",
+                "Nohab main engine",
+            ],
+            "gotaverken": [
+                "Gotaverken",
+                "Götaverken",
+                "Gotaverken engine",
+                "Götaverken engine",
             ],
             "himsen": [
                 "Himsen",
@@ -3264,55 +3391,7 @@ class AIResumeAnalyzer:
         }
 
     def _engine_display_label_map(self):
-        return {
-            "man": "MAN / Everllence",
-            "man_b_w": "MAN B&W",
-            "man_b_w_mc": "MAN B&W MC",
-            "man_b_w_me": "MAN B&W ME",
-            "man_b_w_me_b": "MAN B&W ME-B",
-            "man_b_w_me_c": "MAN B&W ME-C",
-            "man_b_w_me_gi": "MAN B&W ME-GI",
-            "man_b_w_me_c_gi": "MAN B&W ME-C-GI",
-            "man_b_w_me_ga": "MAN B&W ME-GA",
-            "man_b_w_me_lgi": "MAN B&W ME-LGI",
-            "man_b_w_me_lgim": "MAN B&W ME-LGIM",
-            "man_b_w_me_lgip": "MAN B&W ME-LGIP",
-            "man_b_w_me_lgia": "MAN B&W ME-LGIA",
-            "man_b_w_me_gie": "MAN B&W ME-GIE",
-            "wingd": "WinGD",
-            "wingd_x_engines": "WinGD X engines",
-            "wingd_x_df": "WinGD X-DF",
-            "wingd_x_df_m_e": "WinGD X-DF-M/E",
-            "wingd_x_df_a": "WinGD X-DF-A",
-            "wingd_x_df_hp": "WinGD X-DF-HP",
-            "wartsila": "Wartsila",
-            "wartsila_rta": "Wartsila / Sulzer RTA",
-            "wartsila_rt_flex": "Wartsila / Sulzer RT-flex",
-            "wartsila_dual_fuel": "Wartsila dual fuel",
-            "sulzer": "Sulzer",
-            "mitsubishi": "Mitsubishi",
-            "mitsubishi_uec": "Mitsubishi UEC",
-            "mitsubishi_uec_lsii": "Mitsubishi UEC-LSII",
-            "mitsubishi_uec_lse": "Mitsubishi UEC-LSE",
-            "mitsubishi_uec_lsh": "Mitsubishi UEC-LSH",
-            "mitsubishi_uec_lsj": "Mitsubishi UEC-LSJ",
-            "mak": "MaK",
-            "yanmar": "Yanmar",
-            "bergen": "Bergen",
-            "caterpillar": "Caterpillar",
-            "pielstick": "Pielstick",
-            "himsen": "Himsen",
-            "daihatsu": "Daihatsu",
-            "niigata": "Niigata",
-            "doosan": "Doosan",
-            "mtu": "MTU",
-            "detroit_diesel": "Detroit Diesel",
-            "electronically_controlled_engine": "Electronically controlled engine",
-            "mechanical_engine": "Mechanical engine",
-            "dual_fuel": "Dual fuel",
-            "methanol_engine": "Methanol engine",
-            "ammonia_engine": "Ammonia engine",
-        }
+        return ENGINE_DISPLAY_LABEL_MAP
 
     def _engine_compatibility_expansion_map(self):
         return {
@@ -3563,11 +3642,14 @@ class AIResumeAnalyzer:
             "mitsubishi_uec_lse": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
             "mitsubishi_uec_lsh": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
             "mitsubishi_uec_lsj": {"manufacturer": "Mitsubishi", "category": "low_speed_2_stroke", "control_type": "electronic", "fuel_family": "fuel_oil", "fuel_tags": ["fuel_oil"], "dual_fuel": False},
+            "mitsui": {"manufacturer": "Mitsui", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "mak": {"manufacturer": "MaK", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "yanmar": {"manufacturer": "Yanmar", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "bergen": {"manufacturer": "Bergen", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "caterpillar": {"manufacturer": "Caterpillar", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "pielstick": {"manufacturer": "Pielstick", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "nohab": {"manufacturer": "Nohab", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
+            "gotaverken": {"manufacturer": "Gotaverken", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "himsen": {"manufacturer": "Himsen", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "daihatsu": {"manufacturer": "Daihatsu", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
             "niigata": {"manufacturer": "Niigata", "category": "marine_main_engine", "control_type": "unknown", "fuel_family": "unknown", "fuel_tags": [], "dual_fuel": None},
@@ -3903,13 +3985,13 @@ class AIResumeAnalyzer:
             return f"Candidate has {evidence_label} experience matching '{requested_label}'."
         if match_source == "family_fallback":
             return (
-                f"Resume mentions {evidence_label}, but does not specify the requested engine detail "
-                f"'{requested_label}'. Included as a family-level engine match for recruiter review."
+                f"Resume mentions broader engine family {evidence_label}, but does not confirm the requested "
+                f"engine filter '{requested_label}'. Included for recruiter review at reduced confidence."
             )
         if match_source == "manufacturer_fallback":
             return (
-                f"Resume mentions {evidence_label}, but does not specify the requested engine detail "
-                f"'{requested_label}'. Included as a manufacturer-level engine match for recruiter review."
+                f"Resume mentions engine manufacturer {evidence_label}, but does not confirm the requested "
+                f"engine filter '{requested_label}'. Included for recruiter review at reduced confidence."
             )
         return f"Could not determine engine experience for requested filter '{requested_label}'."
 
@@ -3917,7 +3999,7 @@ class AIResumeAnalyzer:
         normalized = self._normalize_ship_type(ship_type)
         if not normalized:
             return str(ship_type or "").strip()
-        return normalized.replace("_", " ")
+        return SHIP_TYPE_DISPLAY_LABEL_MAP.get(normalized, str(ship_type or "").strip())
 
     def _engine_matched_evidence(self, match_outcome):
         if not match_outcome:
