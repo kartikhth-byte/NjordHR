@@ -244,6 +244,15 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         constraints = self.analyzer._extract_job_constraints("2nd engineer between 30 and 50 years old", rank=self.rank)
         self.assertEqual(constraints["applied_constraints"], ["age_range", "rank_match"])
 
+    def test_structured_rank_scope_suppresses_prompt_rank_constraint(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "chief engineer between 30 and 50 years old",
+            rank=self.rank,
+            suppress_prompt_rank=True,
+        )
+        self.assertEqual(constraints["applied_constraints"], ["age_range"])
+        self.assertNotIn("rank", constraints["hard_constraints"])
+
     def test_below_the_age_of_prompt_populates_age_constraint(self):
         constraints = self.analyzer._extract_job_constraints("is below the age of 50", rank=self.rank)
         self.assertEqual(constraints["applied_constraints"], ["age_range"])

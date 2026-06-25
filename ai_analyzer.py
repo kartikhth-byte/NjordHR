@@ -4641,7 +4641,13 @@ class AIResumeAnalyzer:
             "matched_phrases": list(dict.fromkeys(matched_phrases)),
         }
 
-    def _extract_job_constraints(self, user_prompt, rank=None, allow_logical_groups=True):
+    def _extract_job_constraints(
+        self,
+        user_prompt,
+        rank=None,
+        allow_logical_groups=True,
+        suppress_prompt_rank=False,
+    ):
         constraints = {
             "rank": str(rank or "").strip(),
             "hard_constraints": {},
@@ -4667,7 +4673,7 @@ class AIResumeAnalyzer:
                 start, end = matched_span
                 rank_prompt = f"{rank_prompt[:start]} {rank_prompt[end:]}"
 
-        rank_constraint = self._extract_rank_constraint(rank_prompt)
+        rank_constraint = None if suppress_prompt_rank else self._extract_rank_constraint(rank_prompt)
         if rank_constraint:
             constraints["hard_constraints"]["rank"] = rank_constraint
             constraints["applied_constraints"].append("rank_match")
@@ -13211,7 +13217,11 @@ Examples of GOOD responses:
             ):
                 yield ingest_event
 
-            job_constraints = self._extract_job_constraints(user_prompt, rank=rank)
+            job_constraints = self._extract_job_constraints(
+                user_prompt,
+                rank=rank,
+                suppress_prompt_rank=bool(str(rank or "").strip()),
+            )
             if str(applied_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
                 if "applied_ship_type" not in job_constraints.setdefault("applied_constraints", []):

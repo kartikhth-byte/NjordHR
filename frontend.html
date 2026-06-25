@@ -4664,6 +4664,7 @@
                             params.set('rank_folder_id', selectedId);
                         }
                         params.set('rank_folder', selectedRankFolder);
+                        params.set('applied_rank', selectedRankFolder);
                         params.set('applied_ship_type', selectedSearchShipType);
                         if (experienceShipTypeResult.filter && Array.isArray(experienceShipTypeResult.filter.items) && experienceShipTypeResult.filter.items.length) {
                             params.set('experience_ship_type_filter', JSON.stringify(experienceShipTypeResult.filter));
@@ -4834,7 +4835,7 @@
             };
 
             const handleAnalyze = async () => {
-                if (!selectedRankFolder) return handleSendMessage('error', 'Please select a rank folder to analyze.');
+                if (!selectedRankFolder) return handleSendMessage('error', 'Please select an applied-rank scope to analyze.');
                 if (!aiPrompt.trim()) return handleSendMessage('error', 'AI prompt cannot be empty.');
                 if (isViewingHistoricalSearchStep) {
                     return handleSendMessage('warning', 'You are viewing an earlier result set. Return to latest results to refine further.');
@@ -8382,7 +8383,7 @@
                                         </div>
                                         <div>
                                             <label htmlFor="rankFolder" className="block text-sm font-medium text-gray-700 mb-1">
-                                                Select Rank Folder to Analyze {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                                Applied Rank Scope {refinementMode && <span className="text-blue-700">· Locked</span>}
                                             </label>
                                             <select 
                                                 id="rankFolder" 
@@ -8400,6 +8401,9 @@
                                                     <option>No downloaded resume folders found</option>
                                                 )}
                                             </select>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Uses the downloaded rank folder as the applied-rank search scope. Present-rank search is coming in the next picker slice.
+                                            </p>
                                         </div>
                                         <div>
                                             <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">

@@ -181,6 +181,14 @@ def _ai_search_request_fingerprint(
     return hashlib.sha256(encoded.encode("utf-8", "ignore")).hexdigest()
 
 
+def _request_rank_scope_value(source, *, legacy_key="rank_folder", structured_key="applied_rank"):
+    getter = source.get if hasattr(source, "get") else lambda key, default=None: default
+    legacy_value = str(getter(legacy_key, "") or "").strip()
+    if legacy_value:
+        return legacy_value
+    return str(getter(structured_key, "") or "").strip()
+
+
 def _positive_int_or_none(raw):
     if isinstance(raw, bool) or raw in (None, ""):
         return None
@@ -5152,7 +5160,7 @@ def analyze_stream():
             yield f"data: {json.dumps({'type': 'error', 'message': reason})}\n\n"
         return Response(denied(), mimetype='text/event-stream')
     prompt = request.args.get('prompt')
-    rank_folder = request.args.get('rank_folder')
+    rank_folder = _request_rank_scope_value(request.args)
     rank_folder_id = request.args.get('rank_folder_id', '').strip()
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
@@ -5194,6 +5202,7 @@ def analyze_stream():
         "prompt": str(prompt or "").strip(),
         "rank_folder_id": rank_folder_id,
         "rank_folder": str(rank_folder or "").strip(),
+        "applied_rank": str(rank_folder or "").strip(),
         "applied_ship_type": applied_ship_type,
         "experienced_ship_type": experienced_ship_type,
         "experience_ship_type_filter": experience_ship_type_filter,
@@ -5717,6 +5726,7 @@ def analyze_stream():
                     }
                     event_to_client["search_context"] = {
                         "rank_folder": effective_rank_folder,
+                        "applied_rank": effective_rank_folder,
                         "rank_folder_id": effective_rank_folder_id,
                         "download_root_id": effective_download_root_id,
                         "applied_ship_type": effective_applied_ship_type,
@@ -5822,7 +5832,7 @@ def analyze():
     try:
         data = request.json
         prompt = data.get('prompt')
-        rank_folder = data.get('rank_folder')
+        rank_folder = _request_rank_scope_value(data or {})
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
         experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
         experience_ship_type_filter = _normalize_experience_ship_type_filter(

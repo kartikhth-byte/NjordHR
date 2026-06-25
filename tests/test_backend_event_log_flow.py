@@ -1819,6 +1819,45 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(complete["search_context"]["rank_folder_id"], rank_folder_id)
         self.assertTrue(complete["search_context"]["download_root_id"].startswith("dr_"))
 
+    def test_analyze_stream_accepts_applied_rank_alias(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        captured = {}
+        request_id = f"request-applied-rank-{time.time_ns()}"
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, **_kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["prompt"] = prompt
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {"scanned": 0, "passed": 0, "failed": 0, "unknown": 0, "matched": 0},
+                    "message": "ok",
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
+            resp = self.client.get(
+                "/analyze_stream",
+                query_string={
+                    "applied_rank": "Chief_Officer",
+                    "prompt": "show candidates",
+                    "search_request_id": request_id,
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        events = _sse_events(resp)
+        complete = next(event for event in events if event.get("type") == "complete")
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["prompt"], "show candidates")
+        self.assertEqual(complete["search_context"]["rank_folder"], "Chief_Officer")
+        self.assertEqual(complete["search_context"]["applied_rank"], "Chief_Officer")
+
     def test_analyze_stream_rejects_unknown_rank_folder_id_before_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         request_id = f"request-rank-id-missing-{time.time_ns()}"
