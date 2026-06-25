@@ -40,7 +40,7 @@ from repositories.repo_factory import build_candidate_event_repo
 from repositories.search_scope_repo import SQLiteSearchScopeRepository
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import config_value, normalize_env_value, normalized_url
-from ai_analyzer import Analyzer, engine_family_option_catalog
+from ai_analyzer import Analyzer, engine_family_option_catalog, rank_option_catalog
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
 from query_understanding import build_shadow_audit_entry, build_shadow_llm_query_plan
@@ -184,11 +184,45 @@ def _ai_search_request_fingerprint(
 
 
 def _request_rank_scope_value(source, *, legacy_key="rank_folder", structured_key="applied_rank"):
+    # Legacy rank_folder wins while old UI/API clients still send both names.
     getter = source.get if hasattr(source, "get") else lambda key, default=None: default
     legacy_value = str(getter(legacy_key, "") or "").strip()
     if legacy_value:
         return legacy_value
     return str(getter(structured_key, "") or "").strip()
+
+
+def _sse_error_response(message, *, error_code, detail=None):
+    payload = {
+        "type": "error",
+        "message": message,
+        "error_code": error_code,
+    }
+    if detail is not None:
+        payload["detail"] = detail
+
+    def generate():
+        yield f"data: {json.dumps(payload)}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
+
+
+def _canonical_rank_id_for_picker(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    normalized_raw = raw.lower().replace("-", "_").replace(" ", "_")
+    for option in rank_option_catalog():
+        option_value = str(option.get("value") or "")
+        option_label = str(option.get("label") or "")
+        if (
+            raw == option_value
+            or raw == option_label
+            or normalized_raw == option_value.lower()
+            or normalized_raw == option_label.lower().replace("-", "_").replace(" ", "_")
+        ):
+            return option_value
+    return ""
 
 
 def _positive_int_or_none(raw):
@@ -1873,6 +1907,7 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "rank_folder": rank_folder,
             "rank_folder_id": rank_record["rank_folder_id"],
             "download_root_id": rank_record["download_root_id"],
+            "present_rank": str((parent_session.get("context") or {}).get("present_rank") or "").strip(),
             "applied_ship_type": str(parent_session.get("applied_ship_type") or "").strip(),
             "experienced_ship_type": str(parent_session.get("experienced_ship_type") or "").strip(),
             "experience_ship_type_filter": _normalize_experience_ship_type_filter(
@@ -1913,7 +1948,7 @@ def _safe_recovery_scalar_mapping(value, allowed_keys):
 def _safe_recovery_search_context(value):
     result = _safe_recovery_scalar_mapping(
         value,
-        ("rank_folder", "applied_ship_type", "experienced_ship_type"),
+        ("rank_folder", "present_rank", "applied_ship_type", "experienced_ship_type"),
     )
     result["experience_ship_type_filter"] = _normalize_experience_ship_type_filter(
         (value if isinstance(value, dict) else {}).get("experience_ship_type_filter") or {}
@@ -2070,6 +2105,7 @@ def _sanitize_ai_search_recovery_draft(payload):
         "search_state": {
             "prompt": str(search_state.get("prompt") or "")[:4000],
             "selected_rank_folder": str(search_state.get("selected_rank_folder") or "")[:256],
+            "present_rank": str(search_state.get("present_rank") or "")[:256],
             "applied_ship_type": str(search_state.get("applied_ship_type") or "")[:256],
             "experienced_ship_type": str(search_state.get("experienced_ship_type") or "")[:256],
             "experience_ship_type_filter": _normalize_experience_ship_type_filter(
@@ -4791,6 +4827,7 @@ def get_rank_folders():
             "success": True,
             "folders": subfolders,
             "rank_folder_options": [_public_rank_folder_record(record) for record in records],
+            "present_rank_options": rank_option_catalog(),
             "download_root": {
                 "download_root_id": root_record.get("download_root_id", ""),
             },
@@ -5165,6 +5202,21 @@ def analyze_stream():
     rank_folder = _request_rank_scope_value(request.args)
     rank_folder_id = request.args.get('rank_folder_id', '').strip()
     present_rank = request.args.get('present_rank', '').strip()
+    parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
+    if not rank_folder and not rank_folder_id and not parent_search_session_id:
+        return _sse_error_response(
+            "Select an applied-rank folder to run a search. You may optionally add a present-rank filter; Phase 1 applies it only inside that folder.",
+            error_code="RANK_SCOPE_REQUIRED",
+        )
+    if present_rank:
+        canonical_present_rank = _canonical_rank_id_for_picker(present_rank)
+        if not canonical_present_rank:
+            return _sse_error_response(
+                f"Present rank is not recognized: {present_rank}",
+                error_code="PRESENT_RANK_INVALID",
+                detail={"value": present_rank},
+            )
+        present_rank = canonical_present_rank
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     experience_ship_type_filter = _parse_experience_ship_type_filter_payload(
@@ -5182,7 +5234,6 @@ def analyze_stream():
         def invalid_age_filter():
             yield f"data: {json.dumps({'type': 'error', 'message': message, 'error_code': 'AGE_FILTER_INVALID', 'detail': {'code': detail_code}})}\n\n"
         return Response(invalid_age_filter(), mimetype='text/event-stream')
-    parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
     search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
     changed_content_acknowledgement_id = request.args.get(
         'changed_content_acknowledgement_id',
@@ -5223,7 +5274,7 @@ def analyze_stream():
     actor_username = _session_username()
     actor_user_id = _session_actor_user_id()
 
-    def _log_ai_search_audit_rows(audit_rows, rank_folder, prompt, applied_ship_type, experienced_ship_type, search_session_id):
+    def _log_ai_search_audit_rows(audit_rows, rank_folder, present_rank, prompt, applied_ship_type, experienced_ship_type, search_session_id):
         for row in audit_rows or []:
             filename = str(row.get("filename", "")).strip()
             candidate_id = str(row.get("candidate_id", "")).strip()
@@ -5254,6 +5305,7 @@ def analyze_stream():
                 filename=filename,
                 facts_version=str(row.get("facts_version", "")).strip(),
                 rank_applied_for=rank_folder,
+                present_rank_filter=present_rank,
                 ai_prompt=prompt,
                 applied_ship_type_filter=applied_ship_type,
                 experienced_ship_type_filter=experienced_ship_type,
@@ -5622,6 +5674,7 @@ def analyze_stream():
                         _log_ai_search_audit_rows(
                             progress_event.get("hard_filter_audit"),
                             effective_rank_folder,
+                            effective_present_rank,
                             prompt,
                             effective_applied_ship_type,
                             effective_experienced_ship_type,
@@ -5698,6 +5751,7 @@ def analyze_stream():
                                 "rank_folder": effective_rank_folder,
                                 "rank_folder_id": effective_rank_folder_id,
                                 "download_root_id": effective_download_root_id,
+                                "present_rank": effective_present_rank,
                                 "applied_ship_type": effective_applied_ship_type,
                                 "experienced_ship_type": effective_experienced_ship_type,
                                 "experience_ship_type_filter": effective_experience_ship_type_filter,
@@ -5847,6 +5901,16 @@ def analyze():
         prompt = data.get('prompt')
         rank_folder = _request_rank_scope_value(data or {})
         present_rank = str(data.get('present_rank', '')).strip()
+        if present_rank:
+            canonical_present_rank = _canonical_rank_id_for_picker(present_rank)
+            if not canonical_present_rank:
+                return jsonify({
+                    "success": False,
+                    "message": f"Present rank is not recognized: {present_rank}",
+                    "error_code": "PRESENT_RANK_INVALID",
+                    "detail": {"value": present_rank},
+                }), 400
+            present_rank = canonical_present_rank
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
         experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
         experience_ship_type_filter = _normalize_experience_ship_type_filter(
@@ -5866,8 +5930,14 @@ def analyze():
                 "detail": {"code": exc.detail_code},
             }), 400
 
-        if not prompt or not rank_folder:
-            return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
+        if not prompt:
+            return jsonify({"success": False, "message": "AI prompt is required."}), 400
+        if not rank_folder:
+            return jsonify({
+                "success": False,
+                "message": "Select an applied-rank folder to run a search. You may optionally add a present-rank filter; Phase 1 applies it only inside that folder.",
+                "error_code": "RANK_SCOPE_REQUIRED",
+            }), 400
         
         target_folder = os.path.join(_active_download_root(), rank_folder)
         if not os.path.isdir(target_folder):
@@ -5886,6 +5956,7 @@ def analyze():
             summary=f"AI search started for rank={rank_folder}.",
             payload={
                 "rank_folder": rank_folder,
+                "present_rank": present_rank,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
                 "experience_ship_type_filter": experience_ship_type_filter,
@@ -5928,6 +5999,7 @@ def analyze():
             summary=f"AI search completed for rank={rank_folder}.",
             payload={
                 "rank_folder": rank_folder,
+                "present_rank": present_rank,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
                 "experience_ship_type_filter": experience_ship_type_filter,
@@ -5956,6 +6028,7 @@ def analyze():
             summary=f"AI search failed for rank={rank_folder}.",
             payload={
                 "rank_folder": rank_folder,
+                "present_rank": present_rank,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
                 "experience_ship_type_filter": experience_ship_type_filter,

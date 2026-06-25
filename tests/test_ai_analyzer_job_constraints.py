@@ -244,13 +244,14 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         constraints = self.analyzer._extract_job_constraints("2nd engineer between 30 and 50 years old", rank=self.rank)
         self.assertEqual(constraints["applied_constraints"], ["age_range", "rank_match"])
 
-    def test_structured_rank_scope_suppresses_prompt_rank_constraint(self):
+    def test_structured_rank_scope_suppresses_prompt_rank_hard_constraint(self):
         constraints = self.analyzer._extract_job_constraints(
             "chief engineer between 30 and 50 years old",
             rank=self.rank,
             suppress_prompt_rank=True,
         )
         self.assertEqual(constraints["applied_constraints"], ["age_range"])
+        self.assertEqual(constraints["observability_applied_constraints"], ["rank_match"])
         self.assertNotIn("rank", constraints["hard_constraints"])
 
     def test_present_rank_constraint_evaluates_current_rank_fact(self):
@@ -270,6 +271,8 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["reason_code"], "RANK_MATCH")
         self.assertIn("present rank", result["message"])
+        self.assertIn("Chief Officer", result["message"])
+        self.assertNotIn("chief_officer", result["message"])
 
     def test_present_rank_constraint_needs_review_when_current_rank_missing(self):
         result = self.analyzer._evaluate_rank_rule(
@@ -288,6 +291,23 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
         self.assertIn("present rank", result["message"])
+
+    def test_present_rank_constraint_needs_review_when_current_rank_empty_string(self):
+        result = self.analyzer._evaluate_rank_rule(
+            {
+                "role": {
+                    "current_rank_normalized": "",
+                    "applied_rank_normalized": "2nd_engineer",
+                },
+                "fact_meta": {
+                    "role.current_rank_normalized": {"confidence": None},
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                },
+            },
+            {"present_rank_normalized": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "RANK_UNKNOWN")
 
     def test_run_analysis_stream_injects_present_rank_picker_constraint(self):
         filename = "2nd_Engineer_1004.pdf"
@@ -1909,7 +1929,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer available immediately"))
         complete_event = next(event for event in events if event["type"] == "complete")
 
-        self.assertEqual(complete_event["applied_constraints"], ["rank_match", "availability"])
+        self.assertEqual(complete_event["applied_constraints"], ["availability"])
         self.assertEqual(complete_event["unapplied_constraints"], [])
         self.assertEqual(complete_event["parsing_notes"], [])
         self.assertEqual(complete_event["residual_text"], "")
@@ -2726,7 +2746,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         }
         self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
 
-        events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer"))
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport"))
         unknown_event = next(event for event in events if event["type"] == "hard_filter_unknown")
 
         self.assertEqual(unknown_event["match"]["unknown_reason_types"], ["VERSION_MISMATCH_UNKNOWN"])
@@ -2803,15 +2823,22 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "facts_version": AIResumeAnalyzer.FACTS_VERSION,
             "candidate_id": filename,
             "role": {"applied_rank_normalized": "2nd_engineer"},
-            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
             "personal": {"dob": None},
             "derived": {"age_years": None},
+            "logistics": {
+                "passport_expiry_date": "2033-09-05",
+                "passport_expiry_status": "PARSED",
+            },
             "application": {"applied_ship_types": []},
             "experience": {"vessel_types": []},
+            "fact_meta": {
+                "role.applied_rank_normalized": {"confidence": 1.0},
+                "logistics.passport_expiry_date": {"confidence": 0.9},
+            },
         }
         self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
 
-        events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer"))
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport"))
         complete_event = next(event for event in events if event["type"] == "complete")
 
         self.assertEqual(len(complete_event["verified_matches"]), 1)
@@ -2853,15 +2880,22 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "facts_version": AIResumeAnalyzer.FACTS_VERSION,
             "candidate_id": filename,
             "role": {"applied_rank_normalized": "2nd_engineer"},
-            "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
             "personal": {"dob": None},
             "derived": {"age_years": None},
+            "logistics": {
+                "passport_expiry_date": "2033-09-05",
+                "passport_expiry_status": "PARSED",
+            },
             "application": {"applied_ship_types": []},
             "experience": {"vessel_types": []},
+            "fact_meta": {
+                "role.applied_rank_normalized": {"confidence": 1.0},
+                "logistics.passport_expiry_date": {"confidence": 0.9},
+            },
         }
         self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
 
-        events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer"))
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport"))
         complete_event = next(event for event in events if event["type"] == "complete")
         unknown_event = next(event for event in events if event["type"] == "hard_filter_unknown")
 
@@ -2902,17 +2936,24 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 "facts_version": AIResumeAnalyzer.FACTS_VERSION,
                 "candidate_id": filename,
                 "role": {"applied_rank_normalized": "2nd_engineer"},
-                "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
                 "personal": {"dob": None},
                 "derived": {"age_years": None},
+                "logistics": {
+                    "passport_expiry_date": "2033-09-05",
+                    "passport_expiry_status": "PARSED",
+                },
                 "application": {"applied_ship_types": []},
                 "experience": {"vessel_types": []},
+                "fact_meta": {
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                    "logistics.passport_expiry_date": {"confidence": 0.9},
+                },
             }
 
         self.analyzer._synchronous_reextract_candidate_facts = slow_reextract
         self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
 
-        events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer"))
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport"))
         complete_event = next(event for event in events if event["type"] == "complete")
         unknown_event = next(event for event in events if event["type"] == "hard_filter_unknown")
 
@@ -2957,18 +2998,25 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 "facts_version": AIResumeAnalyzer.FACTS_VERSION,
                 "candidate_id": filename,
                 "role": {"applied_rank_normalized": "2nd_engineer"},
-                "fact_meta": {"role.applied_rank_normalized": {"confidence": 1.0}},
                 "personal": {"dob": None},
                 "derived": {"age_years": None},
+                "logistics": {
+                    "passport_expiry_date": "2033-09-05",
+                    "passport_expiry_status": "PARSED",
+                },
                 "application": {"applied_ship_types": []},
                 "experience": {"vessel_types": []},
+                "fact_meta": {
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                    "logistics.passport_expiry_date": {"confidence": 0.9},
+                },
             }
 
         self.analyzer._synchronous_reextract_candidate_facts = fast_reextract
         self.analyzer._reason_with_llm = lambda *args, **kwargs: {"is_match": True, "reason": "ok", "confidence": 0.9}
 
-        first_events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer"))
-        second_events = list(self.analyzer.run_analysis_stream(self.rank, "2nd engineer"))
+        first_events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport"))
+        second_events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport"))
         second_complete = next(event for event in second_events if event["type"] == "complete")
         second_unknown = next(event for event in second_events if event["type"] == "hard_filter_unknown")
 

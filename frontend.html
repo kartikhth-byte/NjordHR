@@ -1152,6 +1152,7 @@
 
             const [rankFolders, setRankFolders] = useState([]);
             const [rankFolderRecords, setRankFolderRecords] = useState([]);
+            const [presentRankOptions, setPresentRankOptions] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
             const [selectedPresentRank, setSelectedPresentRank] = useState('');
             const [downloadFolderSummaries, setDownloadFolderSummaries] = useState([]);
@@ -2082,8 +2083,10 @@
                 if (!currentUser) {
                     setRankFolders([]);
                     setRankFolderRecords([]);
+                    setPresentRankOptions([]);
                     setDownloadFolderSummaries([]);
                     setSelectedRankFolder('');
+                    setSelectedPresentRank('');
                     return;
                 }
                 try {
@@ -2099,6 +2102,7 @@
                             rank_folder_id: '',
                             download_root_id: '',
                         })));
+                        setPresentRankOptions(data.present_rank_options || []);
                         if (folders.length > 0 && !selectedRankFolder) {
                             setSelectedRankFolder(folders[0]);
                         }
@@ -4935,6 +4939,7 @@
                 setActiveSearchStepIndex(view.boundedIndex);
                 setAnalysisResults(view.results);
                 analysisResultsRef.current = view.results;
+                setSelectedPresentRank(view.results?.search_context?.present_rank || '');
                 setRefinementAvailability(view.refinementAvailability);
                 if (view.isLatestStep) {
                     setRefinementState(view.refinementState);
@@ -8421,15 +8426,14 @@
                                                 value={selectedPresentRank}
                                                 onChange={e => { setSelectedPresentRank(e.target.value); invalidateRefinementForFilterChange(); }}
                                                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
-                                                disabled={rankFolders.length === 0 || refinementMode}
+                                                disabled={presentRankOptions.length === 0 || refinementMode}
                                             >
                                                 <option value="">Any present rank</option>
-                                                {rankFolders.map(folder => {
-                                                    const record = rankFolderRecordFor(folder);
-                                                    return <option key={folder} value={folder}>{record?.display_name || folder.replace(/_/g, ' ')}</option>;
-                                                })}
+                                                {presentRankOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>{option.label || option.value}</option>
+                                                ))}
                                             </select>
-                                            <p className="mt-1 text-xs text-gray-500">Filters by current/present rank extracted from the resume. Missing or low-confidence rank evidence appears in Needs Review.</p>
+                                            <p className="mt-1 text-xs text-gray-500">Phase 1: filters by current/present rank extracted from resumes inside the selected applied-rank folder. Missing or low-confidence rank evidence appears in the general Needs Review section.</p>
                                         </div>
                                         <div>
                                             <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">

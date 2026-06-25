@@ -164,6 +164,30 @@ def engine_family_option_catalog():
     ]
 
 
+def _humanize_rank_id(rank_id):
+    parts = str(rank_id or "").strip().split("_")
+    return " ".join(
+        part if part[:1].isdigit() else part.capitalize()
+        for part in parts
+        if part
+    )
+
+
+def rank_option_catalog():
+    options = {}
+    for alias, entry in AIResumeAnalyzer.RANK_ALIAS_TABLE.items():
+        canonical_id = entry.get("canonical_id")
+        if not canonical_id or canonical_id in options:
+            continue
+        options[canonical_id] = {
+            "value": canonical_id,
+            "label": _humanize_rank_id(canonical_id),
+            "department": entry.get("department", ""),
+            "seniority_bucket": entry.get("seniority_bucket", ""),
+        }
+    return [options[key] for key in sorted(options)]
+
+
 @dataclass(frozen=True)
 class ValueMatch:
     family: str
@@ -4673,10 +4697,13 @@ class AIResumeAnalyzer:
                 start, end = matched_span
                 rank_prompt = f"{rank_prompt[:start]} {rank_prompt[end:]}"
 
-        rank_constraint = None if suppress_prompt_rank else self._extract_rank_constraint(rank_prompt)
+        rank_constraint = self._extract_rank_constraint(rank_prompt)
         if rank_constraint:
-            constraints["hard_constraints"]["rank"] = rank_constraint
-            constraints["applied_constraints"].append("rank_match")
+            if not suppress_prompt_rank:
+                constraints["hard_constraints"]["rank"] = rank_constraint
+                constraints["applied_constraints"].append("rank_match")
+            else:
+                constraints.setdefault("observability_applied_constraints", []).append("rank_match")
 
         visa_constraint = self._extract_us_visa_constraint(user_prompt)
         if visa_constraint:
@@ -4816,7 +4843,12 @@ class AIResumeAnalyzer:
                     ]))
                 constraints["applied_constraints"].append("stcw_endorsement")
 
-        if not constraints["applied_constraints"] and not constraints["unapplied_constraints"] and str(user_prompt or "").strip():
+        if (
+            not constraints["applied_constraints"]
+            and not constraints["unapplied_constraints"]
+            and not constraints.get("observability_applied_constraints")
+            and str(user_prompt or "").strip()
+        ):
             constraints["parsing_notes"].append(str(user_prompt).strip())
 
         constraints["applied_constraints"] = list(dict.fromkeys(constraints["applied_constraints"]))
@@ -5234,7 +5266,10 @@ class AIResumeAnalyzer:
     def _parse_prompt_observability(self, user_prompt, job_constraints, has_semantic_intent=None):
         prompt = self._prompt_observability_normalize(user_prompt)
         hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
-        applied_constraints = list(dict.fromkeys((job_constraints or {}).get("applied_constraints") or []))
+        applied_constraints = list(dict.fromkeys(
+            list((job_constraints or {}).get("applied_constraints") or [])
+            + list((job_constraints or {}).get("observability_applied_constraints") or [])
+        ))
         unapplied_constraints = list(dict.fromkeys((job_constraints or {}).get("unapplied_constraints") or []))
         parsing_notes = list(dict.fromkeys(note for note in ((job_constraints or {}).get("parsing_notes") or []) if note))
 
@@ -5468,6 +5503,9 @@ class AIResumeAnalyzer:
         seniority_bucket = alias_entry["seniority_bucket"]
         confidence = 1.0 if normalized_rank.replace(" ", "_") == canonical_id else 0.9
         return canonical_id, department, seniority_bucket, confidence
+
+    def _format_rank_label(self, rank_id):
+        return _humanize_rank_id(rank_id)
 
     def _has_seajobs_training_context(self, text):
         normalized_text = str(text or "").strip()
@@ -6134,7 +6172,10 @@ class AIResumeAnalyzer:
         return cleaned
 
     def _is_structured_only_prompt(self, user_prompt, job_constraints=None, has_semantic_intent=None):
-        applied_constraints = ((job_constraints or {}).get("applied_constraints") or [])
+        applied_constraints = (
+            list((job_constraints or {}).get("applied_constraints") or [])
+            + list((job_constraints or {}).get("observability_applied_constraints") or [])
+        )
         if applied_constraints and has_semantic_intent is False:
             return True
 
@@ -6160,7 +6201,10 @@ class AIResumeAnalyzer:
         if not prompt:
             return False
 
-        applied_constraints = (job_constraints or {}).get("applied_constraints") or []
+        applied_constraints = (
+            list((job_constraints or {}).get("applied_constraints") or [])
+            + list((job_constraints or {}).get("observability_applied_constraints") or [])
+        )
         unapplied_constraints = (job_constraints or {}).get("unapplied_constraints") or []
 
         # Preserve graceful-failure behavior for prompts that are already
@@ -10287,8 +10331,10 @@ class AIResumeAnalyzer:
         if not expected_ranks:
             expected_ranks = (constraint or {}).get("applied_rank_normalized") or []
         evidence_label = "present rank" if evidence_field == "role.current_rank_normalized" else "applied rank"
+        actual_rank_label = self._format_rank_label(actual_rank)
+        expected_rank_labels = ", ".join(self._format_rank_label(rank) for rank in expected_ranks) or "requested rank set"
 
-        if actual_rank is None:
+        if not actual_rank:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RANK_UNKNOWN",
@@ -10314,7 +10360,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "PASS",
                 "RANK_MATCH",
-                f"Candidate normalized {evidence_label} '{actual_rank}' matches the requested rank set.",
+                f"Candidate {evidence_label} '{actual_rank_label}' matches {expected_rank_labels}.",
                 actual_value=actual_rank,
                 expected_value=expected_ranks,
                 confidence=confidence,
@@ -10323,7 +10369,7 @@ class AIResumeAnalyzer:
         return self._base_rule_result(
             "FAIL",
             "RANK_MISMATCH",
-            f"Candidate normalized {evidence_label} '{actual_rank}' does not match the requested rank set.",
+            f"Candidate {evidence_label} '{actual_rank_label}' does not match {expected_rank_labels}.",
             actual_value=actual_rank,
             expected_value=expected_ranks,
             confidence=confidence,
@@ -13225,7 +13271,7 @@ Examples of GOOD responses:
             job_constraints = self._extract_job_constraints(
                 user_prompt,
                 rank=rank,
-                suppress_prompt_rank=bool(str(rank or "").strip()),
+                suppress_prompt_rank=bool(str(rank or "").strip() or str(present_rank or "").strip()),
             )
             present_rank_value = str(present_rank or "").strip()
             if present_rank_value:
@@ -13234,6 +13280,7 @@ Examples of GOOD responses:
                     yield {
                         "type": "error",
                         "message": f"Present rank is not recognized: {present_rank_value}",
+                        "error_code": "PRESENT_RANK_INVALID",
                     }
                     return
                 job_constraints.setdefault("hard_constraints", {})["rank"] = {
@@ -13307,8 +13354,10 @@ Examples of GOOD responses:
                 job_constraints,
             )
             allow_semantic_fallback = has_semantic_intent or recruiter_like_semantic_fallback
+            has_observability_constraints = bool(job_constraints.get("observability_applied_constraints"))
             has_actionable_constraints = bool(
                 job_constraints.get("applied_constraints")
+                or has_observability_constraints
                 or job_constraints.get("logical_groups")
                 or str(applied_ship_type or "").strip()
                 or str(experienced_ship_type or "").strip()
@@ -13857,6 +13906,7 @@ Examples of GOOD responses:
         user_prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        present_rank=None,
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,

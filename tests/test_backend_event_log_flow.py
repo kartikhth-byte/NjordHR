@@ -61,6 +61,10 @@ def _stub_external_modules():
             {"value": "pielstick", "label": "Pielstick"},
             {"value": "mitsubishi_uec", "label": "Mitsubishi UEC"},
         ]
+        analyzer_module.rank_option_catalog = lambda: [
+            {"value": "chief_officer", "label": "Chief Officer", "department": "deck", "seniority_bucket": "management"},
+            {"value": "2nd_engineer", "label": "2nd Engineer", "department": "engine", "seniority_bucket": "operational"},
+        ]
         sys.modules['ai_analyzer'] = analyzer_module
 
 
@@ -1003,16 +1007,18 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
     def test_rank_folder_discovery_returns_opaque_ids_without_paths(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
+        (self.download_root / "Pre-Sea").mkdir(parents=True, exist_ok=True)
+        (self.download_root / "Pre-Sea" / "Pre-Sea_1002.pdf").write_bytes(b"%PDF-1.4")
 
         resp = self.client.get("/get_rank_folders")
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
 
         self.assertTrue(body["success"])
-        self.assertEqual(body["folders"], ["Chief_Officer"])
+        self.assertEqual(body["folders"], ["Chief_Officer", "Pre-Sea"])
         options = body.get("rank_folder_options") or []
-        self.assertEqual(len(options), 1)
-        option = options[0]
+        self.assertEqual(len(options), 2)
+        option = next(row for row in options if row["folder"] == "Chief_Officer")
         self.assertEqual(option["folder"], "Chief_Officer")
         self.assertEqual(option["display_name"], "Chief Officer")
         self.assertTrue(str(option["rank_folder_id"]).startswith("rf_"))
@@ -1020,6 +1026,10 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertNotEqual(option["rank_folder_id"], "Chief_Officer")
         self.assertNotIn("_resolved_path", option)
         self.assertNotIn(str(self.download_root), json.dumps(body))
+        present_rank_values = {row["value"] for row in body.get("present_rank_options") or []}
+        self.assertIn("chief_officer", present_rank_values)
+        self.assertIn("2nd_engineer", present_rank_values)
+        self.assertNotIn("Pre-Sea", present_rank_values)
 
     def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -1857,10 +1867,44 @@ class BackendEventLogFlowTests(unittest.TestCase):
         complete = next(event for event in events if event.get("type") == "complete")
         self.assertEqual(captured["rank_folder"], "Chief_Officer")
         self.assertEqual(captured["prompt"], "show candidates")
-        self.assertEqual(captured["present_rank"], "Chief_Officer")
+        self.assertEqual(captured["present_rank"], "chief_officer")
         self.assertEqual(complete["search_context"]["rank_folder"], "Chief_Officer")
         self.assertEqual(complete["search_context"]["applied_rank"], "Chief_Officer")
-        self.assertEqual(complete["search_context"]["present_rank"], "Chief_Officer")
+        self.assertEqual(complete["search_context"]["present_rank"], "chief_officer")
+
+    def test_analyze_stream_rejects_missing_applied_rank_scope(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "show candidates",
+                    "search_request_id": f"request-rank-required-{time.time_ns()}",
+                },
+            )
+
+        events = _sse_events(resp)
+        self.assertEqual(events[0]["type"], "error")
+        self.assertEqual(events[0]["error_code"], "RANK_SCOPE_REQUIRED")
+        analyzer.assert_not_called()
+
+    def test_analyze_stream_rejects_invalid_present_rank_before_analyzer(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.get(
+                "/analyze_stream",
+                query_string={
+                    "applied_rank": "Chief_Officer",
+                    "present_rank": "Pre-Sea",
+                    "prompt": "show candidates",
+                    "search_request_id": f"request-present-rank-invalid-{time.time_ns()}",
+                },
+            )
+
+        events = _sse_events(resp)
+        self.assertEqual(events[0]["type"], "error")
+        self.assertEqual(events[0]["error_code"], "PRESENT_RANK_INVALID")
+        self.assertEqual(events[0]["detail"], {"value": "Pre-Sea"})
+        analyzer.assert_not_called()
 
     def test_analyze_stream_rejects_unknown_rank_folder_id_before_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -1927,7 +1971,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
             resp = self.client.get(
-                "/analyze_stream?rank_folder=Chief_Officer&prompt=having%20valid%20UK%20visa&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
+                "/analyze_stream?rank_folder=Chief_Officer&present_rank=Chief_Officer&prompt=having%20valid%20UK%20visa&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
             )
 
         self.assertEqual(resp.status_code, 200)
@@ -1942,6 +1986,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(audit_rows[1]["Facts_Version"], "2.0")
         self.assertEqual(audit_rows[1]["Hard_Filter_Decision"], "UNKNOWN")
         self.assertEqual(audit_rows[1]["Reason_Codes"], "VISA_FILTER_UNSUPPORTED")
+        self.assertEqual(audit_rows[1]["Present_Rank_Filter"], "chief_officer")
         self.assertEqual(audit_rows[1]["Applied_Ship_Type_Filter"], "Bulk Carrier")
         self.assertEqual(audit_rows[1]["Experienced_Ship_Type_Filter"], "Tanker")
         payload = resp.get_data(as_text=True)

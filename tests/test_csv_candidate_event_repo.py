@@ -15,6 +15,7 @@ class CSVCandidateEventRepoTests(unittest.TestCase):
                 filename="Chief_Officer_123.pdf",
                 facts_version="2.0",
                 rank_applied_for="Chief Officer",
+                present_rank_filter="chief_officer",
                 ai_prompt="having valid US visa",
                 applied_ship_type_filter="bulk carrier",
                 experienced_ship_type_filter="bulk carrier",
@@ -31,6 +32,7 @@ class CSVCandidateEventRepoTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["Candidate_ID"], "123")
             self.assertEqual(rows[0]["Facts_Version"], "2.0")
+            self.assertEqual(rows[0]["Present_Rank_Filter"], "chief_officer")
             self.assertEqual(rows[0]["Hard_Filter_Decision"], "PASS")
             self.assertEqual(rows[0]["Result_Bucket"], "verified_match")
 

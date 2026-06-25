@@ -111,6 +111,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             experienced_ship_type="Tanker",
             prompt="has valid passport",
             context={
+                "present_rank": "chief_officer",
                 "experience_ship_type_filter": {
                     "type": "experience_ship_type",
                     "match_mode": "any_of",
@@ -623,6 +624,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "experienced_ship_type": experienced_ship_type,
                     "experience_ship_type_filter": experience_ship_type_filter,
                     "engine_experience_filter": engine_experience_filter,
+                    "present_rank": kwargs.get("present_rank"),
                     "candidate_scope_ids": kwargs.get("candidate_scope_ids"),
                     "candidate_scope_memberships": kwargs.get("candidate_scope_memberships"),
                 })
@@ -647,6 +649,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(captured["rank_folder"], "Chief_Engineer")
         self.assertEqual(captured["applied_ship_type"], "Bulk Carrier")
         self.assertEqual(captured["experienced_ship_type"], "Tanker")
+        self.assertEqual(captured["present_rank"], "chief_officer")
         self.assertEqual(
             captured["experience_ship_type_filter"],
             {
@@ -681,6 +684,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(complete_event["search_session"]["search_mode"], "refinement")
         self.assertEqual(complete_event["search_session"]["parent_search_session_id"], "parent-search")
         self.assertEqual(complete_event["search_session"]["refinement_depth"], 1)
+        self.assertEqual(complete_event["search_context"]["present_rank"], "chief_officer")
 
         child = backend_server.search_scope_repo.get_session(
             complete_event["search_session_id"],
@@ -690,6 +694,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(child["parent_search_session_id"], "parent-search")
         self.assertEqual(child["root_search_session_id"], "parent-search")
         self.assertEqual(child["rank_folder"], "Chief_Engineer")
+        self.assertEqual((child["context"] or {}).get("present_rank"), "chief_officer")
 
     def test_refinement_lineage_warning_persists_into_next_refinement(self):
         self._save_parent_scope()
@@ -936,6 +941,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "secret": "must-not-survive",
                     "search_state": {
                         "prompt": "has valid passport",
+                        "present_rank": "chief_officer",
                         "vessel_tonnage_filter": {
                             "min_value": 50000,
                             "max_value": 80000,
@@ -966,6 +972,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                         "current_completed_results": {
                             "search_context": {
                                 "rank_folder": "2nd Engineer",
+                                "present_rank": "2nd_engineer",
                                 "applied_ship_type": "Oil Tanker",
                                 "experienced_ship_type": "Any",
                                 "experience_ship_type_filter": {
@@ -1017,6 +1024,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         loaded = client.get("/ai_search/recovery_draft").get_json()["draft"]["draft"]
         self.assertNotIn("secret", loaded)
         self.assertEqual(loaded["search_state"]["active_search_step_index"], 9)
+        self.assertEqual(loaded["search_state"]["present_rank"], "chief_officer")
         self.assertEqual(
             loaded["search_state"]["vessel_tonnage_filter"],
             {
@@ -1052,6 +1060,10 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "contract_count": 2,
                 }],
             },
+        )
+        self.assertEqual(
+            loaded["search_state"]["current_completed_results"]["search_context"]["present_rank"],
+            "2nd_engineer",
         )
         self.assertEqual(
             loaded["search_state"]["current_completed_results"]["search_context"]["vessel_tonnage_filter"],
