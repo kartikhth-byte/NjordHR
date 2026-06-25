@@ -918,6 +918,30 @@ introduced:
 Reproducibility is preserved across changes. Eval evidence references
 versions so historical comparisons stay valid.
 
+### Alias Match Disambiguation
+
+Longest-first alias matchers running on prompt or snippet text must
+cross-check any in-text country or equivalent disambiguating axis before
+accepting the alias. If the in-text country conflicts with the matched
+authority's canonical country, discard the authority match and emit an
+observability parsing note rather than silently routing to the wrong
+canonical ID.
+
+Prompt country detection must be scoped to the authority alias token
+window: directly adjacent country-name/abbreviation tokens, or country
+aliases connected to the authority alias by a short issuance connective
+from the exact set `"issued"`, `"issuing"`, `"by"`, `"from"`. Incidental
+countries elsewhere in the prompt, such as nationality or joining-location
+text, must not suppress a valid authority constraint.
+
+### Display Labels at Output Boundaries
+
+Recruiter- and operator-visible audit/export sinks must translate
+canonical IDs to display labels at the write boundary. This includes CSV
+audit rows, visible event payloads, error UI, and similar exported views.
+Machine-readable telemetry and session context may keep canonical IDs for
+continuity, provided no UI surface renders them verbatim.
+
 ## Rollout Plan
 
 The features are independent and can land in parallel or sequence.

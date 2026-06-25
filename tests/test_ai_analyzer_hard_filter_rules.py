@@ -277,6 +277,18 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "PASS")
 
+    def test_coc_issue_authority_snippet_conflict_does_not_route_to_wrong_country(self):
+        self.assertIsNone(
+            self.analyzer._extract_coc_issue_authority_from_snippet(
+                "Maritime Industry Authority Indonesia"
+            )
+        )
+        self.assertIsNone(
+            self.analyzer._extract_coc_issue_authority_from_snippet(
+                "Maritime and Coastguard Agency, India"
+            )
+        )
+
     def test_combine_any_of_item_results_sanitizes_debug_payload(self):
         item_results = [
             {

@@ -2053,7 +2053,18 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         with patch.object(backend_server, "Analyzer", CaptureAnalyzer):
             resp = self.client.get(
-                "/analyze_stream?rank_folder=Chief_Officer&present_rank=Chief_Officer&prompt=having%20valid%20UK%20visa&applied_ship_type=Bulk%20Carrier&experienced_ship_type=Tanker"
+                "/analyze_stream",
+                query_string={
+                    "rank_folder": "Chief_Officer",
+                    "present_rank": "Chief_Officer",
+                    "prompt": "having valid UK visa",
+                    "applied_ship_type": "Bulk Carrier",
+                    "experienced_ship_type": "Tanker",
+                    "coc_issue_authority_filter": json.dumps({
+                        "type": "coc_issue_authority",
+                        "authorities": ["india_dg_shipping", "uk_mca"],
+                    }),
+                },
             )
 
         self.assertEqual(resp.status_code, 200)
@@ -2071,6 +2082,12 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(audit_rows[1]["Present_Rank_Filter"], "chief_officer")
         self.assertEqual(audit_rows[1]["Applied_Ship_Type_Filter"], "Bulk Carrier")
         self.assertEqual(audit_rows[1]["Experienced_Ship_Type_Filter"], "Tanker")
+        self.assertEqual(
+            audit_rows[1]["CoC_Issue_Authority_Filter"],
+            "Directorate General of Shipping, India; Maritime and Coastguard Agency (UK)",
+        )
+        self.assertNotIn("india_dg_shipping", audit_rows[1]["CoC_Issue_Authority_Filter"])
+        self.assertNotIn("uk_mca", audit_rows[1]["CoC_Issue_Authority_Filter"])
         payload = resp.get_data(as_text=True)
         self.assertIn('"type": "complete"', payload)
         self.assertNotIn('"hard_filter_audit"', payload)

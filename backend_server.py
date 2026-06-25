@@ -397,6 +397,19 @@ def _normalize_coc_issue_authority_filter(value, *, strict=False):
     }
 
 
+def _coc_issue_authority_filter_audit_label(value):
+    normalized = _normalize_coc_issue_authority_filter(value)
+    authorities = normalized.get("authorities") or []
+    if not authorities:
+        return ""
+    labels = _load_coc_issue_authority_aliases().display_labels
+    return "; ".join(
+        label
+        for label in (labels.get(authority) for authority in authorities)
+        if label
+    )
+
+
 def _positive_int_or_none(raw):
     if isinstance(raw, bool) or raw in (None, ""):
         return None
@@ -5517,7 +5530,7 @@ def analyze_stream():
                 ai_prompt=prompt,
                 applied_ship_type_filter=applied_ship_type,
                 experienced_ship_type_filter=experienced_ship_type,
-                coc_issue_authority_filter=json.dumps(coc_issue_authority_filter or {}, sort_keys=True),
+                coc_issue_authority_filter=_coc_issue_authority_filter_audit_label(coc_issue_authority_filter),
                 hard_filter_decision=str(row.get("hard_filter_decision", "")).strip(),
                 reason_codes=reason_codes,
                 reason_messages=reason_messages,
