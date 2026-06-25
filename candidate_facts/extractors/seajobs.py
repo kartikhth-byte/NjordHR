@@ -231,6 +231,7 @@ def _build_certificates(legacy_facts: Mapping[str, Any], evidence_ids: List[str]
                 expiry_date=coc.get("expiry_date"),
                 country=coc.get("country"),
                 issue_authority=coc.get("issue_authority"),
+                issue_authority_canonical=coc.get("issue_authority_canonical"),
                 certificate_type_raw=coc.get("certificate_type"),
                 grade=coc.get("grade"),
                 status=coc.get("status"),

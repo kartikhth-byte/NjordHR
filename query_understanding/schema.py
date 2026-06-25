@@ -481,6 +481,30 @@ def _validate_payload_family(family_id: str, payload: Any) -> Tuple[Dict[str, An
             "operator": payload.get("operator") if payload.get("operator") in {"contains_any", "equals"} else "contains_any",
         }, errors
 
+    if family_id == "coc_issue_authority_match":
+        if payload.get("type") != "coc_issue_authority_match":
+            errors.append(_error("invalid_payload_type", "constraint.type", "type must be coc_issue_authority_match"))
+        authorities = payload.get("authorities")
+        if not isinstance(authorities, list) or not authorities:
+            errors.append(_error("invalid_coc_issue_authorities", "constraint.authorities", "authorities must be a non-empty list"))
+            normalized_authorities = []
+        else:
+            normalized_authorities = []
+            for index, authority in enumerate(authorities):
+                if not isinstance(authority, str) or not authority.strip():
+                    errors.append(_error("invalid_coc_issue_authority", f"constraint.authorities[{index}]", "authority must be a non-empty string"))
+                    continue
+                authority_id = authority.strip()
+                if not re.fullmatch(r"[a-z][a-z0-9_]*", authority_id):
+                    errors.append(_error("invalid_coc_issue_authority", f"constraint.authorities[{index}]", "authority must be a canonical authority id"))
+                    continue
+                normalized_authorities.append(authority_id)
+        return {
+            "type": "coc_issue_authority_match",
+            "authorities": normalized_authorities,
+            "operator": payload.get("operator") if payload.get("operator") in {"contains_any", "equals"} else "contains_any",
+        }, errors
+
     if family_id == "coc_grade_match":
         if payload.get("type") != "coc_grade_match":
             errors.append(_error("invalid_payload_type", "constraint.type", "type must be coc_grade_match"))

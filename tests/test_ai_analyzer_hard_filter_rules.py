@@ -205,6 +205,78 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_coc_issue_authority_rule_pass(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "DG Shipping", "issue_authority_canonical": "india_dg_shipping"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "COC_ISSUE_AUTHORITY_MATCH")
+        self.assertIn("Directorate General of Shipping, India", result["message"])
+        self.assertNotIn("india_dg_shipping", result["message"])
+
+    def test_coc_issue_authority_rule_passes_multi_authority_or(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "MCA UK", "issue_authority_canonical": "uk_mca"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping", "uk_mca"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
+    def test_coc_issue_authority_rule_fail_uses_display_labels(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "MCA UK", "issue_authority_canonical": "uk_mca"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "FAIL")
+        self.assertEqual(result["reason_code"], "COC_ISSUE_AUTHORITY_MISMATCH")
+        self.assertIn("Maritime and Coastguard Agency (UK)", result["message"])
+        self.assertIn("Directorate General of Shipping, India", result["message"])
+        self.assertNotIn("uk_mca", result["message"])
+        self.assertNotIn("india_dg_shipping", result["message"])
+
+    def test_coc_issue_authority_rule_unresolved_authority_is_unknown(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "Office of Maritime Affairs Tuvalu", "issue_authority_canonical": None}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "COC_ISSUE_AUTHORITY_NOT_FOUND")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_coc_issue_authority_rule_unknown_canonical_does_not_leak_id(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "Legacy imported value", "issue_authority_canonical": "india_dg_shipping_legacy"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "COC_ISSUE_AUTHORITY_NOT_FOUND")
+        self.assertNotIn("india_dg_shipping_legacy", result["message"])
+
+    def test_coc_issue_authority_rule_legacy_raw_authority_can_normalize(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "Directorate General of Shipping, Mumbai"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "PASS")
+
     def test_combine_any_of_item_results_sanitizes_debug_payload(self):
         item_results = [
             {

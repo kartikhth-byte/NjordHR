@@ -207,6 +207,34 @@ class AIAnalyzerCertificationTests(unittest.TestCase):
                 self.assertEqual(fact["country"], expected_country)
                 self.assertEqual(fact["issue_authority"], issue_authority)
 
+    def test_extract_coc_fact_populates_canonical_issue_authority(self):
+        cases = {
+            "DG Shipping": "india_dg_shipping",
+            "Directorate General of Shipping, Mumbai": "india_dg_shipping",
+            "MCA UK": "uk_mca",
+            "Maritime and Port Authority of Singapore": "singapore_mpa",
+        }
+        for issue_authority, expected_authority in cases.items():
+            with self.subTest(issue_authority=issue_authority):
+                fact = self.analyzer._extract_coc_fact_from_text(
+                    "Certificate Details\n"
+                    "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+                    f"ZA844428 Second Mate (FG) {issue_authority} 20-Dec-2021 20-Dec-2026 16NL2433"
+                )
+                self.assertEqual(fact["status"], "PARSED")
+                self.assertEqual(fact["issue_authority"], issue_authority)
+                self.assertEqual(fact["issue_authority_canonical"], expected_authority)
+
+    def test_extract_coc_fact_leaves_unresolved_issue_authority_null(self):
+        fact = self.analyzer._extract_coc_fact_from_text(
+            "Certificate Details\n"
+            "Certificate No Certificate Type Issue Authority Issue Date Expiry Date Indos No.\n"
+            "ZA844428 Second Mate (FG) Office of Maritime Affairs Tuvalu 20-Dec-2021 20-Dec-2026 16NL2433"
+        )
+        self.assertEqual(fact["status"], "PARSED")
+        self.assertEqual(fact["issue_authority"], "Office of Maritime Affairs Tuvalu")
+        self.assertIsNone(fact["issue_authority_canonical"])
+
     def test_extract_coc_country_from_snippet_does_not_treat_in_as_india(self):
         self.assertIsNone(self.analyzer._extract_coc_country_from_snippet("COC issued in 2019"))
 

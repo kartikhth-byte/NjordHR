@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime
+import re
 from typing import Any, Dict, List, Mapping
 
 from .versioning import CANDIDATE_FACTS_SCHEMA_VERSION as _CANDIDATE_FACTS_SCHEMA_VERSION, is_supported_schema_version
@@ -195,6 +196,10 @@ def _validate_fact_item(item: Any, bucket: str, index: int, errors: List[Dict[st
         _require_string(obj.get("issue_date"), f"{path}.issue_date", errors, allow_null=True)
         _require_string(obj.get("expiry_date"), f"{path}.expiry_date", errors, allow_null=True)
         _require_string(obj.get("country"), f"{path}.country", errors, allow_null=True)
+        _require_string(obj.get("issue_authority"), f"{path}.issue_authority", errors, allow_null=True)
+        authority_canonical = _require_string(obj.get("issue_authority_canonical"), f"{path}.issue_authority_canonical", errors, allow_null=True)
+        if authority_canonical is not None and not re.fullmatch(r"[a-z][a-z0-9_]*", authority_canonical):
+            errors.append(_error(f"{path}.issue_authority_canonical", "invalid_value", "must be a canonical authority id"))
     elif bucket == "endorsements":
         _require_string(obj.get("endorsement_type"), f"{path}.endorsement_type", errors)
         if obj.get("level") is not None:

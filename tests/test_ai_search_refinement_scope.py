@@ -139,6 +139,10 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "unit": "dwt",
                     "years_back": 4,
                 },
+                "coc_issue_authority_filter": {
+                    "type": "coc_issue_authority",
+                    "authorities": ["india_dg_shipping", "uk_mca"],
+                },
             },
             memberships=[{
                 "candidate_scope_id": "candidate-scope-a",
@@ -624,6 +628,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "experienced_ship_type": experienced_ship_type,
                     "experience_ship_type_filter": experience_ship_type_filter,
                     "engine_experience_filter": engine_experience_filter,
+                    "coc_issue_authority_filter": kwargs.get("coc_issue_authority_filter"),
                     "present_rank": kwargs.get("present_rank"),
                     "candidate_scope_ids": kwargs.get("candidate_scope_ids"),
                     "candidate_scope_memberships": kwargs.get("candidate_scope_memberships"),
@@ -676,6 +681,13 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 }],
             },
         )
+        self.assertEqual(
+            captured["coc_issue_authority_filter"],
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
+            },
+        )
         self.assertEqual(captured["candidate_scope_ids"], ["candidate-scope-a"])
         self.assertEqual(
             captured["candidate_scope_memberships"][0]["candidate_scope_id"],
@@ -685,6 +697,13 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(complete_event["search_session"]["parent_search_session_id"], "parent-search")
         self.assertEqual(complete_event["search_session"]["refinement_depth"], 1)
         self.assertEqual(complete_event["search_context"]["present_rank"], "chief_officer")
+        self.assertEqual(
+            complete_event["search_context"]["coc_issue_authority_filter"],
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
+            },
+        )
 
         child = backend_server.search_scope_repo.get_session(
             complete_event["search_session_id"],
@@ -695,6 +714,13 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(child["root_search_session_id"], "parent-search")
         self.assertEqual(child["rank_folder"], "Chief_Engineer")
         self.assertEqual((child["context"] or {}).get("present_rank"), "chief_officer")
+        self.assertEqual(
+            (child["context"] or {}).get("coc_issue_authority_filter"),
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
+            },
+        )
 
     def test_refinement_lineage_warning_persists_into_next_refinement(self):
         self._save_parent_scope()
@@ -942,6 +968,11 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                     "search_state": {
                         "prompt": "has valid passport",
                         "present_rank": "chief_officer",
+                        "coc_issue_authority_filter": {
+                            "type": "coc_issue_authority",
+                            "authorities": ["DG Shipping India", "not_real", "MCA UK"],
+                            "ignored": "must-not-survive",
+                        },
                         "vessel_tonnage_filter": {
                             "min_value": 50000,
                             "max_value": 80000,
@@ -997,6 +1028,11 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                     "unit": "dwt",
                                     "years_back": 4,
                                 },
+                                "coc_issue_authority_filter": {
+                                    "type": "coc_issue_authority",
+                                    "authorities": ["MCA UK"],
+                                    "ignored": "must-not-survive",
+                                },
                                 "raw_nested": {"secret": "must-not-survive"},
                             },
                             "verified_matches": [{
@@ -1033,6 +1069,13 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 "max_value": 80000,
                 "unit": "gt_grt",
                 "years_back": 2,
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["coc_issue_authority_filter"],
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
             },
         )
         self.assertEqual(
@@ -1073,6 +1116,13 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                 "max_value": None,
                 "unit": "dwt",
                 "years_back": 4,
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["current_completed_results"]["search_context"]["coc_issue_authority_filter"],
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["uk_mca"],
             },
         )
         self.assertEqual(

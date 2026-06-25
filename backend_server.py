@@ -41,6 +41,7 @@ from repositories.search_scope_repo import SQLiteSearchScopeRepository
 from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import config_value, normalize_env_value, normalized_url
 from ai_analyzer import Analyzer, engine_family_option_catalog, rank_option_catalog
+from candidate_facts.aliases.coc_issue_authority import load_coc_issue_authority_aliases, normalize_alias_key
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
 from query_understanding import build_shadow_audit_entry, build_shadow_llm_query_plan
@@ -157,6 +158,7 @@ def _ai_search_request_fingerprint(
     engine_experience_filter=None,
     vessel_tonnage_filter=None,
     age_filter=None,
+    coc_issue_authority_filter=None,
     parent_search_session_id="",
     changed_content_acknowledgement_id="",
 ):
@@ -172,6 +174,7 @@ def _ai_search_request_fingerprint(
         "engine_experience_filter": {} if is_refinement else _normalize_engine_experience_filter(engine_experience_filter),
         "vessel_tonnage_filter": {} if is_refinement else _normalize_vessel_tonnage_filter(vessel_tonnage_filter),
         "age_filter": {} if is_refinement else _normalize_age_filter(age_filter),
+        "coc_issue_authority_filter": {} if is_refinement else _normalize_coc_issue_authority_filter(coc_issue_authority_filter),
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "changed_content_acknowledgement_id": (
             str(changed_content_acknowledgement_id or "").strip()
@@ -223,6 +226,175 @@ def _canonical_rank_id_for_picker(value):
         ):
             return option_value
     return ""
+
+
+class CocIssueAuthorityFilterInvalid(ValueError):
+    def __init__(self, detail_code, message):
+        super().__init__(message)
+        self.detail_code = detail_code
+
+
+_COC_ISSUE_AUTHORITY_ALIASES = None
+
+
+def _coc_issue_authority_country_aliases():
+    aliases = {
+        "india": "india",
+        "indian": "india",
+        "uk": "uk",
+        "u k": "uk",
+        "gb": "uk",
+        "great britain": "uk",
+        "britain": "uk",
+        "british": "uk",
+        "united kingdom": "uk",
+        "singapore": "singapore",
+        "singaporean": "singapore",
+        "panama": "panama",
+        "panamanian": "panama",
+        "liberia": "liberia",
+        "liberian": "liberia",
+        "marshall islands": "marshall islands",
+        "marshallese": "marshall islands",
+        "malta": "malta",
+        "maltese": "malta",
+        "bahamas": "bahamas",
+        "bahamian": "bahamas",
+        "cyprus": "cyprus",
+        "cypriot": "cyprus",
+        "hong kong": "hong kong",
+        "philippines": "philippines",
+        "philippine": "philippines",
+        "filipino": "philippines",
+        "australia": "australia",
+        "australian": "australia",
+        "new zealand": "new zealand",
+        "new zealander": "new zealand",
+        "denmark": "denmark",
+        "danish": "denmark",
+        "norway": "norway",
+        "norwegian": "norway",
+        "netherlands": "netherlands",
+        "dutch": "netherlands",
+        "greece": "greece",
+        "greek": "greece",
+        "croatia": "croatia",
+        "croatian": "croatia",
+        "russia": "russia",
+        "russian": "russia",
+        "ukraine": "ukraine",
+        "ukrainian": "ukraine",
+        "china": "china",
+        "chinese": "china",
+        "japan": "japan",
+        "japanese": "japan",
+        "korea": "korea",
+        "korean": "korea",
+        "malaysia": "malaysia",
+        "malaysian": "malaysia",
+        "indonesia": "indonesia",
+        "indonesian": "indonesia",
+        "myanmar": "myanmar",
+        "burma": "myanmar",
+        "burmese": "myanmar",
+        "bangladesh": "bangladesh",
+        "bangladeshi": "bangladesh",
+        "pakistan": "pakistan",
+        "pakistani": "pakistan",
+        "sri lanka": "sri lanka",
+        "sri lankan": "sri lanka",
+        "south africa": "south africa",
+        "south african": "south africa",
+    }
+    return {normalize_alias_key(alias): canonical for alias, canonical in aliases.items()}
+
+
+def _load_coc_issue_authority_aliases():
+    global _COC_ISSUE_AUTHORITY_ALIASES
+    if _COC_ISSUE_AUTHORITY_ALIASES is None:
+        _COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
+            country_aliases=_coc_issue_authority_country_aliases()
+        )
+    return _COC_ISSUE_AUTHORITY_ALIASES
+
+
+def _coc_issue_authority_catalog():
+    aliases = _load_coc_issue_authority_aliases()
+    return [
+        {
+            "value": authority_id,
+            "label": aliases.display_labels.get(authority_id, authority_id),
+            "country": aliases.country_by_authority.get(authority_id, ""),
+        }
+        for authority_id in sorted(aliases.display_labels, key=lambda item: aliases.display_labels.get(item, item))
+    ]
+
+
+def _canonical_coc_issue_authority_id_for_picker(value, *, allow_aliases=False):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    aliases = _load_coc_issue_authority_aliases()
+    labels = aliases.display_labels
+    if raw in labels:
+        return raw
+    if allow_aliases:
+        alias_match = aliases.alias_map.get(normalize_alias_key(raw))
+        if alias_match:
+            return alias_match
+        normalized = raw.lower().replace("-", "_").replace(" ", "_")
+        for authority_id, label in labels.items():
+            if normalized == str(label or "").lower().replace("-", "_").replace(" ", "_"):
+                return authority_id
+    return ""
+
+
+def _normalize_coc_issue_authority_filter(value, *, strict=False):
+    if not isinstance(value, dict):
+        if strict and value not in (None, ""):
+            raise CocIssueAuthorityFilterInvalid(
+                "malformed",
+                "CoC Issue Authority filter must be an object with an authorities list.",
+            )
+        return {}
+    if value.get("type") not in (None, "", "coc_issue_authority"):
+        if strict:
+            raise CocIssueAuthorityFilterInvalid(
+                "invalid_type",
+                "CoC Issue Authority filter type must be coc_issue_authority.",
+            )
+        return {}
+    raw_authorities = value.get("authorities")
+    if raw_authorities in (None, ""):
+        return {}
+    if not isinstance(raw_authorities, list):
+        if strict:
+            raise CocIssueAuthorityFilterInvalid(
+                "invalid_authorities",
+                "CoC Issue Authority filter authorities must be a list.",
+            )
+        return {}
+    authorities = []
+    invalid = []
+    for raw_authority in raw_authorities:
+        canonical = _canonical_coc_issue_authority_id_for_picker(raw_authority, allow_aliases=not strict)
+        if not canonical:
+            if str(raw_authority or "").strip():
+                invalid.append(str(raw_authority or "").strip())
+            continue
+        if canonical not in authorities:
+            authorities.append(canonical)
+    if invalid and strict:
+        raise CocIssueAuthorityFilterInvalid(
+            "unknown_authority",
+            f"CoC Issue Authority is not recognized: {', '.join(invalid)}.",
+        )
+    if not authorities:
+        return {}
+    return {
+        "type": "coc_issue_authority",
+        "authorities": authorities,
+    }
 
 
 def _positive_int_or_none(raw):
@@ -441,6 +613,20 @@ def _parse_age_filter_payload_strict(raw):
             "Candidate age filter must be valid JSON.",
         ) from exc
     return _normalize_age_filter(payload, strict=True)
+
+
+def _parse_coc_issue_authority_filter_payload_strict(raw):
+    raw_text = str(raw or "").strip()
+    if not raw_text:
+        return {}
+    try:
+        payload = json.loads(raw_text)
+    except (TypeError, ValueError) as exc:
+        raise CocIssueAuthorityFilterInvalid(
+            "malformed_json",
+            "CoC Issue Authority filter must be valid JSON.",
+        ) from exc
+    return _normalize_coc_issue_authority_filter(payload, strict=True)
 
 
 def _parse_experience_ship_type_filter_payload(raw):
@@ -1922,6 +2108,9 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "age_filter": _normalize_age_filter(
                 (parent_session.get("context") or {}).get("age_filter") or {}
             ),
+            "coc_issue_authority_filter": _normalize_coc_issue_authority_filter(
+                (parent_session.get("context") or {}).get("coc_issue_authority_filter") or {}
+            ),
         },
         "scope_summary": scope_summary,
         "refinement": {
@@ -1961,6 +2150,9 @@ def _safe_recovery_search_context(value):
     )
     result["age_filter"] = _normalize_age_filter(
         (value if isinstance(value, dict) else {}).get("age_filter") or {}
+    )
+    result["coc_issue_authority_filter"] = _normalize_coc_issue_authority_filter(
+        (value if isinstance(value, dict) else {}).get("coc_issue_authority_filter") or {}
     )
     return result
 
@@ -2119,6 +2311,9 @@ def _sanitize_ai_search_recovery_draft(payload):
             ),
             "age_filter": _normalize_age_filter(
                 search_state.get("age_filter") or {}
+            ),
+            "coc_issue_authority_filter": _normalize_coc_issue_authority_filter(
+                search_state.get("coc_issue_authority_filter") or {}
             ),
             "refinement_state": str(search_state.get("refinement_state") or "disabled")[:64],
             "active_search_step_index": _sanitize_recovery_step_index(
@@ -4828,6 +5023,7 @@ def get_rank_folders():
             "folders": subfolders,
             "rank_folder_options": [_public_rank_folder_record(record) for record in records],
             "present_rank_options": rank_option_catalog(),
+            "coc_issue_authority_options": _coc_issue_authority_catalog(),
             "download_root": {
                 "download_root_id": root_record.get("download_root_id", ""),
             },
@@ -5234,6 +5430,16 @@ def analyze_stream():
         def invalid_age_filter():
             yield f"data: {json.dumps({'type': 'error', 'message': message, 'error_code': 'AGE_FILTER_INVALID', 'detail': {'code': detail_code}})}\n\n"
         return Response(invalid_age_filter(), mimetype='text/event-stream')
+    try:
+        coc_issue_authority_filter = _parse_coc_issue_authority_filter_payload_strict(
+            request.args.get('coc_issue_authority_filter', '')
+        )
+    except CocIssueAuthorityFilterInvalid as exc:
+        message = str(exc)
+        detail_code = exc.detail_code
+        def invalid_coc_issue_authority_filter():
+            yield f"data: {json.dumps({'type': 'error', 'message': message, 'error_code': 'COC_ISSUE_AUTHORITY_FILTER_INVALID', 'detail': {'code': detail_code}})}\n\n"
+        return Response(invalid_coc_issue_authority_filter(), mimetype='text/event-stream')
     search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
     changed_content_acknowledgement_id = request.args.get(
         'changed_content_acknowledgement_id',
@@ -5250,6 +5456,7 @@ def analyze_stream():
         engine_experience_filter=engine_experience_filter,
         vessel_tonnage_filter=vessel_tonnage_filter,
         age_filter=age_filter,
+        coc_issue_authority_filter=coc_issue_authority_filter,
         parent_search_session_id=parent_search_session_id,
         changed_content_acknowledgement_id=changed_content_acknowledgement_id,
     )
@@ -5265,6 +5472,7 @@ def analyze_stream():
         "engine_experience_filter": engine_experience_filter,
         "vessel_tonnage_filter": vessel_tonnage_filter,
         "age_filter": age_filter,
+        "coc_issue_authority_filter": coc_issue_authority_filter,
         "parent_search_session_id": parent_search_session_id,
         "changed_content_acknowledgement_id": changed_content_acknowledgement_id,
     }
@@ -5274,7 +5482,7 @@ def analyze_stream():
     actor_username = _session_username()
     actor_user_id = _session_actor_user_id()
 
-    def _log_ai_search_audit_rows(audit_rows, rank_folder, present_rank, prompt, applied_ship_type, experienced_ship_type, search_session_id):
+    def _log_ai_search_audit_rows(audit_rows, rank_folder, present_rank, prompt, applied_ship_type, experienced_ship_type, search_session_id, coc_issue_authority_filter):
         for row in audit_rows or []:
             filename = str(row.get("filename", "")).strip()
             candidate_id = str(row.get("candidate_id", "")).strip()
@@ -5309,6 +5517,7 @@ def analyze_stream():
                 ai_prompt=prompt,
                 applied_ship_type_filter=applied_ship_type,
                 experienced_ship_type_filter=experienced_ship_type,
+                coc_issue_authority_filter=json.dumps(coc_issue_authority_filter or {}, sort_keys=True),
                 hard_filter_decision=str(row.get("hard_filter_decision", "")).strip(),
                 reason_codes=reason_codes,
                 reason_messages=reason_messages,
@@ -5418,6 +5627,7 @@ def analyze_stream():
             effective_engine_experience_filter = dict(engine_experience_filter or {})
             effective_vessel_tonnage_filter = dict(vessel_tonnage_filter or {})
             effective_age_filter = dict(age_filter or {})
+            effective_coc_issue_authority_filter = dict(coc_issue_authority_filter or {})
             search_mode = "root"
             root_search_session_id = search_session_id
             refinement_depth = 0
@@ -5466,6 +5676,9 @@ def analyze_stream():
                 parent_age_filter = _normalize_age_filter(
                     parent_context.get("age_filter") or {}
                 )
+                parent_coc_issue_authority_filter = _normalize_coc_issue_authority_filter(
+                    parent_context.get("coc_issue_authority_filter") or {}
+                )
                 context_mismatch = (
                     (effective_rank_folder and effective_rank_folder != parent_rank_folder)
                     or (effective_present_rank and effective_present_rank != parent_present_rank)
@@ -5489,6 +5702,10 @@ def analyze_stream():
                     or (
                         effective_age_filter
                         and effective_age_filter != parent_age_filter
+                    )
+                    or (
+                        effective_coc_issue_authority_filter
+                        and effective_coc_issue_authority_filter != parent_coc_issue_authority_filter
                     )
                 )
                 if context_mismatch:
@@ -5528,6 +5745,7 @@ def analyze_stream():
                 effective_engine_experience_filter = parent_engine_experience_filter
                 effective_vessel_tonnage_filter = parent_vessel_tonnage_filter
                 effective_age_filter = parent_age_filter
+                effective_coc_issue_authority_filter = parent_coc_issue_authority_filter
                 authoritative_context = authoritative_preflight.get("search_context") or {}
                 effective_rank_folder_id = str(
                     authoritative_context.get("rank_folder_id") or ""
@@ -5635,6 +5853,7 @@ def analyze_stream():
                     "engine_experience_filter": effective_engine_experience_filter,
                     "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                     "age_filter": effective_age_filter,
+                    "coc_issue_authority_filter": effective_coc_issue_authority_filter,
                     "search_session_id": search_session_id,
                     "search_mode": search_mode,
                     "parent_search_session_id": parent_search_session_id,
@@ -5664,6 +5883,7 @@ def analyze_stream():
                 engine_experience_filter=effective_engine_experience_filter,
                 vessel_tonnage_filter=effective_vessel_tonnage_filter,
                 age_filter=effective_age_filter,
+                coc_issue_authority_filter=effective_coc_issue_authority_filter,
                 review_capture_callback=_candidate_facts_review_capture_callback,
                 candidate_scope_ids=candidate_scope_ids,
                 candidate_scope_memberships=candidate_scope_memberships,
@@ -5679,6 +5899,7 @@ def analyze_stream():
                             effective_applied_ship_type,
                             effective_experienced_ship_type,
                             search_session_id,
+                            effective_coc_issue_authority_filter,
                         )
                     except Exception as audit_exc:
                         print(f"[BACKEND WARN] Failed to persist AI search audit rows: {audit_exc}")
@@ -5758,6 +5979,7 @@ def analyze_stream():
                                 "engine_experience_filter": effective_engine_experience_filter,
                                 "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                                 "age_filter": effective_age_filter,
+                                "coc_issue_authority_filter": effective_coc_issue_authority_filter,
                             },
                             input_scope=scope_summary,
                             output=output_counts,
@@ -5801,6 +6023,7 @@ def analyze_stream():
                         "engine_experience_filter": effective_engine_experience_filter,
                         "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                         "age_filter": effective_age_filter,
+                        "coc_issue_authority_filter": effective_coc_issue_authority_filter,
                     }
                     event_to_client["scope_summary"] = scope_summary
                     event_to_client["refinement"] = refinement_payload
@@ -5818,6 +6041,7 @@ def analyze_stream():
                             "engine_experience_filter": effective_engine_experience_filter,
                             "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                             "age_filter": effective_age_filter,
+                            "coc_issue_authority_filter": effective_coc_issue_authority_filter,
                             "search_session_id": search_session_id,
                             "search_mode": search_mode,
                             "parent_search_session_id": parent_search_session_id,
@@ -5868,6 +6092,7 @@ def analyze_stream():
                     "applied_ship_type": applied_ship_type,
                     "experienced_ship_type": experienced_ship_type,
                     "search_session_id": search_session_id,
+                    "coc_issue_authority_filter": coc_issue_authority_filter,
                     "error": f"{type(e).__name__}: {e}",
                 },
                 actor_role=actor_role,
@@ -5896,6 +6121,15 @@ def analyze():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
+    rank_folder = ""
+    present_rank = ""
+    applied_ship_type = ""
+    experienced_ship_type = ""
+    experience_ship_type_filter = {}
+    engine_experience_filter = {}
+    vessel_tonnage_filter = {}
+    age_filter = {}
+    coc_issue_authority_filter = {}
     try:
         data = request.json
         prompt = data.get('prompt')
@@ -5927,6 +6161,18 @@ def analyze():
                 "success": False,
                 "message": str(exc),
                 "error_code": "AGE_FILTER_INVALID",
+                "detail": {"code": exc.detail_code},
+            }), 400
+        try:
+            coc_issue_authority_filter = _normalize_coc_issue_authority_filter(
+                data.get('coc_issue_authority_filter') or {},
+                strict=bool(data.get('coc_issue_authority_filter')),
+            )
+        except CocIssueAuthorityFilterInvalid as exc:
+            return jsonify({
+                "success": False,
+                "message": str(exc),
+                "error_code": "COC_ISSUE_AUTHORITY_FILTER_INVALID",
                 "detail": {"code": exc.detail_code},
             }), 400
 
@@ -5963,6 +6209,7 @@ def analyze():
                 "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "age_filter": age_filter,
+                "coc_issue_authority_filter": coc_issue_authority_filter,
             },
             actor_role=actor_role,
             actor_username=actor_username,
@@ -5985,6 +6232,7 @@ def analyze():
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=_candidate_facts_review_capture_callback,
         )
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
@@ -6006,6 +6254,7 @@ def analyze():
                 "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "age_filter": age_filter,
+                "coc_issue_authority_filter": coc_issue_authority_filter,
                 "success": bool(result.get("success")),
                 "verified_matches": len(result.get("verified_matches", [])),
                 "uncertain_matches": len(result.get("uncertain_matches", [])),
@@ -6035,6 +6284,7 @@ def analyze():
                 "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "age_filter": age_filter,
+                "coc_issue_authority_filter": coc_issue_authority_filter,
                 "error": f"{type(e).__name__}: {e}",
             },
             actor_role=actor_role,

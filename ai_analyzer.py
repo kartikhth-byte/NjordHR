@@ -42,6 +42,10 @@ from repositories.resume_identity import (
 from runtime_env import config_value, normalize_env_value, normalized_url
 from candidate_facts.orchestrator import build_candidate_facts_v1 as build_candidate_facts_contract_v1
 from candidate_facts.review_summary import build_candidate_facts_review_summary
+from candidate_facts.aliases.coc_issue_authority import (
+    load_coc_issue_authority_aliases,
+    normalize_alias_key,
+)
 from query_understanding.hard_filter_catalog import (
     UNAPPLIED_FAMILY_IDS,
     SUPPORTED_FAMILY_IDS,
@@ -1256,6 +1260,7 @@ class AIResumeAnalyzer:
         "rank_match",
         "coc_document_gate",
         "coc_country_match",
+        "coc_issue_authority_match",
         "stcw_basic",
         "company_continuity",
         "passport_validity",
@@ -1266,6 +1271,7 @@ class AIResumeAnalyzer:
         "rank_duration_experience",
     }
     COC_COUNTRY_CONFIDENCE_THRESHOLD = 0.85
+    _COC_ISSUE_AUTHORITY_ALIASES = None
     RANK_ALIAS_TABLE = {
         "master": {
             "canonical_id": "master",
@@ -2433,29 +2439,22 @@ class AIResumeAnalyzer:
             }
         return None
 
-    def _normalize_coc_country_text(self, value):
-        normalized = str(value or "").strip().lower()
-        if not normalized:
-            return ""
-        normalized = unicodedata.normalize("NFKD", normalized)
-        normalized = "".join(char for char in normalized if not unicodedata.combining(char))
-        normalized = re.sub(r"[^a-z]+", " ", normalized).strip()
-        normalized = re.sub(r"\s+", " ", normalized)
-        return normalized
-
-    def _normalize_coc_country(self, value):
-        normalized = self._normalize_coc_country_text(value)
+    def _normalize_alias(self, value, alias_map):
+        normalized = normalize_alias_key(value)
         if not normalized:
             return None
-        aliases = self._coc_country_aliases()
-        return aliases.get(normalized)
+        return (alias_map or {}).get(normalized)
+
+    def _normalize_coc_country_text(self, value):
+        return normalize_alias_key(value)
+
+    def _normalize_coc_country(self, value):
+        return self._normalize_alias(value, self._coc_country_aliases())
 
     def _coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
         aliases = {
             "india": "india",
             "indian": "india",
-            "dg shipping": "india",
-            "directorate general of shipping": "india",
             "uk": "uk",
             "u k": "uk",
             "gb": "uk",
@@ -2539,6 +2538,8 @@ class AIResumeAnalyzer:
             "burmese": "myanmar",
             "nepal": "nepal",
             "nepalese": "nepal",
+            "new zealand": "new zealand",
+            "new zealander": "new zealand",
             "netherlands": "netherlands",
             "dutch": "netherlands",
             "nigeria": "nigeria",
@@ -2628,6 +2629,56 @@ class AIResumeAnalyzer:
             aliases.pop("u s", None)
         return aliases
 
+    def _coc_issue_authority_aliases(self):
+        if self.__class__._COC_ISSUE_AUTHORITY_ALIASES is None:
+            self.__class__._COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
+                country_aliases=self._coc_country_aliases(include_ambiguous_shortcuts=False)
+            )
+        return self.__class__._COC_ISSUE_AUTHORITY_ALIASES
+
+    def _coc_issue_authority_alias_map(self):
+        return dict(self._coc_issue_authority_aliases().alias_map)
+
+    def _coc_issue_authority_display_label(self, authority_id):
+        labels = self._coc_issue_authority_aliases().display_labels
+        return labels.get(str(authority_id or ""))
+
+    def _coc_issue_authority_country(self, authority_id):
+        return self._coc_issue_authority_aliases().country_by_authority.get(str(authority_id or ""))
+
+    def _normalize_coc_issue_authority(self, value):
+        return self._normalize_alias(value, self._coc_issue_authority_alias_map())
+
+    def _is_known_coc_issue_authority(self, value):
+        return str(value or "") in self._coc_issue_authority_aliases().display_labels
+
+    def _ambiguous_coc_issue_authority_aliases(self):
+        return {
+            "amsa",
+            "dgs",
+            "mca",
+            "mmd",
+            "nmd",
+        }
+
+    def _coc_issue_authority_alias_items(self, *, include_ambiguous_shortcuts=True):
+        ambiguous = self._ambiguous_coc_issue_authority_aliases()
+        return [
+            (alias, authority)
+            for alias, authority in self._coc_issue_authority_alias_map().items()
+            if include_ambiguous_shortcuts or alias not in ambiguous
+        ]
+
+    def _extract_coc_issue_authority_from_snippet(self, value):
+        normalized = normalize_alias_key(value)
+        if not normalized:
+            return None
+        aliases = dict(self._coc_issue_authority_alias_items(include_ambiguous_shortcuts=False))
+        for alias in sorted(aliases, key=len, reverse=True):
+            if re.search(rf"\b{re.escape(alias)}\b", normalized):
+                return aliases[alias]
+        return None
+
     def _extract_coc_country_from_snippet(self, value):
         normalized = self._normalize_coc_country_text(value)
         if not normalized:
@@ -2645,6 +2696,8 @@ class AIResumeAnalyzer:
         phrase = re.sub(r"\s+", " ", phrase).strip(" -")
         phrase = re.sub(r"^(?:and|or|for|with)\s+", "", phrase).strip(" -")
         if not phrase:
+            return None
+        if self._extract_coc_issue_authority_from_snippet(phrase):
             return None
         alias_candidate = self._extract_coc_country_from_snippet(phrase)
         if alias_candidate:
@@ -2688,6 +2741,36 @@ class AIResumeAnalyzer:
                     "display_value": match.group(0).strip(),
                 }
         return None
+
+    def _extract_coc_issue_authority_constraint(self, user_prompt):
+        prompt = str(user_prompt or "")
+        if not prompt.strip():
+            return None
+        if not re.search(r"\bc\s*\.?\s*o\s*\.?\s*c\b|\bcertificate\s+of\s+competency\b", prompt, flags=re.IGNORECASE):
+            return None
+        normalized_prompt = normalize_alias_key(prompt)
+        authorities = []
+        for alias, authority in sorted(
+            self._coc_issue_authority_alias_items(include_ambiguous_shortcuts=False),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        ):
+            if re.search(rf"\b{re.escape(alias)}\b", normalized_prompt) and authority not in authorities:
+                authorities.append(authority)
+        if not authorities:
+            return None
+        display_label = " or ".join(
+            label
+            for label in (self._coc_issue_authority_display_label(authority) for authority in authorities)
+            if label
+        )
+        if not display_label:
+            return None
+        return {
+            "authorities": authorities,
+            "operator": "contains_any",
+            "display_value": display_label,
+        }
 
     def _extract_coc_grade_constraint(self, user_prompt):
         prompt = str(user_prompt or "")
@@ -4263,6 +4346,7 @@ class AIResumeAnalyzer:
             "passport_validity": "passport_validity",
             "coc_document_gate": "certifications",
             "coc_country_match": "coc_country",
+            "coc_issue_authority_match": "coc_issue_authority",
             "coc_grade_match": "coc_grade",
             "stcw_basic": "stcw_basic",
             "stcw_endorsement": "certifications",
@@ -4301,6 +4385,10 @@ class AIResumeAnalyzer:
                 countries = constraint.get("countries") or []
                 if countries:
                     return " or ".join(str(country).upper() if str(country).lower() == "uk" else str(country).title() for country in countries)
+            if applied_constraint == "coc_issue_authority_match":
+                authorities = constraint.get("authorities") or []
+                if authorities:
+                    return " or ".join(self._coc_issue_authority_display_label(authority) for authority in authorities)
         if isinstance(constraint, str):
             if applied_constraint == "experience_ship_type":
                 return f"{constraint.replace('_', ' ')} vessel"
@@ -4380,7 +4468,7 @@ class AIResumeAnalyzer:
                         "label": label,
                     })
                 continue
-            if "coc_country_match" in applied_constraints:
+            if "coc_country_match" in applied_constraints or "coc_issue_authority_match" in applied_constraints:
                 applied_constraints = [
                     item for item in applied_constraints
                     if item != "coc_document_gate"
@@ -4671,6 +4759,7 @@ class AIResumeAnalyzer:
         rank=None,
         allow_logical_groups=True,
         suppress_prompt_rank=False,
+        suppress_prompt_coc_issue_authority=False,
     ):
         constraints = {
             "rank": str(rank or "").strip(),
@@ -4679,7 +4768,10 @@ class AIResumeAnalyzer:
             "unapplied_constraints": [],
             "parsing_notes": [],
         }
-        any_of_group = self._extract_any_of_logical_group(user_prompt, rank=rank) if allow_logical_groups else None
+        coc_issue_authority_constraint = self._extract_coc_issue_authority_constraint(user_prompt)
+        any_of_group = None
+        if allow_logical_groups and len((coc_issue_authority_constraint or {}).get("authorities") or []) <= 1:
+            any_of_group = self._extract_any_of_logical_group(user_prompt, rank=rank)
         if any_of_group:
             constraints.setdefault("logical_groups", []).append(any_of_group)
             return constraints
@@ -4717,6 +4809,12 @@ class AIResumeAnalyzer:
 
         coc_constraint = self._extract_coc_requirement_constraint(user_prompt)
         coc_country_constraint = self._extract_coc_country_constraint(user_prompt)
+        if coc_issue_authority_constraint and not coc_constraint:
+            coc_constraint = {
+                "coc_required": True,
+                "coc_valid_required": True,
+                "display_value": coc_issue_authority_constraint.get("display_value"),
+            }
         if coc_country_constraint and not coc_constraint:
             coc_constraint = {
                 "coc_required": True,
@@ -4730,6 +4828,15 @@ class AIResumeAnalyzer:
         if coc_country_constraint:
             constraints["hard_constraints"]["coc_country"] = coc_country_constraint
             constraints["applied_constraints"].append("coc_country_match")
+
+        if coc_issue_authority_constraint:
+            if not suppress_prompt_coc_issue_authority:
+                constraints["hard_constraints"]["coc_issue_authority"] = coc_issue_authority_constraint
+                constraints["applied_constraints"].append("coc_issue_authority_match")
+            else:
+                constraints.setdefault("observability_applied_constraints", []).append("coc_issue_authority_match")
+                constraints.setdefault("observability_constraints", {})["coc_issue_authority"] = coc_issue_authority_constraint
+                constraints.setdefault("observability_constraint_reasons", {})["coc_issue_authority_match"] = "picker_override"
 
         if coc_grade_constraint:
             coc_grade_constraint = dict(coc_grade_constraint)
@@ -5132,6 +5239,8 @@ class AIResumeAnalyzer:
             return self._prompt_observability_coc_phrase(prompt)
         if constraint_id == "coc_grade_match":
             return self._prompt_observability_normalize((hard_constraints.get("coc_grade") or {}).get("display_value"))
+        if constraint_id == "coc_issue_authority_match":
+            return self._prompt_observability_normalize((hard_constraints.get("coc_issue_authority") or {}).get("display_value"))
         if constraint_id == "stcw_basic":
             return self._prompt_observability_stcw_basic_phrase(prompt)
         if constraint_id == "company_continuity":
@@ -5265,13 +5374,16 @@ class AIResumeAnalyzer:
 
     def _parse_prompt_observability(self, user_prompt, job_constraints, has_semantic_intent=None):
         prompt = self._prompt_observability_normalize(user_prompt)
-        hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
+        hard_constraints = dict((job_constraints or {}).get("hard_constraints") or {})
+        for key, value in ((job_constraints or {}).get("observability_constraints") or {}).items():
+            hard_constraints.setdefault(key, value)
         applied_constraints = list(dict.fromkeys(
             list((job_constraints or {}).get("applied_constraints") or [])
             + list((job_constraints or {}).get("observability_applied_constraints") or [])
         ))
         unapplied_constraints = list(dict.fromkeys((job_constraints or {}).get("unapplied_constraints") or []))
         parsing_notes = list(dict.fromkeys(note for note in ((job_constraints or {}).get("parsing_notes") or []) if note))
+        observability_reasons = (job_constraints or {}).get("observability_constraint_reasons") or {}
 
         ledger = []
         value_matches = []
@@ -5343,11 +5455,14 @@ class AIResumeAnalyzer:
                 if recorded:
                     normalized_phrases.append(recorded)
             if normalized_phrases:
-                ledger.append({
+                ledger_entry = {
                     "family": constraint_id,
                     "disposition": "applied",
                     "text": " and ".join(normalized_phrases),
-                })
+                }
+                if observability_reasons.get(constraint_id):
+                    ledger_entry["reason"] = observability_reasons.get(constraint_id)
+                ledger.append(ledger_entry)
 
         unsupported_labels = {
             "min_sea_service": "minimum sea service",
@@ -8444,10 +8559,12 @@ class AIResumeAnalyzer:
             issue_authority = after or before or None
             if issue_authority and before and after and before.lower() == after.lower():
                 issue_authority = after
+            issue_authority_canonical = self._normalize_coc_issue_authority(issue_authority)
             return {
                 "certificate_type": certificate_type,
                 "issue_authority": issue_authority,
-                "country": self._extract_coc_country_from_snippet(issue_authority),
+                "issue_authority_canonical": issue_authority_canonical,
+                "country": self._extract_coc_country_from_snippet(issue_authority) or self._coc_issue_authority_country(issue_authority_canonical),
             }
         return {}
 
@@ -8459,6 +8576,7 @@ class AIResumeAnalyzer:
                 "grade": None,
                 "country": None,
                 "issue_authority": None,
+                "issue_authority_canonical": None,
                 "certificate_type": None,
                 "expiry_date": None,
                 "expiry_status": "MISSING",
@@ -8520,6 +8638,7 @@ class AIResumeAnalyzer:
                 "grade": None,
                 "country": None,
                 "issue_authority": None,
+                "issue_authority_canonical": None,
                 "certificate_type": None,
                 "expiry_date": None,
                 "expiry_status": "MISSING",
@@ -8568,6 +8687,7 @@ class AIResumeAnalyzer:
                 expiry_fact = self._extract_date_fact_from_snippet(snippet)
             coc_country = table_fields.get("country")
             issue_authority = table_fields.get("issue_authority")
+            issue_authority_canonical = table_fields.get("issue_authority_canonical")
             certificate_type = table_fields.get("certificate_type")
             if not coc_country:
                 pre_date_snippet = re.split(date_token_pattern, snippet, maxsplit=1, flags=re.IGNORECASE)[0]
@@ -8579,6 +8699,7 @@ class AIResumeAnalyzer:
                     "grade": grade,
                     "country": coc_country,
                     "issue_authority": issue_authority,
+                    "issue_authority_canonical": issue_authority_canonical,
                     "certificate_type": certificate_type,
                     "expiry_date": expiry_fact.get("date"),
                     "expiry_status": "PARSED",
@@ -8593,6 +8714,7 @@ class AIResumeAnalyzer:
                     "grade": grade,
                     "country": coc_country,
                     "issue_authority": issue_authority,
+                    "issue_authority_canonical": issue_authority_canonical,
                     "certificate_type": certificate_type,
                     "expiry_date": None,
                     "expiry_status": expiry_fact.get("status"),
@@ -8606,6 +8728,7 @@ class AIResumeAnalyzer:
                 "grade": grade,
                 "country": coc_country,
                 "issue_authority": issue_authority,
+                "issue_authority_canonical": issue_authority_canonical,
                 "certificate_type": certificate_type,
                 "expiry_date": None,
                 "expiry_status": "MISSING",
@@ -8619,6 +8742,7 @@ class AIResumeAnalyzer:
             "grade": None,
             "country": None,
             "issue_authority": None,
+            "issue_authority_canonical": None,
             "certificate_type": None,
             "expiry_date": None,
             "expiry_status": "MISSING",
@@ -9346,6 +9470,7 @@ class AIResumeAnalyzer:
                     "grade": coc_fact.get("grade"),
                     "country": coc_fact.get("country"),
                     "issue_authority": coc_fact.get("issue_authority"),
+                    "issue_authority_canonical": coc_fact.get("issue_authority_canonical"),
                     "certificate_type": coc_fact.get("certificate_type"),
                     "expiry_date": coc_fact.get("expiry_date").isoformat() if coc_fact.get("expiry_date") else None,
                     "expiry_status": coc_fact.get("expiry_status"),
@@ -10491,6 +10616,85 @@ class AIResumeAnalyzer:
             f"Candidate COC issuing country '{actual_country}' does not match the requested country filter.",
             actual_value=actual_country,
             expected_value=expected_countries,
+            confidence=confidence,
+        )
+
+    def _evaluate_coc_issue_authority_rule(self, candidate_facts, constraint):
+        coc = (candidate_facts.get("certifications") or {}).get("coc") or {}
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("certifications.coc") or {}).get("confidence")
+        raw_authority = coc.get("issue_authority")
+        actual_authority = coc.get("issue_authority_canonical")
+        if not actual_authority and "issue_authority_canonical" not in coc:
+            actual_authority = self._normalize_coc_issue_authority(raw_authority)
+        expected_authorities = [
+            authority
+            for authority in (
+                self._normalize_coc_issue_authority(authority)
+                or (str(authority or "").strip() if self._is_known_coc_issue_authority(authority) else "")
+                for authority in ((constraint or {}).get("authorities") or [])
+            )
+            if authority
+        ]
+        expected_labels = [
+            label
+            for label in (self._coc_issue_authority_display_label(authority) for authority in expected_authorities)
+            if label
+        ]
+
+        if confidence is not None and confidence < 0.85:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_ISSUE_AUTHORITY_CONFIDENCE_LOW",
+                "COC issuing-authority evidence confidence is below the hard-filter threshold.",
+                actual_value=actual_authority,
+                expected_value=expected_authorities,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if not actual_authority:
+            if raw_authority:
+                message = "Candidate has a CoC but the issuing authority could not be canonicalized."
+            else:
+                message = "Could not determine certificate of competency issuing authority for this candidate."
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_ISSUE_AUTHORITY_NOT_FOUND",
+                message,
+                actual_value=None,
+                expected_value=expected_authorities,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        actual_label = self._coc_issue_authority_display_label(actual_authority)
+        if not actual_label:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_ISSUE_AUTHORITY_NOT_FOUND",
+                "Candidate has a CoC but the issuing authority could not be canonicalized.",
+                actual_value=None,
+                expected_value=expected_authorities,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+        if self._evaluate_rule((constraint or {}).get("operator") or "contains_any", [actual_authority], expected_authorities):
+            return self._base_rule_result(
+                "PASS",
+                "COC_ISSUE_AUTHORITY_MATCH",
+                f"Candidate holds a CoC issued by {actual_label}.",
+                actual_value=actual_authority,
+                expected_value=expected_authorities,
+                confidence=confidence,
+            )
+
+        expected_text = " or ".join(expected_labels) if expected_labels else "the requested authority"
+        return self._base_rule_result(
+            "FAIL",
+            "COC_ISSUE_AUTHORITY_MISMATCH",
+            f"Candidate's CoC was issued by {actual_label}; recruiter required {expected_text}.",
+            actual_value=actual_authority,
+            expected_value=expected_authorities,
             confidence=confidence,
         )
 
@@ -12397,6 +12601,22 @@ class AIResumeAnalyzer:
             else:
                 results.append(self._evaluate_coc_country_rule(candidate_facts, coc_country_constraint))
 
+        coc_issue_authority_constraint = hard_constraints.get("coc_issue_authority")
+        if "coc_issue_authority_match" in applied_constraints and coc_issue_authority_constraint:
+            activated_rules.append("coc_issue_authority_match")
+            if facts_version == "1.1":
+                results.append(self._base_rule_result(
+                    "UNKNOWN",
+                    "COC_ISSUE_AUTHORITY_RULE_REQUIRES_V2_FACTS",
+                    "COC issuing-authority matching requires v2.0 facts; candidate is still on v1.1 facts.",
+                    actual_value=None,
+                    expected_value=coc_issue_authority_constraint,
+                    confidence=None,
+                    unknown_reason="VERSION_MISMATCH_UNKNOWN",
+                ))
+            else:
+                results.append(self._evaluate_coc_issue_authority_rule(candidate_facts, coc_issue_authority_constraint))
+
         stcw_constraint = hard_constraints.get("stcw_basic")
         if "stcw_basic" in applied_constraints and stcw_constraint:
             activated_rules.append("stcw_basic")
@@ -13219,6 +13439,7 @@ Examples of GOOD responses:
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13272,6 +13493,10 @@ Examples of GOOD responses:
                 user_prompt,
                 rank=rank,
                 suppress_prompt_rank=bool(str(rank or "").strip() or str(present_rank or "").strip()),
+                suppress_prompt_coc_issue_authority=(
+                    isinstance(coc_issue_authority_filter, dict)
+                    and bool(coc_issue_authority_filter.get("authorities"))
+                ),
             )
             present_rank_value = str(present_rank or "").strip()
             if present_rank_value:
@@ -13342,6 +13567,24 @@ Examples of GOOD responses:
                 }
                 if "age_range" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("age_range")
+            if isinstance(coc_issue_authority_filter, dict) and coc_issue_authority_filter.get("authorities"):
+                authorities = list(dict.fromkeys(
+                    str(authority or "").strip()
+                    for authority in coc_issue_authority_filter.get("authorities", [])
+                    if self._is_known_coc_issue_authority(authority)
+                ))
+                if authorities:
+                    job_constraints.setdefault("hard_constraints", {})["coc_issue_authority"] = {
+                        "authorities": authorities,
+                        "operator": "contains_any",
+                        "display_value": " or ".join(
+                            label
+                            for label in (self._coc_issue_authority_display_label(authority) for authority in authorities)
+                            if label
+                        ),
+                    }
+                    if "coc_issue_authority_match" not in job_constraints.setdefault("applied_constraints", []):
+                        job_constraints["applied_constraints"].append("coc_issue_authority_match")
             prompt_observability_probe = self._build_prompt_observability(
                 user_prompt,
                 job_constraints,
@@ -13365,6 +13608,7 @@ Examples of GOOD responses:
                 or bool(normalized_engine_experience_filter)
                 or bool(vessel_tonnage_filter)
                 or bool(age_filter)
+                or bool(coc_issue_authority_filter)
             )
             structured_only_prompt = self._is_structured_only_prompt(
                 user_prompt,
@@ -13911,6 +14155,7 @@ Examples of GOOD responses:
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13936,6 +14181,7 @@ Examples of GOOD responses:
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -14034,10 +14280,12 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        present_rank=None,
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14048,10 +14296,12 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            present_rank=present_rank,
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -14063,10 +14313,12 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        present_rank=None,
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14077,10 +14329,12 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            present_rank=present_rank,
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,

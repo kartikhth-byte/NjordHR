@@ -349,6 +349,7 @@
                     engineExperienceFilter: state?.engine_experience_filter || {},
                     vesselTonnageFilter: state?.vessel_tonnage_filter || {},
                     ageFilter: state?.age_filter || {},
+                    cocIssueAuthorityFilter: state?.coc_issue_authority_filter || {},
                     restoredChain,
                     restoredIndex,
                     restoredResults,
@@ -1209,6 +1210,8 @@
             const [configuredEngineFamilies, setConfiguredEngineFamilies] = useState([]);
             const [experienceShipTypeRows, setExperienceShipTypeRows] = useState([]);
             const [engineExperienceRows, setEngineExperienceRows] = useState([]);
+            const [cocIssueAuthorityOptions, setCocIssueAuthorityOptions] = useState([]);
+            const [selectedCocIssueAuthorities, setSelectedCocIssueAuthorities] = useState([]);
             const [candidateAgeMin, setCandidateAgeMin] = useState('');
             const [candidateAgeMax, setCandidateAgeMax] = useState('');
             const [vesselTonnageMin, setVesselTonnageMin] = useState('');
@@ -2084,9 +2087,11 @@
                     setRankFolders([]);
                     setRankFolderRecords([]);
                     setPresentRankOptions([]);
+                    setCocIssueAuthorityOptions([]);
                     setDownloadFolderSummaries([]);
                     setSelectedRankFolder('');
                     setSelectedPresentRank('');
+                    setSelectedCocIssueAuthorities([]);
                     return;
                 }
                 try {
@@ -2103,6 +2108,7 @@
                             download_root_id: '',
                         })));
                         setPresentRankOptions(data.present_rank_options || []);
+                        setCocIssueAuthorityOptions(data.coc_issue_authority_options || []);
                         if (folders.length > 0 && !selectedRankFolder) {
                             setSelectedRankFolder(folders[0]);
                         }
@@ -4418,6 +4424,21 @@
                 };
             };
 
+            const buildCocIssueAuthorityFilter = () => {
+                const authorities = Array.from(new Set(
+                    (selectedCocIssueAuthorities || [])
+                        .map(value => String(value || '').trim())
+                        .filter(Boolean)
+                ));
+                if (!authorities.length) return { filter: {} };
+                return {
+                    filter: {
+                        type: 'coc_issue_authority',
+                        authorities,
+                    },
+                };
+            };
+
             const vesselTonnageSummary = (filter = {}) => {
                 if (!filter || (filter.min_value == null && filter.max_value == null)) return 'Any';
                 const unitLabel = {
@@ -4441,6 +4462,18 @@
                 }
                 if (filter.minimum_years != null) return `>= ${filter.minimum_years} years`;
                 return `<= ${filter.maximum_years} years`;
+            };
+
+            const cocIssueAuthoritySummary = (filter = {}) => {
+                const authorities = Array.isArray(filter?.authorities) ? filter.authorities : [];
+                if (!authorities.length) return 'Any';
+                const labelsByValue = new Map((cocIssueAuthorityOptions || []).map(option => [
+                    String(option.value || ''),
+                    option.label || option.value,
+                ]));
+                return authorities
+                    .map(authority => labelsByValue.get(String(authority || '')) || String(authority || '').replace(/_/g, ' '))
+                    .join(', ');
             };
 
             const appendExperienceFilterRow = (setter) => {
@@ -4702,6 +4735,10 @@
                         }
                         if (tonnageResult.filter && (tonnageResult.filter.min_value != null || tonnageResult.filter.max_value != null)) {
                             params.set('vessel_tonnage_filter', JSON.stringify(tonnageResult.filter));
+                        }
+                        const cocAuthorityResult = buildCocIssueAuthorityFilter();
+                        if (cocAuthorityResult.filter && Array.isArray(cocAuthorityResult.filter.authorities) && cocAuthorityResult.filter.authorities.length) {
+                            params.set('coc_issue_authority_filter', JSON.stringify(cocAuthorityResult.filter));
                         }
                     }
                     const eventSource = new EventSource(`${getCloudApiBaseUrl()}/analyze_stream?${params.toString()}`);
@@ -5051,6 +5088,7 @@
                     }).filter || {},
                     age_filter: buildAgeFilter().filter || {},
                     vessel_tonnage_filter: buildVesselTonnageFilter().filter || {},
+                    coc_issue_authority_filter: buildCocIssueAuthorityFilter().filter || {},
                     refinement_state: refinementState,
                     active_search_step_index: activeSearchStepIndex,
                     current_completed_results: recoveryResults(analysisResultsRef.current),
@@ -5107,6 +5145,11 @@
                     setSelectedRankFolder(restored.selectedRankFolder);
                     setSelectedPresentRank(restored.selectedPresentRank || '');
                     setSelectedSearchShipType(restored.appliedShipType);
+                    setSelectedCocIssueAuthorities(
+                        Array.isArray(restored.cocIssueAuthorityFilter?.authorities)
+                            ? restored.cocIssueAuthorityFilter.authorities
+                            : []
+                    );
                     setExperienceShipTypeRows(
                         restoredExperienceItems.length
                             ? restoredExperienceItems.map(item => createExperienceFilterRow({
@@ -5259,6 +5302,7 @@
             }, [
                 authUser, activeTab, aiPrompt, selectedRankFolder, selectedPresentRank, selectedSearchShipType,
                 experienceShipTypeRows, engineExperienceRows,
+                selectedCocIssueAuthorities,
                 candidateAgeMin, candidateAgeMax,
                 vesselTonnageMin, vesselTonnageMax, vesselTonnageUnit, vesselTonnageYearsBack,
                 refinementState, refinementAvailability,
@@ -8452,6 +8496,29 @@
                                             <p className="mt-1 text-xs text-gray-500">Uses ship type captured from the Seajobs download filter, not resume-derived vessel experience.</p>
                                         </div>
                                         <div>
+                                            <label htmlFor="cocIssueAuthorityFilter" className="block text-sm font-medium text-gray-700 mb-1">
+                                                CoC Issue Authority Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
+                                            <select
+                                                id="cocIssueAuthorityFilter"
+                                                multiple
+                                                value={selectedCocIssueAuthorities}
+                                                onChange={e => {
+                                                    setSelectedCocIssueAuthorities(Array.from(e.target.selectedOptions).map(option => option.value));
+                                                    invalidateRefinementForFilterChange();
+                                                }}
+                                                className="w-full min-h-[7rem] p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                disabled={refinementMode || cocIssueAuthorityOptions.length === 0}
+                                            >
+                                                {cocIssueAuthorityOptions.map(option => (
+                                                    <option key={option.value} value={option.value}>{option.label || option.value}</option>
+                                                ))}
+                                            </select>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Select one or more issuing authorities. Candidates pass if any of their CoCs was issued by a selected authority.
+                                            </p>
+                                        </div>
+                                        <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Experienced Ship Type Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
                                             </label>
@@ -9092,6 +9159,7 @@
                                     <p className="mt-1"><span className="font-medium">Applied ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.applied_ship_type || 'Any'}</p>
                                     <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.experience_ship_type_filter || {}, familyKey: 'ship_family' })}</p>
                                     <p className="mt-1"><span className="font-medium">Engine experience:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.engine_experience_filter || {}, familyKey: 'engine_family' })}</p>
+                                    <p className="mt-1"><span className="font-medium">CoC issue authority:</span> {cocIssueAuthoritySummary(pendingRefinementConfirmation.preflight.search_context?.coc_issue_authority_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Candidate age:</span> {ageFilterSummary(pendingRefinementConfirmation.preflight.search_context?.age_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Vessel tonnage:</span> {vesselTonnageSummary(pendingRefinementConfirmation.preflight.search_context?.vessel_tonnage_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Next step:</span> Refinement {searchChain.length}</p>
