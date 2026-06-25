@@ -2646,6 +2646,15 @@ class AIResumeAnalyzer:
     def _coc_issue_authority_country(self, authority_id):
         return self._coc_issue_authority_aliases().country_by_authority.get(str(authority_id or ""))
 
+    def _coc_country_display_label(self, country):
+        normalized = str(country or "").strip().lower()
+        special = {
+            "uae": "UAE",
+            "uk": "UK",
+            "usa": "USA",
+        }
+        return special.get(normalized) or normalized.replace("_", " ").title()
+
     def _normalize_coc_issue_authority(self, value):
         return self._normalize_alias(value, self._coc_issue_authority_alias_map())
 
@@ -2669,14 +2678,63 @@ class AIResumeAnalyzer:
             if include_ambiguous_shortcuts or alias not in ambiguous
         ]
 
+    def _coc_issue_authority_country_conflicts(self, value, country=None):
+        normalized = normalize_alias_key(value)
+        conflicts = []
+        for alias, authority in sorted(
+            self._coc_issue_authority_alias_items(include_ambiguous_shortcuts=True),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        ):
+            if not re.search(rf"\b{re.escape(alias)}\b", normalized):
+                continue
+            matched_country = country or self._coc_issue_authority_prompt_country_for_alias(normalized, alias)
+            if not matched_country:
+                continue
+            authority_country = self._coc_issue_authority_country(authority)
+            if authority_country and authority_country != matched_country:
+                label = self._coc_issue_authority_display_label(authority) or "CoC issuing authority"
+                country_label = self._coc_country_display_label(matched_country)
+                conflicts.append(
+                    f"{label} conflicts with issuing country '{country_label}'; use the CoC Issue Authority picker."
+                )
+        return list(dict.fromkeys(conflicts))
+
+    def _coc_issue_authority_alias_country_matches(self, value, authority, country=None, allow_text_country_fallback=True):
+        text_country = country
+        if text_country is None and allow_text_country_fallback:
+            text_country = self._extract_coc_country_from_snippet(value)
+        authority_country = self._coc_issue_authority_country(authority)
+        return not text_country or not authority_country or text_country == authority_country
+
+    def _coc_issue_authority_prompt_country_for_alias(self, normalized_prompt, alias):
+        country_aliases = self._coc_country_aliases(include_ambiguous_shortcuts=False)
+        connective = r"(?:issued|issuing|by|from)"
+        for country_alias, country in sorted(country_aliases.items(), key=lambda item: len(item[0]), reverse=True):
+            escaped_country = re.escape(country_alias)
+            escaped_alias = re.escape(alias)
+            if re.search(rf"\b{escaped_country}\s+{connective}\s+{escaped_alias}\b", normalized_prompt):
+                return country
+            if re.search(rf"\b{escaped_alias}\s+{connective}\s+{escaped_country}\b", normalized_prompt):
+                return country
+            if country_alias == country and re.search(rf"\b{escaped_country}\s+{escaped_alias}\b", normalized_prompt):
+                return country
+            if country_alias == country and re.search(rf"\b{escaped_alias}\s+{escaped_country}\b", normalized_prompt):
+                return country
+            if re.search(rf"\b{connective}\s+{escaped_alias}\s+{escaped_country}\b", normalized_prompt):
+                return country
+        return None
+
     def _extract_coc_issue_authority_from_snippet(self, value):
         normalized = normalize_alias_key(value)
         if not normalized:
             return None
         aliases = dict(self._coc_issue_authority_alias_items(include_ambiguous_shortcuts=False))
         for alias in sorted(aliases, key=len, reverse=True):
-            if re.search(rf"\b{re.escape(alias)}\b", normalized):
-                return aliases[alias]
+            authority = aliases[alias]
+            alias_matches = re.search(rf"\b{re.escape(alias)}\b", normalized)
+            if alias_matches and self._coc_issue_authority_alias_country_matches(value, authority):
+                return authority
         return None
 
     def _extract_coc_country_from_snippet(self, value):
@@ -2755,7 +2813,17 @@ class AIResumeAnalyzer:
             key=lambda item: len(item[0]),
             reverse=True,
         ):
-            if re.search(rf"\b{re.escape(alias)}\b", normalized_prompt) and authority not in authorities:
+            alias_country = self._coc_issue_authority_prompt_country_for_alias(normalized_prompt, alias)
+            if (
+                re.search(rf"\b{re.escape(alias)}\b", normalized_prompt)
+                and authority not in authorities
+                and self._coc_issue_authority_alias_country_matches(
+                    prompt,
+                    authority,
+                    country=alias_country,
+                    allow_text_country_fallback=False,
+                )
+            ):
                 authorities.append(authority)
         if not authorities:
             return None
@@ -4769,8 +4837,15 @@ class AIResumeAnalyzer:
             "parsing_notes": [],
         }
         coc_issue_authority_constraint = self._extract_coc_issue_authority_constraint(user_prompt)
+        authority_country_conflict_notes = self._coc_issue_authority_country_conflicts(user_prompt)
+        if authority_country_conflict_notes:
+            constraints["parsing_notes"].extend(authority_country_conflict_notes)
         any_of_group = None
-        if allow_logical_groups and len((coc_issue_authority_constraint or {}).get("authorities") or []) <= 1:
+        if (
+            allow_logical_groups
+            and not authority_country_conflict_notes
+            and len((coc_issue_authority_constraint or {}).get("authorities") or []) <= 1
+        ):
             any_of_group = self._extract_any_of_logical_group(user_prompt, rank=rank)
         if any_of_group:
             constraints.setdefault("logical_groups", []).append(any_of_group)

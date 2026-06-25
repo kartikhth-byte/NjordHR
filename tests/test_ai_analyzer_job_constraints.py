@@ -1441,6 +1441,8 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         cases = {
             "DG Shipping India CoC": "india_dg_shipping",
             "CoC issued by Maritime and Coastguard Agency": "uk_mca",
+            "CoC issued by Maritime and Coastguard Agency UK": "uk_mca",
+            "CoC issued by MCA UK": "uk_mca",
             "has Maritime and Port Authority of Singapore CoC": "singapore_mpa",
         }
         for prompt, expected_authority in cases.items():
@@ -1466,6 +1468,97 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertCountEqual(
             constraints["hard_constraints"]["coc_issue_authority"]["authorities"],
             ["india_dg_shipping", "uk_mca"],
+        )
+
+    def test_coc_issue_authority_prompt_drops_country_conflicting_authority(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "need CoC issued by Maritime Industry Authority Indonesia",
+            rank=self.rank,
+        )
+
+        self.assertNotIn("coc_issue_authority_match", constraints["applied_constraints"])
+        self.assertNotIn("coc_issue_authority", constraints["hard_constraints"])
+        self.assertTrue(
+            any("conflicts with issuing country 'Indonesia'" in note for note in constraints["parsing_notes"])
+        )
+
+    def test_coc_issue_authority_prompt_conflict_does_not_route_to_wrong_authority(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "CoC issued by Maritime and Coastguard Agency, India",
+            rank=self.rank,
+        )
+
+        self.assertNotIn("coc_issue_authority_match", constraints["applied_constraints"])
+        self.assertNotIn("coc_issue_authority", constraints["hard_constraints"])
+        self.assertTrue(
+            any("conflicts with issuing country 'India'" in note for note in constraints["parsing_notes"])
+        )
+
+    def test_coc_issue_authority_prompt_ignores_incidental_country_mentions(self):
+        cases = [
+            "CoC issued by Maritime and Coastguard Agency, working in Singapore",
+            "Indian seafarer with Maritime and Coastguard Agency CoC",
+            "Filipino Maritime and Coastguard Agency CoC holder",
+            "Filipino MCA UK CoC holder",
+        ]
+        for prompt in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertIn("coc_issue_authority_match", constraints["applied_constraints"])
+                self.assertEqual(
+                    constraints["hard_constraints"]["coc_issue_authority"]["authorities"],
+                    ["uk_mca"],
+                )
+                self.assertEqual(
+                    [
+                        note
+                        for note in constraints["parsing_notes"]
+                        if "conflicts with issuing country" in note
+                    ],
+                    [],
+                )
+
+    def test_coc_issue_authority_prompt_rejects_country_mismatched_qualified_alias(self):
+        cases = [
+            ("CoC issued by Maritime and Coastguard Agency India", "India"),
+            ("India-issued Maritime and Coastguard Agency CoC", "India"),
+            ("India-issued MCA CoC", "India"),
+        ]
+        for prompt, country_label in cases:
+            with self.subTest(prompt=prompt):
+                constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+                self.assertNotIn("coc_issue_authority_match", constraints["applied_constraints"])
+                self.assertNotIn("coc_issue_authority", constraints["hard_constraints"])
+                self.assertTrue(
+                    any(
+                        f"conflicts with issuing country '{country_label}'" in note
+                        for note in constraints["parsing_notes"]
+                    )
+                )
+
+    def test_coc_issue_authority_prompt_keeps_matching_authority_when_one_alias_conflicts(self):
+        prompt = "DG Shipping UK or MCA UK CoC"
+        constraints = self.analyzer._extract_job_constraints(prompt, rank=self.rank)
+
+        self.assertIn("coc_issue_authority_match", constraints["applied_constraints"])
+        self.assertNotIn("logical_groups", constraints)
+        self.assertEqual(
+            constraints["hard_constraints"]["coc_issue_authority"]["authorities"],
+            ["uk_mca"],
+        )
+        self.assertTrue(
+            any("Directorate General of Shipping, India conflicts with issuing country 'UK'" in note for note in constraints["parsing_notes"])
+        )
+
+    def test_coc_issue_authority_prompt_country_note_uses_abbreviation_labels(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "Maritime and Port Authority of Singapore UAE CoC",
+            rank=self.rank,
+        )
+
+        self.assertNotIn("coc_issue_authority_match", constraints["applied_constraints"])
+        self.assertTrue(
+            any("conflicts with issuing country 'UAE'" in note for note in constraints["parsing_notes"])
         )
 
     def test_indian_issued_coc_remains_country_prompt(self):
