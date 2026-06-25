@@ -45,8 +45,9 @@ Includes:
   meant something, with each path updated to surface the validator error.
 - Suppression of prompt-derived rank constraints when either picker is set
   (pickers are the structured source of truth for rank scoping).
-- A "Needs rank review" bucket surfacing candidates whose `present_rank`
-  could not be extracted.
+- `present_rank` UNKNOWN results surface in the existing general
+  Needs Review section. v1 does not create a dedicated recruiter-facing
+  rank-review bucket.
 
 Excludes (deferred to later phases):
 
@@ -59,7 +60,7 @@ Excludes (deferred to later phases):
 - Per-folder default picker preferences.
 - Persisted index on disk.
 
-Excludes (dropped, **not** deferred — see "Needs Rank Review Bucket"
+Excludes (dropped, **not** deferred — see "Present-Rank Needs Review"
 and the Phase 2 section for rationale):
 
 - Recruiter-driven manual `present_rank` tagging from the UI.
@@ -124,6 +125,85 @@ should follow them.
 - **Unresolved inputs surface, never silently drop.** Unrecognized
   authority strings or unextractable present ranks go to "Needs review"
   buckets, not the bit bucket.
+
+## Structured Picker Implementation Contract
+
+Every new structured picker/filter must satisfy this checklist before the
+PR is considered complete. This contract exists because picker work touches
+many sibling paths; reviewing only the visible UI or only `/analyze_stream`
+has repeatedly missed real regressions.
+
+### Propagation Checklist
+
+For each picker field, verify the value flows through every applicable
+surface:
+
+- UI state and recovery state.
+- Request payload for `/analyze_stream`.
+- Request payload for `/analyze`.
+- Request fingerprint / idempotency key, when the picker changes search
+  semantics.
+- Root-search validation.
+- Refinement parent-context inheritance.
+- Completed search-session context.
+- Search-result `search_context`.
+- Telemetry start / complete / error payloads.
+- CSV audit rows or equivalent durable audit event.
+- Saved/recovered draft sanitization.
+
+If a surface intentionally does not carry the picker, document why in the
+PR and add a regression test for the omission. The default is propagation,
+not omission.
+
+### Vocabulary Checklist
+
+Each picker must have a single source of truth for allowed values:
+
+- Dropdown options come from the canonical product vocabulary, not from
+  incidental storage labels such as folder names.
+- Backend validation uses the same canonical vocabulary as the dropdown.
+- Any accepted alias forms are explicit. If API aliases are intentionally
+  narrower than parser aliases, document the difference near the validator.
+- Recruiter-facing labels are generated from display-label maps/helpers,
+  never by showing canonical IDs directly.
+- Tests include at least one value that looks plausible but must be rejected
+  because it is outside the canonical picker vocabulary.
+
+### Prompt-Interaction Checklist
+
+When a picker and a free-form prompt can express the same intent:
+
+- Picker value wins and the prompt-derived same-family hard constraint is
+  suppressed.
+- The consumed prompt phrase remains visible in the clause ledger as
+  observed/applied context, not as unsupported text.
+- Suppression must not prevent mixed prompts from running semantic reasoning
+  on real residual text.
+- A prompt-only legacy path must still work when the picker is blank, unless
+  the product intentionally retires that prompt path.
+
+### Needs Review Checklist
+
+UNKNOWN/Needs Review behavior must be explicit:
+
+- The default destination is the existing general Needs Review section.
+- A dedicated family-specific bucket or counter must be implemented,
+  rendered, tested, and documented before the spec may promise one.
+- Helper text must name the actual surface users see. Do not promise a
+  dedicated bucket if the implementation only uses general Needs Review.
+
+### Required Test Shape
+
+Each picker PR should include tests for:
+
+- Valid picker value accepted.
+- Invalid picker value rejected with a structured error.
+- Root search and refinement search.
+- Recovery draft save/load.
+- Audit/session/telemetry propagation.
+- Prompt suppression with no residual text.
+- Prompt suppression with residual semantic text.
+- Recruiter-facing output does not leak canonical IDs.
 
 ## Locked Decisions
 
@@ -201,8 +281,9 @@ It is already a structured field on candidate_facts. v1 does not add new
 extraction logic; it adds the index and the picker wiring.
 
 If extraction fails (bad OCR, unusual format, missing field),
-`present_rank` remains null. The candidate appears in the "Needs rank
-review" bucket but is invisible to `present_rank`-scoped searches.
+`present_rank` remains null. The candidate appears in the existing
+general Needs Review section when a present-rank filter is evaluated,
+but is invisible to `present_rank`-scoped searches that rely on an index.
 
 ### Index Shape
 
@@ -278,21 +359,23 @@ Examples:
 - Pickers: both blank. → Invalid; search is rejected before the prompt
   parser runs.
 
-### "Needs Rank Review" Bucket
+### Present-Rank Needs Review
 
-**Informational only in v1.** A header-level count surfaces how many
-candidates have null `present_rank` (e.g., `"5 candidates couldn't be
-auto-ranked — contact engineering"`). No drill-down view, no
-flag-for-review action, no manual tagging UI. Recruiters see the gap
-exists; the fix path is an engineer patching the extractor or
-hand-editing the candidate_facts entry.
+**General Needs Review only in v1.** Candidates whose current/present rank
+cannot be evaluated surface through the existing hard-filter Needs Review
+section, using rank-specific reason codes. v1 does not add a dedicated
+recruiter-facing rank-review bucket, drill-down view,
+flag-for-review action, or manual tagging UI. Recruiters see the gap in the
+general review surface; the fix path is an engineer patching the extractor
+or hand-editing the candidate_facts entry.
 
-Rationale: extraction reliability is high enough that the bucket stays
-small, and adding a tagging UI introduces overwrite-conflict surface
-area (two recruiters disagreeing on the same candidate) for marginal
-benefit. If extraction reliability turns out worse than expected in
-production, manual tagging can be added later as a separate feature —
-it is explicitly **not** deferred to Phase 2.
+Rationale: extraction reliability is high enough that a separate
+rank-specific review workflow is not yet justified, and adding a tagging UI
+introduces overwrite-conflict surface area (two recruiters disagreeing on
+the same candidate) for marginal benefit. If extraction reliability turns
+out worse than expected in production, manual tagging or a dedicated
+rank-review queue can be added later as a separate feature — it is
+explicitly **not** deferred to Phase 2.
 
 ### Validation Errors
 
@@ -791,10 +874,10 @@ structured-picker work.
 Structured picker features surface unresolved inputs rather than silently
 dropping candidates:
 
-- "Needs rank review" — candidates where `present_rank` extraction
-  failed. **Informational count only** in v1 (no drill-down, no
-  flag-for-review action). See the "Needs Rank Review Bucket" section
-  for rationale.
+- Present-rank UNKNOWN results — candidates where `present_rank`
+  extraction failed or current-rank evidence is missing. Uses the existing
+  hard-filter Needs Review surface; no separate rank-specific review queue
+  in v1. See the "Present-Rank Needs Review" section for rationale.
 - Age filter UNKNOWN results — candidates where age evidence is missing or
   ambiguous. Uses the existing hard-filter Needs Review surface; no
   separate age-specific review queue in v1.
@@ -803,9 +886,9 @@ dropping candidates:
   action.
 
 Engineering owns the fix workflow in v1. The asymmetry
-(rank-review is counter-only, alias-review is actionable) reflects
-that alias additions are bounded data entry while rank tagging
-introduces overwrite-conflict surface area.
+(rank review uses the general Needs Review surface, alias-review is
+actionable) reflects that alias additions are bounded data entry while rank
+tagging introduces overwrite-conflict surface area.
 
 ### Structured Validation Errors
 
@@ -878,13 +961,16 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Prompt parser suppresses rank constraints when either picker is set.
 - Tests for prompt-with-rank-phrase under each picker state.
 
-### PR-5 (rank): "Needs rank review" count
+### PR-5 (rank): Present-rank Needs Review polish
 
-- Header-level count of candidates with null `present_rank`.
-- No drill-down view, no flag-for-review action, no manual tagging UI.
-- Copy: `"N candidates couldn't be auto-ranked — contact engineering."`
-- Tests verify the count updates on reindex and renders only when
-  non-zero.
+- Ensure rank UNKNOWN results render clearly in the existing general
+  Needs Review section.
+- No dedicated drill-down view, no flag-for-review action, no manual
+  tagging UI.
+- Copy should make the limitation explicit, e.g. `"Could not determine
+  current/present rank from this resume."`
+- Tests verify rank UNKNOWN entries use the general Needs Review surface
+  and do not imply a separate rank-review bucket.
 
 ### PR-6 (age): Age range picker
 
@@ -1080,11 +1166,11 @@ Tracked in GitHub Issue #46 (filed alongside PR-0). Phase 2 covers:
   pickers in their saved configuration.
 
 Note: recruiter-driven manual `present_rank` tagging is explicitly
-**not** deferred to Phase 2. The "Needs Rank Review" bucket is
-informational only (see "Needs Rank Review Bucket" above). If
-extraction reliability turns out worse than expected in production,
-manual tagging can be revisited as a standalone feature, but it is
-not on the Phase 2 roadmap. Similarly, the previously-considered
+**not** deferred to Phase 2. Present-rank UNKNOWN results use the general
+Needs Review surface (see "Present-Rank Needs Review" above). If extraction
+reliability turns out worse than expected in production, manual tagging or
+a dedicated rank-review workflow can be revisited as a standalone feature,
+but it is not on the Phase 2 roadmap. Similarly, the previously-considered
 "hide `applied_rank` behind an advanced toggle" option is dropped —
 the two-picker model is locked.
 
