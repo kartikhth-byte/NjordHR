@@ -205,6 +205,25 @@ Each picker PR should include tests for:
 - Prompt suppression with residual semantic text.
 - Recruiter-facing output does not leak canonical IDs.
 
+When a helper change feeds downstream branching, payload propagation,
+request fingerprinting, recovery state, audit/export, telemetry, or result
+rendering, helper-level coverage is not enough. Add at least one adjacent
+integration-path test such as `_extract_job_constraints`, `/analyze_stream`,
+`/analyze`, search-session context, CSV audit row output, or result
+formatting, whichever path consumes the helper's output.
+
+### Spec Update Rule
+
+Every picker PR that introduces a new behavioral invariant must update this
+spec in the same PR. Examples include picker-vs-prompt arbitration,
+alias-disambiguation rules, canonical vocabulary source-of-truth behavior,
+Needs Review behavior, recruiter/operator output sanitization,
+audit/export/telemetry visibility boundaries, and downstream branching when
+a constraint is filtered or partially suppressed.
+
+Reviewer prompts must explicitly ask whether the change introduces a new
+structured-picker invariant and, if yes, where this spec was updated.
+
 ## Locked Decisions
 
 ### Rank Pickers
