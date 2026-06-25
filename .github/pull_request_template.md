@@ -17,8 +17,8 @@
 
 ## Structured Picker / Filter Contract
 
-- [ ] If this PR introduces a new structured-picker invariant, `docs/specs/search_pickers_v1.md` was updated in this PR
-- [ ] If this PR changes a helper consumed by downstream picker/filter paths, an adjacent integration-path test was added
+- [ ] If this PR introduces, removes, relaxes, or otherwise changes a structured-picker invariant, `docs/specs/search_pickers_v1.md` was updated in this PR
+- [ ] If this PR modifies a helper with external callers in `_extract_job_constraints`, `/analyze_stream`, or `/analyze`, the caller grep is listed and an adjacent integration-path test observes the helper output through a consuming path
 - [ ] Picker-vs-prompt arbitration behavior was reviewed for touched families
 - [ ] Recruiter/operator-visible output was checked for canonical ID leaks
 - [ ] Audit/export/telemetry visibility boundaries were reviewed for touched fields

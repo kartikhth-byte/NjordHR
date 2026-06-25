@@ -205,24 +205,38 @@ Each picker PR should include tests for:
 - Prompt suppression with residual semantic text.
 - Recruiter-facing output does not leak canonical IDs.
 
-When a helper change feeds downstream branching, payload propagation,
-request fingerprinting, recovery state, audit/export, telemetry, or result
-rendering, helper-level coverage is not enough. Add at least one adjacent
-integration-path test such as `_extract_job_constraints`, `/analyze_stream`,
-`/analyze`, search-session context, CSV audit row output, or result
-formatting, whichever path consumes the helper's output.
+If a PR modifies a helper with one or more external callers in
+`_extract_job_constraints`, `/analyze_stream`, or `/analyze`, helper-level
+coverage is not enough. The PR must list the caller grep used for verification
+and add at least one adjacent integration-path test that observes the helper's
+output through the consuming path. Valid consuming paths include downstream
+branching, payload propagation, request fingerprinting, recovery state,
+audit/export, telemetry, result rendering, `_extract_job_constraints`,
+`/analyze_stream`, `/analyze`, search-session context, CSV audit row output, or
+result formatting.
 
 ### Spec Update Rule
 
-Every picker PR that introduces a new behavioral invariant must update this
-spec in the same PR. Examples include picker-vs-prompt arbitration,
-alias-disambiguation rules, canonical vocabulary source-of-truth behavior,
-Needs Review behavior, recruiter/operator output sanitization,
-audit/export/telemetry visibility boundaries, and downstream branching when
-a constraint is filtered or partially suppressed.
+Every picker PR that introduces, removes, relaxes, or otherwise changes a
+behavioral invariant must update this spec in the same PR. A behavioral
+invariant means any rule in one of these closed categories, plus any behavior
+independently asserted by tests:
 
-Reviewer prompts must explicitly ask whether the change introduces a new
-structured-picker invariant and, if yes, where this spec was updated.
+- Picker-vs-prompt arbitration.
+- Alias disambiguation.
+- Canonical vocabulary source of truth.
+- Needs Review behavior.
+- Recruiter/operator output sanitization.
+- Audit/export/telemetry visibility boundaries.
+- Request payload, fingerprint, idempotency, recovery, or session/search-context
+  propagation.
+- Root/refinement inheritance.
+- Prompt interaction/suppression behavior.
+- Downstream branching when a constraint is filtered or partially suppressed.
+
+Reviewer prompts must explicitly ask whether the change introduces, removes,
+relaxes, or otherwise changes a structured-picker invariant and, if yes, where
+this spec was updated.
 
 ## Locked Decisions
 

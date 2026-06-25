@@ -252,14 +252,8 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         )
         self.assertEqual(constraints["applied_constraints"], ["age_range"])
         self.assertEqual(constraints["observability_applied_constraints"], ["rank_match"])
-        self.assertEqual(
-            constraints["observability_constraint_reasons"],
-            {"rank_match": "picker_override"},
-        )
-        self.assertEqual(
-            constraints["observability_constraints"]["rank"],
-            {"applied_rank_normalized": ["chief_engineer"], "operator": "contains_any"},
-        )
+        self.assertNotIn("observability_constraint_reasons", constraints)
+        self.assertNotIn("observability_constraints", constraints)
         self.assertNotIn("rank", constraints["hard_constraints"])
 
     def test_structured_coc_issue_authority_scope_suppresses_prompt_authority_hard_constraint(self):
@@ -317,6 +311,19 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             constraints["observability_constraint_reasons"],
             {"rank_match": "picker_override"},
         )
+
+    def test_shared_picker_override_helper_rejects_empty_call(self):
+        with self.assertRaisesRegex(ValueError, "picker_constraint or prompt_constraint is required"):
+            self.analyzer._apply_picker_with_prompt_suppression(
+                {
+                    "hard_constraints": {},
+                    "applied_constraints": [],
+                    "unapplied_constraints": [],
+                    "parsing_notes": [],
+                },
+                family="rank_match",
+                hard_constraint_key="rank",
+            )
 
     def test_present_rank_constraint_evaluates_current_rank_fact(self):
         result = self.analyzer._evaluate_rank_rule(

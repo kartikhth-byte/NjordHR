@@ -55,6 +55,31 @@ def _alias_has_country_qualifier(alias: str, country: str, country_aliases: Mapp
     return any(re.search(rf"\b{re.escape(country_alias)}\b", alias) for country_alias in country_tokens)
 
 
+def _alias_tokens(alias: str) -> set[str]:
+    return set(str(alias or "").split())
+
+
+def _alias_contains_bare_alias(bare_alias: str, other_alias: str) -> bool:
+    bare_tokens = str(bare_alias or "").split()
+    other_tokens = str(other_alias or "").split()
+    if not bare_tokens or not other_tokens:
+        return False
+    if set(bare_tokens).issubset(set(other_tokens)):
+        return True
+    return _alias_contains_bare_abbreviation(bare_tokens, other_tokens)
+
+
+def _alias_contains_bare_abbreviation(bare_tokens: list[str], other_tokens: list[str]) -> bool:
+    if len(bare_tokens) == 1 and len(bare_tokens[0]) > 1:
+        target = bare_tokens[0]
+        target_len = len(target)
+        for index in range(0, len(other_tokens) - target_len + 1):
+            window = other_tokens[index:index + target_len]
+            if all(len(token) == 1 for token in window) and "".join(window) == target:
+                return True
+    return False
+
+
 def _validate_cross_canonical_bare_aliases(alias_entries: list[_AliasEntry], country_aliases: Mapping[str, str]) -> None:
     bare_aliases = [
         entry
@@ -64,18 +89,25 @@ def _validate_cross_canonical_bare_aliases(alias_entries: list[_AliasEntry], cou
     for bare_entry in bare_aliases:
         if not bare_entry.alias:
             continue
-        bare_pattern = re.compile(rf"(^|\s){re.escape(bare_entry.alias)}(\s|$)")
-        for qualified_entry in alias_entries:
-            if qualified_entry.authority_id == bare_entry.authority_id:
+        if not _alias_tokens(bare_entry.alias):
+            continue
+        bare_tokens = bare_entry.alias.split()
+        for other_entry in alias_entries:
+            if other_entry.authority_id == bare_entry.authority_id:
                 continue
-            if not bare_pattern.search(qualified_entry.alias):
+            if other_entry.alias == bare_entry.alias:
                 continue
-            if qualified_entry.alias == bare_entry.alias:
+            other_tokens = other_entry.alias.split()
+            abbreviation_match = _alias_contains_bare_abbreviation(bare_tokens, other_tokens)
+            if _alias_has_country_qualifier(other_entry.alias, other_entry.country, country_aliases) and not abbreviation_match:
+                continue
+            if not _alias_contains_bare_alias(bare_entry.alias, other_entry.alias):
                 continue
             raise ValueError(
                 "ambiguous bare CoC authority alias across canonicals: "
                 f"'{bare_entry.alias}' at {bare_entry.path} ({bare_entry.authority_id}/{bare_entry.country}) "
-                f"conflicts with {qualified_entry.path} ({qualified_entry.authority_id}/{qualified_entry.country})"
+                f"conflicts with '{other_entry.alias}' at {other_entry.path} "
+                f"({other_entry.authority_id}/{other_entry.country})"
             )
 
 
