@@ -150,6 +150,7 @@ def _ai_search_request_fingerprint(
     prompt,
     rank_folder_id="",
     rank_folder="",
+    present_rank="",
     applied_ship_type="",
     experienced_ship_type="",
     experience_ship_type_filter=None,
@@ -164,6 +165,7 @@ def _ai_search_request_fingerprint(
         "prompt": str(prompt or "").strip(),
         "rank_folder_id": "" if is_refinement else str(rank_folder_id or "").strip(),
         "rank_folder": "" if is_refinement else str(rank_folder or "").strip(),
+        "present_rank": "" if is_refinement else str(present_rank or "").strip(),
         "applied_ship_type": "" if is_refinement else str(applied_ship_type or "").strip(),
         "experienced_ship_type": "" if is_refinement else str(experienced_ship_type or "").strip(),
         "experience_ship_type_filter": {} if is_refinement else _normalize_experience_ship_type_filter(experience_ship_type_filter),
@@ -5162,6 +5164,7 @@ def analyze_stream():
     prompt = request.args.get('prompt')
     rank_folder = _request_rank_scope_value(request.args)
     rank_folder_id = request.args.get('rank_folder_id', '').strip()
+    present_rank = request.args.get('present_rank', '').strip()
     applied_ship_type = request.args.get('applied_ship_type', '').strip()
     experienced_ship_type = request.args.get('experienced_ship_type', '').strip()
     experience_ship_type_filter = _parse_experience_ship_type_filter_payload(
@@ -5189,6 +5192,7 @@ def analyze_stream():
         prompt=prompt,
         rank_folder_id=rank_folder_id,
         rank_folder=rank_folder,
+        present_rank=present_rank,
         applied_ship_type=applied_ship_type,
         experienced_ship_type=experienced_ship_type,
         experience_ship_type_filter=experience_ship_type_filter,
@@ -5203,6 +5207,7 @@ def analyze_stream():
         "rank_folder_id": rank_folder_id,
         "rank_folder": str(rank_folder or "").strip(),
         "applied_rank": str(rank_folder or "").strip(),
+        "present_rank": present_rank,
         "applied_ship_type": applied_ship_type,
         "experienced_ship_type": experienced_ship_type,
         "experience_ship_type_filter": experience_ship_type_filter,
@@ -5355,6 +5360,7 @@ def analyze_stream():
             effective_rank_folder_id = str(rank_folder_id or "").strip()
             effective_download_root_id = ""
             effective_applied_ship_type = applied_ship_type
+            effective_present_rank = present_rank
             effective_experienced_ship_type = experienced_ship_type
             effective_experience_ship_type_filter = dict(experience_ship_type_filter or {})
             effective_engine_experience_filter = dict(engine_experience_filter or {})
@@ -5392,6 +5398,7 @@ def analyze_stream():
 
                 parent_session = parent_scope.get("session") or {}
                 parent_rank_folder = str(parent_session.get("rank_folder") or "").strip()
+                parent_present_rank = str((parent_session.get("context") or {}).get("present_rank") or "").strip()
                 parent_applied_ship_type = str(parent_session.get("applied_ship_type") or "").strip()
                 parent_experienced_ship_type = str(parent_session.get("experienced_ship_type") or "").strip()
                 parent_context = parent_session.get("context") or {}
@@ -5409,6 +5416,7 @@ def analyze_stream():
                 )
                 context_mismatch = (
                     (effective_rank_folder and effective_rank_folder != parent_rank_folder)
+                    or (effective_present_rank and effective_present_rank != parent_present_rank)
                     or (effective_applied_ship_type and effective_applied_ship_type != parent_applied_ship_type)
                     or (
                         effective_experienced_ship_type
@@ -5461,6 +5469,7 @@ def analyze_stream():
                     return
 
                 effective_rank_folder = parent_rank_folder
+                effective_present_rank = parent_present_rank
                 effective_applied_ship_type = parent_applied_ship_type
                 effective_experienced_ship_type = parent_experienced_ship_type
                 effective_experience_ship_type_filter = parent_experience_ship_type_filter
@@ -5567,6 +5576,7 @@ def analyze_stream():
                     "rank_folder": effective_rank_folder,
                     "rank_folder_id": effective_rank_folder_id,
                     "download_root_id": effective_download_root_id,
+                    "present_rank": effective_present_rank,
                     "applied_ship_type": effective_applied_ship_type,
                     "experienced_ship_type": effective_experienced_ship_type,
                     "experience_ship_type_filter": effective_experience_ship_type_filter,
@@ -5596,6 +5606,7 @@ def analyze_stream():
                 effective_rank_folder,
                 prompt,
                 applied_ship_type=effective_applied_ship_type,
+                present_rank=effective_present_rank,
                 experienced_ship_type=effective_experienced_ship_type,
                 experience_ship_type_filter=effective_experience_ship_type_filter,
                 engine_experience_filter=effective_engine_experience_filter,
@@ -5727,6 +5738,7 @@ def analyze_stream():
                     event_to_client["search_context"] = {
                         "rank_folder": effective_rank_folder,
                         "applied_rank": effective_rank_folder,
+                        "present_rank": effective_present_rank,
                         "rank_folder_id": effective_rank_folder_id,
                         "download_root_id": effective_download_root_id,
                         "applied_ship_type": effective_applied_ship_type,
@@ -5745,6 +5757,7 @@ def analyze_stream():
                         summary=f"Streaming AI search completed for rank={effective_rank_folder}.",
                         payload={
                             "rank_folder": effective_rank_folder,
+                            "present_rank": effective_present_rank,
                             "applied_ship_type": effective_applied_ship_type,
                             "experienced_ship_type": effective_experienced_ship_type,
                             "experience_ship_type_filter": effective_experience_ship_type_filter,
@@ -5833,6 +5846,7 @@ def analyze():
         data = request.json
         prompt = data.get('prompt')
         rank_folder = _request_rank_scope_value(data or {})
+        present_rank = str(data.get('present_rank', '')).strip()
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
         experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
         experience_ship_type_filter = _normalize_experience_ship_type_filter(
@@ -5893,6 +5907,7 @@ def analyze():
         result = analyzer.run_analysis(
             rank_folder,
             prompt,
+            present_rank=present_rank,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
             experience_ship_type_filter=experience_ship_type_filter,

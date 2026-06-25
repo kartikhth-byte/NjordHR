@@ -1831,6 +1831,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def run_analysis_stream(self, rank_folder, prompt, **_kwargs):
                 captured["rank_folder"] = rank_folder
                 captured["prompt"] = prompt
+                captured["present_rank"] = _kwargs.get("present_rank")
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -1845,6 +1846,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 "/analyze_stream",
                 query_string={
                     "applied_rank": "Chief_Officer",
+                    "present_rank": "Chief_Officer",
                     "prompt": "show candidates",
                     "search_request_id": request_id,
                 },
@@ -1855,8 +1857,10 @@ class BackendEventLogFlowTests(unittest.TestCase):
         complete = next(event for event in events if event.get("type") == "complete")
         self.assertEqual(captured["rank_folder"], "Chief_Officer")
         self.assertEqual(captured["prompt"], "show candidates")
+        self.assertEqual(captured["present_rank"], "Chief_Officer")
         self.assertEqual(complete["search_context"]["rank_folder"], "Chief_Officer")
         self.assertEqual(complete["search_context"]["applied_rank"], "Chief_Officer")
+        self.assertEqual(complete["search_context"]["present_rank"], "Chief_Officer")
 
     def test_analyze_stream_rejects_unknown_rank_folder_id_before_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

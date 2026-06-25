@@ -10280,15 +10280,19 @@ class AIResumeAnalyzer:
 
     def _evaluate_rank_rule(self, candidate_facts, constraint):
         role = candidate_facts.get("role") or {}
-        actual_rank = role.get("applied_rank_normalized")
-        confidence = ((candidate_facts.get("fact_meta") or {}).get("role.applied_rank_normalized") or {}).get("confidence")
-        expected_ranks = (constraint or {}).get("applied_rank_normalized") or []
+        expected_ranks = (constraint or {}).get("present_rank_normalized") or []
+        evidence_field = "role.current_rank_normalized" if expected_ranks else "role.applied_rank_normalized"
+        actual_rank = role.get("current_rank_normalized") if expected_ranks else role.get("applied_rank_normalized")
+        confidence = ((candidate_facts.get("fact_meta") or {}).get(evidence_field) or {}).get("confidence")
+        if not expected_ranks:
+            expected_ranks = (constraint or {}).get("applied_rank_normalized") or []
+        evidence_label = "present rank" if evidence_field == "role.current_rank_normalized" else "applied rank"
 
         if actual_rank is None:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RANK_UNKNOWN",
-                "Could not determine normalized applied rank for rank filter evaluation.",
+                f"Could not determine normalized {evidence_label} for rank filter evaluation.",
                 actual_value=None,
                 expected_value=expected_ranks,
                 confidence=confidence,
@@ -10299,7 +10303,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RANK_CONFIDENCE_LOW",
-                "Normalized applied rank confidence is below the hard-filter threshold.",
+                f"Normalized {evidence_label} confidence is below the hard-filter threshold.",
                 actual_value=actual_rank,
                 expected_value=expected_ranks,
                 confidence=confidence,
@@ -10310,7 +10314,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "PASS",
                 "RANK_MATCH",
-                f"Candidate normalized rank '{actual_rank}' matches the requested rank set.",
+                f"Candidate normalized {evidence_label} '{actual_rank}' matches the requested rank set.",
                 actual_value=actual_rank,
                 expected_value=expected_ranks,
                 confidence=confidence,
@@ -10319,7 +10323,7 @@ class AIResumeAnalyzer:
         return self._base_rule_result(
             "FAIL",
             "RANK_MISMATCH",
-            f"Candidate normalized rank '{actual_rank}' does not match the requested rank set.",
+            f"Candidate normalized {evidence_label} '{actual_rank}' does not match the requested rank set.",
             actual_value=actual_rank,
             expected_value=expected_ranks,
             confidence=confidence,
@@ -13162,6 +13166,7 @@ Examples of GOOD responses:
         self,
         rank,
         user_prompt,
+        present_rank=None,
         applied_ship_type=None,
         experienced_ship_type=None,
         experience_ship_type_filter=None,
@@ -13222,6 +13227,22 @@ Examples of GOOD responses:
                 rank=rank,
                 suppress_prompt_rank=bool(str(rank or "").strip()),
             )
+            present_rank_value = str(present_rank or "").strip()
+            if present_rank_value:
+                present_rank_id, _department, _seniority_bucket, _confidence = self._normalize_rank(present_rank_value)
+                if not present_rank_id:
+                    yield {
+                        "type": "error",
+                        "message": f"Present rank is not recognized: {present_rank_value}",
+                    }
+                    return
+                job_constraints.setdefault("hard_constraints", {})["rank"] = {
+                    "present_rank_normalized": [present_rank_id],
+                    "operator": "contains_any",
+                    "requested_label": present_rank_value,
+                }
+                if "rank_match" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("rank_match")
             if str(applied_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
                 if "applied_ship_type" not in job_constraints.setdefault("applied_constraints", []):
@@ -13858,6 +13879,7 @@ Examples of GOOD responses:
         for event in self.run_analysis_stream(
             rank,
             user_prompt,
+            present_rank=present_rank,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
             experience_ship_type_filter=experience_ship_type_filter,

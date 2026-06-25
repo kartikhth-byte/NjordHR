@@ -342,6 +342,7 @@
                 return {
                     prompt: state?.prompt || '',
                     selectedRankFolder: state?.selected_rank_folder || '',
+                    selectedPresentRank: state?.present_rank || '',
                     appliedShipType: state?.applied_ship_type || '',
                     experiencedShipType: state?.experienced_ship_type || '',
                     experienceShipTypeFilter: state?.experience_ship_type_filter || {},
@@ -1152,6 +1153,7 @@
             const [rankFolders, setRankFolders] = useState([]);
             const [rankFolderRecords, setRankFolderRecords] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
+            const [selectedPresentRank, setSelectedPresentRank] = useState('');
             const [downloadFolderSummaries, setDownloadFolderSummaries] = useState([]);
             const [downloadResultsSummary, setDownloadResultsSummary] = useState({
                 mailbox: {
@@ -4665,6 +4667,9 @@
                         }
                         params.set('rank_folder', selectedRankFolder);
                         params.set('applied_rank', selectedRankFolder);
+                        if (selectedPresentRank) {
+                            params.set('present_rank', selectedPresentRank);
+                        }
                         params.set('applied_ship_type', selectedSearchShipType);
                         if (experienceShipTypeResult.filter && Array.isArray(experienceShipTypeResult.filter.items) && experienceShipTypeResult.filter.items.length) {
                             params.set('experience_ship_type_filter', JSON.stringify(experienceShipTypeResult.filter));
@@ -5027,6 +5032,7 @@
                 search_state: {
                     prompt: aiPrompt,
                     selected_rank_folder: selectedRankFolder,
+                    present_rank: selectedPresentRank,
                     applied_ship_type: selectedSearchShipType,
                     experience_ship_type_filter: buildExperienceFilterFromRows({
                         rows: experienceShipTypeRows,
@@ -5094,6 +5100,7 @@
                         : [];
                     setAiPrompt(restored.prompt);
                     setSelectedRankFolder(restored.selectedRankFolder);
+                    setSelectedPresentRank(restored.selectedPresentRank || '');
                     setSelectedSearchShipType(restored.appliedShipType);
                     setExperienceShipTypeRows(
                         restoredExperienceItems.length
@@ -5245,7 +5252,7 @@
                 const timer = setTimeout(() => saveRecoveryDraft('checkpoint'), 800);
                 return () => clearTimeout(timer);
             }, [
-                authUser, activeTab, aiPrompt, selectedRankFolder, selectedSearchShipType,
+                authUser, activeTab, aiPrompt, selectedRankFolder, selectedPresentRank, selectedSearchShipType,
                 experienceShipTypeRows, engineExperienceRows,
                 candidateAgeMin, candidateAgeMax,
                 vesselTonnageMin, vesselTonnageMax, vesselTonnageUnit, vesselTonnageYearsBack,
@@ -8402,8 +8409,27 @@
                                                 )}
                                             </select>
                                             <p className="mt-1 text-xs text-gray-500">
-                                                Uses the downloaded rank folder as the applied-rank search scope. Present-rank search is coming in the next picker slice.
+                                                Uses the downloaded rank folder as the applied-rank search scope.
                                             </p>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="presentRankScope" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Present Rank Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
+                                            <select
+                                                id="presentRankScope"
+                                                value={selectedPresentRank}
+                                                onChange={e => { setSelectedPresentRank(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                disabled={rankFolders.length === 0 || refinementMode}
+                                            >
+                                                <option value="">Any present rank</option>
+                                                {rankFolders.map(folder => {
+                                                    const record = rankFolderRecordFor(folder);
+                                                    return <option key={folder} value={folder}>{record?.display_name || folder.replace(/_/g, ' ')}</option>;
+                                                })}
+                                            </select>
+                                            <p className="mt-1 text-xs text-gray-500">Filters by current/present rank extracted from the resume. Missing or low-confidence rank evidence appears in Needs Review.</p>
                                         </div>
                                         <div>
                                             <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">

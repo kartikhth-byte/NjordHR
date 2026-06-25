@@ -253,6 +253,90 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(constraints["applied_constraints"], ["age_range"])
         self.assertNotIn("rank", constraints["hard_constraints"])
 
+    def test_present_rank_constraint_evaluates_current_rank_fact(self):
+        result = self.analyzer._evaluate_rank_rule(
+            {
+                "role": {
+                    "current_rank_normalized": "chief_officer",
+                    "applied_rank_normalized": "2nd_engineer",
+                },
+                "fact_meta": {
+                    "role.current_rank_normalized": {"confidence": 1.0},
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                },
+            },
+            {"present_rank_normalized": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "RANK_MATCH")
+        self.assertIn("present rank", result["message"])
+
+    def test_present_rank_constraint_needs_review_when_current_rank_missing(self):
+        result = self.analyzer._evaluate_rank_rule(
+            {
+                "role": {
+                    "current_rank_normalized": None,
+                    "applied_rank_normalized": "2nd_engineer",
+                },
+                "fact_meta": {
+                    "role.current_rank_normalized": {"confidence": None},
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                },
+            },
+            {"present_rank_normalized": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+        self.assertIn("present rank", result["message"])
+
+    def test_run_analysis_stream_injects_present_rank_picker_constraint(self):
+        filename = "2nd_Engineer_1004.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+        captured = {}
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {"resume_id": Path(filename).stem, "rank": self.rank, "raw_text": "Present Rank: Chief Officer"},
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "chief_officer",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": 1.0},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+        }
+
+        def capture_hard_filters(_candidate_facts, job_constraints):
+            captured["job_constraints"] = job_constraints
+            return {
+                "decision": "PASS",
+                "results": [],
+                "evaluation_date_used": "2026-06-25",
+                "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            }
+
+        self.analyzer._evaluate_hard_filters = capture_hard_filters
+
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport", present_rank="Chief Officer"))
+
+        self.assertTrue(any(event["type"] == "complete" for event in events))
+        rank_constraint = captured["job_constraints"]["hard_constraints"]["rank"]
+        self.assertEqual(rank_constraint["present_rank_normalized"], ["chief_officer"])
+        self.assertIn("rank_match", captured["job_constraints"]["applied_constraints"])
+
     def test_below_the_age_of_prompt_populates_age_constraint(self):
         constraints = self.analyzer._extract_job_constraints("is below the age of 50", rank=self.rank)
         self.assertEqual(constraints["applied_constraints"], ["age_range"])
