@@ -82,7 +82,6 @@ test("reason display model groups matched filters, recruiter checks, and resume 
     "Gap > 6 months: Yes (12 months, 2022-09-12 to 2023-08-23)",
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(formatted.context)), [
-    "Vessel tonnage evidence: 83,000 (unit unspecified).",
     "Experienced Ship Type: bulk carrier, container",
   ]);
 });

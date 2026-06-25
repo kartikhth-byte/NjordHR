@@ -906,8 +906,13 @@
                     const normalized = normalizeReasonDisplayLine(line);
                     return normalized && !hardFilterLineKeys.has(normalized);
                 });
+                const hasVesselTonnageFilterReason = hardFilterReasonItems.some(
+                    item => String(item?.reason_code || '').startsWith('VESSEL_TONNAGE_')
+                );
                 const recruiterCheckLines = buildRecruiterCheckLines(match);
-                const contextLines = buildResumeContextLines(match);
+                const contextLines = buildResumeContextLines(match, {
+                    suppressTonnageSummary: hasVesselTonnageFilterReason,
+                });
                 const seen = new Set();
                 const matchedFilterLines = dedupeDisplayLines(
                     presentedHardFilterLines
