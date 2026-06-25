@@ -215,6 +215,100 @@ test("formatter rewrites engine fallback and engine+vessel messages into recruit
   assertNoCanonicalIds(flattenedReasonLines(match));
 });
 
+test("formatter surfaces multiple matching engine filter rows", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    hard_filter_reasons: [
+      {
+        reason_code: "ENGINE_EXPERIENCE_MATCH",
+        message: "Candidate has MAN B&W experience matching 'MAN B&W'.",
+        actual_value: [
+          {
+            decision: "PASS",
+            reason_code: "ENGINE_EXPERIENCE_MATCH",
+            message: "Candidate has MAN B&W experience matching 'MAN B&W'.",
+          },
+          {
+            decision: "PASS",
+            reason_code: "ENGINE_EXPERIENCE_MATCH",
+            message: "Candidate has Pielstick experience matching 'Pielstick'.",
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
+    "Engine experience matches: MAN B&W; Pielstick.",
+  ]);
+  assertNoCanonicalIds(flattenedReasonLines({
+    hard_filter_reasons: [
+      {
+        reason_code: "ENGINE_EXPERIENCE_MATCH",
+        message: "Candidate has MAN B&W experience matching 'MAN B&W'.",
+        actual_value: [
+          {
+            decision: "PASS",
+            reason_code: "ENGINE_EXPERIENCE_MATCH",
+            message: "Candidate has MAN B&W experience matching 'MAN B&W'.",
+          },
+          {
+            decision: "PASS",
+            reason_code: "ENGINE_EXPERIENCE_MATCH",
+            message: "Candidate has Pielstick experience matching 'Pielstick'.",
+          },
+        ],
+      },
+    ],
+  }));
+});
+
+test("formatter surfaces multiple matching experienced ship type rows", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    hard_filter_reasons: [
+      {
+        reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+        message: "Candidate has experienced ship type matching 'container'.",
+        actual_value: [
+          {
+            decision: "PASS",
+            reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+            message: "Candidate has experienced ship type matching 'container'.",
+          },
+          {
+            decision: "PASS",
+            reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+            message: "Candidate has experienced ship type matching 'bulk carrier'.",
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
+    "Experienced ship type matches: container; bulk carrier.",
+  ]);
+  assertNoCanonicalIds(flattenedReasonLines({
+    hard_filter_reasons: [
+      {
+        reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+        message: "Candidate has experienced ship type matching 'container'.",
+        actual_value: [
+          {
+            decision: "PASS",
+            reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+            message: "Candidate has experienced ship type matching 'container'.",
+          },
+          {
+            decision: "PASS",
+            reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+            message: "Candidate has experienced ship type matching 'bulk carrier'.",
+          },
+        ],
+      },
+    ],
+  }));
+});
+
 test("experience filter summaries use configured labels and ship display labels", () => {
   assert.equal(
     helpers.summarizeExperienceFilter({

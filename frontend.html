@@ -546,10 +546,26 @@
                 return `${formattedNumber} ${formatTonnageUnitSuffix(unit)}`.trim();
             };
 
-            const formatShipTypeMatchMessage = (message, prefix) => {
+            const formatShipTypeMatchMessage = (message, prefix, actualValue = null) => {
                 const normalizedPrefix = String(prefix || '').trim();
                 const normalizedMessage = String(message || '').trim();
                 if (!normalizedMessage) return '';
+                const childResults = Array.isArray(actualValue) ? actualValue : [];
+                const childLabels = childResults
+                    .filter(child => child?.decision === 'PASS' && String(child?.reason_code || '').startsWith('EXPERIENCE_SHIP_TYPE_'))
+                    .map(child => {
+                        const childMessage = String(child?.message || '').trim();
+                        const exact = childMessage.match(/matching\s+'([^']+)'/i);
+                        return exact ? exact[1].trim() : '';
+                    })
+                    .filter(Boolean);
+                const uniqueChildLabels = Array.from(new Set(childLabels));
+                if (uniqueChildLabels.length > 1) {
+                    return `${normalizedPrefix} matches: ${uniqueChildLabels.join('; ')}.`;
+                }
+                if (uniqueChildLabels.length === 1) {
+                    return `${normalizedPrefix} matches '${uniqueChildLabels[0]}'.`;
+                }
                 const exactMatch = normalizedMessage.match(/matching\s+'([^']+)'/i);
                 if (exactMatch) {
                     return `${normalizedPrefix} matches '${exactMatch[1]}'.`;
@@ -589,11 +605,33 @@
                 const requested = engineRequestedLabel(item);
                 const evidence = engineEvidenceLabel(item);
                 const actualValue = item?.actual_value || {};
+                const childResults = Array.isArray(actualValue) ? actualValue : [];
                 const matchedContracts = Number(actualValue.matched_contracts || 0);
                 const matchedMonths = Number(actualValue.matched_months || 0);
                 if (!message) return '';
 
                 if (code === 'ENGINE_EXPERIENCE_MATCH') {
+                    const childLabels = childResults
+                        .filter(child => child?.decision === 'PASS' && String(child?.reason_code || '').startsWith('ENGINE_EXPERIENCE_'))
+                        .map(child => {
+                            const childMessage = String(child?.message || '').trim();
+                            const childQuoted = extractQuotedPhrases(childMessage);
+                            const childRequested = childQuoted[0] || '';
+                            const evidenceMatch = childMessage.match(/^Candidate has\s+(.+?)\s+experience matching\s+'[^']+'/i);
+                            const childEvidence = evidenceMatch ? evidenceMatch[1].trim() : '';
+                            if (childEvidence && childRequested && childEvidence !== childRequested) {
+                                return `${childRequested} via ${childEvidence}`;
+                            }
+                            return childRequested || childEvidence;
+                        })
+                        .filter(Boolean);
+                    const uniqueChildLabels = Array.from(new Set(childLabels));
+                    if (uniqueChildLabels.length > 1) {
+                        return `Engine experience matches: ${uniqueChildLabels.join('; ')}.`;
+                    }
+                    if (uniqueChildLabels.length === 1) {
+                        return `Engine experience matches '${uniqueChildLabels[0]}'.`;
+                    }
                     if (matchedMonths > 0 && matchedContracts > 0) {
                         return `Engine experience matches '${requested || evidence}' with ${matchedMonths} month(s) across ${matchedContracts} contract(s).`;
                     }
@@ -743,7 +781,7 @@
                 }
 
                 if (code === 'EXPERIENCE_SHIP_TYPE_MATCH') {
-                    return formatShipTypeMatchMessage(message, 'Experienced ship type');
+                    return formatShipTypeMatchMessage(message, 'Experienced ship type', actualValue);
                 }
 
                 if (code === 'APPLIED_SHIP_TYPE_MATCH') {
