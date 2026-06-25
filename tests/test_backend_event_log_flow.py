@@ -135,6 +135,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
             backend_server.config.write(fh)
         os.environ["NJORDHR_CONFIG_PATH"] = self.temp_config_path
         backend_server.candidate_facts_repo = None
+        backend_server.present_rank_index = backend_server.PresentRankIndex()
         self.client = backend_server.app.test_client()
         with self.client.session_transaction() as sess:
             sess["username"] = "admin"
@@ -157,6 +158,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         else:
             os.environ["NJORDHR_CANDIDATE_FACTS_CACHE_DIR"] = self.prev_candidate_facts_cache_dir
         backend_server.candidate_facts_repo = None
+        backend_server.present_rank_index = backend_server.PresentRankIndex()
         self.temp_dir.cleanup()
         backend_server.cloud_auth_state_cache.update({"ts": 0, "mode": "local", "reason": "not_checked"})
 
@@ -164,6 +166,46 @@ class BackendEventLogFlowTests(unittest.TestCase):
         path = self.rank_dir / filename
         path.write_bytes(b"%PDF-1.4 fake resume content")
         return path
+
+    def _present_rank_index_row(self, *, row_id="row-1", file_name="Chief_Officer_1001.pdf", present_rank="chief_officer"):
+        return {
+            "id": row_id,
+            "candidate_id": f"candidate-{row_id}",
+            "candidate_resume_id": f"resume-{row_id}",
+            "resume_blob_id": f"blob-{row_id}",
+            "candidate_facts_hash": f"hash-{row_id}",
+            "is_current_for_resume": True,
+            "updated_at": "2026-06-26T00:00:00+00:00",
+            "facts_json": {
+                "schema_version": "candidate_facts.v1",
+                "source": {
+                    "resume_id": f"resume-{row_id}",
+                    "candidate_id": f"candidate-{row_id}",
+                    "source_origin": "manual_upload",
+                    "detected_layout": "manual",
+                    "file_name": file_name,
+                    "content_hash": f"content-{row_id}",
+                },
+                "role": {
+                    "current_rank_normalized": present_rank,
+                    "applied_rank_normalized": "chief_officer",
+                },
+                "rank": {"value": "chief_officer"},
+                "extraction": {
+                    "parser_version": "generic_pdf.v1",
+                    "status": "partial",
+                    "minimums_satisfied": [],
+                    "minimums_missing": [],
+                    "provenance": {
+                        "mode": "raw_text_fallback",
+                        "raw_text_version": "v1",
+                        "chunk_index_version": "v1",
+                        "fallback_reason": "test",
+                    },
+                    "warnings": [],
+                },
+            },
+        }
 
     def _read_master_csv(self):
         master = self.verified_root / "verified_resumes.csv"
@@ -1033,6 +1075,38 @@ class BackendEventLogFlowTests(unittest.TestCase):
         coc_authority_values = {row["value"] for row in body.get("coc_issue_authority_options") or []}
         self.assertIn("india_dg_shipping", coc_authority_values)
         self.assertIn("uk_mca", coc_authority_values)
+
+    def test_rank_folder_discovery_includes_present_rank_index_status(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [self._present_rank_index_row()]
+
+        resp = self.client.get("/get_rank_folders")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        index_status = body.get("present_rank_index") or {}
+        self.assertEqual(index_status["version"], 1)
+        self.assertEqual(index_status["row_count"], 1)
+        self.assertEqual(index_status["indexed_count"], 1)
+        self.assertEqual(index_status["unindexed_count"], 0)
+        self.assertEqual(index_status["rank_counts"], {"chief_officer": 1})
+        self.assertTrue(index_status["built_at"])
+
+    def test_rebuild_present_rank_index_endpoint_rebuilds_index(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [self._present_rank_index_row()]
+        first = self.client.get("/get_rank_folders").get_json()["present_rank_index"]
+
+        resp = self.client.post("/rebuild_present_rank_index")
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        rebuilt = body["present_rank_index"]
+        self.assertEqual(rebuilt["rank_counts"], {"chief_officer": 1})
+        self.assertEqual(rebuilt["version"], first["version"] + 1)
 
     def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

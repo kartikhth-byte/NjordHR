@@ -992,6 +992,9 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Build the `{canonical_present_rank: [paths]}` index at startup.
 - Add refresh logic on file mtime change.
 - Add "Reindex" CLI command and a UI hook (not yet exposed).
+- Backend hook shape: `/get_rank_folders` returns a `present_rank_index`
+  status object, and `POST /rebuild_present_rank_index` rebuilds the
+  in-memory index for the future UI button.
 - Tests: index builds correctly, refresh detects file changes, version
   increments on rebuild.
 - No UI changes visible to recruiters yet.
