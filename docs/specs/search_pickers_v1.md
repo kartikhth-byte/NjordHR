@@ -164,6 +164,7 @@ Picker semantics:
 | Backend shape | Existing `age_years` hard constraint |
 | Query-plan family | Existing `age_range` family |
 | Prompt-picker interaction | Either picker value present -> suppress prompt-derived age constraints |
+| Prompt one-sided bounds | A one-sided picker still suppresses the whole prompt-derived age constraint |
 | Missing age evidence | Existing UNKNOWN / Needs Review path |
 
 ### CoC Issue Authority
@@ -348,14 +349,15 @@ structured search filters.
 
 - `Minimum age`: optional numeric input.
 - `Maximum age`: optional numeric input.
+- Control type: HTML number input with `step=1`, `min=18`, `max=80`.
 - Helper text: `"Optional. Candidates pass when their extracted age is
-  within the selected range."`
+  within the selected bounds."`
 - Both fields blank: no age filter.
 - One field set: one-sided bound.
 - Both fields set: inclusive range.
 
-The UI should reject non-integer, negative, zero, and out-of-range values
-before submitting the request.
+The UI should reject non-integer, decimal, negative, zero, and out-of-range
+values before submitting the request.
 
 ### Request Shape
 
@@ -383,6 +385,14 @@ Backend normalization emits the existing legacy hard-constraint shape:
 }
 ```
 
+Field conversion is explicit and one-way:
+
+| Layer | Minimum field | Maximum field | Notes |
+|---|---|---|---|
+| UI payload | `minimum_years` | `maximum_years` | Recruiter-facing units are explicit. |
+| Query-plan family | `minimum_years` | `maximum_years` | Matches `age_range` schema naming. |
+| Legacy analyzer hard constraint | `min_age` | `max_age` | Existing `age_years` evaluator shape; do not expose to UI. |
+
 For query-plan v1 paths, the equivalent constraint remains the existing
 `age_range` family:
 
@@ -403,13 +413,27 @@ For query-plan v1 paths, the equivalent constraint remains the existing
 - `maximum_years` set and `minimum_years` blank: valid.
 - Both set and `minimum_years <= maximum_years`: valid.
 - Both set and `minimum_years > maximum_years`: reject with
-  `AGE_FILTER_INVALID`.
+  `AGE_FILTER_INVALID` and `detail.code = "inverted_bounds"`.
 - Any non-positive, non-integer, or out-of-range value: reject with
-  `AGE_FILTER_INVALID`.
+  `AGE_FILTER_INVALID` and a specific detail code.
+
+The HTTP error code stays coarse (`AGE_FILTER_INVALID`) so existing UI and
+automation can branch on one category. The response must include a
+machine-readable `detail.code` for user-facing copy:
+
+| Detail code | Trigger | Suggested copy |
+|---|---|---|
+| `non_integer` | Value is not a whole number, including decimals like `30.5` | `"Age must be a whole number."` |
+| `non_positive` | Value is `0` or negative | `"Age must be positive."` |
+| `out_of_range` | Value is below `18` or above `80` | `"Age must be between 18 and 80."` |
+| `inverted_bounds` | `minimum_years > maximum_years` | `"Minimum age cannot be greater than maximum age."` |
 
 Allowed picker range is 18-80 inclusive. This mirrors the current
-deterministic prompt parser's conservative age range and avoids accidental
-matches on unrelated numeric fields.
+deterministic prompt parser's conservative age range, avoids accidental
+matches on unrelated numeric fields, and reflects the product policy that
+v1 does not source minors. If cadet sourcing for ages 16-17 becomes a real
+requirement, it should be handled as an explicit policy change rather than
+silently widening this picker.
 
 ### Prompt-Picker Interaction
 
@@ -417,14 +441,21 @@ When either age picker field has a value, prompt-derived age constraints
 are suppressed. Picker values are treated as the structured source of
 truth.
 
+This suppression applies to the whole prompt-derived age constraint, even
+when the picker is one-sided. Example: if `minimum_years = 30` and the
+prompt says `"below 45"`, the prompt's upper bound is ignored. Recruiters
+who need a two-sided age range must set both picker fields. This keeps all
+age intent in the structured picker and avoids merging two sources with
+unclear precedence.
+
 Examples:
 
 - Picker: `minimum_years = 30`, `maximum_years = 50`. Prompt:
   `"candidate below 45 with valid passport"`. -> Passport constraint only;
   age comes from the picker.
 - Picker: `minimum_years = 30`, `maximum_years = null`. Prompt:
-  `"young candidates with US visa"`. -> US visa constraint only; age comes
-  from the picker.
+  `"below 45 with US visa"`. -> US visa constraint only; age comes from
+  the picker; the prompt's upper age bound is ignored.
 - Picker: both blank. Prompt: `"between 30 and 50 years old"`. -> Existing
   prompt parser emits the `age_range` / `age_years` constraint.
 
@@ -432,9 +463,16 @@ Examples:
 
 The evaluator reuses the existing `age_range` behavior:
 
+- Candidate age is computed from date of birth using the search request's
+  reference date.
 - Candidate age inside inclusive bounds -> `PASS`.
 - Candidate age outside bounds -> `FAIL`.
 - Candidate age missing or ambiguous -> `UNKNOWN`.
+
+The reference date is the request timestamp captured at search start, not
+wall-clock time at each candidate evaluation. Scheduled searches, saved
+search reruns, and audits must persist that reference date alongside the
+hard-filter decision so age decisions are reproducible.
 
 Age filter results AND with rank pickers, CoC issue authority picker,
 country picker, vessel tonnage, engine experience, experience ship type,
@@ -855,8 +893,10 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Suppress prompt-derived age constraints when either picker value is set.
 - Reuse the existing `age_range` evaluator and result surfaces.
 - Add `AGE_FILTER_INVALID` validation for invalid values.
+- Capture and audit the age reference date used for evaluation.
 - Tests: one-sided bounds, inclusive range, invalid values, prompt-picker
-  suppression, PASS / FAIL / UNKNOWN result display.
+  suppression, reference-date determinism, PASS / FAIL / UNKNOWN result
+  display.
 
 ### PR-7 (authority): Alias data + canonicalization
 
@@ -965,23 +1005,36 @@ Validation:
 - `test_age_filter_accepts_min_only`.
 - `test_age_filter_accepts_max_only`.
 - `test_age_filter_accepts_inclusive_range`.
+- `test_age_filter_accepts_picker_range_edges`: `18` and `80` are valid.
 - `test_age_filter_rejects_non_integer`.
+- `test_age_filter_rejects_decimal`.
 - `test_age_filter_rejects_negative_or_zero`.
 - `test_age_filter_rejects_out_of_picker_range`.
 - `test_age_filter_rejects_min_greater_than_max`.
+- `test_age_filter_invalid_returns_detail_code`: covers
+  `non_integer`, `non_positive`, `out_of_range`, and
+  `inverted_bounds`.
 
 Prompt interaction:
 
 - `test_prompt_age_suppressed_when_age_picker_min_set`.
 - `test_prompt_age_suppressed_when_age_picker_max_set`.
+- `test_prompt_age_upper_bound_suppressed_when_min_picker_set`:
+  picker `minimum_years = 30`, prompt `"below 45"` emits only the picker
+  lower bound.
 - `test_prompt_age_legacy_path_still_works_when_picker_blank`.
 
 Evaluator/display:
 
 - `test_age_filter_passes_candidate_inside_range`.
+- `test_age_filter_passes_candidate_at_inclusive_minimum`.
+- `test_age_filter_passes_candidate_at_inclusive_maximum`.
 - `test_age_filter_fails_candidate_outside_range`.
 - `test_age_filter_unknown_when_age_missing`.
+- `test_age_filter_uses_request_reference_date`.
+- `test_age_filter_ands_with_other_hard_filters`.
 - `test_age_filter_result_reason_is_human_readable`.
+- `test_age_filter_omits_result_line_when_no_age_constraint_fired`.
 
 ### PR-7 (authority data)
 
