@@ -2641,7 +2641,7 @@ class AIResumeAnalyzer:
 
     def _coc_issue_authority_display_label(self, authority_id):
         labels = self._coc_issue_authority_aliases().display_labels
-        return labels.get(str(authority_id or "")) or str(authority_id or "").replace("_", " ").title()
+        return labels.get(str(authority_id or ""))
 
     def _coc_issue_authority_country(self, authority_id):
         return self._coc_issue_authority_aliases().country_by_authority.get(str(authority_id or ""))
@@ -2649,11 +2649,31 @@ class AIResumeAnalyzer:
     def _normalize_coc_issue_authority(self, value):
         return self._normalize_alias(value, self._coc_issue_authority_alias_map())
 
+    def _is_known_coc_issue_authority(self, value):
+        return str(value or "") in self._coc_issue_authority_aliases().display_labels
+
+    def _ambiguous_coc_issue_authority_aliases(self):
+        return {
+            "amsa",
+            "dgs",
+            "mca",
+            "mmd",
+            "nmd",
+        }
+
+    def _coc_issue_authority_alias_items(self, *, include_ambiguous_shortcuts=True):
+        ambiguous = self._ambiguous_coc_issue_authority_aliases()
+        return [
+            (alias, authority)
+            for alias, authority in self._coc_issue_authority_alias_map().items()
+            if include_ambiguous_shortcuts or alias not in ambiguous
+        ]
+
     def _extract_coc_issue_authority_from_snippet(self, value):
         normalized = normalize_alias_key(value)
         if not normalized:
             return None
-        aliases = self._coc_issue_authority_alias_map()
+        aliases = dict(self._coc_issue_authority_alias_items(include_ambiguous_shortcuts=False))
         for alias in sorted(aliases, key=len, reverse=True):
             if re.search(rf"\b{re.escape(alias)}\b", normalized):
                 return aliases[alias]
@@ -2730,12 +2750,22 @@ class AIResumeAnalyzer:
             return None
         normalized_prompt = normalize_alias_key(prompt)
         authorities = []
-        for alias, authority in sorted(self._coc_issue_authority_alias_map().items(), key=lambda item: len(item[0]), reverse=True):
+        for alias, authority in sorted(
+            self._coc_issue_authority_alias_items(include_ambiguous_shortcuts=False),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        ):
             if re.search(rf"\b{re.escape(alias)}\b", normalized_prompt) and authority not in authorities:
                 authorities.append(authority)
         if not authorities:
             return None
-        display_label = " or ".join(self._coc_issue_authority_display_label(authority) for authority in authorities)
+        display_label = " or ".join(
+            label
+            for label in (self._coc_issue_authority_display_label(authority) for authority in authorities)
+            if label
+        )
+        if not display_label:
+            return None
         return {
             "authorities": authorities,
             "operator": "contains_any",
@@ -4729,6 +4759,7 @@ class AIResumeAnalyzer:
         rank=None,
         allow_logical_groups=True,
         suppress_prompt_rank=False,
+        suppress_prompt_coc_issue_authority=False,
     ):
         constraints = {
             "rank": str(rank or "").strip(),
@@ -4799,8 +4830,13 @@ class AIResumeAnalyzer:
             constraints["applied_constraints"].append("coc_country_match")
 
         if coc_issue_authority_constraint:
-            constraints["hard_constraints"]["coc_issue_authority"] = coc_issue_authority_constraint
-            constraints["applied_constraints"].append("coc_issue_authority_match")
+            if not suppress_prompt_coc_issue_authority:
+                constraints["hard_constraints"]["coc_issue_authority"] = coc_issue_authority_constraint
+                constraints["applied_constraints"].append("coc_issue_authority_match")
+            else:
+                constraints.setdefault("observability_applied_constraints", []).append("coc_issue_authority_match")
+                constraints.setdefault("observability_constraints", {})["coc_issue_authority"] = coc_issue_authority_constraint
+                constraints.setdefault("observability_constraint_reasons", {})["coc_issue_authority_match"] = "picker_override"
 
         if coc_grade_constraint:
             coc_grade_constraint = dict(coc_grade_constraint)
@@ -5203,6 +5239,8 @@ class AIResumeAnalyzer:
             return self._prompt_observability_coc_phrase(prompt)
         if constraint_id == "coc_grade_match":
             return self._prompt_observability_normalize((hard_constraints.get("coc_grade") or {}).get("display_value"))
+        if constraint_id == "coc_issue_authority_match":
+            return self._prompt_observability_normalize((hard_constraints.get("coc_issue_authority") or {}).get("display_value"))
         if constraint_id == "stcw_basic":
             return self._prompt_observability_stcw_basic_phrase(prompt)
         if constraint_id == "company_continuity":
@@ -5336,13 +5374,16 @@ class AIResumeAnalyzer:
 
     def _parse_prompt_observability(self, user_prompt, job_constraints, has_semantic_intent=None):
         prompt = self._prompt_observability_normalize(user_prompt)
-        hard_constraints = (job_constraints or {}).get("hard_constraints") or {}
+        hard_constraints = dict((job_constraints or {}).get("hard_constraints") or {})
+        for key, value in ((job_constraints or {}).get("observability_constraints") or {}).items():
+            hard_constraints.setdefault(key, value)
         applied_constraints = list(dict.fromkeys(
             list((job_constraints or {}).get("applied_constraints") or [])
             + list((job_constraints or {}).get("observability_applied_constraints") or [])
         ))
         unapplied_constraints = list(dict.fromkeys((job_constraints or {}).get("unapplied_constraints") or []))
         parsing_notes = list(dict.fromkeys(note for note in ((job_constraints or {}).get("parsing_notes") or []) if note))
+        observability_reasons = (job_constraints or {}).get("observability_constraint_reasons") or {}
 
         ledger = []
         value_matches = []
@@ -5414,11 +5455,14 @@ class AIResumeAnalyzer:
                 if recorded:
                     normalized_phrases.append(recorded)
             if normalized_phrases:
-                ledger.append({
+                ledger_entry = {
                     "family": constraint_id,
                     "disposition": "applied",
                     "text": " and ".join(normalized_phrases),
-                })
+                }
+                if observability_reasons.get(constraint_id):
+                    ledger_entry["reason"] = observability_reasons.get(constraint_id)
+                ledger.append(ledger_entry)
 
         unsupported_labels = {
             "min_sea_service": "minimum sea service",
@@ -10585,12 +10629,17 @@ class AIResumeAnalyzer:
         expected_authorities = [
             authority
             for authority in (
-                self._normalize_coc_issue_authority(authority) or str(authority or "").strip()
+                self._normalize_coc_issue_authority(authority)
+                or (str(authority or "").strip() if self._is_known_coc_issue_authority(authority) else "")
                 for authority in ((constraint or {}).get("authorities") or [])
             )
             if authority
         ]
-        expected_labels = [self._coc_issue_authority_display_label(authority) for authority in expected_authorities]
+        expected_labels = [
+            label
+            for label in (self._coc_issue_authority_display_label(authority) for authority in expected_authorities)
+            if label
+        ]
 
         if confidence is not None and confidence < 0.85:
             return self._base_rule_result(
@@ -10619,6 +10668,16 @@ class AIResumeAnalyzer:
             )
 
         actual_label = self._coc_issue_authority_display_label(actual_authority)
+        if not actual_label:
+            return self._base_rule_result(
+                "UNKNOWN",
+                "COC_ISSUE_AUTHORITY_NOT_FOUND",
+                "Candidate has a CoC but the issuing authority could not be canonicalized.",
+                actual_value=None,
+                expected_value=expected_authorities,
+                confidence=confidence,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
         if self._evaluate_rule((constraint or {}).get("operator") or "contains_any", [actual_authority], expected_authorities):
             return self._base_rule_result(
                 "PASS",
@@ -13434,6 +13493,10 @@ Examples of GOOD responses:
                 user_prompt,
                 rank=rank,
                 suppress_prompt_rank=bool(str(rank or "").strip() or str(present_rank or "").strip()),
+                suppress_prompt_coc_issue_authority=(
+                    isinstance(coc_issue_authority_filter, dict)
+                    and bool(coc_issue_authority_filter.get("authorities"))
+                ),
             )
             present_rank_value = str(present_rank or "").strip()
             if present_rank_value:
@@ -13508,15 +13571,16 @@ Examples of GOOD responses:
                 authorities = list(dict.fromkeys(
                     str(authority or "").strip()
                     for authority in coc_issue_authority_filter.get("authorities", [])
-                    if str(authority or "").strip()
+                    if self._is_known_coc_issue_authority(authority)
                 ))
                 if authorities:
                     job_constraints.setdefault("hard_constraints", {})["coc_issue_authority"] = {
                         "authorities": authorities,
                         "operator": "contains_any",
                         "display_value": " or ".join(
-                            self._coc_issue_authority_display_label(authority)
-                            for authority in authorities
+                            label
+                            for label in (self._coc_issue_authority_display_label(authority) for authority in authorities)
+                            if label
                         ),
                     }
                     if "coc_issue_authority_match" not in job_constraints.setdefault("applied_constraints", []):

@@ -254,6 +254,20 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(constraints["observability_applied_constraints"], ["rank_match"])
         self.assertNotIn("rank", constraints["hard_constraints"])
 
+    def test_structured_coc_issue_authority_scope_suppresses_prompt_authority_hard_constraint(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "CoC issued by Maritime and Coastguard Agency",
+            rank=self.rank,
+            suppress_prompt_coc_issue_authority=True,
+        )
+        self.assertEqual(constraints["applied_constraints"], ["coc_document_gate"])
+        self.assertEqual(constraints["observability_applied_constraints"], ["coc_issue_authority_match"])
+        self.assertEqual(
+            constraints["observability_constraint_reasons"],
+            {"coc_issue_authority_match": "picker_override"},
+        )
+        self.assertNotIn("coc_issue_authority", constraints["hard_constraints"])
+
     def test_present_rank_constraint_evaluates_current_rank_fact(self):
         result = self.analyzer._evaluate_rank_rule(
             {
@@ -416,19 +430,42 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
         events = list(self.analyzer.run_analysis_stream(
             self.rank,
-            "coc issued by India",
+            "CoC issued by Maritime and Coastguard Agency",
             coc_issue_authority_filter={
                 "type": "coc_issue_authority",
-                "authorities": ["uk_mca"],
+                "authorities": ["india_dg_shipping"],
             },
         ))
 
         self.assertTrue(any(event["type"] == "complete" for event in events))
         authority_constraint = captured["job_constraints"]["hard_constraints"]["coc_issue_authority"]
-        self.assertEqual(authority_constraint["authorities"], ["uk_mca"])
-        self.assertEqual(authority_constraint["display_value"], "Maritime and Coastguard Agency (UK)")
-        self.assertNotIn("uk_mca", authority_constraint["display_value"])
+        self.assertEqual(authority_constraint["authorities"], ["india_dg_shipping"])
+        self.assertEqual(authority_constraint["display_value"], "Directorate General of Shipping, India")
+        self.assertNotIn("india_dg_shipping", authority_constraint["display_value"])
         self.assertIn("coc_issue_authority_match", captured["job_constraints"]["applied_constraints"])
+        self.assertEqual(
+            captured["job_constraints"]["observability_constraint_reasons"],
+            {"coc_issue_authority_match": "picker_override"},
+        )
+        prompt_authority_entries = [
+            item
+            for item in captured["job_constraints"]["clause_ledger"]
+            if item.get("family") == "coc_issue_authority_match"
+        ]
+        self.assertEqual(prompt_authority_entries[0]["reason"], "picker_override")
+        self.assertNotIn("uk_mca", json.dumps(prompt_authority_entries))
+        self.assertNotIn("india_dg_shipping", json.dumps(prompt_authority_entries))
+
+    def test_coc_issue_authority_bare_mmd_does_not_match_india(self):
+        self.assertIsNone(self.analyzer._extract_coc_issue_authority_constraint("CoC issued by MMD"))
+        self.assertEqual(
+            self.analyzer._extract_coc_issue_authority_from_snippet("Mercantile Marine Department, Karachi"),
+            "pakistan_mmd",
+        )
+        self.assertNotEqual(
+            self.analyzer._extract_coc_issue_authority_from_snippet("Mercantile Marine Department, Karachi"),
+            "india_dg_shipping",
+        )
 
     def test_below_the_age_of_prompt_populates_age_constraint(self):
         constraints = self.analyzer._extract_job_constraints("is below the age of 50", rank=self.rank)
@@ -1403,7 +1440,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
     def test_coc_issue_authority_prompt_maps_to_authority_rule(self):
         cases = {
             "DG Shipping India CoC": "india_dg_shipping",
-            "CoC issued by MCA": "uk_mca",
+            "CoC issued by Maritime and Coastguard Agency": "uk_mca",
             "has Maritime and Port Authority of Singapore CoC": "singapore_mpa",
         }
         for prompt, expected_authority in cases.items():
@@ -1422,8 +1459,11 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertNotIn("coc_country_match", constraints["applied_constraints"])
 
     def test_coc_issue_authority_prompt_supports_multi_authority_or(self):
-        constraints = self.analyzer._extract_job_constraints("CoC issued by DG Shipping or MCA", rank=self.rank)
-        self.assertEqual(
+        constraints = self.analyzer._extract_job_constraints(
+            "CoC issued by DG Shipping or Maritime and Coastguard Agency",
+            rank=self.rank,
+        )
+        self.assertCountEqual(
             constraints["hard_constraints"]["coc_issue_authority"]["authorities"],
             ["india_dg_shipping", "uk_mca"],
         )

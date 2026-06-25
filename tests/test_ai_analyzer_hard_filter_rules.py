@@ -255,6 +255,18 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "COC_ISSUE_AUTHORITY_NOT_FOUND")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_coc_issue_authority_rule_unknown_canonical_does_not_leak_id(self):
+        result = self.analyzer._evaluate_coc_issue_authority_rule(
+            {
+                "certifications": {"coc": {"issue_authority": "Legacy imported value", "issue_authority_canonical": "india_dg_shipping_legacy"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"authorities": ["india_dg_shipping"], "operator": "contains_any"},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "COC_ISSUE_AUTHORITY_NOT_FOUND")
+        self.assertNotIn("india_dg_shipping_legacy", result["message"])
+
     def test_coc_issue_authority_rule_legacy_raw_authority_can_normalize(self):
         result = self.analyzer._evaluate_coc_issue_authority_rule(
             {

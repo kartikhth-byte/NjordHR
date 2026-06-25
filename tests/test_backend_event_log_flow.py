@@ -1809,17 +1809,27 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(body["error_code"], "AGE_FILTER_INVALID")
         self.assertEqual(body["detail"]["code"], "out_of_range")
 
-    def test_parse_coc_issue_authority_filter_accepts_known_authorities_and_aliases(self):
+    def test_parse_coc_issue_authority_filter_accepts_known_canonical_authorities(self):
         self.assertEqual(
             backend_server._normalize_coc_issue_authority_filter({
                 "type": "coc_issue_authority",
-                "authorities": ["India", "MCA UK", "india_dg_shipping"],
+                "authorities": ["india_dg_shipping", "uk_mca", "india_dg_shipping"],
             }, strict=True),
             {
                 "type": "coc_issue_authority",
                 "authorities": ["india_dg_shipping", "uk_mca"],
             },
         )
+
+    def test_parse_coc_issue_authority_filter_rejects_noncanonical_api_values(self):
+        for authority in ("India", "MCA UK", "Maritime and Coastguard Agency (UK)"):
+            with self.subTest(authority=authority):
+                with self.assertRaises(backend_server.CocIssueAuthorityFilterInvalid) as context:
+                    backend_server._normalize_coc_issue_authority_filter({
+                        "type": "coc_issue_authority",
+                        "authorities": [authority],
+                    }, strict=True)
+                self.assertEqual(context.exception.detail_code, "unknown_authority")
 
     def test_analyze_stream_rejects_invalid_coc_issue_authority_filter_payload(self):
         invalid_payloads = [

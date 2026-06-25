@@ -970,7 +970,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                         "present_rank": "chief_officer",
                         "coc_issue_authority_filter": {
                             "type": "coc_issue_authority",
-                            "authorities": ["India", "not_real", "MCA UK"],
+                            "authorities": ["DG Shipping India", "not_real", "MCA UK"],
                             "ignored": "must-not-survive",
                         },
                         "vessel_tonnage_filter": {

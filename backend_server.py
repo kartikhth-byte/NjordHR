@@ -234,6 +234,9 @@ class CocIssueAuthorityFilterInvalid(ValueError):
         self.detail_code = detail_code
 
 
+_COC_ISSUE_AUTHORITY_ALIASES = None
+
+
 def _coc_issue_authority_country_aliases():
     aliases = {
         "india": "india",
@@ -307,7 +310,12 @@ def _coc_issue_authority_country_aliases():
 
 
 def _load_coc_issue_authority_aliases():
-    return load_coc_issue_authority_aliases(country_aliases=_coc_issue_authority_country_aliases())
+    global _COC_ISSUE_AUTHORITY_ALIASES
+    if _COC_ISSUE_AUTHORITY_ALIASES is None:
+        _COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
+            country_aliases=_coc_issue_authority_country_aliases()
+        )
+    return _COC_ISSUE_AUTHORITY_ALIASES
 
 
 def _coc_issue_authority_catalog():
@@ -322,28 +330,22 @@ def _coc_issue_authority_catalog():
     ]
 
 
-def _canonical_coc_issue_authority_id_for_picker(value):
+def _canonical_coc_issue_authority_id_for_picker(value, *, allow_aliases=False):
     raw = str(value or "").strip()
     if not raw:
         return ""
     aliases = _load_coc_issue_authority_aliases()
-    alias_match = aliases.alias_map.get(normalize_alias_key(raw))
-    if alias_match:
-        return alias_match
-    country_match = _coc_issue_authority_country_aliases().get(normalize_alias_key(raw))
-    if country_match:
-        country_authorities = (
-            ((aliases.raw.get("authorities") or {}).get(country_match) or {}).get("authorities") or {}
-        )
-        if len(country_authorities) == 1:
-            return next(iter(country_authorities))
     labels = aliases.display_labels
     if raw in labels:
         return raw
-    normalized = raw.lower().replace("-", "_").replace(" ", "_")
-    for authority_id, label in labels.items():
-        if normalized == authority_id.lower() or normalized == str(label or "").lower().replace("-", "_").replace(" ", "_"):
-            return authority_id
+    if allow_aliases:
+        alias_match = aliases.alias_map.get(normalize_alias_key(raw))
+        if alias_match:
+            return alias_match
+        normalized = raw.lower().replace("-", "_").replace(" ", "_")
+        for authority_id, label in labels.items():
+            if normalized == str(label or "").lower().replace("-", "_").replace(" ", "_"):
+                return authority_id
     return ""
 
 
@@ -375,7 +377,7 @@ def _normalize_coc_issue_authority_filter(value, *, strict=False):
     authorities = []
     invalid = []
     for raw_authority in raw_authorities:
-        canonical = _canonical_coc_issue_authority_id_for_picker(raw_authority)
+        canonical = _canonical_coc_issue_authority_id_for_picker(raw_authority, allow_aliases=not strict)
         if not canonical:
             if str(raw_authority or "").strip():
                 invalid.append(str(raw_authority or "").strip())

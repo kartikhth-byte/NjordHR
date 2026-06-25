@@ -15,9 +15,9 @@
             "directorate general of shipping mumbai",
             "directorate general of shipping india",
             "dgs",
-            "mmd",
             "mmd mumbai",
-            "mercantile marine department",
+            "mercantile marine department mumbai",
+            "mercantile marine department india",
             "indian maritime administration"
           ]
         }
@@ -381,7 +381,9 @@
           "display_label": "Mercantile Marine Department, Pakistan",
           "aliases": [
             "mercantile marine department pakistan",
+            "mercantile marine department karachi",
             "mmd pakistan",
+            "mmd karachi",
             "pakistan maritime administration"
           ]
         }
