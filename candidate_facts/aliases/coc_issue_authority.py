@@ -69,13 +69,35 @@ def _alias_contains_bare_alias(bare_alias: str, other_alias: str) -> bool:
     return _alias_contains_bare_abbreviation(bare_tokens, other_tokens)
 
 
+def _single_letter_window_matches(target: str, tokens: list[str], start: int) -> bool:
+    target_len = len(target)
+    window = tokens[start:start + target_len]
+    if len(window) != target_len:
+        return False
+    if not all(len(token) == 1 for token in window):
+        return False
+    if "".join(window) != target:
+        return False
+    previous_is_letter = start > 0 and len(tokens[start - 1]) == 1
+    next_index = start + target_len
+    next_is_letter = next_index < len(tokens) and len(tokens[next_index]) == 1
+    return not previous_is_letter and not next_is_letter
+
+
 def _alias_contains_bare_abbreviation(bare_tokens: list[str], other_tokens: list[str]) -> bool:
     if len(bare_tokens) == 1 and len(bare_tokens[0]) > 1:
         target = bare_tokens[0]
-        target_len = len(target)
-        for index in range(0, len(other_tokens) - target_len + 1):
-            window = other_tokens[index:index + target_len]
-            if all(len(token) == 1 for token in window) and "".join(window) == target:
+        for index in range(0, len(other_tokens) - len(target) + 1):
+            if _single_letter_window_matches(target, other_tokens, index):
+                return True
+    if len(bare_tokens) > 1:
+        initials = "".join(token[0] for token in bare_tokens if token)
+        if not initials:
+            return False
+        if initials in other_tokens:
+            return True
+        for index in range(0, len(other_tokens) - len(initials) + 1):
+            if _single_letter_window_matches(initials, other_tokens, index):
                 return True
     return False
 

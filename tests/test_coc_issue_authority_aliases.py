@@ -67,7 +67,7 @@ class CocIssueAuthorityAliasTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "ambiguous bare CoC authority alias across canonicals: 'mercantile marine department'.*india_mmd/india.*'mercantile marine department karachi'.*pakistan_mmd/pakistan",
+            "ambiguous bare CoC authority alias across canonicals: 'mercantile marine department'.*india_mmd/india.*'mmd pakistan'.*pakistan_mmd/pakistan",
         ):
             load_coc_issue_authority_aliases(path, country_aliases=COUNTRY_ALIASES)
 
@@ -100,6 +100,65 @@ class CocIssueAuthorityAliasTests(unittest.TestCase):
             "ambiguous bare CoC authority alias across canonicals: 'dgs'.*'d g s pakistan'.*pakistan_dgs/pakistan",
         ):
             load_coc_issue_authority_aliases(path, country_aliases=COUNTRY_ALIASES)
+
+    def test_loader_rejects_multi_word_bare_alias_against_acronym_form(self):
+        payload = _base_payload({
+            "india": {
+                "country_canonical": "india",
+                "authorities": {
+                    "india_mmd": {
+                        "display_label": "MMD India",
+                        "aliases": ["mercantile marine department"],
+                    },
+                },
+            },
+            "pakistan": {
+                "country_canonical": "pakistan",
+                "authorities": {
+                    "pakistan_mmd": {
+                        "display_label": "MMD Pakistan",
+                        "aliases": ["mmd karachi"],
+                    },
+                },
+            },
+        })
+        temp_dir, path = _write_alias_payload(payload)
+        self.addCleanup(temp_dir.cleanup)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ambiguous bare CoC authority alias across canonicals: 'mercantile marine department'.*'mmd karachi'",
+        ):
+            load_coc_issue_authority_aliases(path, country_aliases=COUNTRY_ALIASES)
+
+    def test_loader_allows_bare_alias_inside_longer_spelled_abbreviation(self):
+        payload = _base_payload({
+            "india": {
+                "country_canonical": "india",
+                "authorities": {
+                    "india_abc": {
+                        "display_label": "ABC India",
+                        "aliases": ["abc"],
+                    },
+                },
+            },
+            "pakistan": {
+                "country_canonical": "pakistan",
+                "authorities": {
+                    "pakistan_abcd": {
+                        "display_label": "ABCD Pakistan",
+                        "aliases": ["a.b.c.d. pakistan"],
+                    },
+                },
+            },
+        })
+        temp_dir, path = _write_alias_payload(payload)
+        self.addCleanup(temp_dir.cleanup)
+
+        aliases = load_coc_issue_authority_aliases(path, country_aliases=COUNTRY_ALIASES)
+
+        self.assertEqual(aliases.alias_map["abc"], "india_abc")
+        self.assertEqual(aliases.alias_map["a b c d pakistan"], "pakistan_abcd")
 
     def test_loader_allows_other_side_country_qualified_alias(self):
         payload = _base_payload({
