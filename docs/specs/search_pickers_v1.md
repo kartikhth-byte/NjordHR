@@ -4,10 +4,10 @@
 
 Unify the AI Search UI around structured pickers that scope and filter the
 candidate population deterministically, replacing today's ambiguous
-folder-as-scope behavior and adding a missing filter dimension for CoC
-issuing authority.
+folder-as-scope behavior and adding missing filter dimensions for candidate
+age and CoC issuing authority.
 
-v1 ships two related features:
+v1 ships three related features:
 
 - **Rank search scope.** Decouple search scope from folder organization.
   Replace the single folder picker with two independent rank pickers,
@@ -17,8 +17,11 @@ v1 ships two related features:
   specific regulatory body that issued a candidate's Certificate of
   Competency, distinct from the existing CoC country filter. Backed by an
   alias dictionary and a new hard-filter family.
+- **Age range filter.** Add recruiter-friendly minimum/maximum age inputs
+  backed by the existing deterministic `age_range` hard-filter family and
+  resume-derived candidate age evidence.
 
-The two features are independent technically but share patterns: structured
+The three features are independent technically but share patterns: structured
 pickers as source of truth, alias normalization, "Needs review" buckets for
 unresolved inputs, structured validation error codes, audit-trailed
 versioning. Documenting them together keeps the shared conventions in one
@@ -62,6 +65,28 @@ and the Phase 2 section for rationale):
 - Recruiter-driven manual `present_rank` tagging from the UI.
 - Hiding the `applied_rank` picker behind an advanced toggle.
 
+### Age Range Filter
+
+Includes:
+
+- Two optional numeric inputs in the search UI: `Minimum age` and
+  `Maximum age`.
+- Reuse of the existing deterministic `age_range` hard-filter family.
+- Request normalization to the existing legacy hard-constraint shape:
+  `hard_constraints.age_years = {"min_age": N|null, "max_age": N|null}`.
+- Suppression of prompt-derived age constraints when either age picker
+  value is set.
+- Existing UNKNOWN / Needs Review handling when candidate age evidence is
+  missing or ambiguous.
+
+Excludes (deferred to later phases only if production evidence shows a
+need):
+
+- DOB picker UI.
+- Recruiter-driven manual age correction.
+- New age extraction or backfill logic beyond the existing candidate-facts
+  extraction.
+
 ### CoC Issue Authority Filter
 
 Includes:
@@ -87,7 +112,7 @@ Excludes (deferred to later phases):
 
 ## Architectural Principles
 
-Three principles cut across both features. Future structured-picker work
+Three principles cut across these features. Future structured-picker work
 should follow them.
 
 - **Folder is storage, not scope.** Folder organization (by applied rank)
@@ -125,6 +150,21 @@ Picker semantics:
 | set | blank | Search by `applied_rank`, restricted to that folder. |
 | set | set | AND. Candidate must be in the folder AND match present rank. |
 | blank | blank | Invalid. UI button disabled; backend rejects with `RANK_SCOPE_REQUIRED`. |
+
+### Age Range
+
+| Decision | Value |
+|---|---|
+| UI label | `Candidate Age` |
+| Inputs | `Minimum age`, `Maximum age` |
+| Empty state | Both blank means no age filter |
+| Value type | Positive whole years |
+| Allowed picker range | 18-80 inclusive |
+| Bound semantics | Inclusive (`age >= minimum`, `age <= maximum`) |
+| Backend shape | Existing `age_years` hard constraint |
+| Query-plan family | Existing `age_range` family |
+| Prompt-picker interaction | Either picker value present -> suppress prompt-derived age constraints |
+| Missing age evidence | Existing UNKNOWN / Needs Review path |
 
 ### CoC Issue Authority
 
@@ -287,6 +327,131 @@ Every code path that previously assumed "no folder selected" meant
 - Any test fixture exercising a "no folder" path.
 
 If a path is missed, it must fail loud, not return an empty result.
+
+## Age Range Filter — Detailed Spec
+
+### Evidence Source
+
+The picker uses the existing candidate age evidence derived from resume
+date-of-birth / age extraction. v1 does not add a new extractor or a
+backfill job.
+
+Candidate facts should already expose an integer candidate age through the
+same path used by the existing `age_range` evaluator. Missing, ambiguous,
+or out-of-date age evidence follows the current hard-filter UNKNOWN path
+and surfaces in Needs Review.
+
+### UI Shape
+
+`frontend.html` adds a compact `Candidate Age` filter near the other
+structured search filters.
+
+- `Minimum age`: optional numeric input.
+- `Maximum age`: optional numeric input.
+- Helper text: `"Optional. Candidates pass when their extracted age is
+  within the selected range."`
+- Both fields blank: no age filter.
+- One field set: one-sided bound.
+- Both fields set: inclusive range.
+
+The UI should reject non-integer, negative, zero, and out-of-range values
+before submitting the request.
+
+### Request Shape
+
+UI payload:
+
+```json
+{
+  "age_filter": {
+    "minimum_years": 30,
+    "maximum_years": 50
+  }
+}
+```
+
+Backend normalization emits the existing legacy hard-constraint shape:
+
+```json
+{
+  "hard_constraints": {
+    "age_years": {
+      "min_age": 30,
+      "max_age": 50
+    }
+  }
+}
+```
+
+For query-plan v1 paths, the equivalent constraint remains the existing
+`age_range` family:
+
+```json
+{
+  "family": "age_range",
+  "parameters": {
+    "minimum_years": 30,
+    "maximum_years": 50
+  }
+}
+```
+
+### Validation
+
+- Both bounds blank: valid, no age filter emitted.
+- `minimum_years` set and `maximum_years` blank: valid.
+- `maximum_years` set and `minimum_years` blank: valid.
+- Both set and `minimum_years <= maximum_years`: valid.
+- Both set and `minimum_years > maximum_years`: reject with
+  `AGE_FILTER_INVALID`.
+- Any non-positive, non-integer, or out-of-range value: reject with
+  `AGE_FILTER_INVALID`.
+
+Allowed picker range is 18-80 inclusive. This mirrors the current
+deterministic prompt parser's conservative age range and avoids accidental
+matches on unrelated numeric fields.
+
+### Prompt-Picker Interaction
+
+When either age picker field has a value, prompt-derived age constraints
+are suppressed. Picker values are treated as the structured source of
+truth.
+
+Examples:
+
+- Picker: `minimum_years = 30`, `maximum_years = 50`. Prompt:
+  `"candidate below 45 with valid passport"`. -> Passport constraint only;
+  age comes from the picker.
+- Picker: `minimum_years = 30`, `maximum_years = null`. Prompt:
+  `"young candidates with US visa"`. -> US visa constraint only; age comes
+  from the picker.
+- Picker: both blank. Prompt: `"between 30 and 50 years old"`. -> Existing
+  prompt parser emits the `age_range` / `age_years` constraint.
+
+### Evaluator Semantics
+
+The evaluator reuses the existing `age_range` behavior:
+
+- Candidate age inside inclusive bounds -> `PASS`.
+- Candidate age outside bounds -> `FAIL`.
+- Candidate age missing or ambiguous -> `UNKNOWN`.
+
+Age filter results AND with rank pickers, CoC issue authority picker,
+country picker, vessel tonnage, engine experience, experience ship type,
+and prompt-derived hard filters.
+
+### Display in Results
+
+When the age filter fires, result cards should display the matched or
+failed evidence using recruiter-readable wording:
+
+- PASS: `"Age matches requested range: 38."`
+- FAIL: `"Age 54 is outside requested range 30-50."`
+- UNKNOWN: `"Candidate age could not be determined from extracted resume
+  facts."`
+
+No age line is shown when neither picker nor prompt produced an age
+constraint.
 
 ## CoC Issue Authority — Detailed Spec
 
@@ -580,23 +745,26 @@ authority constraint), authority is not displayed.
 
 ## Shared Patterns
 
-These patterns appear in both features and should be reused in future
+These patterns appear across these features and should be reused in future
 structured-picker work.
 
 ### "Needs Review" Buckets
 
-Both features surface unresolved inputs rather than silently dropping
-candidates:
+Structured picker features surface unresolved inputs rather than silently
+dropping candidates:
 
 - "Needs rank review" — candidates where `present_rank` extraction
   failed. **Informational count only** in v1 (no drill-down, no
   flag-for-review action). See the "Needs Rank Review Bucket" section
   for rationale.
+- Age filter UNKNOWN results — candidates where age evidence is missing or
+  ambiguous. Uses the existing hard-filter Needs Review surface; no
+  separate age-specific review queue in v1.
 - "Needs alias review" — CoCs where `issue_authority` did not resolve.
   Exposes the raw input, available context, and a flag-for-review
   action.
 
-Engineering owns the fix workflow in v1 for both. The asymmetry
+Engineering owns the fix workflow in v1. The asymmetry
 (rank-review is counter-only, alias-review is actionable) reflects
 that alias additions are bounded data entry while rank tagging
 introduces overwrite-conflict surface area.
@@ -613,13 +781,15 @@ detect. Codes use UPPER_SNAKE_CASE; messages are human-readable.
 | `APPLIED_RANK_INVALID` | `applied_rank` is not a known canonical rank ID | 400 |
 | `PRESENT_RANK_INVALID` | `present_rank` is not a known canonical rank ID | 400 |
 | `PRESENT_RANK_NOT_INDEXED` | Valid picker, empty index entry | 200 (notice, not error) |
+| `AGE_FILTER_INVALID` | Age bound is non-integer, out of range, or min > max | 400 |
 
 The distinction matters: bad input is an error, valid input with no
 matches is a normal empty result.
 
 ### Versioning and Audit Trails
 
-Both features ship with explicit versioning:
+These features ship with explicit versioning where durable derived data is
+introduced:
 
 - Alias dict: semver in JSON header, referenced in audit logs.
 - Index: monotonic version counter, displayed in UI header.
@@ -629,7 +799,7 @@ versions so historical comparisons stay valid.
 
 ## Rollout Plan
 
-The two features are independent and can land in parallel or sequence.
+The features are independent and can land in parallel or sequence.
 The PR sequence below interleaves them by priority — rank pickers come
 first because the current behavior (folder-as-scope) is actively
 misaligned with recruiter workflow.
@@ -678,7 +848,17 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Tests verify the count updates on reindex and renders only when
   non-zero.
 
-### PR-6 (authority): Alias data + canonicalization
+### PR-6 (age): Age range picker
+
+- Add `Candidate Age` minimum/maximum inputs to `frontend.html`.
+- Normalize UI values into the existing `age_years` hard constraint.
+- Suppress prompt-derived age constraints when either picker value is set.
+- Reuse the existing `age_range` evaluator and result surfaces.
+- Add `AGE_FILTER_INVALID` validation for invalid values.
+- Tests: one-sided bounds, inclusive range, invalid values, prompt-picker
+  suppression, PASS / FAIL / UNKNOWN result display.
+
+### PR-7 (authority): Alias data + canonicalization
 
 - Create `candidate_facts/aliases/` directory and `__init__.py`.
 - Add `coc_issue_authority.json` seeded with 25-30 canonical authorities
@@ -695,7 +875,7 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
   regression, extractor regression.
 - No UI, no query plan, no new hard filter family.
 
-### PR-7 (authority): Hard filter family
+### PR-8 (authority): Hard filter family
 
 - Add `coc_issue_authority_match` to the catalog.
 - Add constraint extractor and evaluator (mirror country).
@@ -707,7 +887,7 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Extend shadow eval corpus with authority-specific prompts. Re-run
   shadow eval; zero regressions on country prompts is the merge gate.
 
-### PR-8 (authority): UI picker + "Needs alias review"
+### PR-9 (authority): UI picker + "Needs alias review"
 
 - Multi-select dropdown for `CoC Issue Authority` in `frontend.html`.
 - Wire picker value into the search request and query plan.
@@ -715,12 +895,12 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - "Needs alias review" view and flag-for-review action.
 - E2E tests for picker-driven searches.
 
-### PR-9 (deferred, optional)
+### PR-10 (deferred, optional)
 
 Hierarchical UX: narrow authority dropdown by selected country. Pure
 UI/JS work.
 
-### PR-10 (deferred, optional)
+### PR-11 (deferred, optional)
 
 Index-backed authority lookup for sub-second filter performance.
 
@@ -778,7 +958,32 @@ Index-backed authority lookup for sub-second filter performance.
   always go through the validator and never reach this code path
   with both pickers blank.
 
-### PR-6 (authority data)
+### PR-6 (age picker)
+
+Validation:
+
+- `test_age_filter_accepts_min_only`.
+- `test_age_filter_accepts_max_only`.
+- `test_age_filter_accepts_inclusive_range`.
+- `test_age_filter_rejects_non_integer`.
+- `test_age_filter_rejects_negative_or_zero`.
+- `test_age_filter_rejects_out_of_picker_range`.
+- `test_age_filter_rejects_min_greater_than_max`.
+
+Prompt interaction:
+
+- `test_prompt_age_suppressed_when_age_picker_min_set`.
+- `test_prompt_age_suppressed_when_age_picker_max_set`.
+- `test_prompt_age_legacy_path_still_works_when_picker_blank`.
+
+Evaluator/display:
+
+- `test_age_filter_passes_candidate_inside_range`.
+- `test_age_filter_fails_candidate_outside_range`.
+- `test_age_filter_unknown_when_age_missing`.
+- `test_age_filter_result_reason_is_human_readable`.
+
+### PR-7 (authority data)
 
 Extraction and canonicalization:
 
@@ -829,6 +1034,16 @@ manual tagging can be revisited as a standalone feature, but it is
 not on the Phase 2 roadmap. Similarly, the previously-considered
 "hide `applied_rank` behind an advanced toggle" option is dropped —
 the two-picker model is locked.
+
+### Age Range Filter
+
+- Recruiter-driven manual age correction, only if UNKNOWN volume is high
+  enough to justify a correction workflow.
+- DOB / age backfill tooling, only if the existing candidate-facts
+  extraction misses a material portion of the corpus.
+
+No Phase 2 age work is planned by default. The Phase 1 min/max picker is
+complete if existing extraction provides reliable age evidence.
 
 ### CoC Issue Authority
 
