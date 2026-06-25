@@ -363,6 +363,81 @@ class AIAnalyzerAgeFilterTests(unittest.TestCase):
         self.assertEqual(result["results"][0]["actual_value"], 36)
         self.assertEqual(result["results"][0]["expected_value"], {"min_age": 30, "max_age": 50})
 
+    def test_age_picker_filter_overrides_prompt_age_constraint(self):
+        _write_fake_pdf(self.rank_folder / "Second_Engineer_1.pdf")
+        captured_constraints = []
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            "Second_Engineer_1": [{
+                "score": 1.0,
+                "metadata": {
+                    "resume_id": "Second_Engineer_1",
+                    "rank": self.rank,
+                    "source_path": str(self.rank_folder / "Second_Engineer_1.pdf"),
+                    "raw_text": "",
+                },
+            }],
+        }
+        self.analyzer._rank_manifest_metadata = lambda *_args, **_kwargs: {}
+        self.analyzer._build_candidate_facts = lambda *_args, **_kwargs: {
+            "candidate_id": "Second_Engineer_1",
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "personal": {"dob": date(1986, 1, 1), "dob_parse_status": "PARSED"},
+            "derived": {"age_years": 40},
+        }
+        self.analyzer._maybe_sync_reextract_candidate = lambda facts, *_args, **_kwargs: (facts, None)
+
+        def capture_hard_filters(candidate_facts, job_constraints, *, today=None):
+            captured_constraints.append(job_constraints)
+            return {
+                "decision": "PASS",
+                "results": [{
+                    "decision": "PASS",
+                    "reason_code": "AGE_IN_RANGE",
+                    "message": "Age matches.",
+                    "actual_value": 40,
+                    "expected_value": {"min_age": 30, "max_age": 50},
+                    "confidence": 1.0,
+                }],
+                "evaluation_date_used": "2026-06-25",
+                "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            }
+
+        self.analyzer._evaluate_hard_filters = capture_hard_filters
+
+        cases = [
+            (
+                "below the age of 60",
+                {"type": "age_range", "minimum_years": 30, "maximum_years": 50},
+                {"min_age": 30, "max_age": 50},
+            ),
+            (
+                "below the age of 45",
+                {"type": "age_range", "minimum_years": 30, "maximum_years": None},
+                {"min_age": 30, "max_age": None},
+            ),
+            (
+                "above the age of 25",
+                {"type": "age_range", "minimum_years": None, "maximum_years": 50},
+                {"min_age": None, "max_age": 50},
+            ),
+        ]
+
+        for prompt, age_filter, expected_constraint in cases:
+            with self.subTest(prompt=prompt, age_filter=age_filter):
+                captured_constraints.clear()
+                events = list(self.analyzer.run_analysis_stream(
+                    self.rank,
+                    prompt,
+                    age_filter=age_filter,
+                ))
+
+                self.assertTrue(any(event["type"] == "complete" for event in events))
+                self.assertEqual(
+                    captured_constraints[0]["hard_constraints"]["age_years"],
+                    expected_constraint,
+                )
+                self.assertIn("age_range", captured_constraints[0]["applied_constraints"])
+
     # ------------------------------------------------------------------
     # _extract_stated_age_fact_from_text — disqualifying prefix guard
     # ------------------------------------------------------------------

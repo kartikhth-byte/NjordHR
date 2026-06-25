@@ -100,7 +100,7 @@ test("reason formatting browser smoke renders structured sections", async ({ pag
 
   await expect(page.locator('[data-group-heading="context"]')).toHaveText("Resume Context");
   await expect(page.locator('[data-group="context"] li')).toHaveText([
-    "Vessel tonnage evidence: 83,000 (unit unspecified).",
     "Experienced Ship Type: bulk carrier, container",
   ]);
+  await expect(page.locator('[data-group="context"]')).not.toContainText("Vessel tonnage evidence");
 });

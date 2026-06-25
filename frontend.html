@@ -347,6 +347,7 @@
                     experienceShipTypeFilter: state?.experience_ship_type_filter || {},
                     engineExperienceFilter: state?.engine_experience_filter || {},
                     vesselTonnageFilter: state?.vessel_tonnage_filter || {},
+                    ageFilter: state?.age_filter || {},
                     restoredChain,
                     restoredIndex,
                     restoredResults,
@@ -1108,6 +1109,8 @@
             const [configuredEngineFamilies, setConfiguredEngineFamilies] = useState([]);
             const [experienceShipTypeRows, setExperienceShipTypeRows] = useState([]);
             const [engineExperienceRows, setEngineExperienceRows] = useState([]);
+            const [candidateAgeMin, setCandidateAgeMin] = useState('');
+            const [candidateAgeMax, setCandidateAgeMax] = useState('');
             const [vesselTonnageMin, setVesselTonnageMin] = useState('');
             const [vesselTonnageMax, setVesselTonnageMax] = useState('');
             const [vesselTonnageUnit, setVesselTonnageUnit] = useState('any');
@@ -4169,6 +4172,12 @@
                 return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : NaN;
             };
 
+            const normalizeAgeInput = (value) => {
+                const parsed = normalizeTonnageInput(value);
+                if (parsed === null || Number.isNaN(parsed)) return parsed;
+                return parsed >= 18 && parsed <= 80 ? parsed : NaN;
+            };
+
             const createExperienceFilterRow = (overrides = {}) => ({
                 ...DEFAULT_EXPERIENCE_FILTER_ROW,
                 ...overrides,
@@ -4255,6 +4264,27 @@
                 configuredShipTypes: shipTypes,
             });
 
+            const buildAgeFilter = () => {
+                const minimumYears = normalizeAgeInput(candidateAgeMin);
+                const maximumYears = normalizeAgeInput(candidateAgeMax);
+                if (Number.isNaN(minimumYears) || Number.isNaN(maximumYears)) {
+                    return { error: 'Candidate age must be a whole number between 18 and 80.' };
+                }
+                if (minimumYears === null && maximumYears === null) {
+                    return { filter: {} };
+                }
+                if (minimumYears !== null && maximumYears !== null && minimumYears > maximumYears) {
+                    return { error: 'Minimum candidate age cannot be greater than maximum candidate age.' };
+                }
+                return {
+                    filter: {
+                        type: 'age_range',
+                        minimum_years: minimumYears,
+                        maximum_years: maximumYears,
+                    },
+                };
+            };
+
             const buildVesselTonnageFilter = () => {
                 const minValue = normalizeTonnageInput(vesselTonnageMin);
                 const maxValue = normalizeTonnageInput(vesselTonnageMax);
@@ -4299,6 +4329,15 @@
                 }
                 if (filter.min_value != null) return `>= ${filter.min_value.toLocaleString()} (${unitLabel}${recency})`;
                 return `<= ${filter.max_value.toLocaleString()} (${unitLabel}${recency})`;
+            };
+
+            const ageFilterSummary = (filter = {}) => {
+                if (!filter || (filter.minimum_years == null && filter.maximum_years == null)) return 'Any';
+                if (filter.minimum_years != null && filter.maximum_years != null) {
+                    return `${filter.minimum_years}-${filter.maximum_years} years`;
+                }
+                if (filter.minimum_years != null) return `>= ${filter.minimum_years} years`;
+                return `<= ${filter.maximum_years} years`;
             };
 
             const appendExperienceFilterRow = (setter) => {
@@ -4535,6 +4574,17 @@
                         if (engineExperienceResult.filter && Array.isArray(engineExperienceResult.filter.items) && engineExperienceResult.filter.items.length) {
                             params.set('engine_experience_filter', JSON.stringify(engineExperienceResult.filter));
                         }
+                        const ageResult = buildAgeFilter();
+                        if (ageResult.error) {
+                            preserveCompletedResultsAfterFailure();
+                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                            setIsAnalyzeLoading(false);
+                            handleSendMessage('error', ageResult.error);
+                            return;
+                        }
+                        if (ageResult.filter && (ageResult.filter.minimum_years != null || ageResult.filter.maximum_years != null)) {
+                            params.set('age_filter', JSON.stringify(ageResult.filter));
+                        }
                         const tonnageResult = buildVesselTonnageFilter();
                         if (tonnageResult.error) {
                             preserveCompletedResultsAfterFailure();
@@ -4693,6 +4743,10 @@
                     return handleSendMessage('warning', 'You are viewing an earlier result set. Return to latest results to refine further.');
                 }
                 if (!refinementMode) {
+                    const ageResult = buildAgeFilter();
+                    if (ageResult.error) {
+                        return handleSendMessage('error', ageResult.error);
+                    }
                     const tonnageResult = buildVesselTonnageFilter();
                     if (tonnageResult.error) {
                         return handleSendMessage('error', tonnageResult.error);
@@ -4886,6 +4940,7 @@
                         familyKey: 'engine_family',
                         type: 'engine_experience',
                     }).filter || {},
+                    age_filter: buildAgeFilter().filter || {},
                     vessel_tonnage_filter: buildVesselTonnageFilter().filter || {},
                     refinement_state: refinementState,
                     active_search_step_index: activeSearchStepIndex,
@@ -4965,6 +5020,16 @@
                             contract_count: item?.contract_count != null ? String(item.contract_count) : '3',
                             minimum_months: item?.minimum_months != null ? String(item.minimum_months) : '',
                         }))
+                    );
+                    setCandidateAgeMin(
+                        restored.ageFilter?.minimum_years != null
+                            ? String(restored.ageFilter.minimum_years)
+                            : ''
+                    );
+                    setCandidateAgeMax(
+                        restored.ageFilter?.maximum_years != null
+                            ? String(restored.ageFilter.maximum_years)
+                            : ''
                     );
                     setVesselTonnageMin(
                         restored.vesselTonnageFilter?.min_value != null
@@ -5084,6 +5149,7 @@
             }, [
                 authUser, activeTab, aiPrompt, selectedRankFolder, selectedSearchShipType,
                 experienceShipTypeRows, engineExperienceRows,
+                candidateAgeMin, candidateAgeMax,
                 vesselTonnageMin, vesselTonnageMax, vesselTonnageUnit, vesselTonnageYearsBack,
                 refinementState, refinementAvailability,
                 analysisResults, searchChain, activeSearchStepIndex,
@@ -8287,6 +8353,48 @@
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Candidate Age Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                                <div>
+                                                    <label htmlFor="candidateAgeMin" className="block text-xs font-medium text-gray-600">Minimum age</label>
+                                                    <input
+                                                        id="candidateAgeMin"
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        min="18"
+                                                        max="80"
+                                                        step="1"
+                                                        value={candidateAgeMin}
+                                                        onChange={e => { setCandidateAgeMin(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        placeholder="e.g., 30"
+                                                        disabled={refinementMode}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label htmlFor="candidateAgeMax" className="block text-xs font-medium text-gray-600">Maximum age</label>
+                                                    <input
+                                                        id="candidateAgeMax"
+                                                        type="number"
+                                                        inputMode="numeric"
+                                                        min="18"
+                                                        max="80"
+                                                        step="1"
+                                                        value={candidateAgeMax}
+                                                        onChange={e => { setCandidateAgeMax(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        placeholder="e.g., 50"
+                                                        disabled={refinementMode}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Optional hard filter using extracted candidate age. Picker values override age wording in the prompt.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Vessel Tonnage Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
                                             </label>
                                             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -8853,6 +8961,7 @@
                                     <p className="mt-1"><span className="font-medium">Applied ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.applied_ship_type || 'Any'}</p>
                                     <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.experience_ship_type_filter || {}, familyKey: 'ship_family' })}</p>
                                     <p className="mt-1"><span className="font-medium">Engine experience:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.engine_experience_filter || {}, familyKey: 'engine_family' })}</p>
+                                    <p className="mt-1"><span className="font-medium">Candidate age:</span> {ageFilterSummary(pendingRefinementConfirmation.preflight.search_context?.age_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Vessel tonnage:</span> {vesselTonnageSummary(pendingRefinementConfirmation.preflight.search_context?.vessel_tonnage_filter || {})}</p>
                                     <p className="mt-1"><span className="font-medium">Next step:</span> Refinement {searchChain.length}</p>
                                 </div>

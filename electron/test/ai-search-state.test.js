@@ -131,6 +131,11 @@ test("recovery restore clamps active index and preflights the latest refinable s
       max_value: 80000,
       unit: "gt_grt",
     },
+    age_filter: {
+      type: "age_range",
+      minimum_years: 30,
+      maximum_years: 50,
+    },
     refinement_state: "active_running",
     active_search_step_index: 99,
     search_chain: [
@@ -157,6 +162,11 @@ test("recovery restore clamps active index and preflights the latest refinable s
     min_value: 50000,
     max_value: 80000,
     unit: "gt_grt",
+  });
+  assert.deepEqual(restored.ageFilter, {
+    type: "age_range",
+    minimum_years: 30,
+    maximum_years: 50,
   });
 });
 

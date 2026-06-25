@@ -155,6 +155,7 @@ def _ai_search_request_fingerprint(
     experience_ship_type_filter=None,
     engine_experience_filter=None,
     vessel_tonnage_filter=None,
+    age_filter=None,
     parent_search_session_id="",
     changed_content_acknowledgement_id="",
 ):
@@ -168,6 +169,7 @@ def _ai_search_request_fingerprint(
         "experience_ship_type_filter": {} if is_refinement else _normalize_experience_ship_type_filter(experience_ship_type_filter),
         "engine_experience_filter": {} if is_refinement else _normalize_engine_experience_filter(engine_experience_filter),
         "vessel_tonnage_filter": {} if is_refinement else _normalize_vessel_tonnage_filter(vessel_tonnage_filter),
+        "age_filter": {} if is_refinement else _normalize_age_filter(age_filter),
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "changed_content_acknowledgement_id": (
             str(changed_content_acknowledgement_id or "").strip()
@@ -316,8 +318,85 @@ def _normalize_vessel_tonnage_filter(value):
     return normalized
 
 
+class AgeFilterInvalid(ValueError):
+    def __init__(self, detail_code, message):
+        super().__init__(message)
+        self.detail_code = detail_code
+
+
+_AGE_BOUND_INVALID = object()
+
+
+def _age_bound_or_none(raw, *, strict=False):
+    if isinstance(raw, bool) or raw in (None, ""):
+        return None
+    text = str(raw).strip()
+    if not re.fullmatch(r"\d+", text):
+        if strict:
+            raise AgeFilterInvalid(
+                "non_integer",
+                "Candidate age filter values must be whole numbers between 18 and 80.",
+            )
+        return _AGE_BOUND_INVALID
+    parsed = int(text)
+    if 18 <= parsed <= 80:
+        return parsed
+    if strict:
+        raise AgeFilterInvalid(
+            "out_of_range",
+            "Candidate age filter values must be between 18 and 80.",
+        )
+    return _AGE_BOUND_INVALID
+
+
+def _normalize_age_filter(value, *, strict=False):
+    if not isinstance(value, dict):
+        if strict and value not in (None, ""):
+            raise AgeFilterInvalid(
+                "malformed",
+                "Candidate age filter must be an object with minimum_years and/or maximum_years.",
+            )
+        return {}
+    minimum_years = _age_bound_or_none(value.get("minimum_years"), strict=strict)
+    maximum_years = _age_bound_or_none(value.get("maximum_years"), strict=strict)
+    if minimum_years is _AGE_BOUND_INVALID or maximum_years is _AGE_BOUND_INVALID:
+        return {}
+    if minimum_years is None and maximum_years is None:
+        return {}
+    if minimum_years is not None and maximum_years is not None and minimum_years > maximum_years:
+        if strict:
+            raise AgeFilterInvalid(
+                "inverted_bounds",
+                "Minimum candidate age cannot be greater than maximum candidate age.",
+            )
+        return {}
+    return {
+        "type": "age_range",
+        "minimum_years": minimum_years,
+        "maximum_years": maximum_years,
+    }
+
+
 def _parse_vessel_tonnage_filter_payload(raw):
     return _parse_json_filter_payload(raw, _normalize_vessel_tonnage_filter)
+
+
+def _parse_age_filter_payload(raw):
+    return _parse_json_filter_payload(raw, _normalize_age_filter)
+
+
+def _parse_age_filter_payload_strict(raw):
+    raw_text = str(raw or "").strip()
+    if not raw_text:
+        return {}
+    try:
+        payload = json.loads(raw_text)
+    except (TypeError, ValueError) as exc:
+        raise AgeFilterInvalid(
+            "malformed_json",
+            "Candidate age filter must be valid JSON.",
+        ) from exc
+    return _normalize_age_filter(payload, strict=True)
 
 
 def _parse_experience_ship_type_filter_payload(raw):
@@ -1795,6 +1874,9 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "vessel_tonnage_filter": _normalize_vessel_tonnage_filter(
                 (parent_session.get("context") or {}).get("vessel_tonnage_filter") or {}
             ),
+            "age_filter": _normalize_age_filter(
+                (parent_session.get("context") or {}).get("age_filter") or {}
+            ),
         },
         "scope_summary": scope_summary,
         "refinement": {
@@ -1831,6 +1913,9 @@ def _safe_recovery_search_context(value):
     )
     result["vessel_tonnage_filter"] = _normalize_vessel_tonnage_filter(
         (value if isinstance(value, dict) else {}).get("vessel_tonnage_filter") or {}
+    )
+    result["age_filter"] = _normalize_age_filter(
+        (value if isinstance(value, dict) else {}).get("age_filter") or {}
     )
     return result
 
@@ -1985,6 +2070,9 @@ def _sanitize_ai_search_recovery_draft(payload):
             ),
             "vessel_tonnage_filter": _normalize_vessel_tonnage_filter(
                 search_state.get("vessel_tonnage_filter") or {}
+            ),
+            "age_filter": _normalize_age_filter(
+                search_state.get("age_filter") or {}
             ),
             "refinement_state": str(search_state.get("refinement_state") or "disabled")[:64],
             "active_search_step_index": _sanitize_recovery_step_index(
@@ -5075,6 +5163,14 @@ def analyze_stream():
         request.args.get('engine_experience_filter', '')
     )
     vessel_tonnage_filter = _parse_vessel_tonnage_filter_payload(request.args.get('vessel_tonnage_filter', ''))
+    try:
+        age_filter = _parse_age_filter_payload_strict(request.args.get('age_filter', ''))
+    except AgeFilterInvalid as exc:
+        message = str(exc)
+        detail_code = exc.detail_code
+        def invalid_age_filter():
+            yield f"data: {json.dumps({'type': 'error', 'message': message, 'error_code': 'AGE_FILTER_INVALID', 'detail': {'code': detail_code}})}\n\n"
+        return Response(invalid_age_filter(), mimetype='text/event-stream')
     parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
     search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
     changed_content_acknowledgement_id = request.args.get(
@@ -5090,6 +5186,7 @@ def analyze_stream():
         experience_ship_type_filter=experience_ship_type_filter,
         engine_experience_filter=engine_experience_filter,
         vessel_tonnage_filter=vessel_tonnage_filter,
+        age_filter=age_filter,
         parent_search_session_id=parent_search_session_id,
         changed_content_acknowledgement_id=changed_content_acknowledgement_id,
     )
@@ -5102,6 +5199,7 @@ def analyze_stream():
         "experience_ship_type_filter": experience_ship_type_filter,
         "engine_experience_filter": engine_experience_filter,
         "vessel_tonnage_filter": vessel_tonnage_filter,
+        "age_filter": age_filter,
         "parent_search_session_id": parent_search_session_id,
         "changed_content_acknowledgement_id": changed_content_acknowledgement_id,
     }
@@ -5252,6 +5350,7 @@ def analyze_stream():
             effective_experience_ship_type_filter = dict(experience_ship_type_filter or {})
             effective_engine_experience_filter = dict(engine_experience_filter or {})
             effective_vessel_tonnage_filter = dict(vessel_tonnage_filter or {})
+            effective_age_filter = dict(age_filter or {})
             search_mode = "root"
             root_search_session_id = search_session_id
             refinement_depth = 0
@@ -5296,6 +5395,9 @@ def analyze_stream():
                 parent_vessel_tonnage_filter = _normalize_vessel_tonnage_filter(
                     parent_context.get("vessel_tonnage_filter") or {}
                 )
+                parent_age_filter = _normalize_age_filter(
+                    parent_context.get("age_filter") or {}
+                )
                 context_mismatch = (
                     (effective_rank_folder and effective_rank_folder != parent_rank_folder)
                     or (effective_applied_ship_type and effective_applied_ship_type != parent_applied_ship_type)
@@ -5315,10 +5417,14 @@ def analyze_stream():
                         effective_vessel_tonnage_filter
                         and effective_vessel_tonnage_filter != parent_vessel_tonnage_filter
                     )
+                    or (
+                        effective_age_filter
+                        and effective_age_filter != parent_age_filter
+                    )
                 )
                 if context_mismatch:
                     yield _error_sse(
-                        "Refinement must use the rank, ship-type, and tonnage filters saved with the previous verified search.",
+                        "Refinement must use the rank, ship-type, age, and tonnage filters saved with the previous verified search.",
                         error_code="REFINEMENT_CONTEXT_MISMATCH",
                         retryable=False,
                     )
@@ -5351,6 +5457,7 @@ def analyze_stream():
                 effective_experience_ship_type_filter = parent_experience_ship_type_filter
                 effective_engine_experience_filter = parent_engine_experience_filter
                 effective_vessel_tonnage_filter = parent_vessel_tonnage_filter
+                effective_age_filter = parent_age_filter
                 authoritative_context = authoritative_preflight.get("search_context") or {}
                 effective_rank_folder_id = str(
                     authoritative_context.get("rank_folder_id") or ""
@@ -5456,6 +5563,7 @@ def analyze_stream():
                     "experience_ship_type_filter": effective_experience_ship_type_filter,
                     "engine_experience_filter": effective_engine_experience_filter,
                     "vessel_tonnage_filter": effective_vessel_tonnage_filter,
+                    "age_filter": effective_age_filter,
                     "search_session_id": search_session_id,
                     "search_mode": search_mode,
                     "parent_search_session_id": parent_search_session_id,
@@ -5483,6 +5591,7 @@ def analyze_stream():
                 experience_ship_type_filter=effective_experience_ship_type_filter,
                 engine_experience_filter=effective_engine_experience_filter,
                 vessel_tonnage_filter=effective_vessel_tonnage_filter,
+                age_filter=effective_age_filter,
                 review_capture_callback=_candidate_facts_review_capture_callback,
                 candidate_scope_ids=candidate_scope_ids,
                 candidate_scope_memberships=candidate_scope_memberships,
@@ -5574,6 +5683,7 @@ def analyze_stream():
                                 "experience_ship_type_filter": effective_experience_ship_type_filter,
                                 "engine_experience_filter": effective_engine_experience_filter,
                                 "vessel_tonnage_filter": effective_vessel_tonnage_filter,
+                                "age_filter": effective_age_filter,
                             },
                             input_scope=scope_summary,
                             output=output_counts,
@@ -5614,6 +5724,7 @@ def analyze_stream():
                         "experience_ship_type_filter": effective_experience_ship_type_filter,
                         "engine_experience_filter": effective_engine_experience_filter,
                         "vessel_tonnage_filter": effective_vessel_tonnage_filter,
+                        "age_filter": effective_age_filter,
                     }
                     event_to_client["scope_summary"] = scope_summary
                     event_to_client["refinement"] = refinement_payload
@@ -5629,6 +5740,7 @@ def analyze_stream():
                             "experience_ship_type_filter": effective_experience_ship_type_filter,
                             "engine_experience_filter": effective_engine_experience_filter,
                             "vessel_tonnage_filter": effective_vessel_tonnage_filter,
+                            "age_filter": effective_age_filter,
                             "search_session_id": search_session_id,
                             "search_mode": search_mode,
                             "parent_search_session_id": parent_search_session_id,
@@ -5720,6 +5832,15 @@ def analyze():
             data.get('engine_experience_filter') or {}
         )
         vessel_tonnage_filter = _normalize_vessel_tonnage_filter(data.get('vessel_tonnage_filter') or {})
+        try:
+            age_filter = _normalize_age_filter(data.get('age_filter') or {}, strict=bool(data.get('age_filter')))
+        except AgeFilterInvalid as exc:
+            return jsonify({
+                "success": False,
+                "message": str(exc),
+                "error_code": "AGE_FILTER_INVALID",
+                "detail": {"code": exc.detail_code},
+            }), 400
 
         if not prompt or not rank_folder:
             return jsonify({"success": False, "message": "AI prompt and a rank folder selection are required."}), 400
@@ -5746,6 +5867,7 @@ def analyze():
                 "experience_ship_type_filter": experience_ship_type_filter,
                 "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
+                "age_filter": age_filter,
             },
             actor_role=actor_role,
             actor_username=actor_username,
@@ -5766,6 +5888,7 @@ def analyze():
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
+            age_filter=age_filter,
             review_capture_callback=_candidate_facts_review_capture_callback,
         )
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
@@ -5785,6 +5908,7 @@ def analyze():
                 "experience_ship_type_filter": experience_ship_type_filter,
                 "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
+                "age_filter": age_filter,
                 "success": bool(result.get("success")),
                 "verified_matches": len(result.get("verified_matches", [])),
                 "uncertain_matches": len(result.get("uncertain_matches", [])),
@@ -5812,6 +5936,7 @@ def analyze():
                 "experience_ship_type_filter": experience_ship_type_filter,
                 "engine_experience_filter": engine_experience_filter,
                 "vessel_tonnage_filter": vessel_tonnage_filter,
+                "age_filter": age_filter,
                 "error": f"{type(e).__name__}: {e}",
             },
             actor_role=actor_role,

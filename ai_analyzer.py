@@ -13053,6 +13053,7 @@ Examples of GOOD responses:
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
+        age_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13145,6 +13146,16 @@ Examples of GOOD responses:
                 job_constraints.setdefault("hard_constraints", {})["vessel_tonnage"] = tonnage_constraint
                 if "vessel_tonnage" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("vessel_tonnage")
+            if isinstance(age_filter, dict) and (
+                age_filter.get("minimum_years") is not None
+                or age_filter.get("maximum_years") is not None
+            ):
+                job_constraints.setdefault("hard_constraints", {})["age_years"] = {
+                    "min_age": age_filter.get("minimum_years"),
+                    "max_age": age_filter.get("maximum_years"),
+                }
+                if "age_range" not in job_constraints.setdefault("applied_constraints", []):
+                    job_constraints["applied_constraints"].append("age_range")
             prompt_observability_probe = self._build_prompt_observability(
                 user_prompt,
                 job_constraints,
@@ -13165,6 +13176,7 @@ Examples of GOOD responses:
                 or bool(normalized_experience_ship_type_filter)
                 or bool(normalized_engine_experience_filter)
                 or bool(vessel_tonnage_filter)
+                or bool(age_filter)
             )
             structured_only_prompt = self._is_structured_only_prompt(
                 user_prompt,
@@ -13705,6 +13717,7 @@ Examples of GOOD responses:
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
+        age_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13728,6 +13741,7 @@ Examples of GOOD responses:
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
+            age_filter=age_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -13829,6 +13843,7 @@ class Analyzer:
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
+        age_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13842,6 +13857,7 @@ class Analyzer:
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
+            age_filter=age_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -13856,6 +13872,7 @@ class Analyzer:
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
+        age_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13869,6 +13886,7 @@ class Analyzer:
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
+            age_filter=age_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,

@@ -51,7 +51,15 @@ def _stub_external_modules():
         analyzer_module.Analyzer = DummyAnalyzer
         analyzer_module.engine_family_option_catalog = lambda: [
             {"value": "man_b_w", "label": "MAN B&W"},
+            {"value": "man_b_w_mc", "label": "MAN B&W MC"},
+            {"value": "man_b_w_me", "label": "MAN B&W ME"},
             {"value": "caterpillar", "label": "Caterpillar"},
+            {"value": "electronically_controlled_engine", "label": "Electronically controlled engine"},
+            {"value": "dual_fuel", "label": "Dual fuel"},
+            {"value": "wartsila_rt_flex", "label": "Wärtsilä RT-flex"},
+            {"value": "wingd_x_engines", "label": "WinGD X engines"},
+            {"value": "pielstick", "label": "Pielstick"},
+            {"value": "mitsubishi_uec", "label": "Mitsubishi UEC"},
         ]
         sys.modules['ai_analyzer'] = analyzer_module
 
@@ -1453,6 +1461,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 experience_ship_type_filter=None,
                 engine_experience_filter=None,
                 vessel_tonnage_filter=None,
+                age_filter=None,
                 **_kwargs,
             ):
                 captured["rank_folder"] = rank_folder
@@ -1462,6 +1471,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 captured["experience_ship_type_filter"] = experience_ship_type_filter
                 captured["engine_experience_filter"] = engine_experience_filter
                 captured["vessel_tonnage_filter"] = vessel_tonnage_filter
+                captured["age_filter"] = age_filter
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -1500,6 +1510,11 @@ class BackendEventLogFlowTests(unittest.TestCase):
                         "max_value": 80000,
                         "unit": "gt_grt",
                         "years_back": 4,
+                    }),
+                    "age_filter": json.dumps({
+                        "type": "age_range",
+                        "minimum_years": 30,
+                        "maximum_years": 50,
                     }),
                 },
             )
@@ -1545,6 +1560,14 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 "max_value": 80000,
                 "unit": "gt_grt",
                 "years_back": 4,
+            },
+        )
+        self.assertEqual(
+            captured["age_filter"],
+            {
+                "type": "age_range",
+                "minimum_years": 30,
+                "maximum_years": 50,
             },
         )
 
@@ -1682,6 +1705,83 @@ class BackendEventLogFlowTests(unittest.TestCase):
         }))
 
         self.assertEqual(payload, {})
+
+    def test_parse_age_filter_payload_accepts_partial_and_range_bounds(self):
+        self.assertEqual(
+            backend_server._parse_age_filter_payload(json.dumps({
+                "type": "age_range",
+                "minimum_years": 30,
+                "maximum_years": 50,
+            })),
+            {
+                "type": "age_range",
+                "minimum_years": 30,
+                "maximum_years": 50,
+            },
+        )
+        self.assertEqual(
+            backend_server._parse_age_filter_payload(json.dumps({
+                "type": "age_range",
+                "minimum_years": 45,
+            })),
+            {
+                "type": "age_range",
+                "minimum_years": 45,
+                "maximum_years": None,
+            },
+        )
+
+    def test_parse_age_filter_payload_rejects_invalid_bounds(self):
+        invalid_payloads = [
+            {"type": "age_range", "minimum_years": 17, "maximum_years": 50},
+            {"type": "age_range", "minimum_years": 30.5, "maximum_years": 50},
+            {"type": "age_range", "minimum_years": 60, "maximum_years": 50},
+            {"type": "age_range", "minimum_years": 30, "maximum_years": 81},
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assertEqual(backend_server._parse_age_filter_payload(json.dumps(payload)), {})
+
+    def test_analyze_stream_rejects_invalid_age_filter_payload(self):
+        invalid_payloads = [
+            ({"type": "age_range", "minimum_years": 17, "maximum_years": 50}, "out_of_range"),
+            ({"type": "age_range", "minimum_years": 30.5, "maximum_years": 50}, "non_integer"),
+            ({"type": "age_range", "minimum_years": 60, "maximum_years": 50}, "inverted_bounds"),
+            ("not-json", "malformed_json"),
+        ]
+        for payload, detail_code in invalid_payloads:
+            with self.subTest(payload=payload):
+                raw_age_filter = payload if isinstance(payload, str) else json.dumps(payload)
+                with patch.object(backend_server, "Analyzer") as analyzer:
+                    resp = self.client.get(
+                        "/analyze_stream",
+                        query_string={
+                            "rank_folder": "Chief_Officer",
+                            "prompt": "show candidates",
+                            "age_filter": raw_age_filter,
+                        },
+                    )
+
+                events = _sse_events(resp)
+                self.assertEqual(events[0]["type"], "error")
+                self.assertEqual(events[0]["error_code"], "AGE_FILTER_INVALID")
+                self.assertEqual(events[0]["detail"]["code"], detail_code)
+                analyzer.assert_not_called()
+
+    def test_analyze_rejects_invalid_age_filter_payload(self):
+        resp = self.client.post(
+            "/analyze",
+            json={
+                "rank_folder": "Chief_Officer",
+                "prompt": "show candidates",
+                "age_filter": {"type": "age_range", "minimum_years": 81},
+            },
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "AGE_FILTER_INVALID")
+        self.assertEqual(body["detail"]["code"], "out_of_range")
 
     def test_analyze_stream_accepts_opaque_rank_folder_id(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

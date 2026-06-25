@@ -32,6 +32,7 @@ config.ini
 NjordHR.bbprojectd/
 electron/node_modules/
 electron/test-results/
+test-results/
 supabase/.temp/
 
 # Historical local backups
