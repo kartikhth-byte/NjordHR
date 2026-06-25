@@ -325,6 +325,43 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
                 hard_constraint_key="rank",
             )
 
+    def test_shared_picker_override_helper_rejects_implicit_prompt_only_picker_override(self):
+        with self.assertRaisesRegex(ValueError, "prompt-only picker_override requires prompt_suppressed_by_picker=True"):
+            self.analyzer._apply_picker_with_prompt_suppression(
+                {
+                    "hard_constraints": {},
+                    "applied_constraints": [],
+                    "unapplied_constraints": [],
+                    "parsing_notes": [],
+                },
+                family="coc_issue_authority_match",
+                hard_constraint_key="coc_issue_authority",
+                prompt_constraint={"authorities": ["uk_mca"], "operator": "contains_any"},
+            )
+
+    def test_shared_picker_override_helper_allows_explicit_prompt_only_picker_override(self):
+        constraints = {
+            "hard_constraints": {},
+            "applied_constraints": [],
+            "unapplied_constraints": [],
+            "parsing_notes": [],
+        }
+
+        self.analyzer._apply_picker_with_prompt_suppression(
+            constraints,
+            family="coc_issue_authority_match",
+            hard_constraint_key="coc_issue_authority",
+            prompt_constraint={"authorities": ["uk_mca"], "operator": "contains_any"},
+            prompt_suppressed_by_picker=True,
+        )
+
+        self.assertEqual(constraints["observability_applied_constraints"], ["coc_issue_authority_match"])
+        self.assertEqual(
+            constraints["observability_constraint_reasons"],
+            {"coc_issue_authority_match": "picker_override"},
+        )
+        self.assertNotIn("coc_issue_authority", constraints["hard_constraints"])
+
     def test_present_rank_constraint_evaluates_current_rank_fact(self):
         result = self.analyzer._evaluate_rank_rule(
             {

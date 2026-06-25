@@ -2430,6 +2430,7 @@ class AIResumeAnalyzer:
         reason="picker_override",
         record_observability_constraint=True,
         record_observability_reason=True,
+        prompt_suppressed_by_picker=False,
     ):
         """Apply picker constraints and route suppressed prompt constraints.
 
@@ -2439,10 +2440,21 @@ class AIResumeAnalyzer:
         and writes the prompt value to observability_* fields. For legacy
         families that only exposed the suppressed family name, pass
         record_observability_constraint=False and record_observability_reason=False.
+        Prompt-only calls that record `picker_override` must set
+        prompt_suppressed_by_picker=True to make the upstream picker dependency
+        explicit.
         applied_constraints keeps insertion order for downstream rendering.
         """
         if picker_constraint is None and prompt_constraint is None:
             raise ValueError("picker_constraint or prompt_constraint is required")
+        if (
+            picker_constraint is None
+            and prompt_constraint is not None
+            and record_observability_reason
+            and reason == "picker_override"
+            and not prompt_suppressed_by_picker
+        ):
+            raise ValueError("prompt-only picker_override requires prompt_suppressed_by_picker=True")
         if picker_constraint is not None:
             constraints.setdefault("hard_constraints", {})[hard_constraint_key] = picker_constraint
             applied_constraints = constraints.setdefault("applied_constraints", [])
@@ -4960,6 +4972,7 @@ class AIResumeAnalyzer:
                     family="coc_issue_authority_match",
                     hard_constraint_key="coc_issue_authority",
                     prompt_constraint=coc_issue_authority_constraint,
+                    prompt_suppressed_by_picker=True,
                 )
 
         if coc_grade_constraint:
@@ -13642,8 +13655,9 @@ Examples of GOOD responses:
                         "requested_label": present_rank_value,
                     },
                 )
-            # These picker families currently have no same-family prompt suppression
-            # semantics; use the shared helper when such arbitration is introduced.
+            # Direct-write picker families in this block currently have no same-family
+            # prompt suppression semantics; use the shared helper when such
+            # arbitration is introduced.
             if str(applied_ship_type or "").strip():
                 job_constraints.setdefault("hard_constraints", {})["applied_ship_type"] = str(applied_ship_type).strip()
                 if "applied_ship_type" not in job_constraints.setdefault("applied_constraints", []):
@@ -13696,6 +13710,7 @@ Examples of GOOD responses:
                 }
                 if "age_range" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("age_range")
+            # End direct-write picker families without same-family prompt suppression.
             if isinstance(coc_issue_authority_filter, dict) and coc_issue_authority_filter.get("authorities"):
                 authorities = list(dict.fromkeys(
                     str(authority or "").strip()
