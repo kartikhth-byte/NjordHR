@@ -509,6 +509,59 @@
                 vlcc: 'VLCC',
             };
 
+            const ENGINE_DISPLAY_LABEL_MAP = {
+                ammonia_engine: 'Ammonia engine',
+                bergen: 'Bergen',
+                caterpillar: 'Caterpillar',
+                daihatsu: 'Daihatsu',
+                detroit_diesel: 'Detroit Diesel',
+                doosan: 'Doosan',
+                dual_fuel: 'Dual fuel',
+                electronically_controlled_engine: 'Electronically controlled engine',
+                gotaverken: 'Gotaverken',
+                himsen: 'Himsen',
+                mak: 'MaK',
+                man: 'MAN / Everllence',
+                man_b_w: 'MAN B&W',
+                man_b_w_mc: 'MAN B&W MC',
+                man_b_w_me: 'MAN B&W ME',
+                man_b_w_me_b: 'MAN B&W ME-B',
+                man_b_w_me_c: 'MAN B&W ME-C',
+                man_b_w_me_c_gi: 'MAN B&W ME-C-GI',
+                man_b_w_me_ga: 'MAN B&W ME-GA',
+                man_b_w_me_gi: 'MAN B&W ME-GI',
+                man_b_w_me_gie: 'MAN B&W ME-GIE',
+                man_b_w_me_lgi: 'MAN B&W ME-LGI',
+                man_b_w_me_lgia: 'MAN B&W ME-LGIA',
+                man_b_w_me_lgim: 'MAN B&W ME-LGIM',
+                man_b_w_me_lgip: 'MAN B&W ME-LGIP',
+                mechanical_engine: 'Mechanical engine',
+                methanol_engine: 'Methanol engine',
+                mitsubishi: 'Mitsubishi',
+                mitsubishi_uec: 'Mitsubishi UEC',
+                mitsubishi_uec_lse: 'Mitsubishi UEC-LSE',
+                mitsubishi_uec_lsh: 'Mitsubishi UEC-LSH',
+                mitsubishi_uec_lsii: 'Mitsubishi UEC-LSII',
+                mitsubishi_uec_lsj: 'Mitsubishi UEC-LSJ',
+                mitsui: 'Mitsui',
+                mtu: 'MTU',
+                niigata: 'Niigata',
+                nohab: 'Nohab',
+                pielstick: 'Pielstick',
+                sulzer: 'Sulzer',
+                wartsila: 'Wartsila',
+                wartsila_dual_fuel: 'Wartsila dual fuel',
+                wartsila_rt_flex: 'Wartsila / Sulzer RT-flex',
+                wartsila_rta: 'Wartsila / Sulzer RTA',
+                wingd: 'WinGD',
+                wingd_x_df: 'WinGD X-DF',
+                wingd_x_df_a: 'WinGD X-DF-A',
+                wingd_x_df_hp: 'WinGD X-DF-HP',
+                wingd_x_df_m_e: 'WinGD X-DF-M/E',
+                wingd_x_engines: 'WinGD X engines',
+                yanmar: 'Yanmar',
+            };
+
             const splitReasonIntoDisplayLines = (value) => {
                 const text = String(value || '').trim();
                 if (!text) return [];
@@ -806,7 +859,10 @@
                 const configuredOption = configuredEngineFamilies.find(
                     option => normalizeFamilyOptionKey(familyOptionValue(option)) === key
                 );
-                return familyOptionLabel(configuredOption) || String(rawMention || '').trim() || '';
+                return familyOptionLabel(configuredOption)
+                    || ENGINE_DISPLAY_LABEL_MAP[key]
+                    || String(rawMention || '').trim()
+                    || '';
             };
 
             const formatShipFamilyLabel = (value, { rawMention = '', configuredShipTypes = [] } = {}) => {
@@ -890,11 +946,22 @@
 
                 const applied = Array.isArray(match?.applied_ship_types) ? match.applied_ship_types.filter(Boolean) : [];
                 const experienced = Array.isArray(match?.experienced_ship_types) ? match.experienced_ship_types.filter(Boolean) : [];
+                const engines = Array.isArray(match?.experienced_engine_types) ? match.experienced_engine_types.filter(Boolean) : [];
                 if (applied.length > 0 && !options.suppressAppliedShipTypes) {
                     lines.push(`Applied Ship Type: ${applied.join(', ')}`);
                 }
                 if (experienced.length > 0 && !options.suppressExperiencedShipTypes) {
                     lines.push(`Experienced Ship Type: ${experienced.join(', ')}`);
+                }
+                if (engines.length > 0 && !options.suppressEngineTypes) {
+                    const engineLabels = Array.from(new Set(
+                        engines
+                            .map(value => formatEngineFamilyLabel(value, { rawMention: String(value || '').trim() }))
+                            .filter(Boolean)
+                    ));
+                    if (engineLabels.length > 0) {
+                        lines.push(`Engine Experience: ${engineLabels.join(', ')}`);
+                    }
                 }
                 return lines;
             };

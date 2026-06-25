@@ -67,6 +67,7 @@ test("reason display model groups matched filters, recruiter checks, and resume 
       max_contract_gap_end: "2023-08-23",
     },
     experienced_ship_types: ["bulk carrier", "container"],
+    experienced_engine_types: ["man_b_w", "pielstick"],
   };
 
   const formatted = helpers.buildReasonDisplayModel(match);
@@ -83,7 +84,9 @@ test("reason display model groups matched filters, recruiter checks, and resume 
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(formatted.context)), [
     "Experienced Ship Type: bulk carrier, container",
+    "Engine Experience: MAN B&W, Pielstick",
   ]);
+  assertNoCanonicalIds(flattenedReasonLines(match));
 });
 
 test("reason display summary uses the same deduped structured lines across result surfaces", () => {
@@ -306,6 +309,19 @@ test("formatter surfaces multiple matching experienced ship type rows", () => {
         ],
       },
     ],
+  }));
+});
+
+test("formatter humanizes engine resume context from extracted engine ids", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    experienced_engine_types: ["pielstick", "mitsubishi_uec_lse", "wingd_x_df_m_e"],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.context)), [
+    "Engine Experience: Pielstick, Mitsubishi UEC-LSE, WinGD X-DF-M/E",
+  ]);
+  assertNoCanonicalIds(flattenedReasonLines({
+    experienced_engine_types: ["pielstick", "mitsubishi_uec_lse", "wingd_x_df_m_e"],
   }));
 });
 

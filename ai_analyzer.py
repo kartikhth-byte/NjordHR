@@ -13459,6 +13459,7 @@ Examples of GOOD responses:
                 dob_value = ((candidate_facts.get("personal") or {}).get("dob"))
                 applied_ship_types = ((candidate_facts.get("application") or {}).get("applied_ship_types") or [])
                 experienced_ship_types = ((candidate_facts.get("experience") or {}).get("vessel_types") or [])
+                experienced_engine_types = ((candidate_facts.get("experience") or {}).get("engine_types") or [])
                 audit_entry = {
                     "candidate_id": resume_id,
                     "filename": filename,
@@ -13529,6 +13530,7 @@ Examples of GOOD responses:
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
                         "experienced_ship_types": experienced_ship_types,
+                        "experienced_engine_types": experienced_engine_types,
                         "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                         "facts_version": hard_filter_result.get("facts_version"),
                         "partial_evaluation": bool(reextract_meta and not reextract_meta.get("succeeded")),
@@ -13592,6 +13594,7 @@ Examples of GOOD responses:
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
                         "experienced_ship_types": experienced_ship_types,
+                        "experienced_engine_types": experienced_engine_types,
                         "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                         "facts_version": hard_filter_result.get("facts_version"),
                         "default_insights": self._build_default_search_insights(candidate_facts),
@@ -13632,6 +13635,7 @@ Examples of GOOD responses:
                             "dob": dob_value.isoformat() if dob_value else None,
                             "applied_ship_types": applied_ship_types,
                             "experienced_ship_types": experienced_ship_types,
+                            "experienced_engine_types": experienced_engine_types,
                             "evaluation_date_used": hard_filter_result.get("evaluation_date_used"),
                             "facts_version": hard_filter_result.get("facts_version"),
                             "default_insights": self._build_default_search_insights(candidate_facts),
