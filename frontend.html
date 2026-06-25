@@ -605,6 +605,14 @@
                 const normalizedMessage = String(message || '').trim();
                 if (!normalizedMessage) return '';
                 const childResults = Array.isArray(actualValue) ? actualValue : [];
+                const childRecencyMissLines = childResults
+                    .filter(child => child?.decision === 'FAIL' && /but not (?:within|in) the requested/i.test(String(child?.message || '')))
+                    .map(child => ensureSentence(
+                        String(child?.message || '')
+                            .trim()
+                            .replace(/^Candidate has\s+(?:experienced ship type\s+)?/i, `${normalizedPrefix} `)
+                    ))
+                    .filter(Boolean);
                 const childLabels = childResults
                     .filter(child => child?.decision === 'PASS' && String(child?.reason_code || '').startsWith('EXPERIENCE_SHIP_TYPE_'))
                     .map(child => {
@@ -615,10 +623,10 @@
                     .filter(Boolean);
                 const uniqueChildLabels = Array.from(new Set(childLabels));
                 if (uniqueChildLabels.length > 1) {
-                    return `${normalizedPrefix} matches: ${uniqueChildLabels.join('; ')}.`;
+                    return [`${normalizedPrefix} matches: ${uniqueChildLabels.join('; ')}.`, ...childRecencyMissLines].join(' ');
                 }
                 if (uniqueChildLabels.length === 1) {
-                    return `${normalizedPrefix} matches '${uniqueChildLabels[0]}'.`;
+                    return [`${normalizedPrefix} matches '${uniqueChildLabels[0]}'.`, ...childRecencyMissLines].join(' ');
                 }
                 if (/but not (?:within|in) the requested/i.test(normalizedMessage)) {
                     return ensureSentence(
@@ -670,6 +678,14 @@
                 if (!message) return '';
 
                 if (code === 'ENGINE_EXPERIENCE_MATCH') {
+                    const childRecencyMissLines = childResults
+                        .filter(child => child?.decision === 'FAIL' && /but not (?:within|in) the requested/i.test(String(child?.message || '')))
+                        .map(child => ensureSentence(
+                            String(child?.message || '')
+                                .trim()
+                                .replace(/^Candidate has\s+(?:engine experience\s+)?/i, 'Engine experience ')
+                        ))
+                        .filter(Boolean);
                     const childLabels = childResults
                         .filter(child => child?.decision === 'PASS' && String(child?.reason_code || '').startsWith('ENGINE_EXPERIENCE_'))
                         .map(child => {
@@ -686,16 +702,16 @@
                         .filter(Boolean);
                     const uniqueChildLabels = Array.from(new Set(childLabels));
                     if (uniqueChildLabels.length > 1) {
-                        return `Engine experience matches: ${uniqueChildLabels.join('; ')}.`;
+                        return [`Engine experience matches: ${uniqueChildLabels.join('; ')}.`, ...childRecencyMissLines].join(' ');
                     }
                     if (uniqueChildLabels.length === 1) {
-                        return `Engine experience matches '${uniqueChildLabels[0]}'.`;
+                        return [`Engine experience matches '${uniqueChildLabels[0]}'.`, ...childRecencyMissLines].join(' ');
                     }
                     if (matchedMonths > 0 && matchedContracts > 0) {
-                        return `Engine experience matches '${requested || evidence}' with ${matchedMonths} month(s) across ${matchedContracts} contract(s).`;
+                        return [`Engine experience matches '${requested || evidence}' with ${matchedMonths} month(s) across ${matchedContracts} contract(s).`, ...childRecencyMissLines].join(' ');
                     }
                     if (evidence && requested) {
-                        return `Engine experience matches '${requested}' via '${evidence}'.`;
+                        return [`Engine experience matches '${requested}' via '${evidence}'.`, ...childRecencyMissLines].join(' ');
                     }
                 }
 

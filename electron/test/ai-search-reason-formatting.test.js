@@ -265,6 +265,33 @@ test("formatter surfaces multiple matching engine filter rows", () => {
   }));
 });
 
+test("formatter surfaces recency-miss sibling rows when engine any-of still passes", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    hard_filter_reasons: [
+      {
+        reason_code: "ENGINE_EXPERIENCE_MATCH",
+        message: "Candidate has MAN B&W experience matching 'MAN B&W'.",
+        actual_value: [
+          {
+            decision: "PASS",
+            reason_code: "ENGINE_EXPERIENCE_MATCH",
+            message: "Candidate has MAN B&W experience matching 'MAN B&W'.",
+          },
+          {
+            decision: "FAIL",
+            reason_code: "ENGINE_EXPERIENCE_MISMATCH",
+            message: "Candidate has engine experience matching 'Pielstick', but not within the requested 2-year window.",
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
+    "Engine experience matches 'MAN B&W'. Engine experience matching 'Pielstick', but not within the requested 2-year window.",
+  ]);
+});
+
 test("formatter surfaces multiple matching experienced ship type rows", () => {
   const formatted = helpers.buildReasonDisplayModel({
     hard_filter_reasons: [
@@ -310,6 +337,33 @@ test("formatter surfaces multiple matching experienced ship type rows", () => {
       },
     ],
   }));
+});
+
+test("formatter surfaces recency-miss sibling rows when ship-type any-of still passes", () => {
+  const formatted = helpers.buildReasonDisplayModel({
+    hard_filter_reasons: [
+      {
+        reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+        message: "Candidate has experienced ship type matching 'container'.",
+        actual_value: [
+          {
+            decision: "PASS",
+            reason_code: "EXPERIENCE_SHIP_TYPE_MATCH",
+            message: "Candidate has experienced ship type matching 'container'.",
+          },
+          {
+            decision: "FAIL",
+            reason_code: "EXPERIENCE_SHIP_TYPE_MISMATCH",
+            message: "Candidate has experienced ship type matching 'oil tanker', but not within the requested 2-year window.",
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(formatted.matchedFilters)), [
+    "Experienced ship type matches 'container'. Experienced ship type matching 'oil tanker', but not within the requested 2-year window.",
+  ]);
 });
 
 test("formatter humanizes engine resume context from extracted engine ids", () => {
