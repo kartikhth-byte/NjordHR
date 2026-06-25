@@ -357,6 +357,79 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(rank_constraint["present_rank_normalized"], ["chief_officer"])
         self.assertIn("rank_match", captured["job_constraints"]["applied_constraints"])
 
+    def test_run_analysis_stream_injects_coc_issue_authority_picker_constraint(self):
+        filename = "2nd_Engineer_1005.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+        captured = {}
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Certificate of Competency Issue Authority: MCA UK",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "2nd_engineer",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": 1.0},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+            "certifications": {
+                "coc": [{
+                    "country": "United Kingdom",
+                    "issue_authority": "MCA UK",
+                    "issue_authority_canonical": "uk_mca",
+                }],
+            },
+        }
+
+        def capture_hard_filters(_candidate_facts, job_constraints):
+            captured["job_constraints"] = job_constraints
+            return {
+                "decision": "PASS",
+                "results": [],
+                "evaluation_date_used": "2026-06-25",
+                "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            }
+
+        self.analyzer._evaluate_hard_filters = capture_hard_filters
+        self.analyzer._reason_with_llm = lambda *_args, **_kwargs: {
+            "is_match": True,
+            "confidence": 0.91,
+            "reason": "Authority picker constraint reached deterministic evaluation.",
+        }
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "coc issued by India",
+            coc_issue_authority_filter={
+                "type": "coc_issue_authority",
+                "authorities": ["uk_mca"],
+            },
+        ))
+
+        self.assertTrue(any(event["type"] == "complete" for event in events))
+        authority_constraint = captured["job_constraints"]["hard_constraints"]["coc_issue_authority"]
+        self.assertEqual(authority_constraint["authorities"], ["uk_mca"])
+        self.assertEqual(authority_constraint["display_value"], "Maritime and Coastguard Agency (UK)")
+        self.assertNotIn("uk_mca", authority_constraint["display_value"])
+        self.assertIn("coc_issue_authority_match", captured["job_constraints"]["applied_constraints"])
+
     def test_below_the_age_of_prompt_populates_age_constraint(self):
         constraints = self.analyzer._extract_job_constraints("is below the age of 50", rank=self.rank)
         self.assertEqual(constraints["applied_constraints"], ["age_range"])

@@ -1030,6 +1030,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertIn("chief_officer", present_rank_values)
         self.assertIn("2nd_engineer", present_rank_values)
         self.assertNotIn("Pre-Sea", present_rank_values)
+        coc_authority_values = {row["value"] for row in body.get("coc_issue_authority_options") or []}
+        self.assertIn("india_dg_shipping", coc_authority_values)
+        self.assertIn("uk_mca", coc_authority_values)
 
     def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -1472,6 +1475,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 engine_experience_filter=None,
                 vessel_tonnage_filter=None,
                 age_filter=None,
+                coc_issue_authority_filter=None,
                 **_kwargs,
             ):
                 captured["rank_folder"] = rank_folder
@@ -1482,6 +1486,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 captured["engine_experience_filter"] = engine_experience_filter
                 captured["vessel_tonnage_filter"] = vessel_tonnage_filter
                 captured["age_filter"] = age_filter
+                captured["coc_issue_authority_filter"] = coc_issue_authority_filter
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -1525,6 +1530,10 @@ class BackendEventLogFlowTests(unittest.TestCase):
                         "type": "age_range",
                         "minimum_years": 30,
                         "maximum_years": 50,
+                    }),
+                    "coc_issue_authority_filter": json.dumps({
+                        "type": "coc_issue_authority",
+                        "authorities": ["india_dg_shipping", "uk_mca"],
                     }),
                 },
             )
@@ -1578,6 +1587,13 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 "type": "age_range",
                 "minimum_years": 30,
                 "maximum_years": 50,
+            },
+        )
+        self.assertEqual(
+            captured["coc_issue_authority_filter"],
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
             },
         )
 
@@ -1792,6 +1808,62 @@ class BackendEventLogFlowTests(unittest.TestCase):
         body = resp.get_json()
         self.assertEqual(body["error_code"], "AGE_FILTER_INVALID")
         self.assertEqual(body["detail"]["code"], "out_of_range")
+
+    def test_parse_coc_issue_authority_filter_accepts_known_authorities_and_aliases(self):
+        self.assertEqual(
+            backend_server._normalize_coc_issue_authority_filter({
+                "type": "coc_issue_authority",
+                "authorities": ["India", "MCA UK", "india_dg_shipping"],
+            }, strict=True),
+            {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
+            },
+        )
+
+    def test_analyze_stream_rejects_invalid_coc_issue_authority_filter_payload(self):
+        invalid_payloads = [
+            ({"type": "wrong", "authorities": ["india_dg_shipping"]}, "invalid_type"),
+            ({"type": "coc_issue_authority", "authorities": "india_dg_shipping"}, "invalid_authorities"),
+            ({"type": "coc_issue_authority", "authorities": ["not_real"]}, "unknown_authority"),
+            ("not-json", "malformed_json"),
+        ]
+        for payload, detail_code in invalid_payloads:
+            with self.subTest(payload=payload):
+                raw_filter = payload if isinstance(payload, str) else json.dumps(payload)
+                with patch.object(backend_server, "Analyzer") as analyzer:
+                    resp = self.client.get(
+                        "/analyze_stream",
+                        query_string={
+                            "rank_folder": "Chief_Officer",
+                            "prompt": "show candidates",
+                            "coc_issue_authority_filter": raw_filter,
+                        },
+                    )
+
+                events = _sse_events(resp)
+                self.assertEqual(events[0]["type"], "error")
+                self.assertEqual(events[0]["error_code"], "COC_ISSUE_AUTHORITY_FILTER_INVALID")
+                self.assertEqual(events[0]["detail"]["code"], detail_code)
+                analyzer.assert_not_called()
+
+    def test_analyze_rejects_invalid_coc_issue_authority_filter_payload(self):
+        resp = self.client.post(
+            "/analyze",
+            json={
+                "rank_folder": "Chief_Officer",
+                "prompt": "show candidates",
+                "coc_issue_authority_filter": {
+                    "type": "coc_issue_authority",
+                    "authorities": ["not_real"],
+                },
+            },
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "COC_ISSUE_AUTHORITY_FILTER_INVALID")
+        self.assertEqual(body["detail"]["code"], "unknown_authority")
 
     def test_analyze_stream_accepts_opaque_rank_folder_id(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

@@ -13380,6 +13380,7 @@ Examples of GOOD responses:
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13503,6 +13504,23 @@ Examples of GOOD responses:
                 }
                 if "age_range" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("age_range")
+            if isinstance(coc_issue_authority_filter, dict) and coc_issue_authority_filter.get("authorities"):
+                authorities = list(dict.fromkeys(
+                    str(authority or "").strip()
+                    for authority in coc_issue_authority_filter.get("authorities", [])
+                    if str(authority or "").strip()
+                ))
+                if authorities:
+                    job_constraints.setdefault("hard_constraints", {})["coc_issue_authority"] = {
+                        "authorities": authorities,
+                        "operator": "contains_any",
+                        "display_value": " or ".join(
+                            self._coc_issue_authority_display_label(authority)
+                            for authority in authorities
+                        ),
+                    }
+                    if "coc_issue_authority_match" not in job_constraints.setdefault("applied_constraints", []):
+                        job_constraints["applied_constraints"].append("coc_issue_authority_match")
             prompt_observability_probe = self._build_prompt_observability(
                 user_prompt,
                 job_constraints,
@@ -13526,6 +13544,7 @@ Examples of GOOD responses:
                 or bool(normalized_engine_experience_filter)
                 or bool(vessel_tonnage_filter)
                 or bool(age_filter)
+                or bool(coc_issue_authority_filter)
             )
             structured_only_prompt = self._is_structured_only_prompt(
                 user_prompt,
@@ -14072,6 +14091,7 @@ Examples of GOOD responses:
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14097,6 +14117,7 @@ Examples of GOOD responses:
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -14195,10 +14216,12 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        present_rank=None,
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14209,10 +14232,12 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            present_rank=present_rank,
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -14224,10 +14249,12 @@ class Analyzer:
         prompt,
         applied_ship_type=None,
         experienced_ship_type=None,
+        present_rank=None,
         experience_ship_type_filter=None,
         engine_experience_filter=None,
         vessel_tonnage_filter=None,
         age_filter=None,
+        coc_issue_authority_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14238,10 +14265,12 @@ class Analyzer:
             prompt,
             applied_ship_type=applied_ship_type,
             experienced_ship_type=experienced_ship_type,
+            present_rank=present_rank,
             experience_ship_type_filter=experience_ship_type_filter,
             engine_experience_filter=engine_experience_filter,
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
+            coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
