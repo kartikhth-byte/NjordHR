@@ -31,6 +31,143 @@ function results(searchSessionId, verifiedCount = 1, refinement = {}) {
   };
 }
 
+function fakeStorage(initial = {}) {
+  const values = { ...initial };
+  return {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+    },
+    setItem(key, value) {
+      values[key] = String(value);
+    },
+    values,
+  };
+}
+
+test("rank picker defaults are actor-scoped and restore only catalog values", () => {
+  const user = { user_id: "user-1", username: "captain", role: "recruiter" };
+  const storage = fakeStorage();
+
+  assert.equal(helpers.rankPickerPreferenceStorageKey({ role: "recruiter" }), "");
+  const fallbackKey = helpers.rankPickerPreferenceStorageKey({ username: "captain", role: "recruiter" });
+  assert.equal(fallbackKey.includes("captain"), false);
+  assert.equal(fallbackKey.includes("recruiter"), false);
+
+  assert.equal(
+    helpers.rememberRankPickerPreference(storage, user, {
+      selectedRankFolder: "Chief_Officer",
+      selectedPresentRank: "chief_officer",
+    }),
+    true,
+  );
+
+  const restored = helpers.resolveRankPickerPreference(storage, user, {
+    rankFolders: ["Chief_Officer", "2nd_Engineer"],
+    presentRankOptions: [{ value: "chief_officer", label: "Chief Officer" }],
+  });
+  assert.equal(restored.selectedRankFolder, "Chief_Officer");
+  assert.equal(restored.selectedPresentRank, "chief_officer");
+
+  const otherUserRestored = helpers.resolveRankPickerPreference(storage, { user_id: "user-2" }, {
+    rankFolders: ["Chief_Officer"],
+    presentRankOptions: [{ value: "chief_officer" }],
+  });
+  assert.equal(otherUserRestored.selectedRankFolder, "");
+  assert.equal(otherUserRestored.selectedPresentRank, "");
+
+  const staleRestored = helpers.resolveRankPickerPreference(storage, user, {
+    rankFolders: ["Master"],
+    presentRankOptions: [{ value: "chief_officer" }, { value: "master" }],
+  });
+  assert.equal(staleRestored.selectedRankFolder, "");
+  assert.equal(staleRestored.selectedPresentRank, "");
+
+  const currentSelectionRestored = helpers.resolveRankPickerPreference(storage, user, {
+    rankFolders: ["Chief_Officer", "Master"],
+    presentRankOptions: [{ value: "chief_officer" }, { value: "master" }],
+    currentSelectedRankFolder: "Master",
+    currentSelectedPresentRank: "master",
+  });
+  assert.equal(currentSelectionRestored.selectedRankFolder, "Master");
+  assert.equal(currentSelectionRestored.selectedPresentRank, "master");
+
+  const currentAllAppliedRestored = helpers.resolveRankPickerPreference(storage, user, {
+    rankFolders: ["Chief_Officer", "Master"],
+    presentRankOptions: [{ value: "chief_officer" }, { value: "master" }],
+    currentSelectedRankFolder: "",
+    currentSelectedPresentRank: "master",
+  });
+  assert.equal(currentAllAppliedRestored.selectedRankFolder, "");
+  assert.equal(currentAllAppliedRestored.selectedPresentRank, "master");
+});
+
+test("rank picker defaults preserve all-applied-ranks and per-applied present-rank choices", () => {
+  const user = { user_id: "user-1" };
+  const storage = fakeStorage();
+
+  helpers.rememberRankPickerPreference(storage, user, {
+    selectedRankFolder: "",
+    selectedPresentRank: "chief_officer",
+  });
+  helpers.rememberRankPickerPreference(storage, user, {
+    selectedRankFolder: "2nd_Engineer",
+    selectedPresentRank: "2nd_engineer",
+  });
+
+  assert.equal(
+    helpers.presentRankPreferenceForAppliedRank(storage, user, {
+      selectedRankFolder: "",
+      presentRankOptions: [{ value: "chief_officer" }, { value: "2nd_engineer" }],
+    }),
+    "chief_officer",
+  );
+  assert.equal(
+    helpers.presentRankPreferenceForAppliedRank(storage, user, {
+      selectedRankFolder: "2nd_Engineer",
+      presentRankOptions: [{ value: "chief_officer" }, { value: "2nd_engineer" }],
+    }),
+    "2nd_engineer",
+  );
+  assert.equal(
+    helpers.presentRankPreferenceForAppliedRank(storage, user, {
+      selectedRankFolder: "2nd_Engineer",
+      presentRankOptions: [{ value: "chief_officer" }],
+    }),
+    null,
+  );
+
+  const allAppliedStorage = fakeStorage();
+  helpers.rememberRankPickerPreference(allAppliedStorage, user, {
+    selectedRankFolder: "",
+    selectedPresentRank: "chief_officer",
+  });
+  const allAppliedRestored = helpers.resolveRankPickerPreference(allAppliedStorage, user, {
+    rankFolders: ["Chief_Officer", "2nd_Engineer"],
+    presentRankOptions: [{ value: "chief_officer" }, { value: "2nd_engineer" }],
+  });
+  assert.equal(allAppliedRestored.selectedRankFolder, "");
+  assert.equal(allAppliedRestored.selectedPresentRank, "chief_officer");
+
+  helpers.rememberRankPickerPreference(storage, user, {
+    selectedRankFolder: "2nd_Engineer",
+    selectedPresentRank: "",
+  });
+  const storedPreference = JSON.parse(storage.values[helpers.rankPickerPreferenceStorageKey(user)]);
+  assert.equal(storedPreference.selected_rank_folder, "2nd_Engineer");
+  assert.equal(storedPreference.present_rank, "");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(storedPreference.present_rank_by_applied_rank, "2nd_Engineer"),
+    false,
+  );
+  assert.equal(
+    helpers.presentRankPreferenceForAppliedRank(storage, user, {
+      selectedRankFolder: "2nd_Engineer",
+      presentRankOptions: [{ value: "2nd_engineer" }],
+    }),
+    null,
+  );
+});
+
 test("historical search steps display their own prompt and disable refinement expansion", () => {
   const chain = [
     { prompt: "has a valid passport", results: results("search-1", 3) },

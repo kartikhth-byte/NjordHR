@@ -1124,6 +1124,35 @@ server-side and return sanitized operator messages to the UI.
 - Tests cover `/analyze_stream`, `/analyze`, and analyzer indexed population
   rooted at the corpus root.
 
+### Phase 2 PR-2 (rank): Rank picker defaults
+
+- The applied-rank and present-rank picker remembers local UI defaults in
+  actor-scoped browser storage. Storage keys require a user ID or username;
+  role-only identities do not persist defaults, and username fallbacks are
+  stored with opaque key material.
+- The frontend applies restored defaults only after a successful
+  `/get_rank_folders` response and only when that live catalog still contains
+  the stored applied-rank folder and present-rank ID.
+- Blank applied-rank selection is preserved as the explicit "All applied ranks"
+  state; it must not be coerced to the first folder.
+- Present-rank defaults are remembered per applied-rank selection, including
+  the blank "All applied ranks" selection.
+- When a parent applied-rank picker value changes, the child present-rank value
+  is restored only from that parent's saved child default or cleared. Child
+  defaults must not persist nonblank values inherited during parent changes.
+- Recovery drafts, completed search-session context, and refinement parent
+  context take precedence over remembered defaults.
+- Defaults are not restored while a recovery-draft fetch is in flight. Once
+  recovery settles, default restore is evaluated against the live picker state
+  so recovered/current picker values keep precedence without stale closures.
+- Remembered defaults do not change `/analyze_stream` payload shape,
+  `/analyze` payload shape, request fingerprints, backend validation, query
+  planning, index contents, or hard-filter behavior.
+- Logout clears in-memory picker state. Actor-scoped local defaults remain
+  in browser storage and must not restore for a different authenticated actor.
+- Tests cover actor scoping, stale-catalog rejection, blank applied-rank
+  preservation, and per-applied-rank present-rank restoration.
+
 ### PR-6 (age): Age range picker
 
 - Add `Candidate Age` minimum/maximum inputs to `frontend.html`.
