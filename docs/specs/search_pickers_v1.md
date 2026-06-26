@@ -1017,7 +1017,25 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Wire pickers to the search request shape.
 - Add helper text and Search-button disable logic.
 - Add the index-header status display + Reindex button.
+- Index status UI renders aggregate-only fields from `present_rank_index`:
+  indexed row count, unindexed row count, present-rank group count, version,
+  and last-built time. It must not render paths or row-level candidate
+  metadata.
+- Reindex button calls `POST /rebuild_present_rank_index`, updates the status
+  from the returned payload, refreshes rank-folder options, disables while
+  rebuilding/searching/refining, and surfaces 409 "already running" responses
+  as a non-fatal warning.
+- Logout/auth changes must clear session-scoped index status and picker-option
+  state, and in-flight Reindex/fetch promises must not write status into a
+  different authenticated session.
 - No backend validation yet (PR-3 follows).
+
+### Shared Instance Lifecycle Rule
+
+When a picker/index feature uses a module-level instance protected by a rebuild
+or refresh lock, all global reassignments of that instance must use the same
+lock as the rebuild path. Rebuild endpoints must log internal exception details
+server-side and return sanitized operator messages to the UI.
 
 ### PR-3 (rank): Backend validator + audit
 

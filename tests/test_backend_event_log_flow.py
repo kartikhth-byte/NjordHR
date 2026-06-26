@@ -1131,6 +1131,31 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertFalse(body["success"])
         self.assertEqual(body["error_code"], "PRESENT_RANK_INDEX_REBUILD_IN_PROGRESS")
 
+    def test_rebuild_present_rank_index_endpoint_sanitizes_internal_errors(self):
+        original_rebuild = backend_server._rebuild_present_rank_index
+
+        def failing_rebuild():
+            raise PermissionError("/Users/alice/NjordHR_Data/private.pdf")
+
+        backend_server._rebuild_present_rank_index = failing_rebuild
+        try:
+            resp = self.client.post("/rebuild_present_rank_index")
+        finally:
+            backend_server._rebuild_present_rank_index = original_rebuild
+
+        self.assertEqual(resp.status_code, 500)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertEqual(body["message"], "Could not rebuild the present-rank index. See server logs.")
+        self.assertNotIn("/Users/alice", body["message"])
+
+    def test_refresh_runtime_managers_keeps_present_rank_rebuild_lock(self):
+        original_lock = backend_server.present_rank_index_rebuild_lock
+
+        backend_server._refresh_runtime_managers()
+
+        self.assertIs(backend_server.present_rank_index_rebuild_lock, original_lock)
+
     def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         original_record = backend_server._rank_folder_catalog_record(

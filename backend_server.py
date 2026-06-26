@@ -1020,7 +1020,7 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index, present_rank_index_rebuild_lock
+    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index
     app_settings = load_app_settings()
     config = app_settings.config
     creds = app_settings.credentials
@@ -1046,9 +1046,9 @@ def _refresh_runtime_managers():
                 old_scope_repo.close()
             except Exception:
                 pass
-    candidate_facts_repo = None
-    present_rank_index = PresentRankIndex()
-    present_rank_index_rebuild_lock = threading.Lock()
+    with present_rank_index_rebuild_lock:
+        candidate_facts_repo = None
+        present_rank_index = PresentRankIndex()
     try:
         Analyzer._instance = None
     except Exception:
@@ -5074,8 +5074,12 @@ def rebuild_present_rank_index():
         }), 409
     try:
         return jsonify({"success": True, "present_rank_index": _rebuild_present_rank_index()})
-    except Exception as exc:
-        return jsonify({"success": False, "message": str(exc)}), 500
+    except Exception:
+        app.logger.exception("Failed to rebuild present-rank index")
+        return jsonify({
+            "success": False,
+            "message": "Could not rebuild the present-rank index. See server logs.",
+        }), 500
     finally:
         present_rank_index_rebuild_lock.release()
 
