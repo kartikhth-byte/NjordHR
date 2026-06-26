@@ -10652,7 +10652,11 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RANK_UNKNOWN",
-                f"Could not determine normalized {evidence_label} for rank filter evaluation.",
+                (
+                    "Could not determine current/present rank from this resume."
+                    if evidence_label == "present rank"
+                    else "Could not determine applied rank from this resume."
+                ),
                 actual_value=None,
                 expected_value=expected_ranks,
                 confidence=confidence,
@@ -10663,7 +10667,11 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RANK_CONFIDENCE_LOW",
-                f"Normalized {evidence_label} confidence is below the hard-filter threshold.",
+                (
+                    "Could not determine current/present rank from this resume."
+                    if evidence_label == "present rank"
+                    else "Could not determine applied rank from this resume."
+                ),
                 actual_value=actual_rank,
                 expected_value=expected_ranks,
                 confidence=confidence,
@@ -14192,6 +14200,12 @@ Examples of GOOD responses:
                         if reason.get("unknown_reason")
                     ))
                     evidence_review = self._derive_evidence_review_metadata(hard_filter_result, candidate_facts)
+                    needs_review_rank_summary = ""
+                    if any(
+                        str(result.get("reason_code") or "").strip().upper() in {"RANK_UNKNOWN", "RANK_CONFIDENCE_LOW"}
+                        for result in hard_filter_result["results"]
+                    ):
+                        needs_review_rank_summary = "Could not determine current/present rank from this resume."
                     unknown_match = {
                         "resume_id": candidate_scope_metadata.get("resume_id") or resume_id,
                         "candidate_scope_id": candidate_scope_metadata.get("candidate_scope_id", ""),
@@ -14203,6 +14217,8 @@ Examples of GOOD responses:
                         "hard_filter_reasons": hard_filter_result["results"],
                         "llm_promoted": llm_promoted_families,
                         "unknown_reason_types": unknown_reason_types,
+                        "result_bucket": "needs_review",
+                        "needs_review_rank_summary": needs_review_rank_summary,
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,

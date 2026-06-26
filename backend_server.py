@@ -2318,6 +2318,7 @@ def _sanitize_recovery_result_card(card, *, default_bucket="verified_match"):
             limit=10,
             max_length=64,
         ),
+        "needs_review_rank_summary": str(card.get("needs_review_rank_summary") or "")[:160],
         "detail_available_after_recovery": False,
     }
 

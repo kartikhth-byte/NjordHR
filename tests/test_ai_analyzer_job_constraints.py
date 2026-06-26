@@ -398,7 +398,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
-        self.assertIn("present rank", result["message"])
+        self.assertEqual(result["message"], "Could not determine current/present rank from this resume.")
 
     def test_present_rank_constraint_needs_review_when_current_rank_empty_string(self):
         result = self.analyzer._evaluate_rank_rule(
@@ -416,6 +416,25 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["reason_code"], "RANK_UNKNOWN")
+        self.assertEqual(result["message"], "Could not determine current/present rank from this resume.")
+
+    def test_present_rank_constraint_needs_review_when_current_rank_confidence_low(self):
+        result = self.analyzer._evaluate_rank_rule(
+            {
+                "role": {
+                    "current_rank_normalized": "chief_officer",
+                    "applied_rank_normalized": "2nd_engineer",
+                },
+                "fact_meta": {
+                    "role.current_rank_normalized": {"confidence": 0.5},
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                },
+            },
+            {"present_rank_normalized": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "RANK_CONFIDENCE_LOW")
+        self.assertEqual(result["message"], "Could not determine current/present rank from this resume.")
 
     def test_run_analysis_stream_injects_present_rank_picker_constraint(self):
         filename = "2nd_Engineer_1004.pdf"
@@ -458,12 +477,54 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
 
         self.analyzer._evaluate_hard_filters = capture_hard_filters
 
-        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport", present_rank="Chief Officer"))
+        events = list(self.analyzer.run_analysis_stream(self.rank, "show candidates", present_rank="Chief Officer"))
 
         self.assertTrue(any(event["type"] == "complete" for event in events))
         rank_constraint = captured["job_constraints"]["hard_constraints"]["rank"]
         self.assertEqual(rank_constraint["present_rank_normalized"], ["chief_officer"])
         self.assertIn("rank_match", captured["job_constraints"]["applied_constraints"])
+
+    def test_present_rank_unknown_match_uses_general_needs_review_summary(self):
+        filename = "2nd_Engineer_1004.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {"resume_id": Path(filename).stem, "rank": self.rank, "raw_text": "Present rank missing"},
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": None},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+        }
+
+        events = list(self.analyzer.run_analysis_stream(self.rank, "has valid passport", present_rank="Chief Officer"))
+        unknown_event = next(event for event in events if event["type"] == "hard_filter_unknown")
+        complete_event = next(event for event in events if event["type"] == "complete")
+
+        self.assertEqual(unknown_event["match"]["result_bucket"], "needs_review")
+        self.assertEqual(
+            unknown_event["match"]["needs_review_rank_summary"],
+            "Could not determine current/present rank from this resume.",
+        )
+        reason_codes = [reason["reason_code"] for reason in unknown_event["match"]["hard_filter_reasons"]]
+        self.assertIn("RANK_UNKNOWN", reason_codes)
+        self.assertEqual(len(complete_event["unknown_matches"]), 1)
 
     def test_run_analysis_stream_uses_indexed_population_without_present_rank_hard_filter(self):
         filename = "2nd_Engineer_1004.pdf"

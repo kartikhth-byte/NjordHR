@@ -141,6 +141,47 @@ test("formatter humanizes unknown review reason codes", () => {
   assert.equal(helpers.formatUnknownReasonType("CUSTOM_UNKNOWN"), "custom unknown");
 });
 
+test("needs review rank summary uses explicit present-rank copy", () => {
+  assert.equal(
+    helpers.buildNeedsReviewRankSummary({
+      needs_review_rank_summary: "Could not determine current/present rank from this resume.",
+    }),
+    "Could not determine current/present rank from this resume.",
+  );
+  assert.equal(
+    helpers.buildNeedsReviewRankSummary({
+      hard_filter_reasons: [{
+        reason_code: "RANK_UNKNOWN",
+        message: "Could not determine current/present rank from this resume.",
+      }],
+    }),
+    "Could not determine current/present rank from this resume.",
+  );
+  assert.equal(
+    helpers.buildNeedsReviewRankSummary({
+      evidence_review_reasons: ["rank_evidence_incomplete"],
+    }),
+    "Could not determine current/present rank from this resume.",
+  );
+  assert.equal(
+    helpers.buildNeedsReviewRankSummary({
+      hard_filter_reasons: [{ reason_code: "PASSPORT_UNKNOWN" }],
+    }),
+    "",
+  );
+});
+
+test("rank needs review summary suppresses duplicate hard-filter rank lines", () => {
+  const summary = helpers.buildReasonDisplaySummary({
+    needs_review_rank_summary: "Could not determine current/present rank from this resume.",
+    hard_filter_reasons: [{
+      reason_code: "RANK_CONFIDENCE_LOW",
+      message: "Could not determine current/present rank from this resume.",
+    }],
+  });
+  assert.equal(summary, "");
+});
+
 test("formatter rewrites engine fallback and engine+vessel messages into recruiter-facing phrasing", () => {
   const match = {
     hard_filter_reasons: [
