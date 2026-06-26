@@ -364,6 +364,124 @@
                 };
             };
 
+            const rankPreferenceActorKey = (user) => {
+                const userId = String(user?.user_id || user?.id || '').trim();
+                if (userId) return `id:${userId}`;
+                const username = String(user?.username || '').trim();
+                const role = String(user?.role || '').trim();
+                if (username || role) return `user:${username}|role:${role}`;
+                return '';
+            };
+
+            const rankPickerPreferenceStorageKey = (user) => {
+                const actorKey = rankPreferenceActorKey(user);
+                return actorKey ? `njordhr_rank_picker_defaults:v1:${actorKey}` : '';
+            };
+
+            const normalizePreferencePresentRankOptions = (options) => new Set(
+                (Array.isArray(options) ? options : [])
+                    .map(option => String(option?.value || option || '').trim())
+                    .filter(Boolean)
+            );
+
+            const normalizeRankPickerPreference = (value) => {
+                const raw = value && typeof value === 'object' ? value : {};
+                const selectedRankFolder = String(raw.selected_rank_folder || '').trim();
+                const selectedPresentRank = String(raw.present_rank || '').trim();
+                const rawByApplied = raw.present_rank_by_applied_rank && typeof raw.present_rank_by_applied_rank === 'object'
+                    ? raw.present_rank_by_applied_rank
+                    : {};
+                const presentRankByAppliedRank = {};
+                Object.entries(rawByApplied).forEach(([key, item]) => {
+                    const normalizedKey = String(key || '').trim();
+                    const normalizedValue = String(item || '').trim();
+                    if (normalizedKey && normalizedValue) {
+                        presentRankByAppliedRank[normalizedKey] = normalizedValue;
+                    }
+                });
+                return {
+                    schema_version: 'rank_picker_defaults.v1',
+                    selected_rank_folder: selectedRankFolder,
+                    present_rank: selectedPresentRank,
+                    present_rank_by_applied_rank: presentRankByAppliedRank,
+                };
+            };
+
+            const readRankPickerPreference = (storage, user) => {
+                const key = rankPickerPreferenceStorageKey(user);
+                if (!storage || !key) return normalizeRankPickerPreference({});
+                try {
+                    return normalizeRankPickerPreference(JSON.parse(storage.getItem(key) || '{}'));
+                } catch (_error) {
+                    return normalizeRankPickerPreference({});
+                }
+            };
+
+            const rankPreferenceAppliedKey = (selectedRankFolder) => (
+                String(selectedRankFolder || '').trim() || '__all_applied_ranks__'
+            );
+
+            const resolveRankPickerPreference = (
+                storage,
+                user,
+                { rankFolders = [], presentRankOptions = [], currentSelectedRankFolder = '', currentSelectedPresentRank = '' } = {},
+            ) => {
+                const folderSet = new Set((Array.isArray(rankFolders) ? rankFolders : []).map(folder => String(folder || '').trim()).filter(Boolean));
+                const presentSet = normalizePreferencePresentRankOptions(presentRankOptions);
+                const preference = readRankPickerPreference(storage, user);
+                const currentFolder = String(currentSelectedRankFolder || '').trim();
+                const currentPresent = String(currentSelectedPresentRank || '').trim();
+                const hasValidCurrentPresent = Boolean(currentPresent && presentSet.has(currentPresent));
+                let selectedRankFolder = '';
+                if (currentFolder && folderSet.has(currentFolder)) {
+                    selectedRankFolder = currentFolder;
+                } else if (!hasValidCurrentPresent && preference.selected_rank_folder && folderSet.has(preference.selected_rank_folder)) {
+                    selectedRankFolder = preference.selected_rank_folder;
+                }
+                const appliedKey = rankPreferenceAppliedKey(selectedRankFolder);
+                const preferredPresentRank = String(
+                    preference.present_rank_by_applied_rank[appliedKey]
+                    || preference.present_rank
+                    || ''
+                ).trim();
+                const selectedPresentRank = hasValidCurrentPresent
+                    ? currentPresent
+                    : (preferredPresentRank && presentSet.has(preferredPresentRank) ? preferredPresentRank : '');
+                return { selectedRankFolder, selectedPresentRank };
+            };
+
+            const presentRankPreferenceForAppliedRank = (
+                storage,
+                user,
+                { selectedRankFolder = '', presentRankOptions = [] } = {},
+            ) => {
+                const presentSet = normalizePreferencePresentRankOptions(presentRankOptions);
+                const preference = readRankPickerPreference(storage, user);
+                const appliedKey = rankPreferenceAppliedKey(selectedRankFolder);
+                const preferredPresentRank = String(
+                    preference.present_rank_by_applied_rank[appliedKey]
+                    || ''
+                ).trim();
+                return preferredPresentRank && presentSet.has(preferredPresentRank) ? preferredPresentRank : null;
+            };
+
+            const rememberRankPickerPreference = (storage, user, { selectedRankFolder = '', selectedPresentRank = '' } = {}) => {
+                const key = rankPickerPreferenceStorageKey(user);
+                if (!storage || !key) return false;
+                const next = readRankPickerPreference(storage, user);
+                next.selected_rank_folder = String(selectedRankFolder || '').trim();
+                next.present_rank = String(selectedPresentRank || '').trim();
+                if (next.present_rank) {
+                    next.present_rank_by_applied_rank[rankPreferenceAppliedKey(next.selected_rank_folder)] = next.present_rank;
+                }
+                try {
+                    storage.setItem(key, JSON.stringify(next));
+                    return true;
+                } catch (_error) {
+                    return false;
+                }
+            };
+
             const streamFailureRecoveryState = ({ isRefinement, completedSearchSnapshot: snapshot = null }) => {
                 const restoreCompletedResults = !isRefinement && snapshot?.analysisResults ? snapshot : null;
                 return {
@@ -470,6 +588,11 @@
                 invalidatedRefinementAvailability,
                 completedSearchSnapshot,
                 deriveRecoveredSearchState,
+                rankPickerPreferenceStorageKey,
+                normalizeRankPickerPreference,
+                resolveRankPickerPreference,
+                presentRankPreferenceForAppliedRank,
+                rememberRankPickerPreference,
                 streamFailureRecoveryState,
                 normalizePresentRankIndexStatus,
                 formatPresentRankIndexStatus,
@@ -2207,6 +2330,49 @@
 
             const selectedRankFolderId = () => rankFolderIdFor(selectedRankFolder);
 
+            const rankPickerPreferenceStorage = () => {
+                try {
+                    return window.localStorage;
+                } catch (_error) {
+                    return null;
+                }
+            };
+
+            const rememberRankPickerDefaults = (rankFolder, presentRank) => {
+                aiSearchState.rememberRankPickerPreference(
+                    rankPickerPreferenceStorage(),
+                    authUserRef.current,
+                    {
+                        selectedRankFolder: rankFolder,
+                        selectedPresentRank: presentRank,
+                    },
+                );
+            };
+
+            const handleAppliedRankScopeChange = (value) => {
+                const nextRankFolder = String(value || '');
+                const preferredPresentRank = aiSearchState.presentRankPreferenceForAppliedRank(
+                    rankPickerPreferenceStorage(),
+                    authUserRef.current,
+                    {
+                        selectedRankFolder: nextRankFolder,
+                        presentRankOptions,
+                    },
+                );
+                const nextPresentRank = preferredPresentRank == null ? selectedPresentRank : preferredPresentRank;
+                setSelectedRankFolder(nextRankFolder);
+                setSelectedPresentRank(nextPresentRank);
+                rememberRankPickerDefaults(nextRankFolder, nextPresentRank);
+                invalidateRefinementForFilterChange();
+            };
+
+            const handlePresentRankScopeChange = (value) => {
+                const nextPresentRank = String(value || '');
+                setSelectedPresentRank(nextPresentRank);
+                rememberRankPickerDefaults(selectedRankFolder, nextPresentRank);
+                invalidateRefinementForFilterChange();
+            };
+
             const fetchRankFolders = async (currentUser = authUser) => {
                 if (!currentUser) {
                     setRankFolders([]);
@@ -2238,8 +2404,21 @@
                         setPresentRankOptions(data.present_rank_options || []);
                         setPresentRankIndexStatus(data.present_rank_index || null);
                         setCocIssueAuthorityOptions(data.coc_issue_authority_options || []);
-                        if (folders.length > 0 && !selectedRankFolder) {
-                            setSelectedRankFolder(folders[0]);
+                        const defaults = aiSearchState.resolveRankPickerPreference(
+                            rankPickerPreferenceStorage(),
+                            requestAuthUser,
+                            {
+                                rankFolders: folders,
+                                presentRankOptions: data.present_rank_options || [],
+                                currentSelectedRankFolder: selectedRankFolder,
+                                currentSelectedPresentRank: selectedPresentRank,
+                            },
+                        );
+                        if (defaults.selectedRankFolder !== selectedRankFolder) {
+                            setSelectedRankFolder(defaults.selectedRankFolder);
+                        }
+                        if (defaults.selectedPresentRank !== selectedPresentRank) {
+                            setSelectedPresentRank(defaults.selectedPresentRank);
                         }
                     } else {
                         setRankFolders([]);
@@ -8643,7 +8822,7 @@
                                             <select 
                                                 id="rankFolder" 
                                                 value={selectedRankFolder} 
-                                                onChange={e => { setSelectedRankFolder(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                onChange={e => handleAppliedRankScopeChange(e.target.value)}
                                                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
                                                 disabled={rankFolders.length === 0 || refinementMode}
                                             >
@@ -8668,7 +8847,7 @@
                                             <select
                                                 id="presentRankScope"
                                                 value={selectedPresentRank}
-                                                onChange={e => { setSelectedPresentRank(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                onChange={e => handlePresentRankScopeChange(e.target.value)}
                                                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
                                                 disabled={presentRankOptions.length === 0 || refinementMode}
                                             >

@@ -1124,6 +1124,26 @@ server-side and return sanitized operator messages to the UI.
 - Tests cover `/analyze_stream`, `/analyze`, and analyzer indexed population
   rooted at the corpus root.
 
+### Phase 2 PR-2 (rank): Rank picker defaults
+
+- The applied-rank and present-rank picker may remember local UI defaults in
+  actor-scoped browser storage.
+- Restored defaults must be applied only when the live `/get_rank_folders`
+  catalog still contains the stored applied-rank folder and present-rank ID.
+- Blank applied-rank selection is preserved as the explicit "All applied ranks"
+  state; it must not be coerced to the first folder.
+- Present-rank defaults are remembered per applied-rank selection, including
+  the blank "All applied ranks" selection.
+- Recovery drafts, completed search-session context, and refinement parent
+  context take precedence over remembered defaults.
+- Remembered defaults do not change `/analyze_stream` payload shape,
+  `/analyze` payload shape, request fingerprints, backend validation, query
+  planning, index contents, or hard-filter behavior.
+- Logout clears in-memory picker state. Actor-scoped local defaults may remain
+  in browser storage and must not restore for a different authenticated actor.
+- Tests cover actor scoping, stale-catalog rejection, blank applied-rank
+  preservation, and per-applied-rank present-rank restoration.
+
 ### PR-6 (age): Age range picker
 
 - Add `Candidate Age` minimum/maximum inputs to `frontend.html`.
