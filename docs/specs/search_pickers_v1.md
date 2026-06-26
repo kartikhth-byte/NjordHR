@@ -1040,9 +1040,10 @@ server-side and return sanitized operator messages to the UI.
 ### PR-3 (rank): Backend validator + audit
 
 - Add `RANK_SCOPE_REQUIRED` validator at the search entry point.
-- Root searches must provide an applied-rank scope (`rank_folder_id`,
-  `rank_folder`, or `applied_rank`). Present-rank-only root searches are
-  invalid and return `RANK_SCOPE_REQUIRED`.
+- Root searches must provide at least one rank scope. Applied-rank scope
+  (`rank_folder_id`, `rank_folder`, or `applied_rank`) resolves a selected
+  folder; present-rank-only root searches are valid in Phase 2 and resolve
+  through the present-rank index across all applied-rank folders.
 - Audit and update every code path that previously fell through to
   unbounded scan.
 - Add `APPLIED_RANK_FOLDER_NOT_FOUND` error.
@@ -1063,8 +1064,8 @@ server-side and return sanitized operator messages to the UI.
 - For the current root-search rollout, the candidate population is:
   applied-rank only -> selected folder scan; applied+present rank -> selected
   folder intersected with `present_rank_index[present_rank]`. Present-rank-only
-  root search remains rejected by the PR-3 validator until the cross-folder
-  present-rank slice explicitly relaxes that rule.
+  root search -> `present_rank_index[present_rank]` across all applied-rank
+  folders.
 - Applied+present rank intersection is literal AND semantics: an indexed row
   must both belong to the selected applied-rank canonical ID and resolve under
   the selected applied-rank folder path before it can enter the population.
@@ -1096,6 +1097,26 @@ server-side and return sanitized operator messages to the UI.
   are introduced.
 - Tests verify rank UNKNOWN entries use the general Needs Review surface
   and do not imply a separate rank-review bucket.
+
+### Phase 2 PR-1 (rank): Cross-folder present-rank search
+
+- Root searches may provide `present_rank` without `applied_rank`,
+  `rank_folder`, or `rank_folder_id`.
+- Blank applied rank + present rank set resolves candidate population from
+  `present_rank_index[present_rank]` across all applied-rank folders.
+- Applied rank + present rank keeps the PR-4 AND semantics: an indexed row
+  must match both the selected applied-rank canonical ID and selected folder
+  path prefix.
+- Blank applied rank + blank present rank still returns `RANK_SCOPE_REQUIRED`.
+- Invalid present-rank values still return `PRESENT_RANK_INVALID` before
+  analyzer construction on both `/analyze_stream` and `/analyze`.
+- The UI search gate allows either rank picker, and the applied-rank picker
+  includes an explicit "All applied ranks" blank option.
+- Cross-folder result cards carry a sanitized `downloaded_rank_folder` so
+  preview links and saved/recovered drafts can resolve the source folder
+  without relying on the selected applied-rank picker.
+- Tests cover `/analyze_stream`, `/analyze`, and analyzer indexed population
+  rooted at the corpus root.
 
 ### PR-6 (age): Age range picker
 
@@ -1285,6 +1306,9 @@ Tracked in GitHub Issue #46 (filed alongside PR-0). Phase 2 covers:
 
 ### Rank Search Scope
 
+- Cross-folder present-rank root search: blank applied rank + set
+  present rank searches the present-rank index across all applied-rank
+  folders.
 - Per-folder default picker preferences.
 - Persisted index on disk for faster cold start.
 - Saved searches and scheduled tasks: migration path to require rank

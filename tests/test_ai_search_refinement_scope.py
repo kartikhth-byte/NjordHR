@@ -1039,6 +1039,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                 "filename": long_filename,
                                 "candidate_scope_id": long_scope_id,
                                 "content_hash": long_content_hash,
+                                "downloaded_rank_folder": "Chief_Officer",
                                 "result_bucket": "verified_match",
                                 "confidence": 0.75,
                                 "lineage_warning_codes": warning_codes,
@@ -1162,6 +1163,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(len(card["filename"]), 255)
         self.assertEqual(len(card["candidate_scope_id"]), 64)
         self.assertEqual(card["content_hash"], long_content_hash.lower()[:128])
+        self.assertEqual(card["downloaded_rank_folder"], "Chief_Officer")
         self.assertEqual(card["result_bucket"], "verified_match")
         self.assertEqual(card["confidence"], 0.75)
         self.assertEqual(len(card["lineage_warning_codes"]), 10)

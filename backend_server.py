@@ -199,10 +199,7 @@ def _request_rank_scope_value(source, *, legacy_key="rank_folder", structured_ke
 
 
 def _rank_scope_required_message():
-    return (
-        "Select an applied-rank folder to run a search. You may optionally add "
-        "a present-rank filter; Phase 1 applies it only inside that folder."
-    )
+    return "Select applied rank, present rank, or both to run a search."
 
 
 def _applied_rank_folder_not_found_payload(resolved):
@@ -214,8 +211,17 @@ def _applied_rank_folder_not_found_payload(resolved):
     }
 
 
-def _validate_root_rank_scope(*, rank_folder_id="", rank_folder=""):
+def _validate_root_rank_scope(*, rank_folder_id="", rank_folder="", present_rank=""):
     if not str(rank_folder or "").strip() and not str(rank_folder_id or "").strip():
+        if str(present_rank or "").strip():
+            return {
+                "success": True,
+                "record": None,
+                "rank_folder": "",
+                "rank_folder_id": "",
+                "download_root_id": "",
+                "cross_folder_present_rank": True,
+            }
         return {
             "success": False,
             "message": _rank_scope_required_message(),
@@ -836,6 +842,9 @@ def _resolve_present_rank_candidate_population(*, present_rank="", rank_folder="
         entry_applied_rank = str(getattr(entry, "applied_rank", "") or "").strip()
         entry_path = str(getattr(entry, "resume_path", "") or "").replace("\\", "/").strip("/")
         if not entry_path:
+            continue
+        if not rank_folder:
+            paths.append(entry_path)
             continue
         applied_matches = bool(folder_rank_id and entry_applied_rank == folder_rank_id)
         path_matches = bool(folder_prefix and entry_path.startswith(f"{folder_prefix}/"))
@@ -2306,6 +2315,7 @@ def _sanitize_recovery_result_card(card, *, default_bucket="verified_match"):
         "candidate_scope_id": str(card.get("candidate_scope_id") or "")[:64],
         "content_hash": str(card.get("content_hash") or "").strip().lower()[:128],
         "filename": str(card.get("filename") or "")[:255],
+        "downloaded_rank_folder": str(card.get("downloaded_rank_folder") or "")[:255],
         "result_bucket": _sanitize_recovery_result_bucket(card.get("result_bucket"), default_bucket),
         "confidence": _sanitize_recovery_confidence(card.get("confidence")),
         "lineage_warning_codes": _sanitize_recovery_machine_codes(
@@ -5529,7 +5539,7 @@ def analyze_stream():
     present_rank = request.args.get('present_rank', '').strip()
     parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
     root_rank_scope = None
-    if not rank_folder and not rank_folder_id and not parent_search_session_id:
+    if not rank_folder and not rank_folder_id and not present_rank and not parent_search_session_id:
         return _sse_error_response(
             _rank_scope_required_message(),
             error_code="RANK_SCOPE_REQUIRED",
@@ -5917,6 +5927,7 @@ def analyze_stream():
                 root_rank_scope = _validate_root_rank_scope(
                     rank_folder_id=effective_rank_folder_id,
                     rank_folder=effective_rank_folder,
+                    present_rank=effective_present_rank,
                 )
                 if not root_rank_scope.get("success"):
                     yield _error_sse(
@@ -5926,20 +5937,27 @@ def analyze_stream():
                         retryable=False,
                     )
                     return
-                rank_record = root_rank_scope["record"]
-                effective_rank_folder = rank_record["folder"]
-                effective_rank_folder_id = rank_record["rank_folder_id"]
-                effective_download_root_id = rank_record["download_root_id"]
-                target_record = rank_record
+                rank_record = root_rank_scope.get("record")
+                if rank_record is not None:
+                    effective_rank_folder = rank_record["folder"]
+                    effective_rank_folder_id = rank_record["rank_folder_id"]
+                    effective_download_root_id = rank_record["download_root_id"]
+                    target_record = rank_record
 
-            if not effective_rank_folder:
+            cross_folder_present_rank = bool(
+                search_mode == "root"
+                and effective_present_rank
+                and not effective_rank_folder
+                and not effective_rank_folder_id
+            )
+            if not effective_rank_folder and not cross_folder_present_rank:
                 yield _error_sse(
                     "Missing required data",
                     error_code="AI_SEARCH_MISSING_REQUIRED_DATA",
                     retryable=False,
                 )
                 return
-            if not _is_safe_name(effective_rank_folder):
+            if effective_rank_folder and not _is_safe_name(effective_rank_folder):
                 error_code = "REFINEMENT_CONTEXT_UNAVAILABLE" if search_mode == "refinement" else "INVALID_RANK_FOLDER"
                 yield _error_sse(
                     "Invalid rank folder.",
@@ -5948,7 +5966,7 @@ def analyze_stream():
                 )
                 return
 
-            if target_record is None:
+            if target_record is None and not cross_folder_present_rank:
                 resolved_target = _resolve_rank_folder_reference(
                     rank_folder_id=effective_rank_folder_id,
                     rank_folder=effective_rank_folder,
@@ -5962,10 +5980,14 @@ def analyze_stream():
                     )
                     return
                 target_record = resolved_target["record"]
-            target_folder = target_record["_resolved_path"]
-            effective_rank_folder = target_record["folder"]
-            effective_rank_folder_id = target_record["rank_folder_id"]
-            effective_download_root_id = target_record["download_root_id"]
+            if target_record is not None:
+                target_folder = target_record["_resolved_path"]
+                effective_rank_folder = target_record["folder"]
+                effective_rank_folder_id = target_record["rank_folder_id"]
+                effective_download_root_id = target_record["download_root_id"]
+            else:
+                target_folder = ""
+                effective_download_root_id = ""
             candidate_population_paths = None
             candidate_population_notice = None
             if search_mode == "root" and effective_present_rank:
@@ -6282,9 +6304,20 @@ def analyze():
         present_rank = str(data.get('present_rank', '')).strip()
         if not prompt:
             return jsonify({"success": False, "message": "AI prompt is required."}), 400
+        if present_rank:
+            canonical_present_rank = _canonical_rank_id_for_picker(present_rank)
+            if not canonical_present_rank:
+                return jsonify({
+                    "success": False,
+                    "message": f"Present rank is not recognized: {present_rank}",
+                    "error_code": "PRESENT_RANK_INVALID",
+                    "detail": {"value": present_rank},
+                }), 400
+            present_rank = canonical_present_rank
         rank_scope = _validate_root_rank_scope(
             rank_folder_id=rank_folder_id,
             rank_folder=rank_folder,
+            present_rank=present_rank,
         )
         if not rank_scope.get("success"):
             body = {
@@ -6298,16 +6331,6 @@ def analyze():
 
         rank_folder = rank_scope["rank_folder"]
         rank_folder_id = rank_scope["rank_folder_id"]
-        if present_rank:
-            canonical_present_rank = _canonical_rank_id_for_picker(present_rank)
-            if not canonical_present_rank:
-                return jsonify({
-                    "success": False,
-                    "message": f"Present rank is not recognized: {present_rank}",
-                    "error_code": "PRESENT_RANK_INVALID",
-                    "detail": {"value": present_rank},
-                }), 400
-            present_rank = canonical_present_rank
         applied_ship_type = str(data.get('applied_ship_type', '')).strip()
         experienced_ship_type = str(data.get('experienced_ship_type', '')).strip()
         experience_ship_type_filter = _normalize_experience_ship_type_filter(
