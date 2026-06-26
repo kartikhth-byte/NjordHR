@@ -239,3 +239,39 @@ test("root stream failure restores the previous completed search state", () => {
   assert.equal(restore.refinementMode, true);
   assert.deepEqual(restore.refinementAvailability, previousAvailability);
 });
+
+test("present-rank index status formatter exposes aggregate recruiter text only", () => {
+  const formatted = helpers.formatPresentRankIndexStatus({
+    version: 7,
+    built_at: "2026-06-26T03:08:45+00:00",
+    row_count: 12,
+    indexed_count: 9,
+    unindexed_count: 3,
+    rank_counts: {
+      chief_officer: 5,
+      second_engineer: 4,
+    },
+    resume_path: "/Users/example/Chief_Officer/a.pdf",
+  });
+
+  assert.equal(formatted.version, 7);
+  assert.equal(formatted.rowCount, 12);
+  assert.equal(formatted.indexedCount, 9);
+  assert.equal(formatted.unindexedCount, 3);
+  assert.equal(formatted.rankGroupCount, 2);
+  assert.match(formatted.summary, /9 indexed current-rank rows/);
+  assert.match(formatted.detail, /12 current facts rows/);
+  assert.match(formatted.detail, /3 rows needing rank review/);
+  assert.match(formatted.detail, /2 present-rank groups/);
+  assert.doesNotMatch(`${formatted.summary}\n${formatted.detail}`, /\/Users|Chief_Officer\/a\.pdf/);
+});
+
+test("present-rank index status formatter handles missing initial status", () => {
+  const formatted = helpers.formatPresentRankIndexStatus(null);
+
+  assert.equal(formatted.version, 0);
+  assert.equal(formatted.rowCount, 0);
+  assert.equal(formatted.rankGroupCount, 0);
+  assert.equal(formatted.summary, "Present-rank index awaiting first refresh");
+  assert.equal(formatted.builtLabel, "Awaiting first refresh");
+});

@@ -380,6 +380,56 @@
                 };
             };
 
+            const boundedNumber = (value) => {
+                const number = Number(value);
+                return Number.isFinite(number) && number > 0 ? number : 0;
+            };
+
+            const normalizePresentRankIndexStatus = (status) => {
+                const rankCounts = status?.rank_counts && typeof status.rank_counts === 'object'
+                    ? Object.fromEntries(
+                        Object.entries(status.rank_counts)
+                            .map(([key, value]) => [String(key || ''), boundedNumber(value)])
+                            .filter(([key]) => Boolean(key))
+                    )
+                    : {};
+                return {
+                    version: boundedNumber(status?.version),
+                    builtAt: String(status?.built_at || ''),
+                    rowCount: boundedNumber(status?.row_count),
+                    indexedCount: boundedNumber(status?.indexed_count),
+                    unindexedCount: boundedNumber(status?.unindexed_count),
+                    rankCounts,
+                };
+            };
+
+            const pluralize = (count, singular, plural = `${singular}s`) => (
+                `${count} ${count === 1 ? singular : plural}`
+            );
+
+            const formatPresentRankIndexStatus = (status) => {
+                const normalized = normalizePresentRankIndexStatus(status);
+                const rankGroupCount = Object.keys(normalized.rankCounts).length;
+                const builtDate = normalized.builtAt ? new Date(normalized.builtAt) : null;
+                const builtLabel = builtDate && !Number.isNaN(builtDate.getTime())
+                    ? builtDate.toLocaleString()
+                    : (normalized.builtAt || 'Awaiting first refresh');
+                return {
+                    ...normalized,
+                    rankGroupCount,
+                    builtLabel,
+                    summary: normalized.builtAt
+                        ? `${pluralize(normalized.indexedCount, 'indexed current-rank row')}`
+                        : 'Present-rank index awaiting first refresh',
+                    detail: [
+                        pluralize(normalized.rowCount, 'current facts row'),
+                        pluralize(normalized.unindexedCount, 'row needing rank review', 'rows needing rank review'),
+                        pluralize(rankGroupCount, 'present-rank group'),
+                        `version ${normalized.version}`,
+                    ].join(' · '),
+                };
+            };
+
             return {
                 HISTORY_MESSAGE,
                 FILTER_INVALIDATED_MESSAGE,
@@ -397,6 +447,8 @@
                 completedSearchSnapshot,
                 deriveRecoveredSearchState,
                 streamFailureRecoveryState,
+                normalizePresentRankIndexStatus,
+                formatPresentRankIndexStatus,
             };
         })();
     </script>
@@ -1156,6 +1208,8 @@
             const [presentRankOptions, setPresentRankOptions] = useState([]);
             const [selectedRankFolder, setSelectedRankFolder] = useState('');
             const [selectedPresentRank, setSelectedPresentRank] = useState('');
+            const [presentRankIndexStatus, setPresentRankIndexStatus] = useState(null);
+            const [isPresentRankIndexRebuilding, setIsPresentRankIndexRebuilding] = useState(false);
             const [downloadFolderSummaries, setDownloadFolderSummaries] = useState([]);
             const [downloadResultsSummary, setDownloadResultsSummary] = useState({
                 mailbox: {
@@ -2087,6 +2141,7 @@
                     setRankFolders([]);
                     setRankFolderRecords([]);
                     setPresentRankOptions([]);
+                    setPresentRankIndexStatus(null);
                     setCocIssueAuthorityOptions([]);
                     setDownloadFolderSummaries([]);
                     setSelectedRankFolder('');
@@ -2108,6 +2163,7 @@
                             download_root_id: '',
                         })));
                         setPresentRankOptions(data.present_rank_options || []);
+                        setPresentRankIndexStatus(data.present_rank_index || null);
                         setCocIssueAuthorityOptions(data.coc_issue_authority_options || []);
                         if (folders.length > 0 && !selectedRankFolder) {
                             setSelectedRankFolder(folders[0]);
@@ -2115,6 +2171,33 @@
                     }
                 } catch (error) {
                     console.error("Could not fetch rank folders", error);
+                }
+            };
+
+            const handleRebuildPresentRankIndex = async () => {
+                if (isPresentRankIndexRebuilding) return;
+                setIsPresentRankIndexRebuilding(true);
+                try {
+                    const response = await fetch(`${getCloudApiBaseUrl()}/rebuild_present_rank_index`, {
+                        method: 'POST',
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.success) {
+                        if (response.status === 409) {
+                            handleSendMessage('warning', data.message || 'Present-rank index rebuild is already running.');
+                        } else {
+                            handleSendMessage('error', data.message || 'Could not rebuild the present-rank index.');
+                        }
+                        return;
+                    }
+                    setPresentRankIndexStatus(data.present_rank_index || null);
+                    handleSendMessage('success', 'Present-rank index rebuilt.');
+                    await fetchRankFolders();
+                } catch (error) {
+                    console.error("Could not rebuild present-rank index", error);
+                    handleSendMessage('error', 'Could not connect to rebuild the present-rank index.');
+                } finally {
+                    setIsPresentRankIndexRebuilding(false);
                 }
             };
 
@@ -8047,6 +8130,8 @@
                     </div>
                 );
             };
+
+            const presentRankIndexDisplay = aiSearchState.formatPresentRankIndexStatus(presentRankIndexStatus);
             
             return (
                 <>
@@ -8436,6 +8521,24 @@
                                                     </span>
                                                 </span>
                                             </label>
+                                        </div>
+                                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-900">Present-rank index</p>
+                                                    <p className="mt-1 text-xs text-slate-600">{presentRankIndexDisplay.summary}</p>
+                                                    <p className="mt-1 text-xs text-slate-500">{presentRankIndexDisplay.detail}</p>
+                                                    <p className="mt-1 text-xs text-slate-500">Last built: {presentRankIndexDisplay.builtLabel}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRebuildPresentRankIndex}
+                                                    disabled={isPresentRankIndexRebuilding || analysisProgress.isAnalyzing || refinementMode}
+                                                    className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                                                >
+                                                    {isPresentRankIndexRebuilding ? 'Reindexing...' : 'Reindex'}
+                                                </button>
+                                            </div>
                                         </div>
                                         <div>
                                             <label htmlFor="rankFolder" className="block text-sm font-medium text-gray-700 mb-1">

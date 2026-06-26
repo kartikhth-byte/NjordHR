@@ -1017,6 +1017,14 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Wire pickers to the search request shape.
 - Add helper text and Search-button disable logic.
 - Add the index-header status display + Reindex button.
+- Index status UI renders aggregate-only fields from `present_rank_index`:
+  indexed row count, unindexed row count, present-rank group count, version,
+  and last-built time. It must not render paths or row-level candidate
+  metadata.
+- Reindex button calls `POST /rebuild_present_rank_index`, updates the status
+  from the returned payload, refreshes rank-folder options, disables while
+  rebuilding/searching/refining, and surfaces 409 "already running" responses
+  as a non-fatal warning.
 - No backend validation yet (PR-3 follows).
 
 ### PR-3 (rank): Backend validator + audit
