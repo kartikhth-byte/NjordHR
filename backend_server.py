@@ -812,6 +812,43 @@ def _refresh_present_rank_index():
     return present_rank_index.refresh(repo.rows, base_folder=_active_download_root())
 
 
+def _present_rank_population_notice(present_rank):
+    return {
+        "code": "PRESENT_RANK_NOT_INDEXED",
+        "message": (
+            f"No candidates are currently indexed for present rank '{present_rank}'. "
+            "Try Reindex if this looks stale."
+        ),
+    }
+
+
+def _resolve_present_rank_candidate_population(*, present_rank="", rank_folder=""):
+    present_rank = str(present_rank or "").strip()
+    rank_folder = str(rank_folder or "").strip()
+    if not present_rank:
+        return {"candidate_population_paths": None, "notice": None, "index_status": None}
+    index_status = _refresh_present_rank_index()
+    folder_rank_id = _canonical_rank_id_for_picker(rank_folder) or rank_folder.lower().replace(" ", "_")
+    folder_prefix = rank_folder.replace("\\", "/").strip("/")
+    entries = present_rank_index.lookup(present_rank)
+    paths = []
+    for entry in entries:
+        entry_applied_rank = str(getattr(entry, "applied_rank", "") or "").strip()
+        entry_path = str(getattr(entry, "resume_path", "") or "").replace("\\", "/").strip("/")
+        if not entry_path:
+            continue
+        applied_matches = bool(folder_rank_id and entry_applied_rank == folder_rank_id)
+        path_matches = bool(folder_prefix and entry_path.startswith(f"{folder_prefix}/"))
+        if applied_matches and path_matches:
+            paths.append(entry_path)
+    paths = list(dict.fromkeys(paths))
+    return {
+        "candidate_population_paths": paths,
+        "notice": _present_rank_population_notice(present_rank) if not paths else None,
+        "index_status": index_status,
+    }
+
+
 def _supabase_telemetry_store():
     global supabase_telemetry_store
     supabase_url = _supabase_url()
@@ -5928,6 +5965,15 @@ def analyze_stream():
             effective_rank_folder = target_record["folder"]
             effective_rank_folder_id = target_record["rank_folder_id"]
             effective_download_root_id = target_record["download_root_id"]
+            candidate_population_paths = None
+            candidate_population_notice = None
+            if search_mode == "root" and effective_present_rank:
+                population = _resolve_present_rank_candidate_population(
+                    present_rank=effective_present_rank,
+                    rank_folder=effective_rank_folder,
+                )
+                candidate_population_paths = population.get("candidate_population_paths")
+                candidate_population_notice = population.get("notice")
             
             # Create analyzer and run streaming analysis
             analyzer = _build_analyzer()
@@ -5981,6 +6027,8 @@ def analyze_stream():
                 review_capture_callback=_candidate_facts_review_capture_callback,
                 candidate_scope_ids=candidate_scope_ids,
                 candidate_scope_memberships=candidate_scope_memberships,
+                candidate_population_paths=candidate_population_paths,
+                candidate_population_notice=candidate_population_notice,
             ):
                 event_to_client = progress_event
                 if progress_event.get("type") == "complete":
@@ -6139,6 +6187,7 @@ def analyze_stream():
                             "search_session_id": search_session_id,
                             "search_mode": search_mode,
                             "parent_search_session_id": parent_search_session_id,
+                            "notices": progress_event.get("notices", []),
                             "verified_matches": len(progress_event.get("verified_matches", [])),
                             "uncertain_matches": len(progress_event.get("uncertain_matches", [])),
                         },
@@ -6291,6 +6340,10 @@ def analyze():
 
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
+        population = _resolve_present_rank_candidate_population(
+            present_rank=present_rank,
+            rank_folder=rank_folder,
+        )
         
         analyzer = _build_analyzer()
         actor_role = _session_role()
@@ -6335,6 +6388,8 @@ def analyze():
             age_filter=age_filter,
             coc_issue_authority_filter=coc_issue_authority_filter,
             review_capture_callback=_candidate_facts_review_capture_callback,
+            candidate_population_paths=population.get("candidate_population_paths"),
+            candidate_population_notice=population.get("notice"),
         )
         _log_usage("analyze", f"AI search completed for rank_folder={rank_folder}", {
             "success": bool(result.get("success")),
@@ -6358,6 +6413,7 @@ def analyze():
                 "age_filter": age_filter,
                 "coc_issue_authority_filter": coc_issue_authority_filter,
                 "success": bool(result.get("success")),
+                "notices": result.get("notices", []),
                 "verified_matches": len(result.get("verified_matches", [])),
                 "uncertain_matches": len(result.get("uncertain_matches", [])),
             },

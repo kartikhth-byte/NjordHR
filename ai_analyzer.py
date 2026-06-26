@@ -6646,6 +6646,58 @@ class AIResumeAnalyzer:
         print(f"[FULL SCAN] Enumerated {len(candidates)} candidate resumes from rank folder")
         return candidates
 
+    def _enumerate_indexed_rank_candidates(self, target_folder, rank, candidate_population_paths):
+        target_root = Path(target_folder).resolve()
+        download_root = Path(self.config.download_root).expanduser().resolve()
+        ordered_paths = list(dict.fromkeys(
+            str(candidate_path or "").strip()
+            for candidate_path in (candidate_population_paths or [])
+            if str(candidate_path or "").strip()
+        ))
+        candidates = {}
+        skipped_count = 0
+        for idx, candidate_path in enumerate(ordered_paths):
+            raw_path = Path(candidate_path)
+            if raw_path.is_absolute():
+                skipped_count += 1
+                continue
+            pdf_path = download_root / raw_path
+            try:
+                pdf_path = pdf_path.resolve()
+                pdf_path.relative_to(target_root)
+            except (OSError, ValueError):
+                skipped_count += 1
+                continue
+            if not pdf_path.is_file() or pdf_path.suffix.lower() != ".pdf":
+                skipped_count += 1
+                continue
+            try:
+                text = self.pdf_processor.extract_text(str(pdf_path))
+            except Exception:
+                skipped_count += 1
+                continue
+            if not text:
+                skipped_count += 1
+                continue
+            resume_id = self.registry.generate_resume_id(str(pdf_path))
+            candidates[resume_id] = [{
+                "id": f"indexed-{resume_id}-{idx}",
+                "score": 1.0,
+                "metadata": {
+                    "resume_id": resume_id,
+                    "rank": rank,
+                    "filename": pdf_path.name,
+                    "source_path": str(pdf_path),
+                    "raw_text": text[:self.LLM_CONTEXT_TEXT_CHAR_LIMIT],
+                },
+            }]
+        print(
+            "[INDEXED SCAN] "
+            f"Resolved {len(candidates)} indexed candidate resume(s) from "
+            f"{len(ordered_paths)} requested path(s); skipped {skipped_count}."
+        )
+        return candidates
+
     def resolve_candidate_scope_snapshot(
         self,
         target_folder,
@@ -13580,6 +13632,8 @@ Examples of GOOD responses:
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
+        candidate_population_paths=None,
+        candidate_population_notice=None,
     ):
         """Streaming analysis with multi-stage retrieval for compound queries"""
         yield {"type": "status", "message": "Initializing analysis..."}
@@ -13587,12 +13641,20 @@ Examples of GOOD responses:
         try:
             target_folder = rank_folder_path(self.config.download_root, rank)
             scoped_mode = candidate_scope_ids is not None
+            indexed_population_mode = candidate_population_paths is not None
             normalized_scope_ids = None
             if scoped_mode:
                 normalized_scope_ids = list(dict.fromkeys(
                     str(candidate_scope_id or "").strip()
                     for candidate_scope_id in candidate_scope_ids
                     if str(candidate_scope_id or "").strip()
+                ))
+            normalized_candidate_population_paths = None
+            if indexed_population_mode:
+                normalized_candidate_population_paths = list(dict.fromkeys(
+                    str(candidate_path or "").strip()
+                    for candidate_path in candidate_population_paths
+                    if str(candidate_path or "").strip()
                 ))
             
             if not target_folder.exists():
@@ -13645,16 +13707,31 @@ Examples of GOOD responses:
                         "error_code": "PRESENT_RANK_INVALID",
                     }
                     return
-                self._apply_picker_with_prompt_suppression(
-                    job_constraints,
-                    family="rank_match",
-                    hard_constraint_key="rank",
-                    picker_constraint={
+                if not indexed_population_mode:
+                    self._apply_picker_with_prompt_suppression(
+                        job_constraints,
+                        family="rank_match",
+                        hard_constraint_key="rank",
+                        picker_constraint={
+                            "present_rank_normalized": [present_rank_id],
+                            "operator": "contains_any",
+                            "requested_label": present_rank_value,
+                        },
+                    )
+                else:
+                    rank_population_constraint = {
                         "present_rank_normalized": [present_rank_id],
                         "operator": "contains_any",
                         "requested_label": present_rank_value,
-                    },
-                )
+                        "population_scope": True,
+                    }
+                    observability_applied = job_constraints.setdefault("observability_applied_constraints", [])
+                    if "rank_match" not in observability_applied:
+                        observability_applied.append("rank_match")
+                    job_constraints.setdefault("observability_constraints", {})["rank"] = rank_population_constraint
+                    job_constraints.setdefault("observability_constraint_reasons", {})[
+                        "rank_match"
+                    ] = "present_rank_picker_population_scope"
             # Direct-write picker families in this block currently have no same-family
             # prompt suppression semantics; use the shared helper when such
             # arbitration is introduced.
@@ -13756,6 +13833,7 @@ Examples of GOOD responses:
                 or bool(vessel_tonnage_filter)
                 or bool(age_filter)
                 or bool(coc_issue_authority_filter)
+                or indexed_population_mode
             )
             structured_only_prompt = self._is_structured_only_prompt(
                 user_prompt,
@@ -13771,6 +13849,15 @@ Examples of GOOD responses:
             job_constraints["clause_accounting"] = prompt_observability.get("clause_accounting", {})
             folder_metadata = self._rank_manifest_metadata(target_folder)
             search_warning = ""
+            population_notice = (
+                dict(candidate_population_notice)
+                if isinstance(candidate_population_notice, dict)
+                and str(candidate_population_notice.get("code") or "").strip()
+                else None
+            )
+            population_notice_message = str((candidate_population_notice or {}).get("message") or "").strip()
+            if population_notice_message:
+                search_warning = population_notice_message
             if not has_actionable_constraints and allow_semantic_fallback:
                 search_warning = (
                     "No supported hard constraints were found. Running semantic search instead. "
@@ -13835,6 +13922,17 @@ Examples of GOOD responses:
                         "scope_summary": scope_summary,
                     }
                     return
+            elif indexed_population_mode:
+                requested_population_count = len(normalized_candidate_population_paths or [])
+                yield {
+                    "type": "status",
+                    "message": f"Evaluating {requested_population_count} indexed candidate(s) in selected rank folder...",
+                }
+                candidates = self._enumerate_indexed_rank_candidates(
+                    target_folder,
+                    rank,
+                    normalized_candidate_population_paths,
+                )
             elif has_actionable_constraints:
                 status_message = "Supported hard constraints detected. Evaluating all resumes in selected rank folder..."
                 if has_semantic_intent:
@@ -14269,6 +14367,7 @@ Examples of GOOD responses:
                    "clause_ledger": job_constraints.get("clause_ledger", []),
                    "clause_accounting": job_constraints.get("clause_accounting", {}),
                    "search_warning": search_warning,
+                   "notices": [population_notice] if population_notice else [],
                    "hard_filter_audit": hard_filter_audit,
                    "hard_filter_summary": hard_filter_summary,
                    "scope_summary": scope_summary or {},
@@ -14306,6 +14405,8 @@ Examples of GOOD responses:
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
+        candidate_population_paths=None,
+        candidate_population_notice=None,
     ):
         """Non-streaming version"""
         verified_matches = []
@@ -14317,6 +14418,7 @@ Examples of GOOD responses:
         clause_ledger = []
         clause_accounting = {}
         search_warning = ""
+        notices = []
         
         for event in self.run_analysis_stream(
             rank,
@@ -14332,6 +14434,8 @@ Examples of GOOD responses:
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
+            candidate_population_paths=candidate_population_paths,
+            candidate_population_notice=candidate_population_notice,
         ):
             if event['type'] == 'match_found':
                 verified_matches.append(event['match'])
@@ -14346,6 +14450,7 @@ Examples of GOOD responses:
                 clause_ledger = event.get("clause_ledger", [])
                 clause_accounting = event.get("clause_accounting", {})
                 search_warning = event.get("search_warning", "")
+                notices = event.get("notices", [])
             elif event['type'] == 'graceful_failure':
                 return {
                     "success": False,
@@ -14362,6 +14467,7 @@ Examples of GOOD responses:
                     "clause_ledger": event.get("clause_ledger", []),
                     "clause_accounting": event.get("clause_accounting", {}),
                     "search_warning": event.get("search_warning", ""),
+                    "notices": event.get("notices", []),
                     "error_code": event.get("error_code", ""),
                     "scope_summary": event.get("scope_summary", {}),
                 }
@@ -14389,6 +14495,7 @@ Examples of GOOD responses:
             "clause_ledger": clause_ledger,
             "clause_accounting": clause_accounting,
             "search_warning": search_warning,
+            "notices": notices,
         }
     
     def store_feedback(self, filename, query, llm_decision, llm_reason, llm_confidence, 
@@ -14436,6 +14543,8 @@ class Analyzer:
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
+        candidate_population_paths=None,
+        candidate_population_notice=None,
     ):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
         return Analyzer._instance.run_analysis(
@@ -14452,6 +14561,8 @@ class Analyzer:
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
+            candidate_population_paths=candidate_population_paths,
+            candidate_population_notice=candidate_population_notice,
         )
     
     def run_analysis_stream(
@@ -14469,6 +14580,8 @@ class Analyzer:
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
+        candidate_population_paths=None,
+        candidate_population_notice=None,
     ):
         rank_name = Path(target_folder).name.replace('_', ' ').replace('-', '/')
         for progress_event in Analyzer._instance.run_analysis_stream(
@@ -14485,6 +14598,8 @@ class Analyzer:
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
+            candidate_population_paths=candidate_population_paths,
+            candidate_population_notice=candidate_population_notice,
         ):
             yield progress_event
 
