@@ -543,6 +543,11 @@
                 return '';
             };
 
+            const isRankNeedsReviewReason = (item) => {
+                const code = String(item?.reason_code || '').trim().toUpperCase();
+                return code === 'RANK_UNKNOWN' || code === 'RANK_CONFIDENCE_LOW';
+            };
+
             const HARD_FILTER_REASON_PRESENTERS = [
                 { prefix: 'PASSPORT_', group: 'matchedFilters' },
                 { prefix: 'VESSEL_TONNAGE_', group: 'matchedFilters' },
@@ -1125,7 +1130,9 @@
                 const match = rawMatch?.reason !== undefined
                     ? rawMatch
                     : { ...rawMatch, reason: rawMatch?.ai_match_reason || '' };
-                const hardFilterReasonItems = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const needsReviewRankSummary = buildNeedsReviewRankSummary(match);
+                const hardFilterReasonItems = (Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [])
+                    .filter(item => !(needsReviewRankSummary && isRankNeedsReviewReason(item)));
                 const rawHardFilterLines = hardFilterReasonItems
                     .map(item => String(item?.message || '').trim())
                     .filter(Boolean);

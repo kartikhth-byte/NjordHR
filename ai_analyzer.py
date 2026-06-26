@@ -10667,7 +10667,11 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "RANK_CONFIDENCE_LOW",
-                f"Normalized {evidence_label} confidence is below the hard-filter threshold.",
+                (
+                    "Could not determine current/present rank from this resume."
+                    if evidence_label == "present rank"
+                    else "Could not determine applied rank from this resume."
+                ),
                 actual_value=actual_rank,
                 expected_value=expected_ranks,
                 confidence=confidence,

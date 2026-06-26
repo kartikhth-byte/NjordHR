@@ -418,6 +418,24 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "RANK_UNKNOWN")
         self.assertEqual(result["message"], "Could not determine current/present rank from this resume.")
 
+    def test_present_rank_constraint_needs_review_when_current_rank_confidence_low(self):
+        result = self.analyzer._evaluate_rank_rule(
+            {
+                "role": {
+                    "current_rank_normalized": "chief_officer",
+                    "applied_rank_normalized": "2nd_engineer",
+                },
+                "fact_meta": {
+                    "role.current_rank_normalized": {"confidence": 0.5},
+                    "role.applied_rank_normalized": {"confidence": 1.0},
+                },
+            },
+            {"present_rank_normalized": ["chief_officer"]},
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "RANK_CONFIDENCE_LOW")
+        self.assertEqual(result["message"], "Could not determine current/present rank from this resume.")
+
     def test_run_analysis_stream_injects_present_rank_picker_constraint(self):
         filename = "2nd_Engineer_1004.pdf"
         (self.rank_folder / filename).write_bytes(b"%PDF-1.4")

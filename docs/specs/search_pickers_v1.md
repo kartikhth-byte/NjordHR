@@ -1091,6 +1091,9 @@ server-side and return sanitized operator messages to the UI.
 - Rank Needs Review result cards may carry a sanitized
   `needs_review_rank_summary` string so saved/recovered drafts can show the
   same explicit copy without preserving raw hard-filter details.
+- Streamed `unknown_match` payloads include `result_bucket = "needs_review"`,
+  the same value used by existing Needs Review surfaces. No new bucket values
+  are introduced.
 - Tests verify rank UNKNOWN entries use the general Needs Review surface
   and do not imply a separate rank-review bucket.
 

@@ -171,6 +171,17 @@ test("needs review rank summary uses explicit present-rank copy", () => {
   );
 });
 
+test("rank needs review summary suppresses duplicate hard-filter rank lines", () => {
+  const summary = helpers.buildReasonDisplaySummary({
+    needs_review_rank_summary: "Could not determine current/present rank from this resume.",
+    hard_filter_reasons: [{
+      reason_code: "RANK_CONFIDENCE_LOW",
+      message: "Could not determine current/present rank from this resume.",
+    }],
+  });
+  assert.equal(summary, "");
+});
+
 test("formatter rewrites engine fallback and engine+vessel messages into recruiter-facing phrasing", () => {
   const match = {
     hard_filter_reasons: [
