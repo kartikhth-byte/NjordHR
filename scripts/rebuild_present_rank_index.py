@@ -25,7 +25,10 @@ def main() -> int:
     active_root = backend_server._active_download_root()
     print(f"Config: {config_path or '(default runtime config)'}", file=sys.stderr)
     print(f"Active corpus root: {active_root}", file=sys.stderr)
-    if not args.yes and sys.stdin.isatty():
+    if not args.yes and not sys.stdin.isatty():
+        print("Refusing non-interactive rebuild without --yes.", file=sys.stderr)
+        return 1
+    if not args.yes:
         answer = input("Rebuild the present-rank index for this corpus? [y/N] ").strip().lower()
         if answer not in {"y", "yes"}:
             print("Aborted.", file=sys.stderr)

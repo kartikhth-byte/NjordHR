@@ -1020,7 +1020,7 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index, present_rank_index_rebuild_lock
+    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index
     app_settings = load_app_settings()
     config = app_settings.config
     creds = app_settings.credentials
@@ -1048,7 +1048,6 @@ def _refresh_runtime_managers():
                 pass
     candidate_facts_repo = None
     present_rank_index = PresentRankIndex()
-    present_rank_index_rebuild_lock = threading.Lock()
     try:
         Analyzer._instance = None
     except Exception:
