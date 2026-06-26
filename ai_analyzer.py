@@ -1116,6 +1116,17 @@ class AIResumeAnalyzer:
             or str(resume_id or "")[:8]
         )
 
+    def _downloaded_rank_folder_for_path(self, original_path):
+        if not original_path:
+            return ""
+        try:
+            relative = Path(original_path).resolve().relative_to(
+                Path(self.config.download_root).expanduser().resolve()
+            )
+        except (OSError, ValueError):
+            return ""
+        return relative.parts[0] if len(relative.parts) > 1 else ""
+
     @staticmethod
     def _normalize_signature_text(value):
         return re.sub(r"\s+", " ", str(value or "")).strip().lower()
@@ -14163,6 +14174,7 @@ Examples of GOOD responses:
                     original_path,
                     chunks=chunks,
                 )
+                downloaded_rank_folder = self._downloaded_rank_folder_for_path(original_path)
                 audit_entry.update(candidate_scope_metadata)
 
                 if reextract_meta and not reextract_meta.get("succeeded"):
@@ -14212,6 +14224,7 @@ Examples of GOOD responses:
                         "content_hash": candidate_scope_metadata.get("content_hash", ""),
                         "lineage_warning_codes": candidate_scope_metadata.get("lineage_warning_codes", []),
                         "filename": filename,
+                        "downloaded_rank_folder": downloaded_rank_folder,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Hard filter result unknown.",
                         "hard_filter_decision": "UNKNOWN",
                         "hard_filter_reasons": hard_filter_result["results"],
@@ -14278,6 +14291,7 @@ Examples of GOOD responses:
                         "content_hash": candidate_scope_metadata.get("content_hash", ""),
                         "lineage_warning_codes": candidate_scope_metadata.get("lineage_warning_codes", []),
                         "filename": filename,
+                        "downloaded_rank_folder": downloaded_rank_folder,
                         "reason": "; ".join(result["message"] for result in hard_filter_result["results"]) or "Passed deterministic hard filters.",
                         "confidence": 1.0,
                         "hard_filter_decision": hard_filter_result["decision"],
@@ -14319,6 +14333,7 @@ Examples of GOOD responses:
                             "content_hash": candidate_scope_metadata.get("content_hash", ""),
                             "lineage_warning_codes": candidate_scope_metadata.get("lineage_warning_codes", []),
                             "filename": filename,
+                            "downloaded_rank_folder": downloaded_rank_folder,
                             "reason": llm_result.get('reason', 'Match found.'),
                             "confidence": llm_result.get('confidence', 0.5),
                             "hard_filter_decision": hard_filter_result["decision"],

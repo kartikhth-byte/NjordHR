@@ -1608,6 +1608,8 @@
             };
             const buildDownloadedResumePreviewUrl = (rankFolder, filename) =>
                 `${getCloudApiBaseUrl()}/preview_downloaded_resume/${encodeURIComponent(rankFolder || '')}/${encodeURIComponent(filename || '')}`;
+            const downloadedRankFolderForMatch = (match) =>
+                String(match?.downloaded_rank_folder || selectedRankFolder || '').trim();
 
             const resolveDashboardResumeTargets = (row) => {
                 const resumeUrl = String(row?.resume_url || '').trim();
@@ -4872,11 +4874,13 @@
                             handleSendMessage('error', experienceShipTypeResult.error || engineExperienceResult.error);
                             return;
                         }
-                        if (selectedId) {
+                        if (selectedRankFolder && selectedId) {
                             params.set('rank_folder_id', selectedId);
                         }
-                        params.set('rank_folder', selectedRankFolder);
-                        params.set('applied_rank', selectedRankFolder);
+                        if (selectedRankFolder) {
+                            params.set('rank_folder', selectedRankFolder);
+                            params.set('applied_rank', selectedRankFolder);
+                        }
                         if (selectedPresentRank) {
                             params.set('present_rank', selectedPresentRank);
                         }
@@ -5054,7 +5058,7 @@
             };
 
             const handleAnalyze = async () => {
-                if (!selectedRankFolder) return handleSendMessage('error', 'Please select an applied-rank scope to analyze.');
+                if (!selectedRankFolder && !selectedPresentRank) return handleSendMessage('error', 'Select applied rank, present rank, or both to run a search.');
                 if (!aiPrompt.trim()) return handleSendMessage('error', 'AI prompt cannot be empty.');
                 if (isViewingHistoricalSearchStep) {
                     return handleSendMessage('warning', 'You are viewing an earlier result set. Return to latest results to refine further.');
@@ -5213,6 +5217,7 @@
             const recoveryCard = (card) => ({
                 schema_version: 'recovery_result_card.v1',
                 filename: String(card?.filename || ''),
+                downloaded_rank_folder: String(card?.downloaded_rank_folder || ''),
                 candidate_scope_id: String(card?.candidate_scope_id || ''),
                 content_hash: String(card?.content_hash || '').toLowerCase(),
                 result_bucket: String(card?.result_bucket || ''),
@@ -8642,6 +8647,7 @@
                                                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
                                                 disabled={rankFolders.length === 0 || refinementMode}
                                             >
+                                                <option value="">All applied ranks</option>
                                                 {rankFolders.length > 0 ? (
                                                     rankFolders.map(folder => {
                                                         const record = rankFolderRecordFor(folder);
@@ -8652,7 +8658,7 @@
                                                 )}
                                             </select>
                                             <p className="mt-1 text-xs text-gray-500">
-                                                Uses the downloaded rank folder as the applied-rank search scope.
+                                                Leave blank to search all applied-rank folders by present rank.
                                             </p>
                                         </div>
                                         <div>
@@ -8671,7 +8677,7 @@
                                                     <option key={option.value} value={option.value}>{option.label || option.value}</option>
                                                 ))}
                                             </select>
-                                            <p className="mt-1 text-xs text-gray-500">Phase 1: filters by current/present rank extracted from resumes inside the selected applied-rank folder. Missing or low-confidence rank evidence appears in the general Needs Review section.</p>
+                                            <p className="mt-1 text-xs text-gray-500">Filters by current/present rank extracted from resumes. With no applied-rank scope, this searches all indexed folders. Missing or low-confidence rank evidence appears in the general Needs Review section.</p>
                                         </div>
                                         <div>
                                             <label htmlFor="searchShipType" className="block text-sm font-medium text-gray-700 mb-1">
@@ -9157,7 +9163,7 @@
                                                                                    onChange={() => handleFileSelection(match.filename)}/>
                                                                         </td>
                                                                         <td className="px-6 py-4 text-sm font-medium text-blue-600 hover:underline">
-                                                                            <a href={buildDownloadedResumePreviewUrl(selectedRankFolder, match.filename)}
+                                                                            <a href={buildDownloadedResumePreviewUrl(downloadedRankFolderForMatch(match), match.filename)}
                                                                                target="_blank" rel="noopener noreferrer">
                                                                                 {match.filename}
                                                                             </a>
@@ -9210,7 +9216,7 @@
                                                                     <div key={i} className="bg-white p-4 rounded border border-slate-200">
                                                                         <div className="flex justify-between items-start gap-4">
                                                                             <div className="flex-1">
-                                                                                <a href={buildDownloadedResumePreviewUrl(selectedRankFolder, match.filename)}
+                                                                                <a href={buildDownloadedResumePreviewUrl(downloadedRankFolderForMatch(match), match.filename)}
                                                                                    target="_blank" rel="noopener noreferrer"
                                                                                    className="text-sm font-medium text-blue-600 hover:underline">
                                                                                     {match.filename}
@@ -9275,7 +9281,7 @@
                                                             <div key={i} className="bg-white p-4 rounded border border-yellow-200">
                                                                 <div className="flex justify-between items-start mb-3">
                                                                     <div className="flex-1">
-                                                                        <a href={buildDownloadedResumePreviewUrl(selectedRankFolder, match.filename)}
+                                                                        <a href={buildDownloadedResumePreviewUrl(downloadedRankFolderForMatch(match), match.filename)}
                                                                            target="_blank" rel="noopener noreferrer"
                                                                            className="text-sm font-medium text-blue-600 hover:underline">
                                                                             {match.filename}

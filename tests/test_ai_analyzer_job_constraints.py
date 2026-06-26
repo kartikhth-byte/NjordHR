@@ -576,6 +576,69 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         )
         self.assertTrue(captured["job_constraints"]["observability_constraints"]["rank"]["population_scope"])
 
+    def test_run_analysis_stream_uses_cross_folder_indexed_population(self):
+        chief_folder = self.download_root / "Chief_Officer"
+        chief_folder.mkdir(parents=True, exist_ok=True)
+        chief_filename = "Chief_Officer_1005.pdf"
+        second_filename = "2nd_Engineer_2005.pdf"
+        (chief_folder / chief_filename).write_bytes(b"%PDF-1.4 chief officer fixture")
+        (self.rank_folder / second_filename).write_bytes(b"%PDF-1.4 second engineer fixture")
+        captured = {"evaluated": []}
+
+        self.analyzer.pdf_processor = _FakePdfProcessor("Present Rank: Chief Officer")
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "chief_officer",
+                "applied_rank_normalized": "chief_officer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": 1.0},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+        }
+
+        def capture_hard_filters(candidate_facts, job_constraints):
+            captured["job_constraints"] = job_constraints
+            captured["evaluated"].append(candidate_facts)
+            return {
+                "decision": "PASS",
+                "results": [],
+                "evaluation_date_used": "2026-06-25",
+                "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            }
+
+        self.analyzer._evaluate_hard_filters = capture_hard_filters
+
+        events = list(self.analyzer.run_analysis_stream(
+            "",
+            "has valid passport",
+            present_rank="Chief Officer",
+            candidate_population_paths=[
+                f"Chief_Officer/{chief_filename}",
+                f"2nd_Engineer/{second_filename}",
+            ],
+        ))
+
+        complete_event = next(event for event in events if event["type"] == "complete")
+        self.assertEqual(len(captured["evaluated"]), 2)
+        self.assertCountEqual(
+            [
+                match.get("downloaded_rank_folder")
+                for match in complete_event.get("verified_matches", [])
+            ],
+            ["Chief_Officer", "2nd_Engineer"],
+        )
+        self.assertNotIn("rank", captured["job_constraints"]["hard_constraints"])
+        self.assertEqual(
+            captured["job_constraints"]["observability_constraint_reasons"],
+            {"rank_match": "present_rank_picker_population_scope"},
+        )
+
     def test_run_analysis_stream_reports_empty_indexed_population_notice(self):
         events = list(self.analyzer.run_analysis_stream(
             self.rank,

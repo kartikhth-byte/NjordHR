@@ -1102,6 +1102,34 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(index_status["rank_counts"], {"chief_officer": 1})
         self.assertTrue(index_status["built_at"])
 
+    def test_cross_folder_present_rank_population_rejects_unsafe_index_paths(self):
+        class FakePresentRankIndex:
+            def lookup(self, present_rank):
+                self.present_rank = present_rank
+                return [
+                    types.SimpleNamespace(resume_path="Chief_Officer/Chief_Officer_1001.pdf"),
+                    types.SimpleNamespace(resume_path="Chief_Officer/../2nd_Engineer/unsafe.pdf"),
+                    types.SimpleNamespace(resume_path="./Chief_Officer/dot.pdf"),
+                    types.SimpleNamespace(resume_path="root_level.pdf"),
+                    types.SimpleNamespace(resume_path="/absolute/path.pdf"),
+                ]
+
+        original_index = backend_server.present_rank_index
+        backend_server.present_rank_index = FakePresentRankIndex()
+        try:
+            with patch("backend_server._refresh_present_rank_index", return_value={"version": 1}):
+                population = backend_server._resolve_present_rank_candidate_population(
+                    present_rank="chief_officer",
+                    rank_folder="",
+                )
+        finally:
+            backend_server.present_rank_index = original_index
+
+        self.assertEqual(
+            population["candidate_population_paths"],
+            ["Chief_Officer/Chief_Officer_1001.pdf"],
+        )
+
     def test_rebuild_present_rank_index_endpoint_rebuilds_index(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         repo = backend_server._candidate_facts_repository()
@@ -2098,8 +2126,41 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(events[0]["error_code"], "RANK_SCOPE_REQUIRED")
         analyzer.assert_not_called()
 
-    def test_analyze_stream_rejects_present_rank_without_applied_rank_scope(self):
-        with patch.object(backend_server, "Analyzer") as analyzer:
+    def test_analyze_stream_accepts_present_rank_without_applied_rank_scope(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        second_rank = self.download_root / "2nd_Engineer"
+        second_rank.mkdir(parents=True, exist_ok=True)
+        (second_rank / "2nd_Engineer_1002.pdf").write_bytes(b"%PDF-1.4 fake resume content")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [
+            self._present_rank_index_row(
+                row_id="chief",
+                file_name="Chief_Officer_1001.pdf",
+                present_rank="chief_officer",
+                applied_rank="chief_officer",
+            ),
+            self._present_rank_index_row(
+                row_id="second",
+                file_name="2nd_Engineer_1002.pdf",
+                present_rank="chief_officer",
+                applied_rank="2nd_engineer",
+            ),
+        ]
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["present_rank"] = kwargs.get("present_rank")
+                captured["candidate_population_paths"] = kwargs.get("candidate_population_paths")
+                captured["candidate_population_notice"] = kwargs.get("candidate_population_notice")
+                yield {"type": "complete", "verified_matches": [], "uncertain_matches": [], "unknown_matches": [], "message": "ok"}
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
             resp = self.client.get(
                 "/analyze_stream",
                 query_string={
@@ -2110,9 +2171,14 @@ class BackendEventLogFlowTests(unittest.TestCase):
             )
 
         events = _sse_events(resp)
-        self.assertEqual(events[0]["type"], "error")
-        self.assertEqual(events[0]["error_code"], "RANK_SCOPE_REQUIRED")
-        analyzer.assert_not_called()
+        self.assertTrue(any(event.get("type") == "complete" for event in events))
+        self.assertEqual(captured["rank_folder"], "")
+        self.assertEqual(captured["present_rank"], "chief_officer")
+        self.assertCountEqual(
+            captured["candidate_population_paths"],
+            ["Chief_Officer/Chief_Officer_1001.pdf", "2nd_Engineer/2nd_Engineer_1002.pdf"],
+        )
+        self.assertIsNone(captured["candidate_population_notice"])
 
     def test_analyze_stream_rejects_invalid_present_rank_before_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -2196,19 +2262,38 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
         analyzer.assert_not_called()
 
-    def test_analyze_rejects_present_rank_without_applied_rank_scope(self):
-        with patch.object(backend_server, "Analyzer") as analyzer:
+    def test_analyze_accepts_present_rank_without_applied_rank_scope(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [self._present_rank_index_row()]
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["present_rank"] = kwargs.get("present_rank")
+                captured["candidate_population_paths"] = kwargs.get("candidate_population_paths")
+                captured["candidate_population_notice"] = kwargs.get("candidate_population_notice")
+                return {"success": True, "verified_matches": [], "uncertain_matches": []}
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
             resp = self.client.post(
                 "/analyze",
                 json={"prompt": "show candidates", "present_rank": "Chief_Officer"},
             )
 
-        self.assertEqual(resp.status_code, 400)
-        body = resp.get_json()
-        self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
-        analyzer.assert_not_called()
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(captured["rank_folder"], "")
+        self.assertEqual(captured["present_rank"], "chief_officer")
+        self.assertEqual(captured["candidate_population_paths"], ["Chief_Officer/Chief_Officer_1001.pdf"])
+        self.assertIsNone(captured["candidate_population_notice"])
 
-    def test_analyze_rejects_invalid_present_rank_without_applied_rank_scope_as_scope_required(self):
+    def test_analyze_rejects_invalid_present_rank_without_applied_rank_scope(self):
         with patch.object(backend_server, "Analyzer") as analyzer:
             resp = self.client.post(
                 "/analyze",
@@ -2217,7 +2302,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         self.assertEqual(resp.status_code, 400)
         body = resp.get_json()
-        self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
+        self.assertEqual(body["error_code"], "PRESENT_RANK_INVALID")
+        self.assertEqual(body["detail"], {"value": "not-a-rank"})
         analyzer.assert_not_called()
 
     def test_analyze_rejects_missing_applied_rank_folder_before_analyzer(self):

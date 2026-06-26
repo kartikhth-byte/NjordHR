@@ -98,6 +98,8 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
     def _save_parent_scope(
         self,
         search_session_id="parent-search",
+        rank_folder="Chief_Engineer",
+        present_rank="chief_officer",
         content_hash_at_event="content-a",
         lineage_warning_codes=None,
     ):
@@ -106,12 +108,12 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             actor_user_id="local:test-recruiter",
             actor_username="recruiter",
             actor_role="recruiter",
-            rank_folder="Chief_Engineer",
+            rank_folder=rank_folder,
             applied_ship_type="Bulk Carrier",
             experienced_ship_type="Tanker",
             prompt="has valid passport",
             context={
-                "present_rank": "chief_officer",
+                "present_rank": present_rank,
                 "experience_ship_type_filter": {
                     "type": "experience_ship_type",
                     "match_mode": "any_of",
@@ -722,6 +724,55 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             },
         )
 
+    def test_refinement_of_cross_folder_present_rank_parent_uses_candidate_scope(self):
+        self._save_parent_scope(rank_folder="", present_rank="chief_officer")
+        client = self._client()
+        captured = {}
+
+        class _CapturingAnalyzer(_FakeAnalyzer):
+            def resolve_candidate_scope_snapshot(self, target_folder, candidate_scope_ids, **kwargs):
+                captured["preflight_target_folder"] = target_folder
+                return super().resolve_candidate_scope_snapshot(
+                    target_folder,
+                    candidate_scope_ids,
+                    **kwargs,
+                )
+
+            def run_analysis_stream(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["present_rank"] = kwargs.get("present_rank")
+                captured["candidate_scope_ids"] = kwargs.get("candidate_scope_ids")
+                captured["candidate_scope_memberships"] = kwargs.get("candidate_scope_memberships")
+                yield from super().run_analysis_stream()
+
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_CapturingAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "strong leadership under pressure",
+                    "parent_search_session_id": "parent-search",
+                },
+            )
+
+        events = _sse_events(response)
+        complete_event = next(event for event in events if event.get("type") == "complete")
+        self.assertEqual(captured["preflight_target_folder"], self.temp_dir.name)
+        self.assertEqual(captured["rank_folder"], "")
+        self.assertEqual(captured["present_rank"], "chief_officer")
+        self.assertEqual(captured["candidate_scope_ids"], ["candidate-scope-a"])
+        self.assertEqual(
+            captured["candidate_scope_memberships"][0]["candidate_scope_id"],
+            "candidate-scope-a",
+        )
+        self.assertEqual(complete_event["search_session"]["search_mode"], "refinement")
+        self.assertEqual(complete_event["search_context"]["rank_folder"], "")
+        self.assertEqual(complete_event["search_context"]["present_rank"], "chief_officer")
+
     def test_refinement_lineage_warning_persists_into_next_refinement(self):
         self._save_parent_scope()
         client = self._client()
@@ -1039,6 +1090,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                 "filename": long_filename,
                                 "candidate_scope_id": long_scope_id,
                                 "content_hash": long_content_hash,
+                                "downloaded_rank_folder": "Chief_Officer",
                                 "result_bucket": "verified_match",
                                 "confidence": 0.75,
                                 "lineage_warning_codes": warning_codes,
@@ -1048,6 +1100,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                             }],
                             "unknown_matches": [{
                                 "filename": "needs-review.pdf",
+                                "downloaded_rank_folder": "../../etc",
                                 "result_bucket": "unsupported-free-text",
                                 "confidence": 2.0,
                                 "needs_review_rank_summary": "Could not determine current/present rank from this resume.",
@@ -1162,6 +1215,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(len(card["filename"]), 255)
         self.assertEqual(len(card["candidate_scope_id"]), 64)
         self.assertEqual(card["content_hash"], long_content_hash.lower()[:128])
+        self.assertEqual(card["downloaded_rank_folder"], "Chief_Officer")
         self.assertEqual(card["result_bucket"], "verified_match")
         self.assertEqual(card["confidence"], 0.75)
         self.assertEqual(len(card["lineage_warning_codes"]), 10)
@@ -1170,6 +1224,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertTrue(all(len(code) <= 64 for code in card["evidence_review_badges"]))
 
         unknown_card = loaded["search_state"]["current_completed_results"]["unknown_matches"][0]
+        self.assertEqual(unknown_card["downloaded_rank_folder"], "")
         self.assertEqual(unknown_card["result_bucket"], "needs_review")
         self.assertIsNone(unknown_card["confidence"])
         self.assertEqual(
