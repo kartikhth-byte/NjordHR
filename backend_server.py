@@ -6230,6 +6230,24 @@ def analyze():
         rank_folder = _request_rank_scope_value(data or {})
         rank_folder_id = str((data or {}).get('rank_folder_id', '')).strip()
         present_rank = str(data.get('present_rank', '')).strip()
+        if not prompt:
+            return jsonify({"success": False, "message": "AI prompt is required."}), 400
+        rank_scope = _validate_root_rank_scope(
+            rank_folder_id=rank_folder_id,
+            rank_folder=rank_folder,
+        )
+        if not rank_scope.get("success"):
+            body = {
+                "success": False,
+                "message": rank_scope.get("message") or _rank_scope_required_message(),
+                "error_code": rank_scope.get("error_code", "RANK_SCOPE_REQUIRED"),
+            }
+            if rank_scope.get("detail") is not None:
+                body["detail"] = rank_scope.get("detail")
+            return jsonify(body), 400
+
+        rank_folder = rank_scope["rank_folder"]
+        rank_folder_id = rank_scope["rank_folder_id"]
         if present_rank:
             canonical_present_rank = _canonical_rank_id_for_picker(present_rank)
             if not canonical_present_rank:
@@ -6271,25 +6289,6 @@ def analyze():
                 "detail": {"code": exc.detail_code},
             }), 400
 
-        if not prompt:
-            return jsonify({"success": False, "message": "AI prompt is required."}), 400
-        rank_scope = _validate_root_rank_scope(
-            rank_folder_id=rank_folder_id,
-            rank_folder=rank_folder,
-        )
-        if not rank_scope.get("success"):
-            body = {
-                "success": False,
-                "message": rank_scope.get("message") or _rank_scope_required_message(),
-                "error_code": rank_scope.get("error_code", "RANK_SCOPE_REQUIRED"),
-            }
-            if rank_scope.get("detail") is not None:
-                body["detail"] = rank_scope.get("detail")
-            return jsonify(body), 400
-
-        rank_folder = rank_scope["rank_folder"]
-        rank_folder_id = rank_scope["rank_folder_id"]
-        
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
         

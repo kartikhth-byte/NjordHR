@@ -1051,6 +1051,9 @@ server-side and return sanitized operator messages to the UI.
   `RANK_SCOPE_REQUIRED`; unknown, unsafe, or stale applied-rank folder
   references return `APPLIED_RANK_FOLDER_NOT_FOUND` with a machine-readable
   detail code preserving the resolver reason.
+- On `/analyze_stream`, rank-scope validation must run after request-claim
+  checks and after refinement-context inheritance so existing request statuses
+  and parent rank context take precedence over live folder validation.
 - Tests for all four picker states: no picker, present-rank only,
   applied-rank only, and applied+present rank.
 

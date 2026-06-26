@@ -2165,6 +2165,18 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
         analyzer.assert_not_called()
 
+    def test_analyze_rejects_invalid_present_rank_without_applied_rank_scope_as_scope_required(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "present_rank": "not-a-rank"},
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
+        analyzer.assert_not_called()
+
     def test_analyze_rejects_missing_applied_rank_folder_before_analyzer(self):
         with patch.object(backend_server, "Analyzer") as analyzer:
             resp = self.client.post(
