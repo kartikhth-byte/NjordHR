@@ -260,7 +260,7 @@ test("picker state derives from each search step context", () => {
   assert.deepEqual(
     JSON.parse(JSON.stringify(helpers.pickerStateFromSearchContext({
       rank_folder: "",
-      applied_rank: "",
+      applied_rank: "Chief_Officer",
       present_rank: "chief_officer",
     }))),
     {

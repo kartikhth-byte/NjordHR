@@ -312,8 +312,11 @@
 
             const pickerStateFromSearchContext = (searchContext) => {
                 const context = searchContext && typeof searchContext === 'object' ? searchContext : {};
+                const rankFolder = Object.prototype.hasOwnProperty.call(context, 'rank_folder')
+                    ? context.rank_folder
+                    : context.applied_rank;
                 return {
-                    selectedRankFolder: String(context.rank_folder || context.applied_rank || '').trim(),
+                    selectedRankFolder: String(rankFolder || '').trim(),
                     selectedPresentRank: String(context.present_rank || '').trim(),
                 };
             };

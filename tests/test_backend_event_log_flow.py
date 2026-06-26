@@ -1878,6 +1878,30 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(current_context["present_rank"], "chief_officer")
         self.assertEqual(current_context["download_root_id"], "dr_active")
 
+    def test_recovery_sanitizer_clears_invalid_rank_context_fields(self):
+        draft = backend_server._sanitize_ai_search_recovery_draft({
+            "search_state": {
+                "current_completed_results": {
+                    "search_context": {
+                        "rank_folder": "../../etc",
+                        "applied_rank": "Chief/Officer",
+                        "present_rank": True,
+                        "rank_folder_id": "../../etc/passwd",
+                        "download_root_id": "a" * 300,
+                        "applied_ship_type": "Bulk Carrier",
+                    },
+                },
+            },
+        })
+
+        context = draft["search_state"]["current_completed_results"]["search_context"]
+        self.assertEqual(context["rank_folder"], "")
+        self.assertEqual(context["applied_rank"], "")
+        self.assertEqual(context["present_rank"], "")
+        self.assertEqual(context["rank_folder_id"], "")
+        self.assertEqual(context["download_root_id"], "")
+        self.assertEqual(context["applied_ship_type"], "Bulk Carrier")
+
     def test_parse_experience_ship_type_filter_payload_accepts_configured_dropdown_values(self):
         payload = backend_server._parse_experience_ship_type_filter_payload(json.dumps({
             "type": "experience_ship_type",
