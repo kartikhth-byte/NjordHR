@@ -198,6 +198,45 @@ def _request_rank_scope_value(source, *, legacy_key="rank_folder", structured_ke
     return str(getter(structured_key, "") or "").strip()
 
 
+def _rank_scope_required_message():
+    return (
+        "Select an applied-rank folder to run a search. You may optionally add "
+        "a present-rank filter; Phase 1 applies it only inside that folder."
+    )
+
+
+def _applied_rank_folder_not_found_payload(resolved):
+    return {
+        "success": False,
+        "message": resolved.get("message") or "Selected applied-rank folder is no longer available.",
+        "error_code": "APPLIED_RANK_FOLDER_NOT_FOUND",
+        "detail": {"code": resolved.get("error_code", "RANK_FOLDER_NOT_FOUND")},
+    }
+
+
+def _validate_root_rank_scope(*, rank_folder_id="", rank_folder=""):
+    if not str(rank_folder or "").strip() and not str(rank_folder_id or "").strip():
+        return {
+            "success": False,
+            "message": _rank_scope_required_message(),
+            "error_code": "RANK_SCOPE_REQUIRED",
+        }
+    resolved = _resolve_rank_folder_reference(
+        rank_folder_id=rank_folder_id,
+        rank_folder=rank_folder,
+    )
+    if not resolved.get("success"):
+        return _applied_rank_folder_not_found_payload(resolved)
+    record = resolved["record"]
+    return {
+        "success": True,
+        "record": record,
+        "rank_folder": record["folder"],
+        "rank_folder_id": record["rank_folder_id"],
+        "download_root_id": record["download_root_id"],
+    }
+
+
 def _sse_error_response(message, *, error_code, detail=None):
     payload = {
         "type": "error",
@@ -5451,9 +5490,10 @@ def analyze_stream():
     rank_folder_id = request.args.get('rank_folder_id', '').strip()
     present_rank = request.args.get('present_rank', '').strip()
     parent_search_session_id = request.args.get('parent_search_session_id', '').strip()
+    root_rank_scope = None
     if not rank_folder and not rank_folder_id and not parent_search_session_id:
         return _sse_error_response(
-            "Select an applied-rank folder to run a search. You may optionally add a present-rank filter; Phase 1 applies it only inside that folder.",
+            _rank_scope_required_message(),
             error_code="RANK_SCOPE_REQUIRED",
         )
     if present_rank:
@@ -5633,7 +5673,7 @@ def analyze_stream():
             })
             return f"data: {json.dumps(payload)}\n\n"
 
-        def _error_sse(message, *, error_code="AI_SEARCH_REQUEST_FAILED", retryable=False):
+        def _error_sse(message, *, error_code="AI_SEARCH_REQUEST_FAILED", retryable=False, detail=None):
             if not _mark_request_failed(error_code, message):
                 return _request_store_unavailable_sse(
                     "AI Search request tracking could not record the failed request. Please retry with a new request.",
@@ -5645,6 +5685,8 @@ def analyze_stream():
             }
             if error_code:
                 payload["error_code"] = error_code
+            if detail is not None:
+                payload["detail"] = detail
             return f"data: {json.dumps(payload)}\n\n"
 
         try:
@@ -5834,19 +5876,19 @@ def analyze_stream():
                         return
 
             if search_mode == "root":
-                resolved_rank = _resolve_rank_folder_reference(
+                root_rank_scope = _validate_root_rank_scope(
                     rank_folder_id=effective_rank_folder_id,
                     rank_folder=effective_rank_folder,
                 )
-                if not resolved_rank.get("success"):
-                    error_code = resolved_rank.get("error_code", "RANK_FOLDER_NOT_FOUND")
+                if not root_rank_scope.get("success"):
                     yield _error_sse(
-                        resolved_rank.get("message") or "Rank folder not found.",
-                        error_code=error_code,
+                        root_rank_scope.get("message") or _rank_scope_required_message(),
+                        error_code=root_rank_scope.get("error_code", "APPLIED_RANK_FOLDER_NOT_FOUND"),
+                        detail=root_rank_scope.get("detail"),
                         retryable=False,
                     )
                     return
-                rank_record = resolved_rank["record"]
+                rank_record = root_rank_scope["record"]
                 effective_rank_folder = rank_record["folder"]
                 effective_rank_folder_id = rank_record["rank_folder_id"]
                 effective_download_root_id = rank_record["download_root_id"]
@@ -6186,6 +6228,7 @@ def analyze():
         data = request.json
         prompt = data.get('prompt')
         rank_folder = _request_rank_scope_value(data or {})
+        rank_folder_id = str((data or {}).get('rank_folder_id', '')).strip()
         present_rank = str(data.get('present_rank', '')).strip()
         if present_rank:
             canonical_present_rank = _canonical_rank_id_for_picker(present_rank)
@@ -6230,16 +6273,22 @@ def analyze():
 
         if not prompt:
             return jsonify({"success": False, "message": "AI prompt is required."}), 400
-        if not rank_folder:
-            return jsonify({
+        rank_scope = _validate_root_rank_scope(
+            rank_folder_id=rank_folder_id,
+            rank_folder=rank_folder,
+        )
+        if not rank_scope.get("success"):
+            body = {
                 "success": False,
-                "message": "Select an applied-rank folder to run a search. You may optionally add a present-rank filter; Phase 1 applies it only inside that folder.",
-                "error_code": "RANK_SCOPE_REQUIRED",
-            }), 400
-        
-        target_folder = os.path.join(_active_download_root(), rank_folder)
-        if not os.path.isdir(target_folder):
-            return jsonify({"success": False, "message": f"Rank folder not found: {rank_folder}"}), 400
+                "message": rank_scope.get("message") or _rank_scope_required_message(),
+                "error_code": rank_scope.get("error_code", "RANK_SCOPE_REQUIRED"),
+            }
+            if rank_scope.get("detail") is not None:
+                body["detail"] = rank_scope.get("detail")
+            return jsonify(body), 400
+
+        rank_folder = rank_scope["rank_folder"]
+        rank_folder_id = rank_scope["rank_folder_id"]
         
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
@@ -6254,6 +6303,7 @@ def analyze():
             summary=f"AI search started for rank={rank_folder}.",
             payload={
                 "rank_folder": rank_folder,
+                "rank_folder_id": rank_folder_id,
                 "present_rank": present_rank,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
@@ -6299,6 +6349,7 @@ def analyze():
             summary=f"AI search completed for rank={rank_folder}.",
             payload={
                 "rank_folder": rank_folder,
+                "rank_folder_id": rank_folder_id,
                 "present_rank": present_rank,
                 "applied_ship_type": applied_ship_type,
                 "experienced_ship_type": experienced_ship_type,
