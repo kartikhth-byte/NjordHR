@@ -84,7 +84,7 @@ class PresentRankIndexTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].candidate_resume_id, "resume-1")
         self.assertEqual(entries[0].file_name, "a.pdf")
-        self.assertEqual(entries[0].resume_path, str((self.base / "chief_officer" / "a.pdf").resolve()))
+        self.assertEqual(entries[0].resume_path, "chief_officer/a.pdf")
 
     def test_index_tracks_unindexed_missing_present_rank_rows(self):
         index = PresentRankIndex()

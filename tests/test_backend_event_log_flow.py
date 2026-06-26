@@ -136,6 +136,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         os.environ["NJORDHR_CONFIG_PATH"] = self.temp_config_path
         backend_server.candidate_facts_repo = None
         backend_server.present_rank_index = backend_server.PresentRankIndex()
+        backend_server.present_rank_index_rebuild_lock = backend_server.threading.Lock()
         self.client = backend_server.app.test_client()
         with self.client.session_transaction() as sess:
             sess["username"] = "admin"
@@ -159,6 +160,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
             os.environ["NJORDHR_CANDIDATE_FACTS_CACHE_DIR"] = self.prev_candidate_facts_cache_dir
         backend_server.candidate_facts_repo = None
         backend_server.present_rank_index = backend_server.PresentRankIndex()
+        backend_server.present_rank_index_rebuild_lock = backend_server.threading.Lock()
         self.temp_dir.cleanup()
         backend_server.cloud_auth_state_cache.update({"ts": 0, "mode": "local", "reason": "not_checked"})
 
@@ -1107,6 +1109,27 @@ class BackendEventLogFlowTests(unittest.TestCase):
         rebuilt = body["present_rank_index"]
         self.assertEqual(rebuilt["rank_counts"], {"chief_officer": 1})
         self.assertEqual(rebuilt["version"], first["version"] + 1)
+
+    def test_rebuild_present_rank_index_endpoint_requires_auth(self):
+        with self.client.session_transaction() as sess:
+            sess.clear()
+
+        resp = self.client.post("/rebuild_present_rank_index")
+
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(resp.get_json()["success"])
+
+    def test_rebuild_present_rank_index_endpoint_rejects_concurrent_rebuild(self):
+        self.assertTrue(backend_server.present_rank_index_rebuild_lock.acquire(blocking=False))
+        try:
+            resp = self.client.post("/rebuild_present_rank_index")
+        finally:
+            backend_server.present_rank_index_rebuild_lock.release()
+
+        self.assertEqual(resp.status_code, 409)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertEqual(body["error_code"], "PRESENT_RANK_INDEX_REBUILD_IN_PROGRESS")
 
     def test_rank_folder_ids_survive_device_inode_changes_for_same_path(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

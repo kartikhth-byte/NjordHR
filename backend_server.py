@@ -72,6 +72,7 @@ auto_shutdown_in_progress = False
 cloud_auth_state_cache = {"ts": 0, "mode": "local", "reason": "not_checked"}
 candidate_facts_repo = None
 present_rank_index = PresentRankIndex()
+present_rank_index_rebuild_lock = threading.Lock()
 supabase_telemetry_store = None
 
 # --- Initialize Extractors ---
@@ -1019,7 +1020,7 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index
+    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index, present_rank_index_rebuild_lock
     app_settings = load_app_settings()
     config = app_settings.config
     creds = app_settings.credentials
@@ -1047,6 +1048,7 @@ def _refresh_runtime_managers():
                 pass
     candidate_facts_repo = None
     present_rank_index = PresentRankIndex()
+    present_rank_index_rebuild_lock = threading.Lock()
     try:
         Analyzer._instance = None
     except Exception:
@@ -5064,10 +5066,18 @@ def rebuild_present_rank_index():
     ok, reason = _require_role("admin", "manager", "recruiter")
     if not ok:
         return jsonify({"success": False, "message": reason}), 403
+    if not present_rank_index_rebuild_lock.acquire(blocking=False):
+        return jsonify({
+            "success": False,
+            "message": "Present-rank index rebuild is already running.",
+            "error_code": "PRESENT_RANK_INDEX_REBUILD_IN_PROGRESS",
+        }), 409
     try:
         return jsonify({"success": True, "present_rank_index": _rebuild_present_rank_index()})
     except Exception as exc:
         return jsonify({"success": False, "message": str(exc)}), 500
+    finally:
+        present_rank_index_rebuild_lock.release()
 
 
 @app.route('/get_rank_folder_summaries', methods=['GET'])
