@@ -331,6 +331,53 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         self.assertFalse((self.verified_root / self.rank).exists(), "No physical verified resume folder should be created")
 
+    def test_verify_resumes_accepts_cross_folder_rank_map(self):
+        self._write_fake_resume("Chief_Officer_1101.pdf")
+        second_rank_dir = self.download_root / "2nd_Engineer"
+        second_rank_dir.mkdir(parents=True, exist_ok=True)
+        (second_rank_dir / "2nd_Engineer_1102.pdf").write_bytes(b"%PDF-1.4 fake resume content")
+
+        resp = self.client.post("/verify_resumes", json={
+            "rank_folder": "",
+            "rank_folder_by_filename": {
+                "Chief_Officer_1101.pdf": "Chief_Officer",
+                "2nd_Engineer_1102.pdf": "2nd_Engineer",
+            },
+            "filenames": ["Chief_Officer_1101.pdf", "2nd_Engineer_1102.pdf"],
+            "match_data": {
+                "Chief_Officer_1101.pdf": {"reason": "Matched chief", "confidence": 0.9},
+                "2nd_Engineer_1102.pdf": {"reason": "Matched engineer", "confidence": 0.9},
+            },
+            "ai_prompt": "chief officer across folders",
+        })
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["processed"], 2)
+        self.assertEqual(body["csv_exports"], 2)
+
+        df = self._read_master_csv()
+        ranks_by_candidate = dict(zip(df["Candidate_ID"].astype(str), df["Rank_Applied_For"]))
+        self.assertEqual(ranks_by_candidate["1101"], "Chief_Officer")
+        self.assertEqual(ranks_by_candidate["1102"], "2nd_Engineer")
+
+    def test_verify_resumes_rejects_invalid_cross_folder_rank_map(self):
+        self._write_fake_resume("Chief_Officer_1201.pdf")
+
+        resp = self.client.post("/verify_resumes", json={
+            "rank_folder": "",
+            "rank_folder_by_filename": {"Chief_Officer_1201.pdf": "../../etc"},
+            "filenames": ["Chief_Officer_1201.pdf"],
+            "match_data": {},
+            "ai_prompt": "prompt",
+        })
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertFalse(body["success"])
+        self.assertIn("Invalid rank folder", body["message"])
+
     def test_ui_vendor_assets_route_serves_local_runtime_js(self):
         resp = self.client.get("/ui_vendor/react.development.js")
         self.assertEqual(resp.status_code, 200)
