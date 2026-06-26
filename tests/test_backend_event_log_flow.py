@@ -2091,6 +2091,22 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(events[0]["error_code"], "RANK_SCOPE_REQUIRED")
         analyzer.assert_not_called()
 
+    def test_analyze_stream_rejects_present_rank_without_applied_rank_scope(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "show candidates",
+                    "present_rank": "Chief Officer",
+                    "search_request_id": f"request-present-only-{time.time_ns()}",
+                },
+            )
+
+        events = _sse_events(resp)
+        self.assertEqual(events[0]["type"], "error")
+        self.assertEqual(events[0]["error_code"], "RANK_SCOPE_REQUIRED")
+        analyzer.assert_not_called()
+
     def test_analyze_stream_rejects_invalid_present_rank_before_analyzer(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         with patch.object(backend_server, "Analyzer") as analyzer:
@@ -2121,8 +2137,138 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
         events = _sse_events(resp)
         self.assertEqual(events[0]["type"], "error")
-        self.assertEqual(events[0]["error_code"], "INVALID_RANK_FOLDER_ID")
+        self.assertEqual(events[0]["error_code"], "APPLIED_RANK_FOLDER_NOT_FOUND")
+        self.assertEqual(events[0]["detail"]["code"], "INVALID_RANK_FOLDER_ID")
         analyzer.assert_not_called()
+
+    def test_analyze_rejects_missing_applied_rank_scope_before_analyzer(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates"},
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
+        analyzer.assert_not_called()
+
+    def test_analyze_rejects_present_rank_without_applied_rank_scope(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "present_rank": "Chief_Officer"},
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
+        analyzer.assert_not_called()
+
+    def test_analyze_rejects_invalid_present_rank_without_applied_rank_scope_as_scope_required(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "present_rank": "not-a-rank"},
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "RANK_SCOPE_REQUIRED")
+        analyzer.assert_not_called()
+
+    def test_analyze_rejects_missing_applied_rank_folder_before_analyzer(self):
+        with patch.object(backend_server, "Analyzer") as analyzer:
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "applied_rank": "Missing_Rank"},
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "APPLIED_RANK_FOLDER_NOT_FOUND")
+        self.assertEqual(body["detail"]["code"], "RANK_FOLDER_NOT_FOUND")
+        analyzer.assert_not_called()
+
+    def test_analyze_accepts_applied_rank_scope(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["prompt"] = prompt
+                captured["present_rank"] = kwargs.get("present_rank")
+                return {"success": True, "verified_matches": [], "uncertain_matches": []}
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "applied_rank": "Chief_Officer"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["prompt"], "show candidates")
+        self.assertEqual(captured["present_rank"], "")
+
+    def test_analyze_accepts_applied_and_present_rank_scope(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["present_rank"] = kwargs.get("present_rank")
+                return {"success": True, "verified_matches": [], "uncertain_matches": []}
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.post(
+                "/analyze",
+                json={
+                    "prompt": "show candidates",
+                    "applied_rank": "Chief_Officer",
+                    "present_rank": "Chief Officer",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["present_rank"], "chief_officer")
+
+    def test_analyze_accepts_opaque_rank_folder_id(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        rank_folder_id = self.client.get("/get_rank_folders").get_json()["rank_folder_options"][0]["rank_folder_id"]
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                return {"success": True, "verified_matches": [], "uncertain_matches": []}
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "rank_folder_id": rank_folder_id},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
 
     def test_analyze_stream_logs_hard_filter_audit_rows(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")

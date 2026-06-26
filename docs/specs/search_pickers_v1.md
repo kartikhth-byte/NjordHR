@@ -1040,10 +1040,22 @@ server-side and return sanitized operator messages to the UI.
 ### PR-3 (rank): Backend validator + audit
 
 - Add `RANK_SCOPE_REQUIRED` validator at the search entry point.
+- Root searches must provide an applied-rank scope (`rank_folder_id`,
+  `rank_folder`, or `applied_rank`). Present-rank-only root searches are
+  invalid and return `RANK_SCOPE_REQUIRED`.
 - Audit and update every code path that previously fell through to
   unbounded scan.
 - Add `APPLIED_RANK_FOLDER_NOT_FOUND` error.
-- Tests for all four picker states.
+- `/analyze_stream` and `/analyze` must share the same root rank-scope
+  validation semantics before analyzer construction. Missing scope returns
+  `RANK_SCOPE_REQUIRED`; unknown, unsafe, or stale applied-rank folder
+  references return `APPLIED_RANK_FOLDER_NOT_FOUND` with a machine-readable
+  detail code preserving the resolver reason.
+- On `/analyze_stream`, rank-scope validation must run after request-claim
+  checks and after refinement-context inheritance so existing request statuses
+  and parent rank context take precedence over live folder validation.
+- Tests for all four picker states: no picker, present-rank only,
+  applied-rank only, and applied+present rank.
 
 ### PR-4 (rank): Query plan + prompt parser interaction
 
