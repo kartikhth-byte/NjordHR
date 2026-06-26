@@ -2275,11 +2275,28 @@ def _safe_recovery_scalar_mapping(value, allowed_keys):
     return result
 
 
+def _safe_recovery_search_context_string(value, *, safe_name=False, opaque_id=False):
+    if not isinstance(value, str):
+        return ""
+    item = value.strip()[:256]
+    if safe_name and item and not _is_safe_name(item):
+        return ""
+    if opaque_id and item and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", item):
+        return ""
+    return item
+
+
 def _safe_recovery_search_context(value):
-    result = _safe_recovery_scalar_mapping(
-        value,
-        ("rank_folder", "present_rank", "applied_ship_type", "experienced_ship_type"),
-    )
+    raw = value if isinstance(value, dict) else {}
+    result = {
+        "rank_folder": _safe_recovery_search_context_string(raw.get("rank_folder"), safe_name=True),
+        "applied_rank": _safe_recovery_search_context_string(raw.get("applied_rank"), safe_name=True),
+        "present_rank": _safe_recovery_search_context_string(raw.get("present_rank")),
+        "rank_folder_id": _safe_recovery_search_context_string(raw.get("rank_folder_id"), opaque_id=True),
+        "download_root_id": _safe_recovery_search_context_string(raw.get("download_root_id"), opaque_id=True),
+        "applied_ship_type": _safe_recovery_search_context_string(raw.get("applied_ship_type")),
+        "experienced_ship_type": _safe_recovery_search_context_string(raw.get("experienced_ship_type")),
+    }
     result["experience_ship_type_filter"] = _normalize_experience_ship_type_filter(
         (value if isinstance(value, dict) else {}).get("experience_ship_type_filter") or {}
     )

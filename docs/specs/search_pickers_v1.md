@@ -1153,6 +1153,30 @@ server-side and return sanitized operator messages to the UI.
 - Tests cover actor scoping, stale-catalog rejection, blank applied-rank
   preservation, and per-applied-rank present-rank restoration.
 
+### Phase 2 PR-3 (rank): Cross-folder search context polish
+
+- Historical search-step navigation restores both rank pickers from that
+  step's `search_context`; cross-folder present-rank searches restore blank
+  applied rank and the saved present-rank ID.
+- The frontend reads `search_context.rank_folder` when the key is present,
+  including an empty string; only when `rank_folder` is absent does it fall
+  through to `search_context.applied_rank`.
+- Saved/recovered result payloads preserve sanitized rank search context fields:
+  `rank_folder`, `applied_rank`, `present_rank`, `rank_folder_id`, and
+  `download_root_id`.
+- Search-context sanitization is strings-only. Each field is length-bounded to
+  256 characters; `rank_folder` and `applied_rank` pass `_is_safe_name`;
+  `rank_folder_id` and `download_root_id` match
+  `^[A-Za-z0-9_.:-]{1,128}$`; values failing validation are cleared to `""`.
+- Cross-folder result cards preserve sanitized `downloaded_rank_folder` per
+  result so preview links keep using the candidate's source folder after
+  completion and recovery.
+- This polish does not change `/analyze_stream` payload shape, `/analyze`
+  payload shape, request fingerprints, backend validation, query planning,
+  index contents, hard-filter behavior, or prompt parsing.
+- Tests cover cross-folder picker-state restoration from `search_context` and
+  recovery sanitization for cross-folder rank context plus result source folder.
+
 ### PR-6 (age): Age range picker
 
 - Add `Candidate Age` minimum/maximum inputs to `frontend.html`.

@@ -310,6 +310,17 @@
                 };
             };
 
+            const pickerStateFromSearchContext = (searchContext) => {
+                const context = searchContext && typeof searchContext === 'object' ? searchContext : {};
+                const rankFolder = Object.prototype.hasOwnProperty.call(context, 'rank_folder')
+                    ? context.rank_folder
+                    : context.applied_rank;
+                return {
+                    selectedRankFolder: String(rankFolder || '').trim(),
+                    selectedPresentRank: String(context.present_rank || '').trim(),
+                };
+            };
+
             const deriveRecoveredSearchState = (state) => {
                 const restoredChain = chainArray(state?.search_chain);
                 const rawRestoredIndex = Number(state?.active_search_step_index);
@@ -599,6 +610,7 @@
                 shouldInvalidateRefinementForFilterChange,
                 invalidatedRefinementAvailability,
                 completedSearchSnapshot,
+                pickerStateFromSearchContext,
                 deriveRecoveredSearchState,
                 rankPickerPreferenceStorageKey,
                 normalizeRankPickerPreference,
@@ -5376,7 +5388,11 @@
                 setActiveSearchStepIndex(view.boundedIndex);
                 setAnalysisResults(view.results);
                 analysisResultsRef.current = view.results;
-                setSelectedPresentRank(view.results?.search_context?.present_rank || '');
+                const pickerState = aiSearchState.pickerStateFromSearchContext(view.results?.search_context || {});
+                selectedRankFolderRef.current = pickerState.selectedRankFolder;
+                selectedPresentRankRef.current = pickerState.selectedPresentRank;
+                setSelectedRankFolder(pickerState.selectedRankFolder);
+                setSelectedPresentRank(pickerState.selectedPresentRank);
                 setRefinementAvailability(view.refinementAvailability);
                 if (view.isLatestStep) {
                     setRefinementState(view.refinementState);
