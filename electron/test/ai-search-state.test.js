@@ -287,3 +287,17 @@ test("present-rank index status formatter flags malformed status payloads", () =
   const partial = helpers.formatPresentRankIndexStatus({ built_at: "", row_count: 0 });
   assert.equal(partial.summary, "Present-rank index status unavailable");
 });
+
+test("present-rank index status formatter distinguishes built empty indexes", () => {
+  const formatted = helpers.formatPresentRankIndexStatus({
+    version: 2,
+    built_at: "2026-06-26T03:08:45+00:00",
+    row_count: 0,
+    indexed_count: 0,
+    unindexed_count: 0,
+    rank_counts: {},
+  });
+
+  assert.equal(formatted.summary, "Present-rank index is built with no current-rank rows");
+  assert.equal(formatted.detail, "No current candidate facts rows are available · version 2");
+});

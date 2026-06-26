@@ -420,6 +420,12 @@
                     && Object.prototype.hasOwnProperty.call(status, 'row_count');
                 const statusUnavailable = Boolean(status)
                     && (!hasStatusShape || (!normalized.builtAt && normalized.rowCount === 0));
+                const statusEmpty = Boolean(status)
+                    && !statusUnavailable
+                    && Boolean(normalized.builtAt)
+                    && normalized.rowCount === 0
+                    && normalized.indexedCount === 0
+                    && normalized.unindexedCount === 0;
                 return {
                     version: normalized.version,
                     builtAt: normalized.builtAt,
@@ -430,11 +436,15 @@
                     builtLabel,
                     summary: statusUnavailable
                         ? 'Present-rank index status unavailable'
+                        : statusEmpty
+                        ? 'Present-rank index is built with no current-rank rows'
                         : normalized.builtAt
                         ? `${pluralize(normalized.indexedCount, 'indexed current-rank row')}`
                         : 'Present-rank index awaiting first refresh',
                     detail: statusUnavailable
                         ? 'Refresh the index status to verify current-rank coverage.'
+                        : statusEmpty
+                        ? `No current candidate facts rows are available · version ${normalized.version}`
                         : [
                         pluralize(normalized.rowCount, 'current facts row'),
                         pluralize(normalized.unindexedCount, 'row needing rank review', 'rows needing rank review'),
@@ -2201,6 +2211,13 @@
                         if (folders.length > 0 && !selectedRankFolder) {
                             setSelectedRankFolder(folders[0]);
                         }
+                    } else {
+                        setRankFolders([]);
+                        setRankFolderRecords([]);
+                        setPresentRankOptions([]);
+                        setPresentRankIndexStatus(null);
+                        setCocIssueAuthorityOptions([]);
+                        handleSendMessage('warning', data.message || 'Could not fetch rank folders.');
                     }
                 } catch (error) {
                     if (authUserRef.current !== requestAuthUser) return;
