@@ -364,12 +364,22 @@
                 };
             };
 
+            const rankPreferenceHash = (value) => {
+                const input = String(value || '');
+                let hash = 2166136261;
+                for (let index = 0; index < input.length; index += 1) {
+                    hash ^= input.charCodeAt(index);
+                    hash = Math.imul(hash, 16777619);
+                }
+                return (hash >>> 0).toString(36);
+            };
+
             const rankPreferenceActorKey = (user) => {
                 const userId = String(user?.user_id || user?.id || '').trim();
                 if (userId) return `id:${userId}`;
                 const username = String(user?.username || '').trim();
                 const role = String(user?.role || '').trim();
-                if (username || role) return `user:${username}|role:${role}`;
+                if (username) return `fallback:${rankPreferenceHash(`${username}|${role}`)}`;
                 return '';
             };
 
@@ -441,7 +451,6 @@
                 const appliedKey = rankPreferenceAppliedKey(selectedRankFolder);
                 const preferredPresentRank = String(
                     preference.present_rank_by_applied_rank[appliedKey]
-                    || preference.present_rank
                     || ''
                 ).trim();
                 const selectedPresentRank = hasValidCurrentPresent
@@ -471,8 +480,11 @@
                 const next = readRankPickerPreference(storage, user);
                 next.selected_rank_folder = String(selectedRankFolder || '').trim();
                 next.present_rank = String(selectedPresentRank || '').trim();
+                const appliedKey = rankPreferenceAppliedKey(next.selected_rank_folder);
                 if (next.present_rank) {
-                    next.present_rank_by_applied_rank[rankPreferenceAppliedKey(next.selected_rank_folder)] = next.present_rank;
+                    next.present_rank_by_applied_rank[appliedKey] = next.present_rank;
+                } else {
+                    delete next.present_rank_by_applied_rank[appliedKey];
                 }
                 try {
                     storage.setItem(key, JSON.stringify(next));
@@ -1615,7 +1627,10 @@
             const refinementConfirmInitiatorRef = useRef(null);
             const analysisResultsRef = useRef(null);
             const authUserRef = useRef(authUser);
+            const selectedRankFolderRef = useRef(selectedRankFolder);
+            const selectedPresentRankRef = useRef(selectedPresentRank);
             const recoveryLoadedRef = useRef(false);
+            const recoveryRestoringRef = useRef(false);
             const recoveryTabIdRef = useRef((() => {
                 try {
                     const key = 'njordhr_ai_search_recovery_tab_id';
@@ -1644,6 +1659,14 @@
             useEffect(() => {
                 authUserRef.current = authUser;
             }, [authUser]);
+
+            useEffect(() => {
+                selectedRankFolderRef.current = selectedRankFolder;
+            }, [selectedRankFolder]);
+
+            useEffect(() => {
+                selectedPresentRankRef.current = selectedPresentRank;
+            }, [selectedPresentRank]);
             
             const resolveApiBaseUrl = () => {
                 const fromElectron = window.NjordDesktop?.runtimeConfig?.apiBaseUrl;
@@ -1943,6 +1966,9 @@
                 setPresentRankOptions([]);
                 setPresentRankIndexStatus(null);
                 setIsPresentRankIndexRebuilding(false);
+                recoveryRestoringRef.current = false;
+                selectedRankFolderRef.current = '';
+                selectedPresentRankRef.current = '';
                 setSelectedRankFolder('');
                 setSelectedPresentRank('');
             };
@@ -2359,7 +2385,9 @@
                         presentRankOptions,
                     },
                 );
-                const nextPresentRank = preferredPresentRank == null ? selectedPresentRank : preferredPresentRank;
+                const nextPresentRank = preferredPresentRank == null ? '' : preferredPresentRank;
+                selectedRankFolderRef.current = nextRankFolder;
+                selectedPresentRankRef.current = nextPresentRank;
                 setSelectedRankFolder(nextRankFolder);
                 setSelectedPresentRank(nextPresentRank);
                 rememberRankPickerDefaults(nextRankFolder, nextPresentRank);
@@ -2368,8 +2396,9 @@
 
             const handlePresentRankScopeChange = (value) => {
                 const nextPresentRank = String(value || '');
+                selectedPresentRankRef.current = nextPresentRank;
                 setSelectedPresentRank(nextPresentRank);
-                rememberRankPickerDefaults(selectedRankFolder, nextPresentRank);
+                rememberRankPickerDefaults(selectedRankFolderRef.current, nextPresentRank);
                 invalidateRefinementForFilterChange();
             };
 
@@ -2381,6 +2410,8 @@
                     setPresentRankIndexStatus(null);
                     setCocIssueAuthorityOptions([]);
                     setDownloadFolderSummaries([]);
+                    selectedRankFolderRef.current = '';
+                    selectedPresentRankRef.current = '';
                     setSelectedRankFolder('');
                     setSelectedPresentRank('');
                     setSelectedCocIssueAuthorities([]);
@@ -2404,20 +2435,25 @@
                         setPresentRankOptions(data.present_rank_options || []);
                         setPresentRankIndexStatus(data.present_rank_index || null);
                         setCocIssueAuthorityOptions(data.coc_issue_authority_options || []);
+                        if (!recoveryLoadedRef.current || recoveryRestoringRef.current) return;
+                        const liveSelectedRankFolder = selectedRankFolderRef.current;
+                        const liveSelectedPresentRank = selectedPresentRankRef.current;
                         const defaults = aiSearchState.resolveRankPickerPreference(
                             rankPickerPreferenceStorage(),
                             requestAuthUser,
                             {
                                 rankFolders: folders,
                                 presentRankOptions: data.present_rank_options || [],
-                                currentSelectedRankFolder: selectedRankFolder,
-                                currentSelectedPresentRank: selectedPresentRank,
+                                currentSelectedRankFolder: recoveryLoadedRef.current ? liveSelectedRankFolder : '',
+                                currentSelectedPresentRank: recoveryLoadedRef.current ? liveSelectedPresentRank : '',
                             },
                         );
-                        if (defaults.selectedRankFolder !== selectedRankFolder) {
+                        if (defaults.selectedRankFolder !== liveSelectedRankFolder) {
+                            selectedRankFolderRef.current = defaults.selectedRankFolder;
                             setSelectedRankFolder(defaults.selectedRankFolder);
                         }
-                        if (defaults.selectedPresentRank !== selectedPresentRank) {
+                        if (defaults.selectedPresentRank !== liveSelectedPresentRank) {
+                            selectedPresentRankRef.current = defaults.selectedPresentRank;
                             setSelectedPresentRank(defaults.selectedPresentRank);
                         }
                     } else {
@@ -2426,6 +2462,10 @@
                         setPresentRankOptions([]);
                         setPresentRankIndexStatus(null);
                         setCocIssueAuthorityOptions([]);
+                        selectedRankFolderRef.current = '';
+                        selectedPresentRankRef.current = '';
+                        setSelectedRankFolder('');
+                        setSelectedPresentRank('');
                         handleSendMessage('warning', data.message || 'Could not fetch rank folders.');
                     }
                 } catch (error) {
@@ -2436,6 +2476,10 @@
                     setPresentRankOptions([]);
                     setPresentRankIndexStatus(null);
                     setCocIssueAuthorityOptions([]);
+                    selectedRankFolderRef.current = '';
+                    selectedPresentRankRef.current = '';
+                    setSelectedRankFolder('');
+                    setSelectedPresentRank('');
                 }
             };
 
@@ -5483,8 +5527,9 @@
             };
 
             const restoreRecoveryDraft = async () => {
-                if (!authUser || recoveryLoadedRef.current) return;
-                recoveryLoadedRef.current = true;
+                if (!authUser || recoveryLoadedRef.current || recoveryRestoringRef.current) return;
+                const requestAuthUser = authUser;
+                recoveryRestoringRef.current = true;
                 try {
                     const response = await fetch(`${API_BASE_URL}/ai_search/recovery_draft`);
                     const data = await response.json();
@@ -5500,6 +5545,8 @@
                         ? restored.engineExperienceFilter.items
                         : [];
                     setAiPrompt(restored.prompt);
+                    selectedRankFolderRef.current = restored.selectedRankFolder;
+                    selectedPresentRankRef.current = restored.selectedPresentRank || '';
                     setSelectedRankFolder(restored.selectedRankFolder);
                     setSelectedPresentRank(restored.selectedPresentRank || '');
                     setSelectedSearchShipType(restored.appliedShipType);
@@ -5583,6 +5630,12 @@
                     }
                 } catch (_error) {
                     // A missing or unavailable draft starts a normal fresh session.
+                } finally {
+                    recoveryRestoringRef.current = false;
+                    recoveryLoadedRef.current = true;
+                    if (authUserRef.current === requestAuthUser) {
+                        await fetchRankFolders(requestAuthUser);
+                    }
                 }
             };
 
@@ -5648,6 +5701,7 @@
             useEffect(() => {
                 if (!authUser) {
                     recoveryLoadedRef.current = false;
+                    recoveryRestoringRef.current = false;
                     return;
                 }
                 restoreRecoveryDraft();
