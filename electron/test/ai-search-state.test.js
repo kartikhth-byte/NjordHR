@@ -256,6 +256,41 @@ test("filter changes invalidate displayed root results but not active refinement
   });
 });
 
+test("picker state derives from each search step context", () => {
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(helpers.pickerStateFromSearchContext({
+      rank_folder: "",
+      applied_rank: "",
+      present_rank: "chief_officer",
+    }))),
+    {
+      selectedRankFolder: "",
+      selectedPresentRank: "chief_officer",
+    },
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(helpers.pickerStateFromSearchContext({
+      rank_folder: "Chief_Officer",
+      applied_rank: "Chief_Officer",
+      present_rank: "master",
+    }))),
+    {
+      selectedRankFolder: "Chief_Officer",
+      selectedPresentRank: "master",
+    },
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(helpers.pickerStateFromSearchContext({
+      applied_rank: "2nd_Engineer",
+      present_rank: "",
+    }))),
+    {
+      selectedRankFolder: "2nd_Engineer",
+      selectedPresentRank: "",
+    },
+  );
+});
+
 test("recovery restore clamps active index and preflights the latest refinable scope", () => {
   const state = {
     prompt: "current typed prompt",

@@ -2278,7 +2278,15 @@ def _safe_recovery_scalar_mapping(value, allowed_keys):
 def _safe_recovery_search_context(value):
     result = _safe_recovery_scalar_mapping(
         value,
-        ("rank_folder", "present_rank", "applied_ship_type", "experienced_ship_type"),
+        (
+            "rank_folder",
+            "applied_rank",
+            "present_rank",
+            "rank_folder_id",
+            "download_root_id",
+            "applied_ship_type",
+            "experienced_ship_type",
+        ),
     )
     result["experience_ship_type_filter"] = _normalize_experience_ship_type_filter(
         (value if isinstance(value, dict) else {}).get("experience_ship_type_filter") or {}

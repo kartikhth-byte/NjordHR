@@ -1831,6 +1831,53 @@ class BackendEventLogFlowTests(unittest.TestCase):
             },
         )
 
+    def test_recovery_sanitizer_preserves_cross_folder_rank_context(self):
+        draft = backend_server._sanitize_ai_search_recovery_draft({
+            "search_state": {
+                "search_chain": [{
+                    "prompt": "show chief officers",
+                    "results": {
+                        "search_context": {
+                            "rank_folder": "",
+                            "applied_rank": "",
+                            "present_rank": "chief_officer",
+                            "rank_folder_id": "",
+                            "download_root_id": "dr_active",
+                            "applied_ship_type": "Bulk Carrier",
+                            "experienced_ship_type": "Tanker",
+                        },
+                        "verified_matches": [{
+                            "filename": "Chief_Officer_1001.pdf",
+                            "downloaded_rank_folder": "Chief_Officer",
+                        }],
+                    },
+                }],
+                "current_completed_results": {
+                    "search_context": {
+                        "rank_folder": "",
+                        "applied_rank": "",
+                        "present_rank": "chief_officer",
+                        "rank_folder_id": "",
+                        "download_root_id": "dr_active",
+                    },
+                },
+            },
+        })
+
+        context = draft["search_state"]["search_chain"][0]["results"]["search_context"]
+        self.assertEqual(context["rank_folder"], "")
+        self.assertEqual(context["applied_rank"], "")
+        self.assertEqual(context["present_rank"], "chief_officer")
+        self.assertEqual(context["rank_folder_id"], "")
+        self.assertEqual(context["download_root_id"], "dr_active")
+        self.assertEqual(
+            draft["search_state"]["search_chain"][0]["results"]["verified_matches"][0]["downloaded_rank_folder"],
+            "Chief_Officer",
+        )
+        current_context = draft["search_state"]["current_completed_results"]["search_context"]
+        self.assertEqual(current_context["present_rank"], "chief_officer")
+        self.assertEqual(current_context["download_root_id"], "dr_active")
+
     def test_parse_experience_ship_type_filter_payload_accepts_configured_dropdown_values(self):
         payload = backend_server._parse_experience_ship_type_filter_payload(json.dumps({
             "type": "experience_ship_type",
