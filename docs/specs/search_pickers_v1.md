@@ -1060,7 +1060,24 @@ server-side and return sanitized operator messages to the UI.
 ### PR-4 (rank): Query plan + prompt parser interaction
 
 - Pickers resolve before query plan execution.
+- For the current root-search rollout, the candidate population is:
+  applied-rank only -> selected folder scan; applied+present rank -> selected
+  folder intersected with `present_rank_index[present_rank]`. Present-rank-only
+  root search remains rejected by the PR-3 validator until the cross-folder
+  present-rank slice explicitly relaxes that rule.
+- Applied+present rank intersection is literal AND semantics: an indexed row
+  must both belong to the selected applied-rank canonical ID and resolve under
+  the selected applied-rank folder path before it can enter the population.
 - Prompt parser suppresses rank constraints when either picker is set.
+- Present-rank picker values used for indexed population must not be re-added
+  as a `rank_match` hard-filter family for the same root search; the picker is
+  a population pre-filter, with prompt-derived rank text routed only to
+  observability.
+- Population-scoped rank pickers still appear on the observability constraint
+  surface with a population-scope reason, even when the free-text prompt has no
+  rank phrase.
+- Valid present-rank IDs with no indexed candidates return an empty 200 search
+  result with a `PRESENT_RANK_NOT_INDEXED` notice, not a validation error.
 - Tests for prompt-with-rank-phrase under each picker state.
 
 ### PR-5 (rank): Present-rank Needs Review polish

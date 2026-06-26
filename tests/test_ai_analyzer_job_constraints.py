@@ -465,6 +465,73 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(rank_constraint["present_rank_normalized"], ["chief_officer"])
         self.assertIn("rank_match", captured["job_constraints"]["applied_constraints"])
 
+    def test_run_analysis_stream_uses_indexed_population_without_present_rank_hard_filter(self):
+        filename = "2nd_Engineer_1004.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+        captured = {}
+
+        self.analyzer.pdf_processor = _FakePdfProcessor("Present Rank: Chief Officer")
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "chief_officer",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": 1.0},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+        }
+
+        def capture_hard_filters(_candidate_facts, job_constraints):
+            captured["job_constraints"] = job_constraints
+            return {
+                "decision": "PASS",
+                "results": [],
+                "evaluation_date_used": "2026-06-25",
+                "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            }
+
+        self.analyzer._evaluate_hard_filters = capture_hard_filters
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "has valid passport",
+            present_rank="Chief Officer",
+            candidate_population_paths=[f"2nd_Engineer/{filename}"],
+        ))
+
+        self.assertTrue(any(event["type"] == "complete" for event in events))
+        self.assertNotIn("rank", captured["job_constraints"]["hard_constraints"])
+        self.assertNotIn("rank_match", captured["job_constraints"]["applied_constraints"])
+        self.assertEqual(captured["job_constraints"]["observability_applied_constraints"], ["rank_match"])
+        self.assertEqual(
+            captured["job_constraints"]["observability_constraint_reasons"],
+            {"rank_match": "present_rank_picker_population_scope"},
+        )
+        self.assertTrue(captured["job_constraints"]["observability_constraints"]["rank"]["population_scope"])
+
+    def test_run_analysis_stream_reports_empty_indexed_population_notice(self):
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "Chief Officer",
+            present_rank="Chief Officer",
+            candidate_population_paths=[],
+            candidate_population_notice={
+                "code": "PRESENT_RANK_NOT_INDEXED",
+                "message": "No candidates are currently indexed for present rank 'chief_officer'.",
+            },
+        ))
+
+        complete = next(event for event in events if event["type"] == "complete")
+        self.assertEqual(complete["hard_filter_summary"]["scanned"], 0)
+        self.assertEqual(complete["notices"][0]["code"], "PRESENT_RANK_NOT_INDEXED")
+        self.assertIn("No candidates are currently indexed", complete["search_warning"])
+
     def test_run_analysis_stream_injects_coc_issue_authority_picker_constraint(self):
         filename = "2nd_Engineer_1005.pdf"
         (self.rank_folder / filename).write_bytes(b"%PDF-1.4")

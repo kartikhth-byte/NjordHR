@@ -169,7 +169,14 @@ class BackendEventLogFlowTests(unittest.TestCase):
         path.write_bytes(b"%PDF-1.4 fake resume content")
         return path
 
-    def _present_rank_index_row(self, *, row_id="row-1", file_name="Chief_Officer_1001.pdf", present_rank="chief_officer"):
+    def _present_rank_index_row(
+        self,
+        *,
+        row_id="row-1",
+        file_name="Chief_Officer_1001.pdf",
+        present_rank="chief_officer",
+        applied_rank="chief_officer",
+    ):
         return {
             "id": row_id,
             "candidate_id": f"candidate-{row_id}",
@@ -190,9 +197,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 },
                 "role": {
                     "current_rank_normalized": present_rank,
-                    "applied_rank_normalized": "chief_officer",
+                    "applied_rank_normalized": applied_rank,
                 },
-                "rank": {"value": "chief_officer"},
+                "rank": {"value": applied_rank},
                 "extraction": {
                     "parser_version": "generic_pdf.v1",
                     "status": "partial",
@@ -2141,6 +2148,42 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(events[0]["detail"]["code"], "INVALID_RANK_FOLDER_ID")
         analyzer.assert_not_called()
 
+    def test_analyze_stream_passes_indexed_population_for_applied_and_present_rank(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [self._present_rank_index_row()]
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["present_rank"] = kwargs.get("present_rank")
+                captured["candidate_population_paths"] = kwargs.get("candidate_population_paths")
+                captured["candidate_population_notice"] = kwargs.get("candidate_population_notice")
+                yield {"type": "complete", "verified_matches": [], "uncertain_matches": [], "unknown_matches": [], "message": "ok"}
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "show candidates",
+                    "applied_rank": "Chief_Officer",
+                    "present_rank": "Chief Officer",
+                    "search_request_id": f"request-indexed-population-{time.time_ns()}",
+                },
+            )
+
+        events = _sse_events(resp)
+        self.assertTrue(any(event.get("type") == "complete" for event in events))
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["present_rank"], "chief_officer")
+        self.assertEqual(captured["candidate_population_paths"], ["Chief_Officer/Chief_Officer_1001.pdf"])
+        self.assertIsNone(captured["candidate_population_notice"])
+
     def test_analyze_rejects_missing_applied_rank_scope_before_analyzer(self):
         with patch.object(backend_server, "Analyzer") as analyzer:
             resp = self.client.post(
@@ -2219,6 +2262,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
 
     def test_analyze_accepts_applied_and_present_rank_scope(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [self._present_rank_index_row()]
         captured = {}
 
         class CaptureAnalyzer:
@@ -2228,6 +2273,8 @@ class BackendEventLogFlowTests(unittest.TestCase):
             def run_analysis(self, rank_folder, prompt, **kwargs):
                 captured["rank_folder"] = rank_folder
                 captured["present_rank"] = kwargs.get("present_rank")
+                captured["candidate_population_paths"] = kwargs.get("candidate_population_paths")
+                captured["candidate_population_notice"] = kwargs.get("candidate_population_notice")
                 return {"success": True, "verified_matches": [], "uncertain_matches": []}
 
         with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
@@ -2245,6 +2292,96 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertTrue(resp.get_json()["success"])
         self.assertEqual(captured["rank_folder"], "Chief_Officer")
         self.assertEqual(captured["present_rank"], "chief_officer")
+        self.assertEqual(captured["candidate_population_paths"], ["Chief_Officer/Chief_Officer_1001.pdf"])
+        self.assertIsNone(captured["candidate_population_notice"])
+
+    def test_analyze_accepts_valid_unindexed_present_rank_as_empty_population(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = []
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, rank_folder, prompt, **kwargs):
+                captured["rank_folder"] = rank_folder
+                captured["present_rank"] = kwargs.get("present_rank")
+                captured["candidate_population_paths"] = kwargs.get("candidate_population_paths")
+                captured["candidate_population_notice"] = kwargs.get("candidate_population_notice")
+                notice = kwargs.get("candidate_population_notice") or {}
+                return {
+                    "success": True,
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "search_warning": notice.get("message", ""),
+                    "notices": [notice] if notice else [],
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.post(
+                "/analyze",
+                json={
+                    "prompt": "show candidates",
+                    "applied_rank": "Chief_Officer",
+                    "present_rank": "Chief Officer",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_json()
+        self.assertTrue(body["success"])
+        self.assertEqual(captured["rank_folder"], "Chief_Officer")
+        self.assertEqual(captured["present_rank"], "chief_officer")
+        self.assertEqual(captured["candidate_population_paths"], [])
+        self.assertEqual(captured["candidate_population_notice"]["code"], "PRESENT_RANK_NOT_INDEXED")
+        self.assertIn("No candidates are currently indexed", body["search_warning"])
+        self.assertEqual(body["notices"][0]["code"], "PRESENT_RANK_NOT_INDEXED")
+
+    def test_analyze_present_rank_population_requires_applied_rank_and_path_intersection(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        repo = backend_server._candidate_facts_repository()
+        repo.rows = [
+            self._present_rank_index_row(
+                row_id="stale-row",
+                file_name="Chief_Officer_1001.pdf",
+                present_rank="chief_officer",
+                applied_rank="2nd_engineer",
+            )
+        ]
+        captured = {}
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, rank_folder, prompt, **kwargs):
+                captured["candidate_population_paths"] = kwargs.get("candidate_population_paths")
+                captured["candidate_population_notice"] = kwargs.get("candidate_population_notice")
+                notice = kwargs.get("candidate_population_notice") or {}
+                return {
+                    "success": True,
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "notices": [notice] if notice else [],
+                }
+
+        with patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.post(
+                "/analyze",
+                json={
+                    "prompt": "show candidates",
+                    "applied_rank": "Chief_Officer",
+                    "present_rank": "Chief Officer",
+                },
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(captured["candidate_population_paths"], [])
+        self.assertEqual(captured["candidate_population_notice"]["code"], "PRESENT_RANK_NOT_INDEXED")
 
     def test_analyze_accepts_opaque_rank_folder_id(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
