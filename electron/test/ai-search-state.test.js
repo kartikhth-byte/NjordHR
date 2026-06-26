@@ -264,6 +264,8 @@ test("present-rank index status formatter exposes aggregate recruiter text only"
   assert.match(formatted.detail, /3 rows needing rank review/);
   assert.match(formatted.detail, /2 present-rank groups/);
   assert.doesNotMatch(`${formatted.summary}\n${formatted.detail}`, /\/Users|Chief_Officer\/a\.pdf/);
+  assert.doesNotMatch(`${formatted.summary}\n${formatted.detail}`, /chief_officer|second_engineer/);
+  assert.equal(Object.hasOwn(formatted, "rankCounts"), false);
 });
 
 test("present-rank index status formatter handles missing initial status", () => {
@@ -274,4 +276,14 @@ test("present-rank index status formatter handles missing initial status", () =>
   assert.equal(formatted.rankGroupCount, 0);
   assert.equal(formatted.summary, "Present-rank index awaiting first refresh");
   assert.equal(formatted.builtLabel, "Awaiting first refresh");
+});
+
+test("present-rank index status formatter flags malformed status payloads", () => {
+  const formatted = helpers.formatPresentRankIndexStatus({});
+
+  assert.equal(formatted.summary, "Present-rank index status unavailable");
+  assert.equal(formatted.detail, "Refresh the index status to verify current-rank coverage.");
+
+  const partial = helpers.formatPresentRankIndexStatus({ built_at: "", row_count: 0 });
+  assert.equal(partial.summary, "Present-rank index status unavailable");
 });

@@ -414,14 +414,28 @@
                 const builtLabel = builtDate && !Number.isNaN(builtDate.getTime())
                     ? builtDate.toLocaleString()
                     : (normalized.builtAt || 'Awaiting first refresh');
+                const hasStatusShape = Boolean(status)
+                    && typeof status === 'object'
+                    && Object.prototype.hasOwnProperty.call(status, 'built_at')
+                    && Object.prototype.hasOwnProperty.call(status, 'row_count');
+                const statusUnavailable = Boolean(status)
+                    && (!hasStatusShape || (!normalized.builtAt && normalized.rowCount === 0));
                 return {
-                    ...normalized,
+                    version: normalized.version,
+                    builtAt: normalized.builtAt,
+                    rowCount: normalized.rowCount,
+                    indexedCount: normalized.indexedCount,
+                    unindexedCount: normalized.unindexedCount,
                     rankGroupCount,
                     builtLabel,
-                    summary: normalized.builtAt
+                    summary: statusUnavailable
+                        ? 'Present-rank index status unavailable'
+                        : normalized.builtAt
                         ? `${pluralize(normalized.indexedCount, 'indexed current-rank row')}`
                         : 'Present-rank index awaiting first refresh',
-                    detail: [
+                    detail: statusUnavailable
+                        ? 'Refresh the index status to verify current-rank coverage.'
+                        : [
                         pluralize(normalized.rowCount, 'current facts row'),
                         pluralize(normalized.unindexedCount, 'row needing rank review', 'rows needing rank review'),
                         pluralize(rankGroupCount, 'present-rank group'),
@@ -1439,6 +1453,7 @@
             const refinementCancelButtonRef = useRef(null);
             const refinementConfirmInitiatorRef = useRef(null);
             const analysisResultsRef = useRef(null);
+            const authUserRef = useRef(authUser);
             const recoveryLoadedRef = useRef(false);
             const recoveryTabIdRef = useRef((() => {
                 try {
@@ -1464,6 +1479,10 @@
                     return `ui_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
                 }
             })());
+
+            useEffect(() => {
+                authUserRef.current = authUser;
+            }, [authUser]);
             
             const resolveApiBaseUrl = () => {
                 const fromElectron = window.NjordDesktop?.runtimeConfig?.apiBaseUrl;
@@ -1684,6 +1703,7 @@
                         handleSendMessage('error', data.message || 'Login failed');
                         return;
                     }
+                    authUserRef.current = data.user || null;
                     setAuthUser(data.user || null);
                     setLoginPassword('');
                     const nextRole = (data.user && data.user.role) || '';
@@ -1733,6 +1753,7 @@
                     setBootstrapConfirmPassword('');
                     setLoginUsername(bootstrapUsername.trim());
                     if (data.user) {
+                        authUserRef.current = data.user;
                         setAuthUser(data.user);
                         setActiveTab('download');
                     }
@@ -1748,11 +1769,19 @@
                 try {
                     await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
                 } catch (_error) {}
+                authUserRef.current = null;
                 setAuthUser(null);
                 setLoginPassword('');
                 setActiveTab('download');
                 setSettingsLoaded(false);
                 setAdminSessionPassword('');
+                setRankFolders([]);
+                setRankFolderRecords([]);
+                setPresentRankOptions([]);
+                setPresentRankIndexStatus(null);
+                setIsPresentRankIndexRebuilding(false);
+                setSelectedRankFolder('');
+                setSelectedPresentRank('');
             };
 
             useEffect(() => {
@@ -1805,11 +1834,13 @@
                     setBootstrapRequired(Boolean(bootstrapStatus.required));
                     setBootstrapReason(bootstrapStatus.reason || '');
                     if (bootstrapStatus.required) {
+                        authUserRef.current = null;
                         setAuthUser(null);
                         setAuthChecking(false);
                         setBootstrapChecking(false);
                         return;
                     }
+                    authUserRef.current = currentUser;
                     setAuthUser(currentUser);
                     setAuthChecking(false);
                     setBootstrapChecking(false);
@@ -2149,9 +2180,11 @@
                     setSelectedCocIssueAuthorities([]);
                     return;
                 }
+                const requestAuthUser = currentUser;
                 try {
                     const response = await fetch(`${getCloudApiBaseUrl()}/get_rank_folders`);
                     const data = await response.json();
+                    if (authUserRef.current !== requestAuthUser) return;
                     if (data.success) {
                         const folders = data.folders || [];
                         setRankFolders(folders);
@@ -2170,18 +2203,26 @@
                         }
                     }
                 } catch (error) {
+                    if (authUserRef.current !== requestAuthUser) return;
                     console.error("Could not fetch rank folders", error);
+                    setRankFolders([]);
+                    setRankFolderRecords([]);
+                    setPresentRankOptions([]);
+                    setPresentRankIndexStatus(null);
                 }
             };
 
             const handleRebuildPresentRankIndex = async () => {
                 if (isPresentRankIndexRebuilding) return;
+                const requestAuthUser = authUserRef.current;
+                if (!requestAuthUser) return;
                 setIsPresentRankIndexRebuilding(true);
                 try {
                     const response = await fetch(`${getCloudApiBaseUrl()}/rebuild_present_rank_index`, {
                         method: 'POST',
                     });
                     const data = await response.json().catch(() => ({}));
+                    if (authUserRef.current !== requestAuthUser) return;
                     if (!response.ok || !data.success) {
                         if (response.status === 409) {
                             handleSendMessage('warning', data.message || 'Present-rank index rebuild is already running.');
@@ -2192,12 +2233,15 @@
                     }
                     setPresentRankIndexStatus(data.present_rank_index || null);
                     handleSendMessage('success', 'Present-rank index rebuilt.');
-                    await fetchRankFolders();
+                    await fetchRankFolders(requestAuthUser);
                 } catch (error) {
+                    if (authUserRef.current !== requestAuthUser) return;
                     console.error("Could not rebuild present-rank index", error);
                     handleSendMessage('error', 'Could not connect to rebuild the present-rank index.');
                 } finally {
-                    setIsPresentRankIndexRebuilding(false);
+                    if (authUserRef.current === requestAuthUser) {
+                        setIsPresentRankIndexRebuilding(false);
+                    }
                 }
             };
 

@@ -1025,7 +1025,17 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
   from the returned payload, refreshes rank-folder options, disables while
   rebuilding/searching/refining, and surfaces 409 "already running" responses
   as a non-fatal warning.
+- Logout/auth changes must clear session-scoped index status and picker-option
+  state, and in-flight Reindex/fetch promises must not write status into a
+  different authenticated session.
 - No backend validation yet (PR-3 follows).
+
+### Shared Instance Lifecycle Rule
+
+When a picker/index feature uses a module-level instance protected by a rebuild
+or refresh lock, all global reassignments of that instance must use the same
+lock as the rebuild path. Rebuild endpoints must log internal exception details
+server-side and return sanitized operator messages to the UI.
 
 ### PR-3 (rank): Backend validator + audit
 
