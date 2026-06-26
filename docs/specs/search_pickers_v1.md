@@ -992,6 +992,21 @@ policy excerpt in `AI_Search_Results/README.md`. No code.
 - Build the `{canonical_present_rank: [paths]}` index at startup.
 - Add refresh logic on file mtime change.
 - Add "Reindex" CLI command and a UI hook (not yet exposed).
+- Backend hook shape: `/get_rank_folders` returns a `present_rank_index`
+  status object, and `POST /rebuild_present_rank_index` rebuilds the
+  in-memory index for the future UI button.
+- `present_rank_index` status payload contains only aggregate fields:
+  `version`, `built_at`, `row_count`, `indexed_count`, `unindexed_count`,
+  and `rank_counts`. It must not expose candidate file paths or row-level
+  candidate metadata.
+- Refresh triggers: current persisted candidate-facts row changes
+  (`candidate_facts_hash`, row ID, updated timestamp, or present-rank value)
+  and matching resume file mtime changes. Refresh may rebuild the in-memory
+  index but must avoid changing search execution until PR-4 wires candidate
+  population resolution.
+- `version` is session-scoped and resets when runtime managers/config roots
+  reset. The UI may use it for within-session staleness hints only, not as a
+  durable cross-restart revision.
 - Tests: index builds correctly, refresh detects file changes, version
   increments on rebuild.
 - No UI changes visible to recruiters yet.
