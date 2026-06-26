@@ -1115,6 +1115,12 @@ server-side and return sanitized operator messages to the UI.
 - Cross-folder result cards carry a sanitized `downloaded_rank_folder` so
   preview links and saved/recovered drafts can resolve the source folder
   without relying on the selected applied-rank picker.
+- Refinement of a cross-folder present-rank root search inherits the saved
+  candidate scope and resolves preflight against the corpus root; it must not
+  require an applied-rank folder.
+- Cross-folder index population ignores unsafe relative paths containing `.`
+  or `..` components and ignores root-level files without a rank-folder path
+  component.
 - Tests cover `/analyze_stream`, `/analyze`, and analyzer indexed population
   rooted at the corpus root.
 

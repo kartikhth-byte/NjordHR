@@ -828,6 +828,19 @@ def _present_rank_population_notice(present_rank):
     }
 
 
+def _safe_index_relative_path(value):
+    raw = str(value or "").replace("\\", "/").strip()
+    if not raw or raw.startswith("/"):
+        return ""
+    normalized = raw.strip("/")
+    if not normalized:
+        return ""
+    parts = [part for part in normalized.split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts):
+        return ""
+    return "/".join(parts)
+
+
 def _resolve_present_rank_candidate_population(*, present_rank="", rank_folder=""):
     present_rank = str(present_rank or "").strip()
     rank_folder = str(rank_folder or "").strip()
@@ -840,10 +853,12 @@ def _resolve_present_rank_candidate_population(*, present_rank="", rank_folder="
     paths = []
     for entry in entries:
         entry_applied_rank = str(getattr(entry, "applied_rank", "") or "").strip()
-        entry_path = str(getattr(entry, "resume_path", "") or "").replace("\\", "/").strip("/")
+        entry_path = _safe_index_relative_path(getattr(entry, "resume_path", ""))
         if not entry_path:
             continue
         if not rank_folder:
+            if "/" not in entry_path:
+                continue
             paths.append(entry_path)
             continue
         applied_matches = bool(folder_rank_id and entry_applied_rank == folder_rank_id)
@@ -2150,27 +2165,40 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
     rank_folder = str(parent_session.get("rank_folder") or "").strip()
     context = parent_session.get("context") or {}
     rank_folder_id = str(context.get("rank_folder_id") or "").strip()
-    resolved_rank = _resolve_rank_folder_reference(
-        rank_folder_id=rank_folder_id,
-        rank_folder=rank_folder,
-    )
-    if not resolved_rank.get("success"):
+    present_rank = str(context.get("present_rank") or "").strip()
+    rank_record = None
+    if rank_folder or rank_folder_id:
+        resolved_rank = _resolve_rank_folder_reference(
+            rank_folder_id=rank_folder_id,
+            rank_folder=rank_folder,
+        )
+        if not resolved_rank.get("success"):
+            return {
+                "success": False,
+                "available": False,
+                "error_code": "REFINEMENT_CONTEXT_UNAVAILABLE",
+                "message": "The original rank folder is no longer available.",
+                "retryable": False,
+            }
+        rank_record = resolved_rank["record"]
+        rank_folder = rank_record["folder"]
+        target_folder = rank_record["_resolved_path"]
+    elif present_rank:
+        target_folder = _active_download_root()
+    else:
         return {
             "success": False,
             "available": False,
             "error_code": "REFINEMENT_CONTEXT_UNAVAILABLE",
-            "message": "The original rank folder is no longer available.",
+            "message": "The original search scope is no longer available.",
             "retryable": False,
         }
-    rank_record = resolved_rank["record"]
-    rank_folder = rank_record["folder"]
-    target_folder = rank_record["_resolved_path"]
     if not os.path.isdir(target_folder):
         return {
             "success": False,
             "available": False,
             "error_code": "REFINEMENT_CONTEXT_UNAVAILABLE",
-            "message": "The original rank folder is no longer available.",
+            "message": "The original search scope is no longer available.",
             "retryable": False,
         }
 
@@ -2204,9 +2232,9 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "search_context": {
             "rank_folder": rank_folder,
-            "rank_folder_id": rank_record["rank_folder_id"],
-            "download_root_id": rank_record["download_root_id"],
-            "present_rank": str((parent_session.get("context") or {}).get("present_rank") or "").strip(),
+            "rank_folder_id": rank_record["rank_folder_id"] if rank_record is not None else "",
+            "download_root_id": rank_record["download_root_id"] if rank_record is not None else "",
+            "present_rank": present_rank,
             "applied_ship_type": str(parent_session.get("applied_ship_type") or "").strip(),
             "experienced_ship_type": str(parent_session.get("experienced_ship_type") or "").strip(),
             "experience_ship_type_filter": _normalize_experience_ship_type_filter(
@@ -2310,12 +2338,15 @@ def _sanitize_recovery_step_index(value):
 
 def _sanitize_recovery_result_card(card, *, default_bucket="verified_match"):
     card = card if isinstance(card, dict) else {}
+    downloaded_rank_folder = str(card.get("downloaded_rank_folder") or "")[:255]
+    if downloaded_rank_folder and not _is_safe_name(downloaded_rank_folder):
+        downloaded_rank_folder = ""
     return {
         "schema_version": "recovery_result_card.v1",
         "candidate_scope_id": str(card.get("candidate_scope_id") or "")[:64],
         "content_hash": str(card.get("content_hash") or "").strip().lower()[:128],
         "filename": str(card.get("filename") or "")[:255],
-        "downloaded_rank_folder": str(card.get("downloaded_rank_folder") or "")[:255],
+        "downloaded_rank_folder": downloaded_rank_folder,
         "result_bucket": _sanitize_recovery_result_bucket(card.get("result_bucket"), default_bucket),
         "confidence": _sanitize_recovery_confidence(card.get("confidence")),
         "lineage_warning_codes": _sanitize_recovery_machine_codes(
@@ -5945,10 +5976,10 @@ def analyze_stream():
                     target_record = rank_record
 
             cross_folder_present_rank = bool(
-                search_mode == "root"
-                and effective_present_rank
+                effective_present_rank
                 and not effective_rank_folder
                 and not effective_rank_folder_id
+                and (search_mode == "root" or bool(candidate_scope_ids))
             )
             if not effective_rank_folder and not cross_folder_present_rank:
                 yield _error_sse(

@@ -1102,6 +1102,34 @@ class BackendEventLogFlowTests(unittest.TestCase):
         self.assertEqual(index_status["rank_counts"], {"chief_officer": 1})
         self.assertTrue(index_status["built_at"])
 
+    def test_cross_folder_present_rank_population_rejects_unsafe_index_paths(self):
+        class FakePresentRankIndex:
+            def lookup(self, present_rank):
+                self.present_rank = present_rank
+                return [
+                    types.SimpleNamespace(resume_path="Chief_Officer/Chief_Officer_1001.pdf"),
+                    types.SimpleNamespace(resume_path="Chief_Officer/../2nd_Engineer/unsafe.pdf"),
+                    types.SimpleNamespace(resume_path="./Chief_Officer/dot.pdf"),
+                    types.SimpleNamespace(resume_path="root_level.pdf"),
+                    types.SimpleNamespace(resume_path="/absolute/path.pdf"),
+                ]
+
+        original_index = backend_server.present_rank_index
+        backend_server.present_rank_index = FakePresentRankIndex()
+        try:
+            with patch("backend_server._refresh_present_rank_index", return_value={"version": 1}):
+                population = backend_server._resolve_present_rank_candidate_population(
+                    present_rank="chief_officer",
+                    rank_folder="",
+                )
+        finally:
+            backend_server.present_rank_index = original_index
+
+        self.assertEqual(
+            population["candidate_population_paths"],
+            ["Chief_Officer/Chief_Officer_1001.pdf"],
+        )
+
     def test_rebuild_present_rank_index_endpoint_rebuilds_index(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
         repo = backend_server._candidate_facts_repository()
