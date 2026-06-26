@@ -523,6 +523,26 @@
                 return humanizeReasonCode(code);
             };
 
+            const buildNeedsReviewRankSummary = (match) => {
+                const explicitSummary = String(match?.needs_review_rank_summary || '').trim();
+                if (explicitSummary) return explicitSummary;
+                const reasons = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const hasRankUnknown = reasons.some(item => {
+                    const code = String(item?.reason_code || '').trim().toUpperCase();
+                    return code === 'RANK_UNKNOWN' || code === 'RANK_CONFIDENCE_LOW';
+                });
+                if (hasRankUnknown) {
+                    return 'Could not determine current/present rank from this resume.';
+                }
+                const evidenceReasons = Array.isArray(match?.evidence_review_reasons)
+                    ? match.evidence_review_reasons
+                    : [];
+                if (evidenceReasons.includes('rank_evidence_incomplete')) {
+                    return 'Could not determine current/present rank from this resume.';
+                }
+                return '';
+            };
+
             const HARD_FILTER_REASON_PRESENTERS = [
                 { prefix: 'PASSPORT_', group: 'matchedFilters' },
                 { prefix: 'VESSEL_TONNAGE_', group: 'matchedFilters' },
@@ -1157,6 +1177,7 @@
                 normalizeReasonDisplayLine,
                 humanizeReasonCode,
                 formatUnknownReasonType,
+                buildNeedsReviewRankSummary,
                 formatEngineFamilyLabel,
                 formatShipFamilyLabel,
                 summarizeExperienceFilter,
@@ -5193,6 +5214,7 @@
                 evidence_review_badges: Array.isArray(card?.evidence_review_badges)
                     ? card.evidence_review_badges
                     : (Array.isArray(card?.evidence_review_reasons) ? card.evidence_review_reasons : []),
+                needs_review_rank_summary: String(card?.needs_review_rank_summary || '').slice(0, 160),
                 detail_available_after_recovery: false,
             });
 
@@ -8941,7 +8963,12 @@
                                                         </h4>
                                                         <div className="space-y-1 max-h-32 overflow-y-auto">
                                                             {analysisProgress.liveUnknown.map((m, i) => (
-                                                                <p key={i} className="text-xs text-slate-600">• {m.filename}</p>
+                                                                <div key={i} className="text-xs text-slate-600">
+                                                                    <p>• {m.filename}</p>
+                                                                    {reasonFormatting.buildNeedsReviewRankSummary(m) && (
+                                                                        <p className="ml-3 text-slate-500">{reasonFormatting.buildNeedsReviewRankSummary(m)}</p>
+                                                                    )}
+                                                                </div>
                                                             ))}
                                                         </div>
                                                     </div>
@@ -9181,6 +9208,11 @@
                                                                                    className="text-sm font-medium text-blue-600 hover:underline">
                                                                                     {match.filename}
                                                                                 </a>
+                                                                                {reasonFormatting.buildNeedsReviewRankSummary(match) && (
+                                                                                    <p className="mt-1 text-sm text-slate-700">
+                                                                                        {reasonFormatting.buildNeedsReviewRankSummary(match)}
+                                                                                    </p>
+                                                                                )}
                                                                                 <div className="mt-1">{renderFormattedReasonBlock(match)}</div>
                                                                                 <div className="mt-2 flex flex-wrap gap-2">
                                                                                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${getReviewPathBadgeClass(getNeedsReviewPathType(match))}`}>

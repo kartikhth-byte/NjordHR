@@ -1050,6 +1050,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                 "filename": "needs-review.pdf",
                                 "result_bucket": "unsupported-free-text",
                                 "confidence": 2.0,
+                                "needs_review_rank_summary": "Could not determine current/present rank from this resume.",
                             }],
                         },
                     },
@@ -1171,6 +1172,10 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         unknown_card = loaded["search_state"]["current_completed_results"]["unknown_matches"][0]
         self.assertEqual(unknown_card["result_bucket"], "needs_review")
         self.assertIsNone(unknown_card["confidence"])
+        self.assertEqual(
+            unknown_card["needs_review_rank_summary"],
+            "Could not determine current/present rank from this resume.",
+        )
 
     def test_recovery_draft_without_completed_results_stays_empty(self):
         client = self._client()
