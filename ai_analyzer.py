@@ -3565,6 +3565,9 @@ class AIResumeAnalyzer:
         last_boundary = max(prefix.rfind(boundary) for boundary in (".", "!", "?", ";", ":", "\n"))
         if last_boundary >= 0:
             prefix = prefix[last_boundary + 1 :]
+        contrast_matches = list(re.finditer(r"(?:^|[,\s])(?:but|however)\b", prefix, flags=re.IGNORECASE))
+        if contrast_matches:
+            prefix = prefix[contrast_matches[-1].end() :]
         return prefix
 
     def _engine_match_is_negated(self, text, start_index):
