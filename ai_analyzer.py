@@ -10818,7 +10818,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "PASS",
                 "COC_COUNTRY_MATCH",
-                f"Candidate COC issuing country {actual_label} matches the requested country filter.",
+                f"Candidate COC issuing country '{actual_label}' matches the requested country filter.",
                 actual_value=actual_country,
                 expected_value=expected_countries,
                 confidence=confidence,
