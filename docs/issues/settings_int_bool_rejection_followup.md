@@ -1,6 +1,7 @@
-# Issue Draft: Settings Integer Bool Rejection
+# Closed Issue: Settings Integer Bool Rejection
 
-Suggested labels: `settings`, `hardening`
+Status: closed by the existing `_agent_setting_int` hardening and pinned by
+`tests/test_settings_precedence.py`.
 
 ## Title
 
@@ -8,27 +9,29 @@ Reject boolean payloads in `_agent_setting_int` while preserving numeric `0`
 
 ## Summary
 
-The recent settings hardening fixed the important `0`-value round-trip bug in
-`_agent_setting_int`, but one deferred edge case remains: boolean payloads
-still coerce through `int(True) == 1` / `int(False) == 0`.
-
-That means a malformed upstream payload such as `{poll_interval: true}` could be
-silently stored as `1` instead of being rejected.
+The settings hardening now rejects boolean payloads before integer coercion while
+preserving integer `0` as a valid local-agent value.
 
 ## Scope
 
 - Reject `bool` explicitly in `_agent_setting_int`.
-- Preserve the current valid behavior for:
+- Preserve the valid behavior for:
   - integer `0`
   - numeric strings where supported
   - empty values mapping to default / unset behavior
-- Add regression coverage around settings save/load behavior.
+- Add regression coverage around settings payload behavior.
 
 ## Acceptance criteria
 
-- `0` remains a valid stored and returned value.
+- `0` remains a valid returned value.
 - `true` / `false` are rejected rather than coerced.
 - Existing settings flows do not regress.
+
+## Verification
+
+- `test_settings_payload_preserves_zero_poll_interval_from_local_agent`
+- `test_settings_payload_rejects_boolean_poll_interval_from_local_agent`
+- `test_settings_payload_rejects_false_boolean_poll_interval_from_local_agent`
 
 ## Likely files
 

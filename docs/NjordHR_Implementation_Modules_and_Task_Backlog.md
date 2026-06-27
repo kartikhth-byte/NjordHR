@@ -332,9 +332,10 @@ Suggested overlap:
   - demonyms such as `Iranian`, `Maldivian`, `Mauritian`, and `Argentinian` normalize on prompt and candidate-evidence paths
   - recruiter-facing CoC country rule messages use display labels while audit values remain canonical
   - broader CoC country alias migration remains separate future work
-- `P2` Harden settings input typing:
-  - reject boolean payloads passed into `_agent_setting_int`
-  - keep `0` as a valid round-tripping integer value
+- `P2` Settings integer input typing follow-up is closed:
+  - `_agent_setting_int` rejects boolean payloads from local-agent settings instead of coercing them through `int(bool)`
+  - integer `0` remains a valid returned poll interval
+  - regression coverage pins both `True` / `False` rejection and `0` preservation in `tests/test_settings_precedence.py`
 - `P2` Clean debug payload hygiene for logical-group aggregation:
   - `_combine_any_of_item_results` should not leak oversized internal detail into `actual_value`
   - keep recruiter-facing reason text and debug/audit payloads intentionally separate
