@@ -566,6 +566,19 @@ Interpretation:
 - plain manufacturer/family evidence is still too weak to imply
   `methanol_engine` or `ammonia_engine`
 
+Decision:
+
+- `methanol_engine` and `ammonia_engine` use symmetric fallback rules.
+- `dual_fuel` evidence is specific enough to send a methanol or ammonia
+  request to Needs Review as `ENGINE_EXPERIENCE_FAMILY_FALLBACK`.
+- Generic manufacturer or family evidence, including `MAN`, `MAN B&W`,
+  `MAN B&W ME`, `WinGD`, and `WinGD X engines`, is not fuel-specific enough
+  for either methanol or ammonia. It returns
+  `ENGINE_EXPERIENCE_MISMATCH`.
+- The evaluator must not add manufacturer-level fallback for either
+  fuel-specific bucket without changing this decision and its paired
+  regression tests in the same PR.
+
 This is intentionally more conservative than the generic `dual_fuel` fallback
 rule. A recruiter searching specifically for methanol or ammonia should not get
 `MAN B&W` or `WinGD` candidates promoted into `Needs Review` without any fuel

@@ -1316,6 +1316,33 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "FAIL")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
 
+    def test_engine_experience_rule_rejects_generic_evidence_for_fuel_specific_buckets(self):
+        cases = [
+            ("methanol_engine", "man_b_w_me"),
+            ("methanol_engine", "wingd"),
+            ("ammonia_engine", "man_b_w_me"),
+            ("ammonia_engine", "wingd"),
+        ]
+        for requested_engine_type, candidate_engine_type in cases:
+            with self.subTest(requested_engine_type=requested_engine_type, candidate_engine_type=candidate_engine_type):
+                result = self.analyzer._evaluate_hard_filters(
+                    {
+                        "experience": {"engine_types": [candidate_engine_type]},
+                        "fact_meta": {"experience.engine_types": {"confidence": 0.8}},
+                    },
+                    {
+                        "applied_constraints": ["engine_experience"],
+                        "hard_constraints": {
+                            "engine_experience": {
+                                "engine_type": requested_engine_type,
+                                "expected_values": self.analyzer._engine_type_expected_values(requested_engine_type),
+                            }
+                        },
+                    },
+                )
+                self.assertEqual(result["decision"], "FAIL")
+                self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MISMATCH")
+
     def test_engine_experience_rule_sibling_buckets_do_not_match(self):
         result = self.analyzer._evaluate_hard_filters(
             {
