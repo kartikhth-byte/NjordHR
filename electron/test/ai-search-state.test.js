@@ -325,6 +325,16 @@ test("applied rank scope label respects explicit blank cross-folder context", ()
     "2nd_Engineer",
   );
   assert.equal(
+    helpers.appliedRankScopeLabelFromSearchContext(
+      {
+        applied_rank: "",
+        present_rank: "master",
+      },
+      "Chief_Officer",
+    ),
+    "All applied ranks",
+  );
+  assert.equal(
     helpers.appliedRankScopeLabelFromSearchContext({}, "Master"),
     "Master",
   );

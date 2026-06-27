@@ -1214,8 +1214,8 @@ server-side and return sanitized operator messages to the UI.
 - When `search_context.rank_folder` is present with an empty string and
   `present_rank` is non-empty, refinement confirmation displays
   `All applied ranks`; it does not fall back to the current picker state.
-- When `search_context.rank_folder` is absent, refinement confirmation may
-  fall through to `search_context.applied_rank` and then to the live selected
+- When `search_context.rank_folder` is absent, refinement confirmation falls
+  through to `search_context.applied_rank` and then to the live selected
   applied-rank folder.
 - Refinement confirmation displays present rank as a separate field using the
   saved preflight `search_context.present_rank`.
