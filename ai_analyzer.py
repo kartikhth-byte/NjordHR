@@ -10811,11 +10811,14 @@ class AIResumeAnalyzer:
                 unknown_reason="FACTUAL_UNKNOWN",
             )
 
+        actual_label = self._coc_country_display_label(actual_country)
+        expected_label = ", ".join(self._coc_country_display_label(country) for country in expected_countries)
+
         if self._evaluate_rule((constraint or {}).get("operator") or "contains_any", [actual_country], expected_countries):
             return self._base_rule_result(
                 "PASS",
                 "COC_COUNTRY_MATCH",
-                f"Candidate COC issuing country '{actual_country}' matches the requested country filter.",
+                f"Candidate COC issuing country {actual_label} matches the requested country filter.",
                 actual_value=actual_country,
                 expected_value=expected_countries,
                 confidence=confidence,
@@ -10824,7 +10827,7 @@ class AIResumeAnalyzer:
         return self._base_rule_result(
             "FAIL",
             "COC_COUNTRY_MISMATCH",
-            f"Candidate COC issuing country '{actual_country}' does not match the requested country filter.",
+            f"Candidate COC issuing country {actual_label} does not match requested country filter {expected_label}.",
             actual_value=actual_country,
             expected_value=expected_countries,
             confidence=confidence,

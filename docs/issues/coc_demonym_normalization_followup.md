@@ -1,6 +1,6 @@
-# Issue Draft: CoC Demonym Normalization
+# Closed Follow-Up: CoC Demonym Normalization
 
-Suggested labels: `coc`, `hardening`
+Status: closed
 
 ## Title
 
@@ -8,13 +8,12 @@ Expand CoC country normalization to cover common demonyms
 
 ## Summary
 
-The current CoC country matching work improved extraction and deterministic
-evaluation, but reviewer follow-up flagged that demonym forms such as
-`Iranian`, `Maldivian`, `Mauritian`, and `Argentinian` are still not covered
-consistently.
+CoC country matching now covers the reviewer-flagged demonym forms
+`Iranian`, `Maldivian`, `Mauritian`, and `Argentinian` consistently across
+prompt-side country constraints and candidate-evidence country extraction.
 
-This is a focused normalization-hardening issue for recruiter prompts and
-candidate evidence that use demonym phrasing instead of country-name phrasing.
+This note is retained as close-out evidence for the original focused
+normalization-hardening issue.
 
 ## Why this matters
 
@@ -25,24 +24,26 @@ candidate evidence that use demonym phrasing instead of country-name phrasing.
 - This work is narrow and should stay isolated from unrelated engine or search
   parser changes.
 
-## Scope
+## Closed Scope
 
-- Expand alias coverage for the currently missed demonym forms.
-- Add prompt-side normalization tests.
-- Add candidate-evidence normalization tests where applicable.
-- Confirm recruiter-visible reason text still uses human country labels.
+- Alias coverage includes the originally missed demonym forms.
+- Prompt-side normalization tests cover the named demonyms and adjacent
+  long-tail demonyms.
+- Candidate-evidence normalization tests cover demonym issue-authority rows.
+- CoC country hard-filter messages use human display labels while preserving
+  canonical values in actual/expected audit fields.
 
-## Acceptance criteria
+## Acceptance Criteria
 
 - Prompts such as `has Iranian coc`, `has Maldivian coc`, `has Mauritian coc`,
   and `has Argentinian coc` normalize correctly.
 - Equivalent resume evidence matches under the same canonical country.
 - No regressions to existing `India` / `Indian` style paths.
+- Recruiter-facing CoC country rule text uses human country labels.
 
-## Likely files
+## Evidence Files
 
 - `/Users/kartikraghavan/Tools/NjordHR/ai_analyzer.py`
-- `/Users/kartikraghavan/Tools/NjordHR/candidate_facts/aliases`
-- `/Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_logistics.py`
+- `/Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_certifications.py`
+- `/Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_job_constraints.py`
 - `/Users/kartikraghavan/Tools/NjordHR/tests/test_ai_analyzer_hard_filter_rules.py`
-- `/Users/kartikraghavan/Tools/NjordHR/docs/specs/search_pickers_v1.md`

@@ -328,9 +328,10 @@ Suggested overlap:
 - `P1` `MAN B&W LMC` alias follow-up is closed:
   - `_engine_type_aliases` normalizes `MAN B&W LMC` to `man_b_w_mc`
   - regression coverage pins both prompt extraction and resume-text extraction
-- `P1` Reopen CoC demonym normalization:
-  - add demonyms such as `Iranian`, `Maldivian`, `Mauritian`, and `Argentinian`
-  - keep this work isolated from unrelated search-prompt changes
+- `P1` CoC demonym normalization follow-up is closed:
+  - demonyms such as `Iranian`, `Maldivian`, `Mauritian`, and `Argentinian` normalize on prompt and candidate-evidence paths
+  - recruiter-facing CoC country rule messages use display labels while audit values remain canonical
+  - broader CoC country alias migration remains separate future work
 - `P2` Harden settings input typing:
   - reject boolean payloads passed into `_agent_setting_int`
   - keep `0` as a valid round-tripping integer value

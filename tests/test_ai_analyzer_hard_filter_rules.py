@@ -194,6 +194,49 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "FAIL")
 
+    def test_coc_country_rule_messages_use_display_labels_for_demonyms(self):
+        pass_result = self.analyzer._evaluate_coc_country_rule(
+            {
+                "certifications": {"coc": {"country": "Iranian"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"countries": ["iran"], "operator": "contains_any"},
+        )
+        self.assertEqual(pass_result["decision"], "PASS")
+        self.assertIn("Iran", pass_result["message"])
+        self.assertNotIn("iran", pass_result["message"])
+
+        fail_result = self.analyzer._evaluate_coc_country_rule(
+            {
+                "certifications": {"coc": {"country": "Mauritian"}},
+                "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+            },
+            {"countries": ["argentina"], "operator": "contains_any"},
+        )
+        self.assertEqual(fail_result["decision"], "FAIL")
+        self.assertIn("Mauritius", fail_result["message"])
+        self.assertIn("Argentina", fail_result["message"])
+        self.assertNotIn("mauritius", fail_result["message"])
+        self.assertNotIn("argentina", fail_result["message"])
+
+    def test_coc_country_rule_normalizes_named_demonym_followups(self):
+        cases = {
+            "Iranian": "iran",
+            "Maldivian": "maldives",
+            "Mauritian": "mauritius",
+            "Argentinian": "argentina",
+        }
+        for raw_country, expected_country in cases.items():
+            with self.subTest(raw_country=raw_country):
+                result = self.analyzer._evaluate_coc_country_rule(
+                    {
+                        "certifications": {"coc": {"country": raw_country}},
+                        "fact_meta": {"certifications.coc": {"confidence": 0.9}},
+                    },
+                    {"countries": [expected_country], "operator": "contains_any"},
+                )
+                self.assertEqual(result["decision"], "PASS")
+
     def test_coc_country_rule_missing_is_unknown(self):
         result = self.analyzer._evaluate_coc_country_rule(
             {
