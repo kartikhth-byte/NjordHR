@@ -1,6 +1,7 @@
-# Issue Draft: Logical-Group Debug Payload Hygiene
+# Closed Issue: Logical-Group Debug Payload Hygiene
 
-Suggested labels: `diagnostics`, `hardening`
+Status: closed by `_redacted_group_child_results` and pinned by
+`tests/test_ai_analyzer_hard_filter_rules.py`.
 
 ## Title
 
@@ -8,10 +9,11 @@ Trim internal detail from `_combine_any_of_item_results` debug payloads
 
 ## Summary
 
-Reviewer follow-up noted that `_combine_any_of_item_results` can dump full
-`item_results` structures into `actual_value`. That is useful while debugging
-locally, but it risks surfacing oversized or overly internal payloads to
-downstream logger/debug consumers.
+`_combine_any_of_item_results` now stores redacted child summaries in
+`actual_value` instead of full `item_results` structures. This preserves the
+child decision, reason code, message, confidence, unknown reason, and optional
+child label without carrying nested `actual_value`, `expected_value`, or
+`logical_group_child_constraint` payloads forward.
 
 Recruiter-facing reason text and audit/debug payloads should stay intentionally
 separate.
@@ -31,6 +33,13 @@ separate.
 - Debug payload still identifies which child item matched / failed / stayed
   unknown.
 - Existing result rendering does not regress.
+
+## Verification
+
+- `test_combine_any_of_item_results_sanitizes_debug_payload`
+- `test_combine_any_of_item_results_sanitizes_fail_and_unknown_payloads`
+- `test_vessel_engine_any_of_group_redacts_child_payloads`
+  (`tests/test_ai_analyzer_ship_type_filters.py`)
 
 ## Likely files
 
