@@ -1227,6 +1227,68 @@ server-side and return sanitized operator messages to the UI.
   populated rank-folder display, applied-rank fallback, and live picker
   fallback only when the search context has no rank folder.
 
+### Phase 2 Rank Scope Close-Out
+
+The Phase 2 present-rank rollout is complete after PR-1 through PR-5. Future
+picker work inherits these invariants:
+
+- Scope-changing PRs state the exact files and execution paths they are
+  allowed to touch before implementation begins.
+- UI state, recovery state, completed search-session context, and historical
+  search-step context all use the same key-precedence rules.
+- Empty string is a valid explicit value when the picker domain defines it.
+  Helpers check key presence before falling through to defaults.
+- Cross-folder paths remain relative, sanitized, and tied to the candidate's
+  source folder. UI previews, verification, export, and audit events do not
+  infer source folders from the current picker state when result metadata
+  carries a source folder.
+- Refinement preflight inherits the parent search context and candidate scope.
+  Cross-folder present-rank refinements resolve against the corpus root rather
+  than requiring an applied-rank folder.
+- Root-search validators run before analyzer construction and after
+  idempotency claim handling. Refinements preserve parent context precedence
+  over live folder validation.
+- Picker-as-population filters record observability without mutating hard
+  filter activation state.
+- Picker-derived Needs Review output uses the existing `needs_review` bucket
+  and does not introduce new result-bucket values.
+- Actor-scoped browser state uses opaque keys, clears in-memory state on
+  logout, and restores defaults only after the live catalog confirms each
+  stored value is still valid.
+- Shared mutable backend instances are reassigned only while holding their
+  lifecycle lock.
+- Saved and recovered drafts sanitize every string field with a field-specific
+  validation shape and clear invalid values to `""`.
+- Structured picker PRs update this spec in the same PR that introduces,
+  removes, relaxes, or otherwise changes an invariant.
+- Helper-level tests are not enough when a helper feeds a request, recovery,
+  refinement, verification, export, or display path. The consuming path also
+  gets a regression test or caller-grep evidence.
+
+Before coding the next picker/filter family:
+
+- Write the picker state shape, recovery shape, request payload fields, audit
+  fields, search-context fields, telemetry fields, and display labels in this
+  spec.
+- Identify every sibling path that consumes the picker: `/analyze_stream`,
+  `/analyze`, root search, refinement, completed-session recovery,
+  historical-step navigation, verification, export, telemetry, CSV/durable
+  audit, and recruiter-facing result cards.
+- Decide whether the picker activates a hard filter, changes candidate
+  population, or only changes display/recovery state. Record the observability
+  shape for that choice.
+- Define how picker values override or suppress prompt-derived constraints,
+  including the exact observability reason.
+- Define the canonical vocabulary source of truth and reject non-canonical API
+  values before they reach analyzer construction.
+- Define UNKNOWN / Needs Review behavior and the recruiter-facing copy. Do not
+  expose canonical IDs in recruiter-facing text.
+- Define field-specific sanitization for saved and recovered drafts before
+  adding UI state.
+- Add tests for both accepted and rejected values, root and refinement paths,
+  `/analyze_stream` and `/analyze`, recovered drafts, completed search context,
+  telemetry/audit payloads, and recruiter-facing output.
+
 ### PR-6 (age): Age range picker
 
 - Add `Candidate Age` minimum/maximum inputs to `frontend.html`.
