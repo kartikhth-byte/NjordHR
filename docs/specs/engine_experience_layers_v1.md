@@ -272,6 +272,10 @@ such as:
 Contrastive clauses reset the negation look-behind. `No ME experience, but has
 X-DF experience` keeps `X-DF` as positive evidence, while `No ME or X-DF
 experience` suppresses both engine mentions.
+Recognized markers are the literal tokens `but` and `however`, matched
+case-insensitively at a word boundary and preceded by the start of the
+look-behind window, whitespace, or comma. If more than one marker appears in
+the look-behind window, the extractor uses the last marker.
 
 This reduces a known false-positive class, but it is still heuristic. Cases
 such as broader prose within the same sentence or clause may still be
