@@ -5826,17 +5826,26 @@
                             if (selectedFiles.has(match.filename)) {
                                 matchData[match.filename] = {
                                     reason: match.reason,
-                                    confidence: match.confidence
+                                    confidence: match.confidence,
+                                    downloaded_rank_folder: downloadedRankFolderForMatch(match),
                                 };
                             }
                         });
                     }
+                    const rankFolderByFilename = {};
+                    Object.entries(matchData).forEach(([filename, item]) => {
+                        const downloadedRankFolder = String(item?.downloaded_rank_folder || '').trim();
+                        if (downloadedRankFolder) {
+                            rankFolderByFilename[filename] = downloadedRankFolder;
+                        }
+                    });
                     
                     const response = await fetch(`${getCloudApiBaseUrl()}/verify_resumes`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             rank_folder: selectedRankFolder,
+                            rank_folder_by_filename: rankFolderByFilename,
                             search_ship_type: selectedSearchShipType,
                             filenames: Array.from(selectedFiles),
                             match_data: matchData,
