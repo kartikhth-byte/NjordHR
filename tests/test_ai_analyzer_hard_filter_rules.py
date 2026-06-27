@@ -996,6 +996,23 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
             ["man_b_w_mc"],
         )
 
+    def test_engine_experience_extraction_keeps_contrastive_positive_engine_evidence(self):
+        cases = [
+            ("No ME experience, but has X-DF experience.", ["wingd_x_df"]),
+            ("Without MAN B&W background, however served on RT-flex engines.", ["wartsila_rt_flex"]),
+            ("No ME experience, But has X-DF experience.", ["wingd_x_df"]),
+            ("No ME experience, but not ME-C. However served on RT-flex engines.", ["wartsila_rt_flex"]),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(self.analyzer._extract_engine_types_from_text(text), expected)
+
+    def test_engine_experience_extraction_suppresses_negated_engine_list(self):
+        self.assertEqual(
+            self.analyzer._extract_engine_types_from_text("No ME or X-DF experience."),
+            [],
+        )
+
     def test_engine_experience_rule_fails_when_family_missing(self):
         result = self.analyzer._evaluate_hard_filters(
             {

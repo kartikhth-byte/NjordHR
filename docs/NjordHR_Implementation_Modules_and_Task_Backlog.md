@@ -315,10 +315,11 @@ Suggested overlap:
   - rerun the same-folder diagnostic before any broader validation
 
 ### 6.2.1 Current experience-filters / engine-layer post-merge follow-up focus
-- `P1` Sentence-aware engine negation remains intentionally deferred:
+- `P1` Sentence-aware engine negation contrast handling is closed:
   - current v1 suppresses straightforward pre-mention negation inside a bounded look-behind window
-  - sentence-boundary-aware handling is still needed to avoid suppressing positive evidence in nearby later sentences
-  - treat this as the first engine-layer correctness follow-up if field telemetry shows false suppression
+  - contrastive clauses such as `No ME experience, but has X-DF experience` now keep later positive evidence
+  - negated lists such as `No ME or X-DF experience` remain suppressed
+  - broader context classification remains deferred to a future extraction-hardening spec
 - `P1` Methanol / ammonia broad-bucket fallback symmetry is closed:
   - `engine_experience_layers_v1.md` documents the symmetric conservative rule
   - dual-fuel-only evidence goes to Needs Review for fuel-specific bucket requests
