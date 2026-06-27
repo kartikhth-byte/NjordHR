@@ -291,6 +291,45 @@ test("picker state derives from each search step context", () => {
   );
 });
 
+test("applied rank scope label respects explicit blank cross-folder context", () => {
+  assert.equal(
+    helpers.appliedRankScopeLabelFromSearchContext(
+      {
+        rank_folder: "",
+        applied_rank: "Chief_Officer",
+        present_rank: "chief_officer",
+      },
+      "Master",
+    ),
+    "All applied ranks",
+  );
+  assert.equal(
+    helpers.appliedRankScopeLabelFromSearchContext(
+      {
+        rank_folder: "Chief_Officer",
+        applied_rank: "Chief_Officer",
+        present_rank: "master",
+      },
+      "Master",
+    ),
+    "Chief_Officer",
+  );
+  assert.equal(
+    helpers.appliedRankScopeLabelFromSearchContext(
+      {
+        applied_rank: "2nd_Engineer",
+        present_rank: "",
+      },
+      "Master",
+    ),
+    "2nd_Engineer",
+  );
+  assert.equal(
+    helpers.appliedRankScopeLabelFromSearchContext({}, "Master"),
+    "Master",
+  );
+});
+
 test("recovery restore clamps active index and preflights the latest refinable scope", () => {
   const state = {
     prompt: "current typed prompt",

@@ -1207,6 +1207,26 @@ server-side and return sanitized operator messages to the UI.
   telemetry rank-folder metadata, invalid per-file rank-folder rejection,
   malformed per-file map rejection, and cross-folder stale PDF cleanup.
 
+### Phase 2 PR-5 (rank): Cross-folder refinement wrap-up
+
+- Refinement confirmation displays the applied-rank scope from the preflight
+  `search_context`.
+- When `search_context.rank_folder` is present with an empty string and
+  `present_rank` is non-empty, refinement confirmation displays
+  `All applied ranks`; it does not fall back to the current picker state.
+- When `search_context.rank_folder` is absent, refinement confirmation may
+  fall through to `search_context.applied_rank` and then to the live selected
+  applied-rank folder.
+- Refinement confirmation displays present rank as a separate field using the
+  saved preflight `search_context.present_rank`.
+- This wrap-up does not change `/analyze_stream` payload shape, `/analyze`
+  payload shape, request fingerprints, backend validation, query planning,
+  index contents, hard-filter behavior, prompt parsing, verification, export,
+  or result bucket behavior.
+- Tests cover explicit blank cross-folder `rank_folder` display precedence,
+  populated rank-folder display, applied-rank fallback, and live picker
+  fallback only when the search context has no rank folder.
+
 ### PR-6 (age): Age range picker
 
 - Add `Candidate Age` minimum/maximum inputs to `frontend.html`.

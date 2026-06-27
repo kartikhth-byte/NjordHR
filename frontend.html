@@ -321,6 +321,18 @@
                 };
             };
 
+            const appliedRankScopeLabelFromSearchContext = (searchContext, fallbackRankFolder = '') => {
+                const context = searchContext && typeof searchContext === 'object' ? searchContext : {};
+                const rankFolder = Object.prototype.hasOwnProperty.call(context, 'rank_folder')
+                    ? context.rank_folder
+                    : context.applied_rank;
+                const normalizedRankFolder = String(rankFolder || '').trim();
+                if (normalizedRankFolder) return normalizedRankFolder;
+                const presentRank = String(context.present_rank || '').trim();
+                if (presentRank) return 'All applied ranks';
+                return String(fallbackRankFolder || '').trim() || 'All applied ranks';
+            };
+
             const deriveRecoveredSearchState = (state) => {
                 const restoredChain = chainArray(state?.search_chain);
                 const rawRestoredIndex = Number(state?.active_search_step_index);
@@ -611,6 +623,7 @@
                 invalidatedRefinementAvailability,
                 completedSearchSnapshot,
                 pickerStateFromSearchContext,
+                appliedRankScopeLabelFromSearchContext,
                 deriveRecoveredSearchState,
                 rankPickerPreferenceStorageKey,
                 normalizeRankPickerPreference,
@@ -2367,6 +2380,13 @@
             );
 
             const selectedRankFolderId = () => rankFolderIdFor(selectedRankFolder);
+
+            const presentRankLabelFor = (presentRank) => {
+                const normalized = String(presentRank || '').trim();
+                if (!normalized) return 'Any present rank';
+                const option = (presentRankOptions || []).find(item => String(item?.value || '').trim() === normalized);
+                return option?.label || normalized;
+            };
 
             const rankPickerPreferenceStorage = () => {
                 try {
@@ -9623,7 +9643,8 @@
                             <div className="space-y-4 px-6 py-5">
                                 <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
                                     <p><span className="font-medium">New prompt:</span> {pendingRefinementConfirmation.prompt}</p>
-                                    <p className="mt-1"><span className="font-medium">Rank:</span> {pendingRefinementConfirmation.preflight.search_context?.rank_folder || selectedRankFolder}</p>
+                                    <p className="mt-1"><span className="font-medium">Applied rank scope:</span> {aiSearchState.appliedRankScopeLabelFromSearchContext(pendingRefinementConfirmation.preflight.search_context || {}, selectedRankFolder)}</p>
+                                    <p className="mt-1"><span className="font-medium">Present rank:</span> {presentRankLabelFor(pendingRefinementConfirmation.preflight.search_context?.present_rank)}</p>
                                     <p className="mt-1"><span className="font-medium">Applied ship type:</span> {pendingRefinementConfirmation.preflight.search_context?.applied_ship_type || 'Any'}</p>
                                     <p className="mt-1"><span className="font-medium">Experienced ship type:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.experience_ship_type_filter || {}, familyKey: 'ship_family' })}</p>
                                     <p className="mt-1"><span className="font-medium">Engine experience:</span> {summarizeExperienceFilter({ filter: pendingRefinementConfirmation.preflight.search_context?.engine_experience_filter || {}, familyKey: 'engine_family' })}</p>
