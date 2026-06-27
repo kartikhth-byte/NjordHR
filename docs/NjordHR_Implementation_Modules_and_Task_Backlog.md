@@ -319,10 +319,11 @@ Suggested overlap:
   - current v1 suppresses straightforward pre-mention negation inside a bounded look-behind window
   - sentence-boundary-aware handling is still needed to avoid suppressing positive evidence in nearby later sentences
   - treat this as the first engine-layer correctness follow-up if field telemetry shows false suppression
-- `P1` Decide and document methanol / ammonia broad-bucket fallback symmetry:
-  - current deterministic layer supports the subtype families
-  - broad bucket behavior for manufacturer-only evidence should be made explicit and then regression-tested
-  - do not change bucket semantics piecemeal without a written decision
+- `P1` Methanol / ammonia broad-bucket fallback symmetry is closed:
+  - `engine_experience_layers_v1.md` documents the symmetric conservative rule
+  - dual-fuel-only evidence goes to Needs Review for fuel-specific bucket requests
+  - generic manufacturer or family evidence fails for both methanol and ammonia
+  - regression coverage pins both buckets against manufacturer-only and generic-family evidence
 - `P1` `MAN B&W LMC` alias follow-up is closed:
   - `_engine_type_aliases` normalizes `MAN B&W LMC` to `man_b_w_mc`
   - regression coverage pins both prompt extraction and resume-text extraction
