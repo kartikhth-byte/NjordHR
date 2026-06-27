@@ -1318,10 +1318,16 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
 
     def test_engine_experience_rule_rejects_generic_evidence_for_fuel_specific_buckets(self):
         cases = [
+            ("methanol_engine", "man"),
+            ("methanol_engine", "man_b_w"),
             ("methanol_engine", "man_b_w_me"),
             ("methanol_engine", "wingd"),
+            ("methanol_engine", "wingd_x_engines"),
+            ("ammonia_engine", "man"),
+            ("ammonia_engine", "man_b_w"),
             ("ammonia_engine", "man_b_w_me"),
             ("ammonia_engine", "wingd"),
+            ("ammonia_engine", "wingd_x_engines"),
         ]
         for requested_engine_type, candidate_engine_type in cases:
             with self.subTest(requested_engine_type=requested_engine_type, candidate_engine_type=candidate_engine_type):

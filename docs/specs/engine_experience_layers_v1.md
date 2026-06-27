@@ -571,9 +571,9 @@ Decision:
 - `methanol_engine` and `ammonia_engine` use symmetric fallback rules.
 - `dual_fuel` evidence is specific enough to send a methanol or ammonia
   request to Needs Review as `ENGINE_EXPERIENCE_FAMILY_FALLBACK`.
-- Generic manufacturer or family evidence, including `MAN`, `MAN B&W`,
-  `MAN B&W ME`, `WinGD`, and `WinGD X engines`, is not fuel-specific enough
-  for either methanol or ammonia. It returns
+- Generic manufacturer or family evidence is not fuel-specific enough for
+  either methanol or ammonia. The closed v1 regression set is `MAN`,
+  `MAN B&W`, `MAN B&W ME`, `WinGD`, and `WinGD X engines`; each returns
   `ENGINE_EXPERIENCE_MISMATCH`.
 - The evaluator must not add manufacturer-level fallback for either
   fuel-specific bucket without changing this decision and its paired
