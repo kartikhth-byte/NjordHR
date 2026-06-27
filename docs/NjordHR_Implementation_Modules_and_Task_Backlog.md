@@ -323,9 +323,9 @@ Suggested overlap:
   - current deterministic layer supports the subtype families
   - broad bucket behavior for manufacturer-only evidence should be made explicit and then regression-tested
   - do not change bucket semantics piecemeal without a written decision
-- `P1` Add the `MAN B&W LMC` alias follow-up:
-  - resumes that say `MAN B&W LMC` should normalize consistently to the intended `MAN B&W MC` family when the alias is confirmed
-  - land this as a narrow extraction/evaluator patch with direct regression coverage
+- `P1` `MAN B&W LMC` alias follow-up is closed:
+  - `_engine_type_aliases` normalizes `MAN B&W LMC` to `man_b_w_mc`
+  - regression coverage pins both prompt extraction and resume-text extraction
 - `P1` Reopen CoC demonym normalization:
   - add demonyms such as `Iranian`, `Maldivian`, `Mauritian`, and `Argentinian`
   - keep this work isolated from unrelated search-prompt changes
