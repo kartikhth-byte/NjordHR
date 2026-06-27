@@ -1279,6 +1279,7 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             ("has experience in ME-GI engine type", "man_b_w_me_gi", 0, 0),
             ("has 6S60ME-C10.5 engine experience", "man_b_w_me_c", 0, 0),
             ("has X52DF engine type experience", "wingd_x_df", 0, 0),
+            ("has MAN B&W LMC engine experience", "man_b_w_mc", 0, 0),
             ("electronically controlled engines in recent 4 vessels", "electronically_controlled_engine", 0, 4),
         ]
         for prompt, expected_engine_type, expected_months, expected_contracts in cases:

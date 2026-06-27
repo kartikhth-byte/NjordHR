@@ -990,6 +990,12 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["decision"], "PASS")
         self.assertEqual(result["results"][0]["reason_code"], "ENGINE_EXPERIENCE_MATCH")
 
+    def test_engine_experience_extraction_normalizes_man_b_w_lmc_alias(self):
+        self.assertEqual(
+            self.analyzer._extract_engine_types_from_text("Chief Engineer with MAN B&W LMC experience"),
+            ["man_b_w_mc"],
+        )
+
     def test_engine_experience_rule_fails_when_family_missing(self):
         result = self.analyzer._evaluate_hard_filters(
             {
