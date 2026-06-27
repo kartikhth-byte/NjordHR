@@ -1188,16 +1188,24 @@ server-side and return sanitized operator messages to the UI.
 - `POST /verify_resumes` accepts the per-file rank-folder map and resolves
   each selected PDF from its own safe source folder. The legacy top-level
   `rank_folder` remains a fallback for single-folder callers.
-- Per-file rank-folder values must pass `_is_safe_name`; missing or invalid
-  per-file folders return a 400 response before processing.
+- `rank_folder_by_filename` must be an object when present. Per-file
+  rank-folder values must be non-empty strings and pass `_is_safe_name`;
+  missing, empty, non-string, or invalid per-file folders return a 400 response
+  before processing when no valid top-level fallback applies.
+- Verification usage telemetry records the distinct safe rank folders touched
+  by the request.
+- Cross-folder re-verification deletes stale local PDF versions from both the
+  new source folder and the candidate's previous latest `Rank_Applied_For`
+  folder when the previous folder differs.
 - Dashboard export continues to resolve PDFs from each exported row's
   `Rank_Applied_For`; it does not use the current search picker state.
 - This audit does not change `/analyze_stream` payload shape, `/analyze`
   payload shape, request fingerprints, backend validation, query planning,
   index contents, hard-filter behavior, prompt parsing, or result bucket
   behavior.
-- Tests cover cross-folder verification with multiple source folders and
-  invalid per-file rank-folder rejection.
+- Tests cover cross-folder verification with multiple source folders, usage
+  telemetry rank-folder metadata, invalid per-file rank-folder rejection,
+  malformed per-file map rejection, and cross-folder stale PDF cleanup.
 
 ### PR-6 (age): Age range picker
 

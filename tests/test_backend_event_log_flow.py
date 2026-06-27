@@ -337,19 +337,20 @@ class BackendEventLogFlowTests(unittest.TestCase):
         second_rank_dir.mkdir(parents=True, exist_ok=True)
         (second_rank_dir / "2nd_Engineer_1102.pdf").write_bytes(b"%PDF-1.4 fake resume content")
 
-        resp = self.client.post("/verify_resumes", json={
-            "rank_folder": "",
-            "rank_folder_by_filename": {
-                "Chief_Officer_1101.pdf": "Chief_Officer",
-                "2nd_Engineer_1102.pdf": "2nd_Engineer",
-            },
-            "filenames": ["Chief_Officer_1101.pdf", "2nd_Engineer_1102.pdf"],
-            "match_data": {
-                "Chief_Officer_1101.pdf": {"reason": "Matched chief", "confidence": 0.9},
-                "2nd_Engineer_1102.pdf": {"reason": "Matched engineer", "confidence": 0.9},
-            },
-            "ai_prompt": "chief officer across folders",
-        })
+        with patch.object(backend_server, "_log_usage") as log_usage:
+            resp = self.client.post("/verify_resumes", json={
+                "rank_folder": "",
+                "rank_folder_by_filename": {
+                    "Chief_Officer_1101.pdf": "Chief_Officer",
+                    "2nd_Engineer_1102.pdf": "2nd_Engineer",
+                },
+                "filenames": ["Chief_Officer_1101.pdf", "2nd_Engineer_1102.pdf"],
+                "match_data": {
+                    "Chief_Officer_1101.pdf": {"reason": "Matched chief", "confidence": 0.9},
+                    "2nd_Engineer_1102.pdf": {"reason": "Matched engineer", "confidence": 0.9},
+                },
+                "ai_prompt": "chief officer across folders",
+            })
 
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
@@ -361,6 +362,9 @@ class BackendEventLogFlowTests(unittest.TestCase):
         ranks_by_candidate = dict(zip(df["Candidate_ID"].astype(str), df["Rank_Applied_For"]))
         self.assertEqual(ranks_by_candidate["1101"], "Chief_Officer")
         self.assertEqual(ranks_by_candidate["1102"], "2nd_Engineer")
+        usage_payload = log_usage.call_args.args[2]
+        self.assertEqual(usage_payload["rank_folders"], ["2nd_Engineer", "Chief_Officer"])
+        self.assertEqual(usage_payload["rank_folder_by_filename_count"], 2)
 
     def test_verify_resumes_rejects_invalid_cross_folder_rank_map(self):
         self._write_fake_resume("Chief_Officer_1201.pdf")
@@ -377,6 +381,58 @@ class BackendEventLogFlowTests(unittest.TestCase):
         body = resp.get_json()
         self.assertFalse(body["success"])
         self.assertIn("Invalid rank folder", body["message"])
+
+    def test_verify_resumes_rejects_malformed_cross_folder_rank_map(self):
+        self._write_fake_resume("Chief_Officer_1301.pdf")
+
+        cases = [
+            (["not", "a", "dict"], "INVALID_RANK_FOLDER_BY_FILENAME"),
+            ({"Chief_Officer_1301.pdf": ""}, None),
+            ({"Chief_Officer_1301.pdf": 42}, None),
+        ]
+        for rank_map, error_code in cases:
+            with self.subTest(rank_map=rank_map):
+                resp = self.client.post("/verify_resumes", json={
+                    "rank_folder": "",
+                    "rank_folder_by_filename": rank_map,
+                    "filenames": ["Chief_Officer_1301.pdf"],
+                    "match_data": {},
+                    "ai_prompt": "prompt",
+                })
+
+                self.assertEqual(resp.status_code, 400)
+                body = resp.get_json()
+                self.assertFalse(body["success"])
+                if error_code:
+                    self.assertEqual(body["error_code"], error_code)
+
+    def test_cross_folder_reverify_deletes_old_folder_local_version(self):
+        old_name = "Chief_Officer_1401_2026-02-25_10-00-00.pdf"
+        new_name = "2nd_Engineer_1401_2026-02-26_10-00-00.pdf"
+        self._write_fake_resume(old_name)
+        self.client.post("/verify_resumes", json={
+            "rank_folder": self.rank,
+            "filenames": [old_name],
+            "match_data": {},
+            "ai_prompt": "first",
+        })
+        second_rank_dir = self.download_root / "2nd_Engineer"
+        second_rank_dir.mkdir(parents=True, exist_ok=True)
+        (second_rank_dir / new_name).write_bytes(b"%PDF-1.4 updated fake resume content")
+
+        resp = self.client.post("/verify_resumes", json={
+            "rank_folder": "",
+            "rank_folder_by_filename": {new_name: "2nd_Engineer"},
+            "filenames": [new_name],
+            "match_data": {},
+            "ai_prompt": "second",
+        })
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.get_json()["success"])
+        self.assertEqual(resp.get_json().get("stale_versions_deleted"), 1)
+        self.assertFalse((self.rank_dir / old_name).exists())
+        self.assertTrue((second_rank_dir / new_name).exists())
 
     def test_ui_vendor_assets_route_serves_local_runtime_js(self):
         resp = self.client.get("/ui_vendor/react.development.js")

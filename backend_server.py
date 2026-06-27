@@ -6659,8 +6659,14 @@ def verify_resumes():
     # Get AI match data for each file (if available from frontend)
     match_data = data.get('match_data', {})  # {filename: {reason: "...", confidence: 0.9}}
     match_data = match_data if isinstance(match_data, dict) else {}
-    rank_folder_by_filename = data.get('rank_folder_by_filename') or {}
-    rank_folder_by_filename = rank_folder_by_filename if isinstance(rank_folder_by_filename, dict) else {}
+    raw_rank_folder_by_filename = data.get('rank_folder_by_filename') or {}
+    if not isinstance(raw_rank_folder_by_filename, dict):
+        return jsonify({
+            "success": False,
+            "message": "rank_folder_by_filename must be an object.",
+            "error_code": "INVALID_RANK_FOLDER_BY_FILENAME",
+        }), 400
+    rank_folder_by_filename = raw_rank_folder_by_filename
     ai_prompt = data.get('ai_prompt', '')
     search_ship_type = data.get('search_ship_type', '')
 
@@ -6670,14 +6676,24 @@ def verify_resumes():
         return jsonify({"success": False, "message": "Invalid rank folder."}), 400
     if not isinstance(filenames, list):
         return jsonify({"success": False, "message": "Invalid filenames payload."}), 400
+    file_rank_folders = {}
     for filename in filenames:
         if not _is_safe_name(filename) or not filename.lower().endswith('.pdf'):
             return jsonify({"success": False, "message": f"Invalid filename: {filename}"}), 400
-        file_rank_folder = str(rank_folder_by_filename.get(filename) or rank_folder or "").strip()
+        if filename in rank_folder_by_filename:
+            raw_file_rank_folder = rank_folder_by_filename.get(filename)
+            if not isinstance(raw_file_rank_folder, str):
+                return jsonify({"success": False, "message": f"Invalid rank folder for: {filename}"}), 400
+            file_rank_folder = raw_file_rank_folder.strip()
+            if not file_rank_folder:
+                return jsonify({"success": False, "message": f"Missing rank folder for: {filename}"}), 400
+        else:
+            file_rank_folder = rank_folder
         if not file_rank_folder:
             return jsonify({"success": False, "message": f"Missing rank folder for: {filename}"}), 400
         if not _is_safe_name(file_rank_folder):
             return jsonify({"success": False, "message": f"Invalid rank folder for: {filename}"}), 400
+        file_rank_folders[filename] = file_rank_folder
 
     source_base_dir = _active_download_root()
 
@@ -6688,7 +6704,7 @@ def verify_resumes():
         extraction_errors = []
         
         for filename in filenames:
-            file_rank_folder = str(rank_folder_by_filename.get(filename) or rank_folder or "").strip()
+            file_rank_folder = file_rank_folders[filename]
             source_folder = _resolve_within_base(source_base_dir, file_rank_folder)
             source_path = _resolve_within_base(source_folder, filename)
 
@@ -6710,6 +6726,15 @@ def verify_resumes():
                 if not extracted_email:
                     extraction_errors.append(f"{filename}: Missing required email in extracted resume data")
                     continue
+
+                previous_rank_folder = ""
+                latest_candidate_row = None
+                try:
+                    latest_candidate_row = csv_manager.get_latest_candidate_row(candidate_id)
+                except Exception as latest_exc:
+                    print(f"[VERIFY] Could not load previous candidate row for {candidate_id}: {latest_exc}")
+                if latest_candidate_row:
+                    previous_rank_folder = str(latest_candidate_row.get("Rank_Applied_For") or "").strip()
 
                 identifiers_ok, identifier_error, already_exists = _ensure_candidate_identifiers_consistent(
                     candidate_id=candidate_id,
@@ -6752,12 +6777,18 @@ def verify_resumes():
                 if csv_ok:
                     csv_exports += 1
                     print(f"[VERIFY] Event logged for {filename}")
-                    if event_type == 'resume_updated':
-                        deleted_files = _delete_older_candidate_resume_versions(
+                    if event_type == 'resume_updated' or (previous_rank_folder and previous_rank_folder != file_rank_folder):
+                        deleted_files = list(_delete_older_candidate_resume_versions(
                             rank_folder=file_rank_folder,
                             candidate_id=candidate_id,
                             keep_filename=filename,
-                        )
+                        ))
+                        if previous_rank_folder and previous_rank_folder != file_rank_folder:
+                            deleted_files.extend(_delete_older_candidate_resume_versions(
+                                rank_folder=previous_rank_folder,
+                                candidate_id=candidate_id,
+                                keep_filename=filename,
+                            ))
                         stale_versions_deleted += len(deleted_files)
                 else:
                     extraction_errors.append(f"{filename}: CSV event logging failed")
@@ -6787,6 +6818,8 @@ def verify_resumes():
             "csv_exports": csv_exports,
             "stale_versions_deleted": stale_versions_deleted,
             "warnings": len(extraction_errors),
+            "rank_folders": sorted(set(file_rank_folders.values())),
+            "rank_folder_by_filename_count": len(file_rank_folders),
         })
         return jsonify({
             "success": success,
