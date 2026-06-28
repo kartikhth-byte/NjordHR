@@ -333,6 +333,38 @@ class AIAnalyzerShipTypeFilterTests(unittest.TestCase):
         )
         self.assertEqual(constraint, "dredger")
 
+    def test_ship_type_prompt_constraints_cover_configured_catalog(self):
+        parser = configparser.ConfigParser()
+        config_path = Path(__file__).resolve().parents[1] / "config.ini"
+        parser.read(config_path)
+
+        class _Config:
+            config = parser
+
+        self.analyzer.config = _Config()
+        raw_labels = [
+            line.strip()
+            for line in parser.get("ShipTypes", "ship_type_options").splitlines()
+            if line.strip()
+        ]
+        labels = self.analyzer._configured_ship_type_labels()
+        self.assertEqual(len(raw_labels), 104)
+        self.assertEqual(len(labels), 103)
+
+        for label in labels:
+            with self.subTest(label=label, constraint="vessel_type"):
+                constraint = self.analyzer._extract_vessel_type_constraint(
+                    f"Need chief officer for {label}"
+                )
+                self.assertIsNotNone(constraint)
+                self.assertIn(label, constraint["required"])
+
+            with self.subTest(label=label, constraint="experience_ship_type"):
+                constraint = self.analyzer._extract_experience_ship_type_constraint(
+                    f"Need candidates with {label} experience"
+                )
+                self.assertEqual(constraint, label)
+
     def test_dual_fuel_experience_prompt_populates_applied_constraint(self):
         constraints = self.analyzer._extract_job_constraints("has dual fuel experience")
 
