@@ -332,7 +332,7 @@ Suggested overlap:
 - `P1` CoC demonym normalization follow-up is closed:
   - demonyms such as `Iranian`, `Maldivian`, `Mauritian`, and `Argentinian` normalize on prompt and candidate-evidence paths
   - recruiter-facing CoC country rule messages use display labels while audit values remain canonical
-  - broader CoC country alias migration is planned in `docs/specs/coc_country_alias_migration_v1.md`
+  - broader CoC country alias migration is closed in `docs/specs/coc_country_alias_migration_v1.md`; analyzer and backend country aliases now read from `candidate_facts/aliases/coc_country.json`, and the inline maps plus temporary rollback switch are removed
 - `P2` Settings integer input typing follow-up is closed:
   - `_agent_setting_int` rejects boolean payloads from local-agent settings instead of coercing them through `int(bool)`
   - integer `0` remains a valid returned poll interval

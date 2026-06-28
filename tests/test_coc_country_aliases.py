@@ -1,11 +1,9 @@
 import json
-import os
 import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 
 def _stub_ai_dependencies():
@@ -72,83 +70,33 @@ class CocCountryAliasTests(unittest.TestCase):
 
     def _reset_alias_caches(self):
         AIResumeAnalyzer._COC_COUNTRY_ALIASES = None
-        AIResumeAnalyzer._COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
         AIResumeAnalyzer._COC_ISSUE_AUTHORITY_ALIASES = None
-        AIResumeAnalyzer._COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
         backend_server._COC_COUNTRY_ALIASES = None
-        backend_server._COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
         backend_server._COC_ISSUE_AUTHORITY_ALIASES = None
-        backend_server._COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
 
-    def test_json_alias_maps_match_current_inline_analyzer_snapshots(self):
+    def test_json_alias_maps_preserve_analyzer_scope_counts_and_shortcuts(self):
         aliases = load_coc_country_aliases(ALIAS_FILE)
 
-        self.assertEqual(
-            dict(aliases.alias_map),
-            self.analyzer._inline_coc_country_aliases(include_ambiguous_shortcuts=True),
-        )
-        self.assertEqual(
-            dict(aliases.alias_map_without_ambiguous_shortcuts),
-            self.analyzer._inline_coc_country_aliases(include_ambiguous_shortcuts=False),
-        )
+        self.assertEqual(len(aliases.alias_map), 169)
+        self.assertEqual(len(aliases.alias_map_without_ambiguous_shortcuts), 166)
+        self.assertEqual(aliases.alias_map["in"], "india")
+        self.assertEqual(aliases.alias_map["us"], "usa")
+        self.assertEqual(aliases.alias_map["u s"], "usa")
+        self.assertNotIn("in", aliases.alias_map_without_ambiguous_shortcuts)
+        self.assertNotIn("us", aliases.alias_map_without_ambiguous_shortcuts)
+        self.assertNotIn("u s", aliases.alias_map_without_ambiguous_shortcuts)
 
-    def test_authority_country_alias_map_matches_current_backend_allow_list(self):
+    def test_authority_country_alias_map_preserves_backend_allow_list_scope(self):
         aliases = load_coc_country_aliases(ALIAS_FILE)
 
+        self.assertEqual(len(aliases.authority_country_alias_map), 66)
+        self.assertEqual(len(set(aliases.authority_country_alias_map.values())), 30)
         self.assertEqual(
             dict(aliases.authority_country_alias_map),
-            backend_server._inline_coc_issue_authority_country_aliases(),
+            backend_server._coc_issue_authority_country_aliases(),
         )
-
-    def test_runtime_source_switch_preserves_analyzer_maps(self):
-        for include_ambiguous_shortcuts in (True, False):
-            with self.subTest(include_ambiguous_shortcuts=include_ambiguous_shortcuts):
-                with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "inline"}):
-                    inline_map = self.analyzer._coc_country_aliases(
-                        include_ambiguous_shortcuts=include_ambiguous_shortcuts
-                    )
-                self._reset_alias_caches()
-                with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "json"}):
-                    json_map = self.analyzer._coc_country_aliases(
-                        include_ambiguous_shortcuts=include_ambiguous_shortcuts
-                    )
-                self.assertEqual(json_map, inline_map)
-
-    def test_runtime_source_switch_preserves_backend_authority_allow_list(self):
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "inline"}):
-            inline_map = backend_server._coc_issue_authority_country_aliases()
-        self._reset_alias_caches()
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "json"}):
-            json_map = backend_server._coc_issue_authority_country_aliases()
-
-        self.assertEqual(json_map, inline_map)
-
-    def test_unknown_runtime_source_falls_back_to_json(self):
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "unexpected"}):
-            self.assertEqual(self.analyzer._coc_country_alias_source(), "json")
-            self.assertEqual(backend_server._coc_country_alias_source(), "json")
-
-    def test_runtime_source_switch_rebuilds_analyzer_authority_alias_cache(self):
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "inline"}):
-            inline_aliases = self.analyzer._coc_issue_authority_aliases()
-            self.assertEqual(AIResumeAnalyzer._COC_ISSUE_AUTHORITY_ALIAS_SOURCE, "inline")
-
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "json"}):
-            json_aliases = self.analyzer._coc_issue_authority_aliases()
-
-        self.assertEqual(AIResumeAnalyzer._COC_ISSUE_AUTHORITY_ALIAS_SOURCE, "json")
-        self.assertEqual(json_aliases.alias_map, inline_aliases.alias_map)
-
-    def test_runtime_source_switch_rebuilds_backend_authority_alias_cache(self):
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "inline"}):
-            inline_aliases = backend_server._load_coc_issue_authority_aliases()
-            self.assertEqual(backend_server._COC_ISSUE_AUTHORITY_ALIAS_SOURCE, "inline")
-
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "json"}):
-            json_aliases = backend_server._load_coc_issue_authority_aliases()
-
-        self.assertEqual(backend_server._COC_ISSUE_AUTHORITY_ALIAS_SOURCE, "json")
-        self.assertEqual(json_aliases.alias_map, inline_aliases.alias_map)
+        self.assertNotIn("iran", aliases.authority_country_alias_map)
+        self.assertNotIn("iraqi", aliases.authority_country_alias_map)
 
     def test_display_labels_match_current_analyzer_labels(self):
         aliases = load_coc_country_aliases(ALIAS_FILE)
@@ -159,12 +107,6 @@ class CocCountryAliasTests(unittest.TestCase):
         for country_id, display_label in aliases.display_labels.items():
             with self.subTest(country_id=country_id):
                 self.assertEqual(display_label, self.analyzer._coc_country_display_label(country_id))
-
-    def test_display_label_first_path_logs_active_source(self):
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": "json"}):
-            self.assertEqual(self.analyzer._coc_country_display_label("uk"), "UK")
-
-        self.assertTrue(AIResumeAnalyzer._COC_COUNTRY_ALIAS_SOURCE_LOGGED)
 
     def test_existing_issue_authority_catalog_country_values_are_allowed(self):
         country_aliases = load_coc_country_aliases(ALIAS_FILE)
@@ -178,7 +120,7 @@ class CocCountryAliasTests(unittest.TestCase):
         self.assertTrue(authority_aliases.country_by_authority)
         self.assertTrue(set(authority_aliases.country_by_authority.values()).issubset(allowed_countries))
 
-    def test_country_consuming_paths_match_inline_and_json_sources(self):
+    def test_country_consuming_paths_preserve_expected_behavior(self):
         cases = [
             ("normalize", "Indian", (), "india"),
             ("normalize", "Iranian", (), "iran"),
@@ -206,22 +148,17 @@ class CocCountryAliasTests(unittest.TestCase):
 
         for kind, value, extra_args, expected in cases:
             with self.subTest(kind=kind, value=value):
-                inline_result = self._run_country_path(kind, value, extra_args, source="inline")
-                self._reset_alias_caches()
-                json_result = self._run_country_path(kind, value, extra_args, source="json")
-                self.assertEqual(json_result, inline_result)
-                self.assertEqual(json_result, expected)
+                self.assertEqual(self._run_country_path(kind, value, extra_args), expected)
 
-    def _run_country_path(self, kind, value, extra_args, *, source):
-        with patch.dict(os.environ, {"COC_COUNTRY_ALIAS_SOURCE": source}):
-            if kind == "normalize":
-                return self.analyzer._normalize_coc_country(value)
-            if kind == "snippet":
-                return self.analyzer._extract_coc_country_from_snippet(value)
-            if kind == "phrase":
-                return self.analyzer._is_coc_country_phrase_candidate(value)
-            if kind == "prompt_country_for_alias":
-                return self.analyzer._coc_issue_authority_prompt_country_for_alias(value, *extra_args)
+    def _run_country_path(self, kind, value, extra_args):
+        if kind == "normalize":
+            return self.analyzer._normalize_coc_country(value)
+        if kind == "snippet":
+            return self.analyzer._extract_coc_country_from_snippet(value)
+        if kind == "phrase":
+            return self.analyzer._is_coc_country_phrase_candidate(value)
+        if kind == "prompt_country_for_alias":
+            return self.analyzer._coc_issue_authority_prompt_country_for_alias(value, *extra_args)
         raise AssertionError(f"unknown country path test kind: {kind}")
 
     def test_loader_rejects_ambiguous_shortcut_outside_closed_list(self):
