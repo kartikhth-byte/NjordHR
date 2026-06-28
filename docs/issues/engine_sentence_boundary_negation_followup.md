@@ -1,6 +1,8 @@
-# Issue Draft: Sentence-Aware Engine Negation
+# Closed Issue: Sentence-Aware Engine Negation
 
-Suggested labels: `engine-experience`, `hardening`
+Status: sentence / clause boundary behavior is closed by the current bounded
+engine negation window and pinned by
+`tests/test_ai_analyzer_hard_filter_rules.py`.
 
 ## Title
 
@@ -8,49 +10,50 @@ Sentence-aware negation handling for deterministic engine extraction
 
 ## Summary
 
-`engine_experience` v1 currently suppresses straightforward negation near an
-engine mention using a bounded look-behind heuristic. That closes the obvious
-false-positive class (`no ME experience`, `never operated RT-flex`) but still
-allows a documented false-suppression case when sentence punctuation is stripped
-and a negation phrase from one sentence suppresses a positive engine mention in
-the next sentence.
+`engine_experience` v1 suppresses straightforward negation near an engine
+mention using a bounded look-behind heuristic that is reset at sentence and
+clause boundaries.
 
 Example:
 
 - `Held no formal certifications. Operated ME-GI engines for 18 months.`
 
-The current v1 spec explicitly treats sentence-boundary-aware negation as a
-non-goal. This issue is the follow-up to implement that missing layer.
+The sentence-boundary layer is now part of the deterministic extractor. Broader
+context classification, such as training/course context versus sea-time context,
+remains separate future work. Telemetry or audit markers for broader negation
+review are deferred to that extraction-hardening work; this closeout does not
+change telemetry or audit payload shape.
 
 ## Why this matters
 
-- False suppression drops real candidates into `FAIL` / `UNKNOWN` outcomes.
-- The current behavior is intentional but heuristic-limited; we should not rely
-  on the look-behind window forever.
-- The limitation is already documented in
-  `/Users/kartikraghavan/Tools/NjordHR/docs/specs/engine_experience_layers_v1.md`.
+- Same-sentence negation still suppresses direct negated evidence.
+- A negation phrase in a prior sentence or clause does not suppress later
+  positive engine evidence.
+- Broader context classification and telemetry markers remain intentionally
+  outside this closeout.
 
 ## Scope
 
 - Split or preserve sentence boundaries before applying negation suppression.
-- Keep the current bounded-token negation behavior within the same sentence.
-- Preserve compact-alias handling (`manb&w`, OCR-collapsed tokens) under the
-  same rule.
-- Add telemetry or audit markers when negation suppression fires, so future
-  review can distinguish:
-  - explicit same-sentence negation
-  - sentence-boundary-sensitive cases
+- Keep the bounded-token negation behavior within the same sentence / clause
+  window.
+- Preserve compact-alias and model-token handling under the same rule.
 
 ## Acceptance criteria
 
 - `no ME experience` suppresses `ME`.
 - `never operated RT-flex` suppresses `RT-flex`.
 - `Held no formal certifications. Operated ME-GI engines for 18 months.`
-  still extracts `ME-GI`.
-- `Without X-DF background; later joined a vessel with ME-C.` does not suppress
-  the `ME-C` mention unless the negation is in the same sentence / clause under
-  the chosen rule.
-- Regression coverage exists for both normal aliases and compact aliases.
+  extracts `ME-GI`.
+- `Without X-DF background; later joined a vessel with ME-C.` extracts `ME-C`.
+- Regression coverage exists for normal aliases, compact aliases, and model
+  tokens.
+
+## Verification
+
+- `test_engine_experience_extraction_keeps_contrastive_positive_engine_evidence`
+- `test_engine_experience_extraction_suppresses_negated_engine_list`
+- `test_engine_experience_extraction_respects_sentence_boundary_negation`
 
 ## Likely files
 
