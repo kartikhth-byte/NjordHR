@@ -109,7 +109,8 @@ Excludes (deferred to later phases):
 - Recruiter-driven alias additions from the UI.
 - Hierarchical UX that narrows the authority dropdown by selected country.
 - Index-backed authority lookup for sub-second filter performance.
-- Migration of the existing country alias dict from inline Python to JSON.
+- Migration of the existing country alias dict from inline Python to JSON
+  (planned in `docs/specs/coc_country_alias_migration_v1.md`).
 
 ## Architectural Principles
 
@@ -293,7 +294,7 @@ Picker semantics:
 | Display policy | Canonical label in result cards, raw string on hover |
 | Audit trail | Semver `version` + ISO `last_updated` in JSON header |
 | Normalization | Shared with country: refactor `_normalize_coc_country` → generic `_normalize_alias(value, alias_map)` |
-| Country alias migration | None in v1; country aliases stay inline |
+| Country alias migration | Deferred from CoC Issue Authority v1; planned in `docs/specs/coc_country_alias_migration_v1.md` |
 | JSON schema validation | Strict, fail loud at module load |
 
 ## Rank Search Scope — Detailed Spec
@@ -1512,8 +1513,7 @@ complete if existing extraction provides reliable age evidence.
   "Needs review" backlog cannot be drained by engineering at the
   required cadence.
 - Migration of inline country aliases to a JSON file under
-  `candidate_facts/aliases/`, if the inconsistency between alias storage
-  patterns becomes a real maintenance cost.
+  `candidate_facts/aliases/`; see `docs/specs/coc_country_alias_migration_v1.md`.
 - Cross-family co-occurrence: a generalized `same_row` logical group
   (also tracked in `vessel_tonnage_v1.md`) could eventually support
   combinations like `coc_issue_authority + coc_grade` on the same
