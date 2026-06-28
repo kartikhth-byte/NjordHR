@@ -465,9 +465,9 @@ Suggested overlap:
 - `AI-T4` Completed in current implementation:
   - deterministic ship-type extraction/evaluation is wired for both applied ship type and experienced ship type
   - backend, UI controls, and regression coverage are present
-  - follow-up still open:
-    - prompt-side ship-type normalization is currently broader-bucket oriented and does not yet align to the full configured `ShipTypes.ship_type_options` catalog in `config.ini`
-    - treat config-aligned ship-type prompt recognition as a separate narrow implementation unit rather than mixing it into unrelated parser work
+  - prompt-side ship-type recognition is aligned to the configured `ShipTypes.ship_type_options` catalog in `config.ini`
+  - regression coverage pins every unique normalized configured ship-type label for both vessel-type prompt constraints and experienced-ship-type prompt constraints
+  - current catalog count is 104 raw entries collapsing to 103 unique normalized labels; `Dredger` / `DREDGER` is the lone case-fold collision
 - `AI-T5` Completed in current implementation:
   - deterministic/audit logging for hard-filter outcomes is emitted, persisted, and surfaced in the current flow
 - `AI-T6` Retrieval chunking upgrade is partially completed in current implementation:
