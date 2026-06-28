@@ -1056,6 +1056,32 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
             [],
         )
 
+    def test_engine_experience_extraction_respects_sentence_boundary_negation(self):
+        cases = [
+            (
+                "Held no formal certifications. Operated ME-GI engines for 18 months.",
+                ["man_b_w_me_gi"],
+            ),
+            (
+                "Without X-DF background; later joined a vessel with ME-C.",
+                ["man_b_w_me_c"],
+            ),
+            (
+                "Held no formal certifications. Operated RTflex engines.",
+                ["wartsila_rt_flex"],
+            ),
+            (
+                "Held no formal certifications. Operated 6S60ME-C engines.",
+                ["man_b_w_me_c"],
+            ),
+            ("No ME experience.", []),
+            ("Never operated RT-flex engines.", []),
+            ("No RTflex experience.", []),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(self.analyzer._extract_engine_types_from_text(text), expected)
+
     def test_engine_experience_rule_fails_when_family_missing(self):
         result = self.analyzer._evaluate_hard_filters(
             {

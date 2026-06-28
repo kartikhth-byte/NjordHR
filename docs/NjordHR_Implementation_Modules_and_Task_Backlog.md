@@ -317,6 +317,7 @@ Suggested overlap:
 ### 6.2.1 Current experience-filters / engine-layer post-merge follow-up focus
 - `P1` Sentence-aware engine negation contrast handling is closed:
   - current v1 suppresses straightforward pre-mention negation inside a bounded look-behind window
+  - sentence and clause boundaries reset the negation window before extraction
   - contrastive clauses such as `No ME experience, but has X-DF experience` now keep later positive evidence
   - negated lists such as `No ME or X-DF experience` remain suppressed
   - broader context classification remains deferred to a future extraction-hardening spec
