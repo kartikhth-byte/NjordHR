@@ -342,6 +342,9 @@ Suggested overlap:
   - recruiter-facing reason text remains separate from debug/audit payload shape
   - regression coverage pins PASS, FAIL, and UNKNOWN paths in `tests/test_ai_analyzer_hard_filter_rules.py`
   - consuming hard-filter redaction coverage is pinned in `tests/test_ai_analyzer_ship_type_filters.py`
+- `P1` Shadow-LLM rescue promotion copy is clarified:
+  - `LLM_Promotion_Stage` applies only to the five eval-cleared rescue families: `certificate_requirement`, `rank_match`, `stcw_basic`, `us_visa`, and `age_range`
+  - remaining shadow-LLM normalization families are still pending separate evidence runs and promotion PRs
 
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).
