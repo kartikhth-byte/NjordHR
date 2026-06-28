@@ -7247,6 +7247,9 @@
                                                 Stage 0 disables LLM rescue. Stage 1 enables `certificate_requirement`. Stage 2 adds `rank_match`. Stage 3 adds `age_range`. Stage 4 adds `stcw_basic`. Stage 5 adds `us_visa`.
                                             </p>
                                             <p className="mt-2 text-xs">
+                                                These stages cover only the five eval-cleared rescue families. Other shadow-LLM normalization families remain pending until their own evidence runs and promotion PRs.
+                                            </p>
+                                            <p className="mt-2 text-xs">
                                                 Stability evidence:{' '}
                                                 <a
                                                     className="font-semibold underline"
@@ -7272,7 +7275,7 @@
                                                     title="Stage 0 disables LLM rescue. Stage 1 enables certificate_requirement. Stage 2 adds rank_match. Stage 3 adds age_range. Stage 4 adds stcw_basic. Stage 5 adds us_visa. Stability evidence: docs/eval-evidence/ai-search-tail-plus-solved-stability-comparison-2026-06-09.json"
                                                 />
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    0 disables all promoted families; 5 enables all five eval-cleared families. The env var `NJORDHR_LLM_PROMOTED_FAMILIES` still acts as an emergency override.
+                                                    0 disables all promoted rescue families; 5 enables only the five eval-cleared rescue families. Other shadow-LLM families remain pending. The env var `NJORDHR_LLM_PROMOTED_FAMILIES` still acts as an emergency override.
                                                 </p>
                                             </div>
                                             <div>
@@ -7580,7 +7583,7 @@
                                             <p>`use_supabase_reads`: Reads dashboard/history from Supabase. Source: migration phase status. Reset: set `false` to read from CSV.</p>
                                             <p>`use_local_agent`: Reserved for hybrid cloud/local-agent rollout. Reset: set `false` for current architecture.</p>
                                             <p>`use_cloud_export`: Reserved for cloud export mode. Reset: set `false` for local export behavior.</p>
-                                            <p>`LLM_Promotion_Stage`: LLM rescue stage counter for the five eval-cleared families. Stage 0 disables all; Stage 1 enables `certificate_requirement`; Stage 2 adds `rank_match`; Stage 3 adds `age_range`; Stage 4 adds `stcw_basic`; Stage 5 adds `us_visa`. Emergency override: `NJORDHR_LLM_PROMOTED_FAMILIES`.</p>
+                                            <p>`LLM_Promotion_Stage`: LLM rescue stage counter for the five eval-cleared rescue families only. Stage 0 disables all promoted rescue families; Stage 1 enables `certificate_requirement`; Stage 2 adds `rank_match`; Stage 3 adds `age_range`; Stage 4 adds `stcw_basic`; Stage 5 adds `us_visa`. Other shadow-LLM normalization families remain pending until separate evidence runs and promotion PRs. Emergency override: `NJORDHR_LLM_PROMOTED_FAMILIES`.</p>
                                         </div>
 
                                         <div>
