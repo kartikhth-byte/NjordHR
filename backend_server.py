@@ -284,21 +284,7 @@ class CocIssueAuthorityFilterInvalid(ValueError):
 
 
 _COC_ISSUE_AUTHORITY_ALIASES = None
-_COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
 _COC_COUNTRY_ALIASES = None
-_COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
-
-
-def _coc_country_alias_source():
-    source = str(os.getenv("COC_COUNTRY_ALIAS_SOURCE", "json") or "json").strip().lower()
-    return "inline" if source == "inline" else "json"
-
-
-def _log_coc_country_alias_source_once(source):
-    global _COC_COUNTRY_ALIAS_SOURCE_LOGGED
-    if not _COC_COUNTRY_ALIAS_SOURCE_LOGGED:
-        print(f"[CONFIG] CoC country alias source: {source}")
-        _COC_COUNTRY_ALIAS_SOURCE_LOGGED = True
 
 
 def _load_coc_country_aliases():
@@ -308,94 +294,16 @@ def _load_coc_country_aliases():
     return _COC_COUNTRY_ALIASES
 
 
-def _inline_coc_issue_authority_country_aliases():
-    aliases = {
-        "india": "india",
-        "indian": "india",
-        "uk": "uk",
-        "u k": "uk",
-        "gb": "uk",
-        "great britain": "uk",
-        "britain": "uk",
-        "british": "uk",
-        "united kingdom": "uk",
-        "singapore": "singapore",
-        "singaporean": "singapore",
-        "panama": "panama",
-        "panamanian": "panama",
-        "liberia": "liberia",
-        "liberian": "liberia",
-        "marshall islands": "marshall islands",
-        "marshallese": "marshall islands",
-        "malta": "malta",
-        "maltese": "malta",
-        "bahamas": "bahamas",
-        "bahamian": "bahamas",
-        "cyprus": "cyprus",
-        "cypriot": "cyprus",
-        "hong kong": "hong kong",
-        "philippines": "philippines",
-        "philippine": "philippines",
-        "filipino": "philippines",
-        "australia": "australia",
-        "australian": "australia",
-        "new zealand": "new zealand",
-        "new zealander": "new zealand",
-        "denmark": "denmark",
-        "danish": "denmark",
-        "norway": "norway",
-        "norwegian": "norway",
-        "netherlands": "netherlands",
-        "dutch": "netherlands",
-        "greece": "greece",
-        "greek": "greece",
-        "croatia": "croatia",
-        "croatian": "croatia",
-        "russia": "russia",
-        "russian": "russia",
-        "ukraine": "ukraine",
-        "ukrainian": "ukraine",
-        "china": "china",
-        "chinese": "china",
-        "japan": "japan",
-        "japanese": "japan",
-        "korea": "korea",
-        "korean": "korea",
-        "malaysia": "malaysia",
-        "malaysian": "malaysia",
-        "indonesia": "indonesia",
-        "indonesian": "indonesia",
-        "myanmar": "myanmar",
-        "burma": "myanmar",
-        "burmese": "myanmar",
-        "bangladesh": "bangladesh",
-        "bangladeshi": "bangladesh",
-        "pakistan": "pakistan",
-        "pakistani": "pakistan",
-        "sri lanka": "sri lanka",
-        "sri lankan": "sri lanka",
-        "south africa": "south africa",
-        "south african": "south africa",
-    }
-    return {normalize_alias_key(alias): canonical for alias, canonical in aliases.items()}
-
-
 def _coc_issue_authority_country_aliases():
-    source = _coc_country_alias_source()
-    _log_coc_country_alias_source_once(source)
-    if source == "inline":
-        return _inline_coc_issue_authority_country_aliases()
     return dict(_load_coc_country_aliases().authority_country_alias_map)
 
 
 def _load_coc_issue_authority_aliases():
-    global _COC_ISSUE_AUTHORITY_ALIASES, _COC_ISSUE_AUTHORITY_ALIAS_SOURCE
-    source = _coc_country_alias_source()
-    if _COC_ISSUE_AUTHORITY_ALIASES is None or _COC_ISSUE_AUTHORITY_ALIAS_SOURCE != source:
+    global _COC_ISSUE_AUTHORITY_ALIASES
+    if _COC_ISSUE_AUTHORITY_ALIASES is None:
         _COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
             country_aliases=_coc_issue_authority_country_aliases()
         )
-        _COC_ISSUE_AUTHORITY_ALIAS_SOURCE = source
     return _COC_ISSUE_AUTHORITY_ALIASES
 
 
@@ -1153,7 +1061,7 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index, _COC_COUNTRY_ALIASES, _COC_ISSUE_AUTHORITY_ALIASES, _COC_ISSUE_AUTHORITY_ALIAS_SOURCE, _COC_COUNTRY_ALIAS_SOURCE_LOGGED
+    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index, _COC_COUNTRY_ALIASES, _COC_ISSUE_AUTHORITY_ALIASES
     app_settings = load_app_settings()
     config = app_settings.config
     creds = app_settings.credentials
@@ -1184,13 +1092,9 @@ def _refresh_runtime_managers():
         present_rank_index = PresentRankIndex()
     _COC_COUNTRY_ALIASES = None
     _COC_ISSUE_AUTHORITY_ALIASES = None
-    _COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
-    _COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
     try:
         Analyzer._COC_COUNTRY_ALIASES = None
         Analyzer._COC_ISSUE_AUTHORITY_ALIASES = None
-        Analyzer._COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
-        Analyzer._COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
         Analyzer._instance = None
     except Exception:
         pass

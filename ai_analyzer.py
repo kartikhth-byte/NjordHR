@@ -1284,9 +1284,7 @@ class AIResumeAnalyzer:
     }
     COC_COUNTRY_CONFIDENCE_THRESHOLD = 0.85
     _COC_COUNTRY_ALIASES = None
-    _COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
     _COC_ISSUE_AUTHORITY_ALIASES = None
-    _COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
     RANK_ALIAS_TABLE = {
         "master": {
             "canonical_id": "master",
@@ -2517,218 +2515,22 @@ class AIResumeAnalyzer:
     def _normalize_coc_country(self, value):
         return self._normalize_alias(value, self._coc_country_aliases())
 
-    def _coc_country_alias_source(self):
-        source = str(os.getenv("COC_COUNTRY_ALIAS_SOURCE", "json") or "json").strip().lower()
-        return "inline" if source == "inline" else "json"
-
     def _json_coc_country_aliases(self):
         if self.__class__._COC_COUNTRY_ALIASES is None:
             self.__class__._COC_COUNTRY_ALIASES = load_coc_country_aliases()
         return self.__class__._COC_COUNTRY_ALIASES
 
-    def _log_coc_country_alias_source_once(self, source):
-        if not self.__class__._COC_COUNTRY_ALIAS_SOURCE_LOGGED:
-            print(f"[CONFIG] CoC country alias source: {source}")
-            self.__class__._COC_COUNTRY_ALIAS_SOURCE_LOGGED = True
-
-    def _inline_coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
-        aliases = {
-            "india": "india",
-            "indian": "india",
-            "uk": "uk",
-            "u k": "uk",
-            "gb": "uk",
-            "great britain": "uk",
-            "britain": "uk",
-            "british": "uk",
-            "united kingdom": "uk",
-            "australia": "australia",
-            "australian": "australia",
-            "bahamas": "bahamas",
-            "bahamian": "bahamas",
-            "bangladesh": "bangladesh",
-            "bangladeshi": "bangladesh",
-            "brazil": "brazil",
-            "brazilian": "brazil",
-            "canada": "canada",
-            "canadian": "canada",
-            "china": "china",
-            "chinese": "china",
-            "colombia": "colombia",
-            "colombian": "colombia",
-            "croatia": "croatia",
-            "croatian": "croatia",
-            "cyprus": "cyprus",
-            "cypriot": "cyprus",
-            "denmark": "denmark",
-            "danish": "denmark",
-            "egypt": "egypt",
-            "egyptian": "egypt",
-            "ecuador": "ecuador",
-            "ecuadorian": "ecuador",
-            "algeria": "algeria",
-            "algerian": "algeria",
-            "tunisia": "tunisia",
-            "tunisian": "tunisia",
-            "libya": "libya",
-            "libyan": "libya",
-            "morocco": "morocco",
-            "moroccan": "morocco",
-            "france": "france",
-            "french": "france",
-            "germany": "germany",
-            "german": "germany",
-            "greece": "greece",
-            "greek": "greece",
-            "hong kong": "hong kong",
-            "indonesia": "indonesia",
-            "indonesian": "indonesia",
-            "iran": "iran",
-            "iranian": "iran",
-            "iraq": "iraq",
-            "iraqi": "iraq",
-            "italy": "italy",
-            "italian": "italy",
-            "japan": "japan",
-            "japanese": "japan",
-            "kenya": "kenya",
-            "kenyan": "kenya",
-            "korea": "korea",
-            "korean": "korea",
-            "liberia": "liberia",
-            "liberian": "liberia",
-            "latvia": "latvia",
-            "latvian": "latvia",
-            "lebanon": "lebanon",
-            "lebanese": "lebanon",
-            "lithuania": "lithuania",
-            "lithuanian": "lithuania",
-            "malta": "malta",
-            "maltese": "malta",
-            "maldives": "maldives",
-            "maldivian": "maldives",
-            "malaysia": "malaysia",
-            "malaysian": "malaysia",
-            "marshall islands": "marshall islands",
-            "marshallese": "marshall islands",
-            "mauritius": "mauritius",
-            "mauritian": "mauritius",
-            "myanmar": "myanmar",
-            "burma": "myanmar",
-            "burmese": "myanmar",
-            "nepal": "nepal",
-            "nepalese": "nepal",
-            "new zealand": "new zealand",
-            "new zealander": "new zealand",
-            "netherlands": "netherlands",
-            "dutch": "netherlands",
-            "nigeria": "nigeria",
-            "nigerian": "nigeria",
-            "norway": "norway",
-            "norwegian": "norway",
-            "oman": "oman",
-            "omani": "oman",
-            "pakistan": "pakistan",
-            "pakistani": "pakistan",
-            "panama": "panama",
-            "panamanian": "panama",
-            "philippines": "philippines",
-            "philippine": "philippines",
-            "filipino": "philippines",
-            "argentina": "argentina",
-            "argentinian": "argentina",
-            "bolivia": "bolivia",
-            "bolivian": "bolivia",
-            "peru": "peru",
-            "peruvian": "peru",
-            "poland": "poland",
-            "polish": "poland",
-            "portugal": "portugal",
-            "portuguese": "portugal",
-            "qatar": "qatar",
-            "qatari": "qatar",
-            "romania": "romania",
-            "romanian": "romania",
-            "russia": "russia",
-            "russian": "russia",
-            "saudi arabia": "saudi arabia",
-            "saudi": "saudi arabia",
-            "singapore": "singapore",
-            "singaporean": "singapore",
-            "serbia": "serbia",
-            "serbian": "serbia",
-            "spain": "spain",
-            "spanish": "spain",
-            "sri lanka": "sri lanka",
-            "sri lankan": "sri lanka",
-            "south africa": "south africa",
-            "south african": "south africa",
-            "sudan": "sudan",
-            "sudanese": "sudan",
-            "taiwan": "taiwan",
-            "taiwanese": "taiwan",
-            "thailand": "thailand",
-            "thai": "thailand",
-            "turkey": "turkey",
-            "turkiye": "turkey",
-            "turkish": "turkey",
-            "ukraine": "ukraine",
-            "ukrainian": "ukraine",
-            "united arab emirates": "uae",
-            "uae": "uae",
-            "u a e": "uae",
-            "emirati": "uae",
-            "usa": "usa",
-            "us": "usa",
-            "u s": "usa",
-            "united states": "usa",
-            "american": "usa",
-            "venezuela": "venezuela",
-            "venezuelan": "venezuela",
-            "vietnam": "vietnam",
-            "vietnamese": "vietnam",
-            "bahrain": "bahrain",
-            "bahraini": "bahrain",
-            "belarus": "belarus",
-            "belarusian": "belarus",
-            "bulgaria": "bulgaria",
-            "bulgarian": "bulgaria",
-            "estonia": "estonia",
-            "estonian": "estonia",
-            "hungary": "hungary",
-            "hungarian": "hungary",
-            "kuwait": "kuwait",
-            "kuwaiti": "kuwait",
-            "yemen": "yemen",
-            "yemeni": "yemen",
-        }
-        if include_ambiguous_shortcuts:
-            aliases["in"] = "india"
-        else:
-            aliases.pop("us", None)
-            aliases.pop("u s", None)
-        return aliases
-
     def _coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
-        source = self._coc_country_alias_source()
-        self._log_coc_country_alias_source_once(source)
-        if source == "inline":
-            return self._inline_coc_country_aliases(include_ambiguous_shortcuts=include_ambiguous_shortcuts)
         aliases = self._json_coc_country_aliases()
         if include_ambiguous_shortcuts:
             return dict(aliases.alias_map)
         return dict(aliases.alias_map_without_ambiguous_shortcuts)
 
     def _coc_issue_authority_aliases(self):
-        source = self._coc_country_alias_source()
-        if (
-            self.__class__._COC_ISSUE_AUTHORITY_ALIASES is None
-            or self.__class__._COC_ISSUE_AUTHORITY_ALIAS_SOURCE != source
-        ):
+        if self.__class__._COC_ISSUE_AUTHORITY_ALIASES is None:
             self.__class__._COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
                 country_aliases=self._coc_country_aliases(include_ambiguous_shortcuts=False)
             )
-            self.__class__._COC_ISSUE_AUTHORITY_ALIAS_SOURCE = source
         return self.__class__._COC_ISSUE_AUTHORITY_ALIASES
 
     def _coc_issue_authority_alias_map(self):
@@ -2743,18 +2545,10 @@ class AIResumeAnalyzer:
 
     def _coc_country_display_label(self, country):
         normalized = str(country or "").strip().lower()
-        source = self._coc_country_alias_source()
-        self._log_coc_country_alias_source_once(source)
-        if source != "inline":
-            label = self._json_coc_country_aliases().display_labels.get(normalized)
-            if label:
-                return label
-        special = {
-            "uae": "UAE",
-            "uk": "UK",
-            "usa": "USA",
-        }
-        return special.get(normalized) or normalized.replace("_", " ").title()
+        label = self._json_coc_country_aliases().display_labels.get(normalized)
+        if label:
+            return label
+        return normalized.replace("_", " ").title()
 
     def _normalize_coc_issue_authority(self, value):
         return self._normalize_alias(value, self._coc_issue_authority_alias_map())

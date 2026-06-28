@@ -2,11 +2,13 @@
 
 ## Status
 
-Planning spec. No runtime behavior changes are introduced by this document.
+Completed migration contract. Runtime behavior remains equivalent to the
+pre-migration inline maps, with `candidate_facts/aliases/coc_country.json` as
+the single source of truth.
 
 ## Problem
 
-CoC country aliases currently live inline in two places:
+Before this migration, CoC country aliases lived inline in two places:
 
 - `ai_analyzer.py::_coc_country_aliases` (around line 2516 as of PR #95),
   used by prompt parsing, candidate-evidence extraction, and hard-filter
@@ -172,13 +174,13 @@ Caching:
 - Analyzer and backend loaders keep process-level caches.
 - Tests that mutate alias files reset those caches explicitly.
 
-Kill switch:
+Temporary rollback switch:
 
-- PR-2 adds `COC_COUNTRY_ALIAS_SOURCE=inline|json`.
-- The default is `json` after PR-2 switches runtime call sites.
-- `inline` restores the pre-migration inline maps for analyzer and backend
+- PR-2 added `COC_COUNTRY_ALIAS_SOURCE=inline|json`.
+- The default was `json` after PR-2 switched runtime call sites.
+- `inline` restored the pre-migration inline maps for analyzer and backend
   country alias helpers without changing request payloads or result shapes.
-- PR-3 removes the kill switch after JSON-backed runtime tests are green.
+- PR-3 removed the rollback switch after JSON-backed runtime tests were green.
 
 ## Parity Requirements
 
@@ -231,34 +233,34 @@ Required named cases:
 
 ### PR-1: JSON + Loader + Validator
 
-- Add `coc_country.json`.
-- Add the loader/validator.
-- Add loader validation tests.
-- Add snapshot parity tests against the current inline analyzer and backend
-  maps.
-- Add display-label parity tests.
-- Add `coc_issue_authority.json` `country_canonical` allow-list validation.
-- No analyzer/backend runtime switch yet.
+- Added `coc_country.json`.
+- Added the loader/validator.
+- Added loader validation tests.
+- Added snapshot parity tests against the inline analyzer and backend maps at
+  the PR commit.
+- Added display-label parity tests.
+- Added `coc_issue_authority.json` `country_canonical` allow-list validation.
+- Left analyzer/backend runtime behavior unchanged.
 
 ### PR-2: Analyzer + Backend Switch
 
-- Add `COC_COUNTRY_ALIAS_SOURCE=inline|json`.
-- Switch analyzer country aliases to the loader under the `json` source.
-- Switch backend authority-country validation to
+- Added the temporary `COC_COUNTRY_ALIAS_SOURCE=inline|json` rollback switch.
+- Switched analyzer country aliases to the loader under the `json` source.
+- Switched backend authority-country validation to
   `authority_country_alias_map` under the `json` source.
-- Preserve all existing CoC country, authority, prompt, snippet, and evaluator
+- Preserved all existing CoC country, authority, prompt, snippet, and evaluator
   tests.
-- Add behavior-level parity tests for prompt/snippet paths.
-- Add cache-reset tests for loader updates where applicable.
-- Log the active alias source at startup.
+- Added behavior-level parity tests for prompt/snippet paths.
+- Added cache-reset tests for loader updates where applicable.
+- Logged the active alias source while the switch existed.
 
 ### PR-3: Remove Inline Maps
 
-- Remove the inline country maps once parity and switched-runtime tests are
+- Removed the inline country maps after parity and switched-runtime tests were
   green.
-- Remove `COC_COUNTRY_ALIAS_SOURCE`.
-- Keep a single source of truth in `coc_country.json`.
-- Update closeout docs and backlog.
+- Removed `COC_COUNTRY_ALIAS_SOURCE`.
+- Kept `coc_country.json` as the single source of truth.
+- Updated closeout docs and backlog.
 
 ## Review Checklist
 
