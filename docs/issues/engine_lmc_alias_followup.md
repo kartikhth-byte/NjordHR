@@ -1,6 +1,9 @@
-# Issue Draft: MAN B&W LMC Alias
+# Closed Issue: MAN B&W LMC Alias
 
-Suggested labels: `engine-experience`, `extraction`
+Status: closed by the deterministic engine alias table and pinned by
+`tests/test_ai_analyzer_hard_filter_rules.py`,
+`tests/test_ai_analyzer_logistics.py`, and
+`tests/test_ai_analyzer_job_constraints.py`.
 
 ## Title
 
@@ -9,17 +12,15 @@ Add and verify `MAN B&W LMC` alias handling in deterministic engine extraction
 ## Summary
 
 Reviewer follow-up noted that resumes may mention `MAN B&W LMC`, while the
-current deterministic catalog is centered on the `MAN B&W MC` family and its
-descendants. We need a narrow alias decision and regression coverage so that
-recruiter searches do not miss resumes that use the `LMC` spelling.
+deterministic catalog is centered on the `MAN B&W MC` family and its
+descendants. The alias decision is now closed: `MAN B&W LMC` normalizes to
+`man_b_w_mc`.
 
 ## Why this matters
 
 - `MAN B&W LMC` appears in real resume experience tables.
-- This is a sharp false-negative if the alias is real and intentionally
-  equivalent to the `MC` family in recruiter usage.
-- It should land as a focused patch, not be mixed into broader engine-layer
-  semantics work.
+- The alias now maps to the `MC` family in deterministic extraction.
+- The fix stayed focused and did not change broader engine-layer semantics.
 
 ## Scope
 
@@ -34,6 +35,13 @@ recruiter searches do not miss resumes that use the `LMC` spelling.
 - `MAN B&W LMC` normalizes deterministically to the chosen canonical node.
 - Existing `MAN B&W MC` behavior does not regress.
 - Recruiter-facing reason text stays humanized and does not leak canonical ids.
+
+## Verification
+
+- `test_engine_experience_extraction_normalizes_man_b_w_lmc_alias`
+- `test_extract_engine_details_handles_engine_map_regressions`
+- prompt-side case `has MAN B&W LMC engine experience` in
+  `test_engine_experience_slot_parser_handles_recruiter_variants`
 
 ## Likely files
 
