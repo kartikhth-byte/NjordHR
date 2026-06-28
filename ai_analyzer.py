@@ -46,6 +46,7 @@ from candidate_facts.aliases.coc_issue_authority import (
     load_coc_issue_authority_aliases,
     normalize_alias_key,
 )
+from candidate_facts.aliases.coc_country import load_coc_country_aliases
 from query_understanding.hard_filter_catalog import (
     UNAPPLIED_FAMILY_IDS,
     SUPPORTED_FAMILY_IDS,
@@ -1282,7 +1283,10 @@ class AIResumeAnalyzer:
         "rank_duration_experience",
     }
     COC_COUNTRY_CONFIDENCE_THRESHOLD = 0.85
+    _COC_COUNTRY_ALIASES = None
+    _COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
     _COC_ISSUE_AUTHORITY_ALIASES = None
+    _COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
     RANK_ALIAS_TABLE = {
         "master": {
             "canonical_id": "master",
@@ -2513,7 +2517,21 @@ class AIResumeAnalyzer:
     def _normalize_coc_country(self, value):
         return self._normalize_alias(value, self._coc_country_aliases())
 
-    def _coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
+    def _coc_country_alias_source(self):
+        source = str(os.getenv("COC_COUNTRY_ALIAS_SOURCE", "json") or "json").strip().lower()
+        return "inline" if source == "inline" else "json"
+
+    def _json_coc_country_aliases(self):
+        if self.__class__._COC_COUNTRY_ALIASES is None:
+            self.__class__._COC_COUNTRY_ALIASES = load_coc_country_aliases()
+        return self.__class__._COC_COUNTRY_ALIASES
+
+    def _log_coc_country_alias_source_once(self, source):
+        if not self.__class__._COC_COUNTRY_ALIAS_SOURCE_LOGGED:
+            print(f"[CONFIG] CoC country alias source: {source}")
+            self.__class__._COC_COUNTRY_ALIAS_SOURCE_LOGGED = True
+
+    def _inline_coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
         aliases = {
             "india": "india",
             "indian": "india",
@@ -2691,11 +2709,26 @@ class AIResumeAnalyzer:
             aliases.pop("u s", None)
         return aliases
 
+    def _coc_country_aliases(self, *, include_ambiguous_shortcuts=True):
+        source = self._coc_country_alias_source()
+        self._log_coc_country_alias_source_once(source)
+        if source == "inline":
+            return self._inline_coc_country_aliases(include_ambiguous_shortcuts=include_ambiguous_shortcuts)
+        aliases = self._json_coc_country_aliases()
+        if include_ambiguous_shortcuts:
+            return dict(aliases.alias_map)
+        return dict(aliases.alias_map_without_ambiguous_shortcuts)
+
     def _coc_issue_authority_aliases(self):
-        if self.__class__._COC_ISSUE_AUTHORITY_ALIASES is None:
+        source = self._coc_country_alias_source()
+        if (
+            self.__class__._COC_ISSUE_AUTHORITY_ALIASES is None
+            or self.__class__._COC_ISSUE_AUTHORITY_ALIAS_SOURCE != source
+        ):
             self.__class__._COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
                 country_aliases=self._coc_country_aliases(include_ambiguous_shortcuts=False)
             )
+            self.__class__._COC_ISSUE_AUTHORITY_ALIAS_SOURCE = source
         return self.__class__._COC_ISSUE_AUTHORITY_ALIASES
 
     def _coc_issue_authority_alias_map(self):
@@ -2710,6 +2743,12 @@ class AIResumeAnalyzer:
 
     def _coc_country_display_label(self, country):
         normalized = str(country or "").strip().lower()
+        source = self._coc_country_alias_source()
+        self._log_coc_country_alias_source_once(source)
+        if source != "inline":
+            label = self._json_coc_country_aliases().display_labels.get(normalized)
+            if label:
+                return label
         special = {
             "uae": "UAE",
             "uk": "UK",

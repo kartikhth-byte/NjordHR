@@ -42,6 +42,7 @@ from repositories.supabase_candidate_event_repo import resolve_supabase_api_key
 from runtime_env import config_value, normalize_env_value, normalized_url
 from ai_analyzer import Analyzer, engine_family_option_catalog, rank_option_catalog
 from candidate_facts.aliases.coc_issue_authority import load_coc_issue_authority_aliases, normalize_alias_key
+from candidate_facts.aliases.coc_country import load_coc_country_aliases
 from candidate_facts.present_rank_index import PresentRankIndex
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
@@ -283,9 +284,31 @@ class CocIssueAuthorityFilterInvalid(ValueError):
 
 
 _COC_ISSUE_AUTHORITY_ALIASES = None
+_COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
+_COC_COUNTRY_ALIASES = None
+_COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
 
 
-def _coc_issue_authority_country_aliases():
+def _coc_country_alias_source():
+    source = str(os.getenv("COC_COUNTRY_ALIAS_SOURCE", "json") or "json").strip().lower()
+    return "inline" if source == "inline" else "json"
+
+
+def _log_coc_country_alias_source_once(source):
+    global _COC_COUNTRY_ALIAS_SOURCE_LOGGED
+    if not _COC_COUNTRY_ALIAS_SOURCE_LOGGED:
+        print(f"[CONFIG] CoC country alias source: {source}")
+        _COC_COUNTRY_ALIAS_SOURCE_LOGGED = True
+
+
+def _load_coc_country_aliases():
+    global _COC_COUNTRY_ALIASES
+    if _COC_COUNTRY_ALIASES is None:
+        _COC_COUNTRY_ALIASES = load_coc_country_aliases()
+    return _COC_COUNTRY_ALIASES
+
+
+def _inline_coc_issue_authority_country_aliases():
     aliases = {
         "india": "india",
         "indian": "india",
@@ -357,12 +380,22 @@ def _coc_issue_authority_country_aliases():
     return {normalize_alias_key(alias): canonical for alias, canonical in aliases.items()}
 
 
+def _coc_issue_authority_country_aliases():
+    source = _coc_country_alias_source()
+    _log_coc_country_alias_source_once(source)
+    if source == "inline":
+        return _inline_coc_issue_authority_country_aliases()
+    return dict(_load_coc_country_aliases().authority_country_alias_map)
+
+
 def _load_coc_issue_authority_aliases():
-    global _COC_ISSUE_AUTHORITY_ALIASES
-    if _COC_ISSUE_AUTHORITY_ALIASES is None:
+    global _COC_ISSUE_AUTHORITY_ALIASES, _COC_ISSUE_AUTHORITY_ALIAS_SOURCE
+    source = _coc_country_alias_source()
+    if _COC_ISSUE_AUTHORITY_ALIASES is None or _COC_ISSUE_AUTHORITY_ALIAS_SOURCE != source:
         _COC_ISSUE_AUTHORITY_ALIASES = load_coc_issue_authority_aliases(
             country_aliases=_coc_issue_authority_country_aliases()
         )
+        _COC_ISSUE_AUTHORITY_ALIAS_SOURCE = source
     return _COC_ISSUE_AUTHORITY_ALIASES
 
 
@@ -1120,7 +1153,7 @@ def _candidate_facts_review_capture_callback(candidate_facts, capture_context):
 
 
 def _refresh_runtime_managers():
-    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index
+    global app_settings, config, creds, settings, feature_flags, csv_manager, search_scope_repo, VERIFIED_RESUMES_DIR, candidate_facts_repo, present_rank_index, _COC_COUNTRY_ALIASES, _COC_ISSUE_AUTHORITY_ALIASES, _COC_ISSUE_AUTHORITY_ALIAS_SOURCE, _COC_COUNTRY_ALIAS_SOURCE_LOGGED
     app_settings = load_app_settings()
     config = app_settings.config
     creds = app_settings.credentials
@@ -1149,7 +1182,15 @@ def _refresh_runtime_managers():
     with present_rank_index_rebuild_lock:
         candidate_facts_repo = None
         present_rank_index = PresentRankIndex()
+    _COC_COUNTRY_ALIASES = None
+    _COC_ISSUE_AUTHORITY_ALIASES = None
+    _COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
+    _COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
     try:
+        Analyzer._COC_COUNTRY_ALIASES = None
+        Analyzer._COC_ISSUE_AUTHORITY_ALIASES = None
+        Analyzer._COC_ISSUE_AUTHORITY_ALIAS_SOURCE = None
+        Analyzer._COC_COUNTRY_ALIAS_SOURCE_LOGGED = False
         Analyzer._instance = None
     except Exception:
         pass
