@@ -336,9 +336,11 @@ Suggested overlap:
   - `_agent_setting_int` rejects boolean payloads from local-agent settings instead of coercing them through `int(bool)`
   - integer `0` remains a valid returned poll interval
   - regression coverage pins both `True` / `False` rejection and `0` preservation in `tests/test_settings_precedence.py`
-- `P2` Clean debug payload hygiene for logical-group aggregation:
-  - `_combine_any_of_item_results` should not leak oversized internal detail into `actual_value`
-  - keep recruiter-facing reason text and debug/audit payloads intentionally separate
+- `P2` Logical-group debug payload hygiene follow-up is closed:
+  - `_combine_any_of_item_results` stores redacted child summaries in `actual_value` instead of full nested raw child results
+  - recruiter-facing reason text remains separate from debug/audit payload shape
+  - regression coverage pins PASS, FAIL, and UNKNOWN paths in `tests/test_ai_analyzer_hard_filter_rules.py`
+  - consuming hard-filter redaction coverage is pinned in `tests/test_ai_analyzer_ship_type_filters.py`
 
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).
