@@ -84,6 +84,8 @@ Resume-derived relative values anchor to `availability_extracted_on_date`:
 - `notice period N days` resolves to `availability_extracted_on_date + N`.
 - future `sign-off date` evidence resolves against `availability_extracted_on_date`.
 
+Resume-derived relative anchors do not advance on metadata-only refreshes.
+
 Search-derived relative values anchor to server search-submission time:
 
 - UI `within N days`
@@ -258,6 +260,8 @@ Result: PASS
 
 ### Available within N days
 
+UNKNOWN when `extraction_state != PARSED`.
+
 Resolve:
 
 ```text
@@ -328,7 +332,9 @@ Default for PR-2 is `legacy`.
 
 `v1` enables the new extraction path.
 
-PR-2 can dual-write v1 facts for audit, but live search behavior remains legacy until the cutover PR.
+PR-2 dual-writes v1 facts only to the existing analyzer-internal audit log.
+
+PR-2 does not add CSV columns, payload fields, telemetry fields, search context fields, or durable audit-event fields.
 
 ## Structured picker propagation
 
