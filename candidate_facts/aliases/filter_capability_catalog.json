@@ -1,0 +1,114 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-06-29",
+  "families": [
+    {
+      "family": "availability",
+      "purpose": "Match recruiter availability requirements against candidate availability windows extracted from resumes.",
+      "accepted_phrases": [
+        "available immediately",
+        "available by 15 Apr 2026",
+        "available from 1 Sep 2026",
+        "available within 30 days",
+        "available between 1 Apr 2026 and 1 May 2026"
+      ],
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "value_type",
+          "status",
+          "available_by_date",
+          "available_from_date",
+          "available_until_date",
+          "relative_days",
+          "resolved_reference_date",
+          "display_value"
+        ],
+        "properties": {
+          "version": {"const": "v1"},
+          "value_type": {"enum": ["status", "by_date", "from_date", "relative_days", "window"]},
+          "status": {"enum": ["immediate", null]},
+          "available_by_date": {"type": ["string", "null"]},
+          "available_from_date": {"type": ["string", "null"]},
+          "available_until_date": {"type": ["string", "null"]},
+          "relative_days": {"type": ["integer", "null"]},
+          "resolved_reference_date": {"type": ["string", "null"]},
+          "display_value": {"type": "string"}
+        },
+        "oneOf": [
+          {
+            "required": ["value_type", "status"],
+            "properties": {
+              "value_type": {"const": "status"},
+              "status": {"const": "immediate"},
+              "available_by_date": {"const": null},
+              "available_from_date": {"const": null},
+              "available_until_date": {"const": null},
+              "relative_days": {"const": null}
+            }
+          },
+          {
+            "required": ["value_type", "available_by_date"],
+            "properties": {
+              "value_type": {"const": "by_date"},
+              "status": {"const": null},
+              "available_by_date": {"type": "string"},
+              "available_from_date": {"const": null},
+              "available_until_date": {"const": null},
+              "relative_days": {"const": null}
+            }
+          },
+          {
+            "required": ["value_type", "available_from_date"],
+            "properties": {
+              "value_type": {"const": "from_date"},
+              "status": {"const": null},
+              "available_by_date": {"const": null},
+              "available_from_date": {"type": "string"},
+              "available_until_date": {"const": null},
+              "relative_days": {"const": null}
+            }
+          },
+          {
+            "required": ["value_type", "relative_days"],
+            "properties": {
+              "value_type": {"const": "relative_days"},
+              "status": {"const": null},
+              "available_by_date": {"const": null},
+              "available_from_date": {"const": null},
+              "available_until_date": {"const": null},
+              "relative_days": {"type": "integer"}
+            }
+          },
+          {
+            "required": ["value_type", "available_from_date", "available_until_date"],
+            "properties": {
+              "value_type": {"const": "window"},
+              "status": {"const": null},
+              "available_by_date": {"const": null},
+              "available_from_date": {"type": "string"},
+              "available_until_date": {"type": "string"},
+              "relative_days": {"const": null}
+            }
+          }
+        ]
+      },
+      "do_not_use_for": [
+        "candidate salary expectations",
+        "day-of-week availability",
+        "contract length requirements",
+        "ambiguous locale-specific date phrases",
+        "travel or recovery offsets after sign-off",
+        "combined availability plus ship-type clauses",
+        "contradictory availability instructions",
+        "availability mixed with day-of-week constraints"
+      ],
+      "plausibility_bounds": {
+        "relative_days": {"min": 0, "max": 365}
+      },
+      "executor_id": "availability"
+    }
+  ]
+}
