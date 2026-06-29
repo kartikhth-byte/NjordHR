@@ -4728,6 +4728,7 @@ class AIResumeAnalyzer:
         allow_logical_groups=True,
         suppress_prompt_rank=False,
         suppress_prompt_coc_issue_authority=False,
+        suppress_prompt_availability=False,
     ):
         constraints = {
             "rank": str(rank or "").strip(),
@@ -4896,8 +4897,17 @@ class AIResumeAnalyzer:
 
         availability_constraint = self._extract_availability_constraint(user_prompt)
         if availability_constraint:
-            constraints["hard_constraints"]["availability"] = availability_constraint
-            constraints["applied_constraints"].append("availability")
+            if not suppress_prompt_availability:
+                constraints["hard_constraints"]["availability"] = availability_constraint
+                constraints["applied_constraints"].append("availability")
+            else:
+                self._apply_picker_with_prompt_suppression(
+                    constraints,
+                    family="availability",
+                    hard_constraint_key="availability",
+                    prompt_constraint=availability_constraint,
+                    prompt_suppressed_by_picker=True,
+                )
 
         endorsement_constraint = self._extract_endorsement_constraint(user_prompt)
         if endorsement_constraint:
@@ -13932,6 +13942,7 @@ Examples of GOOD responses:
         vessel_tonnage_filter=None,
         age_filter=None,
         coc_issue_authority_filter=None,
+        availability_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -13998,6 +14009,10 @@ Examples of GOOD responses:
                 suppress_prompt_coc_issue_authority=(
                     isinstance(coc_issue_authority_filter, dict)
                     and bool(coc_issue_authority_filter.get("authorities"))
+                ),
+                suppress_prompt_availability=(
+                    isinstance(availability_filter, dict)
+                    and bool(availability_filter.get("value_type"))
                 ),
             )
             present_rank_value = str(present_rank or "").strip()
@@ -14090,6 +14105,13 @@ Examples of GOOD responses:
                 }
                 if "age_range" not in job_constraints.setdefault("applied_constraints", []):
                     job_constraints["applied_constraints"].append("age_range")
+            if isinstance(availability_filter, dict) and availability_filter.get("value_type"):
+                self._apply_picker_with_prompt_suppression(
+                    job_constraints,
+                    family="availability",
+                    hard_constraint_key="availability",
+                    picker_constraint=dict(availability_filter),
+                )
             # End direct-write picker families without same-family prompt suppression.
             if isinstance(coc_issue_authority_filter, dict) and coc_issue_authority_filter.get("authorities"):
                 authorities = list(dict.fromkeys(
@@ -14136,6 +14158,7 @@ Examples of GOOD responses:
                 or bool(vessel_tonnage_filter)
                 or bool(age_filter)
                 or bool(coc_issue_authority_filter)
+                or bool(availability_filter)
                 or indexed_population_mode
             )
             structured_only_prompt = self._is_structured_only_prompt(
@@ -14717,6 +14740,7 @@ Examples of GOOD responses:
         vessel_tonnage_filter=None,
         age_filter=None,
         coc_issue_authority_filter=None,
+        availability_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14746,6 +14770,7 @@ Examples of GOOD responses:
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
             coc_issue_authority_filter=coc_issue_authority_filter,
+            availability_filter=availability_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -14855,6 +14880,7 @@ class Analyzer:
         vessel_tonnage_filter=None,
         age_filter=None,
         coc_issue_authority_filter=None,
+        availability_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14873,6 +14899,7 @@ class Analyzer:
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
             coc_issue_authority_filter=coc_issue_authority_filter,
+            availability_filter=availability_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,
@@ -14892,6 +14919,7 @@ class Analyzer:
         vessel_tonnage_filter=None,
         age_filter=None,
         coc_issue_authority_filter=None,
+        availability_filter=None,
         review_capture_callback=None,
         candidate_scope_ids=None,
         candidate_scope_memberships=None,
@@ -14910,6 +14938,7 @@ class Analyzer:
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
             coc_issue_authority_filter=coc_issue_authority_filter,
+            availability_filter=availability_filter,
             review_capture_callback=review_capture_callback,
             candidate_scope_ids=candidate_scope_ids,
             candidate_scope_memberships=candidate_scope_memberships,

@@ -373,6 +373,7 @@
                     vesselTonnageFilter: state?.vessel_tonnage_filter || {},
                     ageFilter: state?.age_filter || {},
                     cocIssueAuthorityFilter: state?.coc_issue_authority_filter || {},
+                    availabilityFilter: state?.availability_filter || {},
                     restoredChain,
                     restoredIndex,
                     restoredResults,
@@ -1484,6 +1485,11 @@
             const [vesselTonnageMax, setVesselTonnageMax] = useState('');
             const [vesselTonnageUnit, setVesselTonnageUnit] = useState('any');
             const [vesselTonnageYearsBack, setVesselTonnageYearsBack] = useState('');
+            const [availabilityMode, setAvailabilityMode] = useState('any');
+            const [availabilityByDate, setAvailabilityByDate] = useState('');
+            const [availabilityFromDate, setAvailabilityFromDate] = useState('');
+            const [availabilityUntilDate, setAvailabilityUntilDate] = useState('');
+            const [availabilityWithinDays, setAvailabilityWithinDays] = useState('');
             const [aiPrompt, setAiPrompt] = useState('');
             const [analysisResults, setAnalysisResults] = useState(null);
             const [isNeedsReviewCollapsed, setIsNeedsReviewCollapsed] = useState(false);
@@ -4869,6 +4875,94 @@
                 };
             };
 
+            const normalizeAvailabilityDaysInput = (value) => {
+                const text = String(value || '').trim();
+                if (!text) return null;
+                if (!/^\d+$/.test(text)) return NaN;
+                const parsed = Number.parseInt(text, 10);
+                return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 365 ? parsed : NaN;
+            };
+
+            const isIsoDateInput = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+
+            const buildAvailabilityFilter = () => {
+                const mode = String(availabilityMode || 'any');
+                if (mode === 'any') return { filter: {} };
+                const base = {
+                    type: 'availability',
+                    version: 'v1',
+                    value_type: mode,
+                    status: null,
+                    available_by_date: null,
+                    available_from_date: null,
+                    available_until_date: null,
+                    relative_days: null,
+                };
+                if (mode === 'status') {
+                    return {
+                        filter: {
+                            ...base,
+                            status: 'immediate',
+                            display_value: 'available immediately',
+                        },
+                    };
+                }
+                if (mode === 'by_date') {
+                    if (!isIsoDateInput(availabilityByDate)) {
+                        return { error: 'Availability by-date must be a valid date.' };
+                    }
+                    return {
+                        filter: {
+                            ...base,
+                            available_by_date: availabilityByDate,
+                            display_value: `available by ${availabilityByDate}`,
+                        },
+                    };
+                }
+                if (mode === 'from_date') {
+                    if (!isIsoDateInput(availabilityFromDate)) {
+                        return { error: 'Availability from-date must be a valid date.' };
+                    }
+                    return {
+                        filter: {
+                            ...base,
+                            available_from_date: availabilityFromDate,
+                            display_value: `available from ${availabilityFromDate}`,
+                        },
+                    };
+                }
+                if (mode === 'relative_days') {
+                    const days = normalizeAvailabilityDaysInput(availabilityWithinDays);
+                    if (Number.isNaN(days) || days === null) {
+                        return { error: 'Availability within-days must be a whole number from 0 to 365.' };
+                    }
+                    return {
+                        filter: {
+                            ...base,
+                            relative_days: days,
+                            display_value: `available within ${days} day${days === 1 ? '' : 's'}`,
+                        },
+                    };
+                }
+                if (mode === 'window') {
+                    if (!isIsoDateInput(availabilityFromDate) || !isIsoDateInput(availabilityUntilDate)) {
+                        return { error: 'Availability date window requires valid start and end dates.' };
+                    }
+                    if (availabilityFromDate > availabilityUntilDate) {
+                        return { error: 'Availability window start cannot be after the end date.' };
+                    }
+                    return {
+                        filter: {
+                            ...base,
+                            available_from_date: availabilityFromDate,
+                            available_until_date: availabilityUntilDate,
+                            display_value: `available between ${availabilityFromDate} and ${availabilityUntilDate}`,
+                        },
+                    };
+                }
+                return { error: 'Availability filter mode is not recognized.' };
+            };
+
             const vesselTonnageSummary = (filter = {}) => {
                 if (!filter || (filter.min_value == null && filter.max_value == null)) return 'Any';
                 const unitLabel = {
@@ -5171,6 +5265,17 @@
                         const cocAuthorityResult = buildCocIssueAuthorityFilter();
                         if (cocAuthorityResult.filter && Array.isArray(cocAuthorityResult.filter.authorities) && cocAuthorityResult.filter.authorities.length) {
                             params.set('coc_issue_authority_filter', JSON.stringify(cocAuthorityResult.filter));
+                        }
+                        const availabilityResult = buildAvailabilityFilter();
+                        if (availabilityResult.error) {
+                            preserveCompletedResultsAfterFailure();
+                            setAnalysisProgress(prev => ({ ...prev, isAnalyzing: false }));
+                            setIsAnalyzeLoading(false);
+                            handleSendMessage('error', availabilityResult.error);
+                            return;
+                        }
+                        if (availabilityResult.filter && availabilityResult.filter.value_type) {
+                            params.set('availability_filter', JSON.stringify(availabilityResult.filter));
                         }
                     }
                     const eventSource = new EventSource(`${getCloudApiBaseUrl()}/analyze_stream?${params.toString()}`);
@@ -5527,6 +5632,7 @@
                     age_filter: buildAgeFilter().filter || {},
                     vessel_tonnage_filter: buildVesselTonnageFilter().filter || {},
                     coc_issue_authority_filter: buildCocIssueAuthorityFilter().filter || {},
+                    availability_filter: buildAvailabilityFilter().filter || {},
                     refinement_state: refinementState,
                     active_search_step_index: activeSearchStepIndex,
                     current_completed_results: recoveryResults(analysisResultsRef.current),
@@ -5639,6 +5745,15 @@
                     setVesselTonnageYearsBack(
                         restored.vesselTonnageFilter?.years_back != null
                             ? String(restored.vesselTonnageFilter.years_back)
+                            : ''
+                    );
+                    setAvailabilityMode(restored.availabilityFilter?.value_type || 'any');
+                    setAvailabilityByDate(restored.availabilityFilter?.available_by_date || '');
+                    setAvailabilityFromDate(restored.availabilityFilter?.available_from_date || '');
+                    setAvailabilityUntilDate(restored.availabilityFilter?.available_until_date || '');
+                    setAvailabilityWithinDays(
+                        restored.availabilityFilter?.relative_days != null
+                            ? String(restored.availabilityFilter.relative_days)
                             : ''
                     );
                     setAnalysisResults(restored.restoredResults);
@@ -9070,6 +9185,92 @@
                                             </div>
                                             <p className="mt-1 text-xs text-gray-500">
                                                 Optional hard filter using extracted candidate age. Picker values override age wording in the prompt.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label htmlFor="availabilityMode" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Availability Filter {refinementMode && <span className="text-blue-700">· Locked</span>}
+                                            </label>
+                                            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                                                <div>
+                                                    <label htmlFor="availabilityMode" className="block text-xs font-medium text-gray-600">Mode</label>
+                                                    <select
+                                                        id="availabilityMode"
+                                                        value={availabilityMode}
+                                                        onChange={e => { setAvailabilityMode(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                        className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                        disabled={refinementMode}
+                                                    >
+                                                        <option value="any">Any availability</option>
+                                                        <option value="status">Available immediately</option>
+                                                        <option value="by_date">Available by date</option>
+                                                        <option value="from_date">Available from date</option>
+                                                        <option value="relative_days">Available within N days</option>
+                                                        <option value="window">Available between dates</option>
+                                                    </select>
+                                                </div>
+                                                {availabilityMode === 'by_date' && (
+                                                    <div>
+                                                        <label htmlFor="availabilityByDate" className="block text-xs font-medium text-gray-600">By date</label>
+                                                        <input
+                                                            id="availabilityByDate"
+                                                            type="date"
+                                                            value={availabilityByDate}
+                                                            onChange={e => { setAvailabilityByDate(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                            className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                            disabled={refinementMode}
+                                                        />
+                                                    </div>
+                                                )}
+                                                {(availabilityMode === 'from_date' || availabilityMode === 'window') && (
+                                                    <div>
+                                                        <label htmlFor="availabilityFromDate" className="block text-xs font-medium text-gray-600">
+                                                            {availabilityMode === 'window' ? 'Start date' : 'From date'}
+                                                        </label>
+                                                        <input
+                                                            id="availabilityFromDate"
+                                                            type="date"
+                                                            value={availabilityFromDate}
+                                                            onChange={e => { setAvailabilityFromDate(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                            className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                            disabled={refinementMode}
+                                                        />
+                                                    </div>
+                                                )}
+                                                {availabilityMode === 'window' && (
+                                                    <div>
+                                                        <label htmlFor="availabilityUntilDate" className="block text-xs font-medium text-gray-600">End date</label>
+                                                        <input
+                                                            id="availabilityUntilDate"
+                                                            type="date"
+                                                            value={availabilityUntilDate}
+                                                            onChange={e => { setAvailabilityUntilDate(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                            className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                            disabled={refinementMode}
+                                                        />
+                                                    </div>
+                                                )}
+                                                {availabilityMode === 'relative_days' && (
+                                                    <div>
+                                                        <label htmlFor="availabilityWithinDays" className="block text-xs font-medium text-gray-600">Days</label>
+                                                        <input
+                                                            id="availabilityWithinDays"
+                                                            type="number"
+                                                            inputMode="numeric"
+                                                            min="0"
+                                                            max="365"
+                                                            step="1"
+                                                            value={availabilityWithinDays}
+                                                            onChange={e => { setAvailabilityWithinDays(e.target.value); invalidateRefinementForFilterChange(); }}
+                                                            className="mt-1 w-full p-2 border border-gray-300 rounded-md shadow-sm disabled:bg-slate-100 disabled:text-slate-700"
+                                                            placeholder="30"
+                                                            disabled={refinementMode}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Uses extracted availability windows from resumes. Picker values override availability wording in the prompt.
                                             </p>
                                         </div>
                                         <div>

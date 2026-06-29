@@ -357,6 +357,18 @@ test("recovery restore clamps active index and preflights the latest refinable s
       minimum_years: 30,
       maximum_years: 50,
     },
+    availability_filter: {
+      type: "availability",
+      version: "v1",
+      value_type: "by_date",
+      status: null,
+      available_by_date: "2026-04-15",
+      available_from_date: null,
+      available_until_date: null,
+      relative_days: null,
+      resolved_reference_date: "2026-04-06",
+      display_value: "available by 2026-04-15",
+    },
     refinement_state: "active_running",
     active_search_step_index: 99,
     search_chain: [
@@ -388,6 +400,18 @@ test("recovery restore clamps active index and preflights the latest refinable s
     type: "age_range",
     minimum_years: 30,
     maximum_years: 50,
+  });
+  assert.deepEqual(restored.availabilityFilter, {
+    type: "availability",
+    version: "v1",
+    value_type: "by_date",
+    status: null,
+    available_by_date: "2026-04-15",
+    available_from_date: null,
+    available_until_date: null,
+    relative_days: null,
+    resolved_reference_date: "2026-04-06",
+    display_value: "available by 2026-04-15",
   });
 });
 
