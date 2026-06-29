@@ -2855,6 +2855,10 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["reason_code"], "AVAILABILITY_STALE")
+        self.assertEqual(
+            result["message"],
+            "Could not determine candidate availability reliably from the resume.",
+        )
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
     def test_availability_v1_rule_stale_immediate_phrase_variants_unknown(self):
@@ -2905,6 +2909,10 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["reason_code"], "AVAILABILITY_MISSING")
+        self.assertEqual(
+            result["message"],
+            "Could not determine candidate availability reliably from the resume.",
+        )
         self.assertNotIn("extraction_state", result["actual_value"])
 
     def test_availability_v1_wrong_version_falls_back_to_legacy_fields(self):
@@ -2976,6 +2984,10 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+        self.assertEqual(
+            result["message"],
+            "Could not determine candidate availability reliably from the resume.",
+        )
 
     def test_hard_filter_skips_availability_rule_when_not_in_applied_constraints(self):
         result = self.analyzer._evaluate_hard_filters(

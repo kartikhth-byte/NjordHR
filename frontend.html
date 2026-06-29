@@ -704,9 +704,30 @@
                 return '';
             };
 
+            const buildNeedsReviewAvailabilitySummary = (match) => {
+                const explicitSummary = String(match?.needs_review_availability_summary || '').trim();
+                if (explicitSummary) return explicitSummary;
+                const reasons = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const hasAvailabilityUnknown = reasons.some(item => isAvailabilityNeedsReviewReason(item));
+                return hasAvailabilityUnknown
+                    ? 'Could not determine candidate availability reliably from the resume.'
+                    : '';
+            };
+
             const isRankNeedsReviewReason = (item) => {
                 const code = String(item?.reason_code || '').trim().toUpperCase();
                 return code === 'RANK_UNKNOWN' || code === 'RANK_CONFIDENCE_LOW';
+            };
+
+            const isAvailabilityNeedsReviewReason = (item) => {
+                const code = String(item?.reason_code || '').trim().toUpperCase();
+                return [
+                    'AVAILABILITY_MISSING',
+                    'AVAILABILITY_STALE',
+                    'AVAILABILITY_CONFIDENCE_LOW',
+                    'AVAILABILITY_CONSTRAINT_UNSUPPORTED',
+                    'AVAILABILITY_RULE_REQUIRES_V2_FACTS',
+                ].includes(code);
             };
 
             const HARD_FILTER_REASON_PRESENTERS = [
@@ -1292,17 +1313,23 @@
                     ? rawMatch
                     : { ...rawMatch, reason: rawMatch?.ai_match_reason || '' };
                 const needsReviewRankSummary = buildNeedsReviewRankSummary(match);
-                const hardFilterReasonItems = (Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [])
-                    .filter(item => !(needsReviewRankSummary && isRankNeedsReviewReason(item)));
-                const rawHardFilterLines = hardFilterReasonItems
+                const needsReviewAvailabilitySummary = buildNeedsReviewAvailabilitySummary(match);
+                const allHardFilterReasonItems = Array.isArray(match?.hard_filter_reasons) ? match.hard_filter_reasons : [];
+                const hardFilterReasonItems = allHardFilterReasonItems
+                    .filter(item => !(needsReviewRankSummary && isRankNeedsReviewReason(item)))
+                    .filter(item => !(needsReviewAvailabilitySummary && isAvailabilityNeedsReviewReason(item)));
+                const rawHardFilterLines = allHardFilterReasonItems
                     .map(item => String(item?.message || '').trim())
+                    .filter(Boolean);
+                const allPresentedHardFilterLines = allHardFilterReasonItems
+                    .map(getHardFilterReasonPresentation)
                     .filter(Boolean);
                 const presentedHardFilterLines = hardFilterReasonItems
                     .map(getHardFilterReasonPresentation)
                     .filter(Boolean);
                 const hardFilterLineKeys = new Set([
                     ...rawHardFilterLines.map(normalizeReasonDisplayLine),
-                    ...presentedHardFilterLines.map(entry => normalizeReasonDisplayLine(entry.line)),
+                    ...allPresentedHardFilterLines.map(entry => normalizeReasonDisplayLine(entry.line)),
                 ]);
                 const primaryReasonLines = splitReasonIntoDisplayLines(match?.reason).filter(line => {
                     const normalized = normalizeReasonDisplayLine(line);
@@ -1346,6 +1373,7 @@
                 humanizeReasonCode,
                 formatUnknownReasonType,
                 buildNeedsReviewRankSummary,
+                buildNeedsReviewAvailabilitySummary,
                 formatEngineFamilyLabel,
                 formatShipFamilyLabel,
                 summarizeExperienceFilter,
@@ -5591,6 +5619,7 @@
                     ? card.evidence_review_badges
                     : (Array.isArray(card?.evidence_review_reasons) ? card.evidence_review_reasons : []),
                 needs_review_rank_summary: String(card?.needs_review_rank_summary || '').slice(0, 160),
+                needs_review_availability_summary: String(card?.needs_review_availability_summary || '').slice(0, 180),
                 detail_available_after_recovery: false,
             });
 
@@ -9463,6 +9492,9 @@
                                                                     {reasonFormatting.buildNeedsReviewRankSummary(m) && (
                                                                         <p className="ml-3 text-slate-500">{reasonFormatting.buildNeedsReviewRankSummary(m)}</p>
                                                                     )}
+                                                                    {reasonFormatting.buildNeedsReviewAvailabilitySummary(m) && (
+                                                                        <p className="ml-3 text-slate-500">{reasonFormatting.buildNeedsReviewAvailabilitySummary(m)}</p>
+                                                                    )}
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -9706,6 +9738,11 @@
                                                                                 {reasonFormatting.buildNeedsReviewRankSummary(match) && (
                                                                                     <p className="mt-1 text-sm text-slate-700">
                                                                                         {reasonFormatting.buildNeedsReviewRankSummary(match)}
+                                                                                    </p>
+                                                                                )}
+                                                                                {reasonFormatting.buildNeedsReviewAvailabilitySummary(match) && (
+                                                                                    <p className="mt-1 text-sm text-slate-700">
+                                                                                        {reasonFormatting.buildNeedsReviewAvailabilitySummary(match)}
                                                                                     </p>
                                                                                 )}
                                                                                 <div className="mt-1">{renderFormattedReasonBlock(match)}</div>

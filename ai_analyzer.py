@@ -10702,7 +10702,7 @@ class AIResumeAnalyzer:
                 reason_code = "AVAILABILITY_STALE" if extraction_state == "STALE" else "AVAILABILITY_MISSING"
                 return _unknown_result(
                     reason_code,
-                    "Could not determine candidate availability evidence reliably.",
+                    "Could not determine candidate availability reliably from the resume.",
                     availability_date,
                     availability_end_date,
                 )
@@ -10851,7 +10851,7 @@ class AIResumeAnalyzer:
             return self._base_rule_result(
                 "UNKNOWN",
                 "AVAILABILITY_MISSING",
-                "Could not determine candidate availability evidence reliably.",
+                "Could not determine candidate availability reliably from the resume.",
                 actual_value={
                     "availability_date": str(availability_date_raw) if availability_date_raw else None,
                     "availability_end_date": str(availability_end_raw) if availability_end_raw else None,
@@ -14525,6 +14525,18 @@ Examples of GOOD responses:
                         for result in hard_filter_result["results"]
                     ):
                         needs_review_rank_summary = "Could not determine current/present rank from this resume."
+                    needs_review_availability_summary = ""
+                    if any(
+                        str(result.get("reason_code") or "").strip().upper() in {
+                            "AVAILABILITY_MISSING",
+                            "AVAILABILITY_STALE",
+                            "AVAILABILITY_CONFIDENCE_LOW",
+                            "AVAILABILITY_CONSTRAINT_UNSUPPORTED",
+                            "AVAILABILITY_RULE_REQUIRES_V2_FACTS",
+                        }
+                        for result in hard_filter_result["results"]
+                    ):
+                        needs_review_availability_summary = "Could not determine candidate availability reliably from the resume."
                     unknown_match = {
                         "resume_id": candidate_scope_metadata.get("resume_id") or resume_id,
                         "candidate_scope_id": candidate_scope_metadata.get("candidate_scope_id", ""),
@@ -14539,6 +14551,7 @@ Examples of GOOD responses:
                         "unknown_reason_types": unknown_reason_types,
                         "result_bucket": "needs_review",
                         "needs_review_rank_summary": needs_review_rank_summary,
+                        "needs_review_availability_summary": needs_review_availability_summary,
                         "computed_age": age_value,
                         "dob": dob_value.isoformat() if dob_value else None,
                         "applied_ship_types": applied_ship_types,
