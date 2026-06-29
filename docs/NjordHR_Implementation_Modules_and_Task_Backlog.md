@@ -345,7 +345,7 @@ Suggested overlap:
 - `P1` Shadow-LLM rescue promotion copy is clarified:
   - `LLM_Promotion_Stage` applies only to the five eval-cleared rescue families: `certificate_requirement`, `rank_match`, `stcw_basic`, `us_visa`, and `age_range`
   - remaining shadow-LLM normalization families are still pending separate evidence runs and promotion PRs
-  - compound-prompt normalizer contract is locked in `docs/specs/shadow_llm_compound_prompt_normalizer_v1.md`; v1 starts with `vessel_tonnage` in shadow mode only
+  - compound-prompt normalizer contract is locked in `docs/specs/shadow_llm_compound_prompt_normalizer_v1.md`; v1 starts with `vessel_tonnage` in shadow mode only, then backfills the five eval-cleared rescue families one by one before future active families
 
 ### 6.2 P0 (Start immediately)
 - `M0-T2` Define feature flags (`USE_SUPABASE_DB`, `USE_LOCAL_AGENT`, `USE_CLOUD_EXPORT`).

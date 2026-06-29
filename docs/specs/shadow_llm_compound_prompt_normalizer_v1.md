@@ -359,6 +359,63 @@ The catalog ships with exactly one family in v1.
 
 No other families are enumerated in v1. Additional families enter via their own per-family PRs following the rollout below.
 
+## Family rollout and backfill inventory
+
+This spec starts with `vessel_tonnage` because it has a bounded numeric schema
+and is not already live through the legacy rescue path. After `vessel_tonnage`
+completes the harness, evidence, and promotion sequence, remaining families
+enter the compound-prompt normalizer one at a time.
+
+### Current v1 family
+
+- `vessel_tonnage` — first catalog row and first shadow/evidence/promotion
+  target for this normalizer.
+
+### Already-promoted rescue families to backfill
+
+These five families are already live through the existing
+`LLM_Promotion_Stage` rescue path. The compound-prompt normalizer does not
+replace that path in PR-2 or PR-3. Each family enters this normalizer through a
+separate backfill PR that adds its catalog row, proves `query_plan.v1` schema
+parity against the existing promoted rescue output, and verifies live behavior
+remains unchanged until an explicit cutover/promotion PR says otherwise.
+
+- `certificate_requirement`
+- `rank_match`
+- `stcw_basic`
+- `us_visa`
+- `age_range`
+
+### Future active families
+
+The remaining active hard-filter families enter through later per-family PRs.
+Each PR adds exactly one catalog row, evidence corpus, and promotion/backfill
+decision.
+
+- `coc_document_gate`
+- `coc_country_match`
+- `coc_issue_authority_match`
+- `coc_grade_match`
+- `passport_validity`
+- `recent_contract_vessel_experience`
+- `engine_experience`
+- `engine_vessel_experience`
+- `company_continuity`
+- `recency`
+- `rank_duration_experience`
+- `stcw_endorsement`
+- `rank_certificate_expectation`
+- `experience_ship_type`
+- `availability`
+
+### Unsupported / unapplied families
+
+These families stay out of the v1 catalog until a separate design explicitly
+promotes them from unsupported/unapplied status.
+
+- `min_sea_service`
+- `vessel_type`
+
 ## Promotion gate
 
 A family promotes from shadow to live only via a dedicated promotion PR. Plain "agreement against the deterministic baseline" is insufficient because the LLM normalizer is justified partly by cases the deterministic parser misses. The evidence ledger must therefore split metrics across three case classes:
