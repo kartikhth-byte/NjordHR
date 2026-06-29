@@ -185,6 +185,20 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(immediate["availability_date"], self.reference_date)
         self.assertEqual(immediate["extraction_state"], "PARSED")
 
+        immediate_phrases = [
+            "Immediately available",
+            "Ready to join",
+            "Join ASAP",
+        ]
+        for phrase in immediate_phrases:
+            with self.subTest(phrase=phrase):
+                phrase_fact = self.analyzer._extract_availability_fact_v1_from_text(
+                    phrase,
+                    availability_extracted_on_date=self.reference_date,
+                )
+                self.assertEqual(phrase_fact["availability_date"], self.reference_date)
+                self.assertEqual(phrase_fact["extraction_state"], "PARSED")
+
         notice = self.analyzer._extract_availability_fact_v1_from_text(
             "Notice period: 30 days",
             availability_extracted_on_date=self.reference_date,
@@ -225,6 +239,21 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["availability_date"], None)
         self.assertEqual(fact["extraction_state"], "AMBIGUOUS_NUMERIC")
 
+    def test_availability_v1_disambiguates_numeric_when_one_position_over_12(self):
+        day_first = self.analyzer._extract_availability_fact_v1_from_text(
+            "Available from 13/04/2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(day_first["availability_date"], date(2026, 4, 13))
+        self.assertEqual(day_first["extraction_state"], "PARSED")
+
+        month_first = self.analyzer._extract_availability_fact_v1_from_text(
+            "Available from 04/13/2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(month_first["availability_date"], date(2026, 4, 13))
+        self.assertEqual(month_first["extraction_state"], "PARSED")
+
     def test_availability_v1_marks_non_overlapping_sources_contradictory(self):
         fact = self.analyzer._extract_availability_fact_v1_from_text(
             "Availability Details From date - Till date 01-Jan-2026 - 01-Mar-2026 "
@@ -233,6 +262,18 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         )
         self.assertEqual(fact["extraction_state"], "CONTRADICTORY")
         self.assertIsNone(fact["availability_date"])
+
+    def test_availability_v1_compatible_lower_precedence_is_dropped(self):
+        extracted_on = date(2025, 12, 15)
+        fact = self.analyzer._extract_availability_fact_v1_from_text(
+            "Availability Details From date - Till date 01-Jan-2026 - 01-Mar-2026 "
+            "Notice period: 30 days",
+            availability_extracted_on_date=extracted_on,
+        )
+        self.assertEqual(fact["availability_date"], date(2026, 1, 1))
+        self.assertEqual(fact["availability_end_date"], date(2026, 3, 1))
+        self.assertEqual(fact["availability_source_label"], "availability_details")
+        self.assertEqual(fact["extraction_state"], "PARSED")
 
     def test_logistics_v1_dual_write_is_opt_in_and_keeps_legacy_fields(self):
         raw_text = (
