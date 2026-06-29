@@ -331,6 +331,7 @@ No separate `_SHADOW_ONLY` env var exists; the tri-state subsumes it.
 - The wire format is `query_plan.v1`. Catalog rows are versioned independently via the catalog's `version` field.
 - Adding a new family is a minor catalog bump, not a wire-format bump.
 - Adding a new field to an existing family's `parameters` object is a minor catalog bump if optional, a major bump if required.
+- Tightening `plausibility_bounds` on an existing field is a major catalog bump because it can move previously accepted constraints to `needs_review`. Widening `plausibility_bounds` is a minor catalog bump.
 - Changing the four-channel structure (adding `ranking_weights`, removing `soft_signals`, etc.) is a wire-format bump to `v2` and follows the migration discipline of `coc_country_alias_migration_v1.md`: PR-1 dual-write, PR-2 runtime switch with kill switch, PR-3 removal.
 
 ## Initial family enumeration (v1)
@@ -380,6 +381,14 @@ separate backfill PR that adds its catalog row, proves `query_plan.v1` schema
 parity against the existing promoted rescue output, and verifies live behavior
 remains unchanged until an explicit cutover/promotion PR says otherwise.
 
+A backfill PR adds the family to `CAPABILITY_REGISTRY` and records its
+`parsed_payload` for parity against the existing rescue-path output, with the
+rescue path continuing to drive live behavior. A cutover PR adds the family to
+`PROMOTED_FAMILIES` and routes dispatch through the compound-prompt normalizer.
+A later removal PR retires the rescue-path code for that family after the
+cutover is verified, mirroring the PR-2 to PR-3 discipline used by
+`coc_country_alias_migration_v1.md`.
+
 - `certificate_requirement`
 - `rank_match`
 - `stcw_basic`
@@ -413,6 +422,11 @@ decision.
 These families stay out of the v1 catalog until a separate design explicitly
 promotes them from unsupported/unapplied status.
 
+The analyzer currently classifies these families as `unapplied_constraints`;
+no deterministic evaluator exists for them. Moving either family into the
+compound-prompt normalizer first requires defining the evaluator and
+deterministic baseline, which is out of scope for v1.
+
 - `min_sea_service`
 - `vessel_type`
 
@@ -427,7 +441,7 @@ A family promotes from shadow to live only via a dedicated promotion PR. Plain "
 
 **Class B — deterministic-missed cases.** Prompts the deterministic parser misses today, with human-labeled ground truth.
 
-- LLM correct-classification rate must clear an explicit threshold (recommend at least 70%, set per family in the promotion PR).
+- LLM correct-classification rate must clear an explicit threshold (default floor 70%, overridden per family in the promotion PR).
 - The promotion PR must show measurable recall lift over the deterministic baseline on this class. Zero lift, or negative lift, blocks promotion.
 
 **Class C — adversarial / out-of-scope cases.** Prompts deliberately phrased to mislead (ambiguous, contradictory, off-topic).
@@ -445,6 +459,10 @@ Across all classes:
 The corpus is append-only. Once a case enters the ledger, it stays. Regressions are annotated, not deleted.
 
 Promotion is binary: a family is in `PROMOTED_FAMILIES` or it is not. No partial promotion.
+
+An empty `constraints` array with non-empty `unapplied` or `needs_review` is
+not a shadow-mode failure. The deterministic parser still drives live behavior
+for that prompt.
 
 ## Rollout slices
 
@@ -486,6 +504,9 @@ PR-2, PR-3, and any promotion PR must each independently verify:
 ## Open items (not blocking spec lock)
 
 - Where the eval corpus lives and how it is owned. Recommend a separate `eval/` spec.
+- Where `model_id` is pinned (spec-level constant, PR-2 config, or env var) is deferred to PR-2.
+- LLM call failure modes (timeout, transport error, structured-output parse failure) and per-mode fallback behavior are deferred to PR-2.
+- Mixed-language prompts, right-to-left text, and context-window-overflow behavior are deferred to a later normalizer robustness spec.
 - Whether LangSmith or an equivalent trace store is adopted for the audit ledger. Requires a privacy review separate from this spec.
 - Whether `soft_signals` ever wire to a ranking layer. v1 ignores them at dispatch; future work owns the question.
 - Whether multi-turn refinement is supported. v1 is single-call only; refinement is a separate spec.
