@@ -8237,8 +8237,19 @@ class AIResumeAnalyzer:
 
     @staticmethod
     def _availability_extraction_mode():
-        raw = str(os.getenv(_AVAILABILITY_EXTRACTION_MODE_ENV, "legacy") or "legacy").strip().lower()
+        raw = str(os.getenv(_AVAILABILITY_EXTRACTION_MODE_ENV, "v1") or "v1").strip().lower()
         return "v1" if raw == "v1" else "legacy"
+
+    @staticmethod
+    def _serialize_availability_v1_fact(fact):
+        if not isinstance(fact, dict):
+            return None
+        serialized = dict(fact)
+        for key in ("availability_date", "availability_end_date", "availability_extracted_on_date"):
+            value = serialized.get(key)
+            if isinstance(value, date):
+                serialized[key] = value.isoformat()
+        return serialized
 
     def _availability_v1_empty_fact(self, extracted_on_date, state="MISSING", source_label=None, source_text=""):
         return {
@@ -9765,6 +9776,7 @@ class AIResumeAnalyzer:
                 "availability_date": logistics_fact.get("availability_date").isoformat() if logistics_fact.get("availability_date") else None,
                 "availability_end_date": logistics_fact.get("availability_end_date").isoformat() if logistics_fact.get("availability_end_date") else None,
                 "availability_status": logistics_fact.get("availability_status"),
+                "availability_v1": self._serialize_availability_v1_fact(logistics_fact.get("availability_v1_fact")),
                 "salary_expectation_usd": None,
             },
             "personal": {
@@ -10600,9 +10612,202 @@ class AIResumeAnalyzer:
 
     def _evaluate_availability_rule(self, candidate_facts, constraint, reference_date=None):
         logistics = candidate_facts.get("logistics") or {}
-        confidence = ((candidate_facts.get("fact_meta") or {}).get("logistics.availability_date") or {}).get("confidence")
         value_type = (constraint or {}).get("value_type")
         today = reference_date or date.today()
+        v1_fact = logistics.get("availability_v1") if isinstance(logistics.get("availability_v1"), dict) else None
+
+        def _parse_availability_date(value):
+            if isinstance(value, date):
+                return value
+            if value:
+                try:
+                    return date.fromisoformat(str(value))
+                except Exception:
+                    return None
+            return None
+
+        def _actual_value(start_date, end_date, extra=None):
+            value = {
+                "availability_date": start_date.isoformat() if isinstance(start_date, date) else None,
+                "availability_end_date": end_date.isoformat() if isinstance(end_date, date) else None,
+            }
+            if extra:
+                value.update(extra)
+            return value
+
+        def _constraint_target_date(*keys):
+            for key in keys:
+                requested_date = (constraint or {}).get(key)
+                if requested_date:
+                    parsed = _parse_availability_date(requested_date)
+                    if parsed:
+                        return parsed
+            return None
+
+        def _legacy_constraint_kind():
+            if value_type == "status" and (constraint or {}).get("status") in {"immediately", "immediate"}:
+                return "status"
+            if value_type == "relative_phrase":
+                return "relative_phrase"
+            if value_type in {"by_date", "from_date", "relative_days", "window"}:
+                return value_type
+            if value_type == "date":
+                display_value = str((constraint or {}).get("display_value") or "").strip().lower()
+                if re.search(r"\b(?:available\s+by|join\s+by|join\s+next\s+month|available\s+next\s+month)\b", display_value):
+                    return "by_date"
+                return "from_date"
+            return value_type
+
+        def _unknown_result(reason_code, message, start_date=None, end_date=None, extra=None):
+            return self._base_rule_result(
+                "UNKNOWN",
+                reason_code,
+                message,
+                actual_value=_actual_value(start_date, end_date, extra=extra),
+                expected_value=constraint,
+                confidence=None,
+                unknown_reason="FACTUAL_UNKNOWN",
+            )
+
+        if v1_fact and str(v1_fact.get("version") or "") == _AVAILABILITY_FACT_VERSION:
+            extraction_state = str(v1_fact.get("extraction_state") or "MISSING")
+            availability_date = _parse_availability_date(v1_fact.get("availability_date"))
+            availability_end_date = _parse_availability_date(v1_fact.get("availability_end_date"))
+            extracted_on_date = _parse_availability_date(v1_fact.get("availability_extracted_on_date"))
+            source_label = str(v1_fact.get("availability_source_label") or "")
+            source_text = str(v1_fact.get("availability_source_text") or "")
+
+            relative_source = (
+                source_label == "notice_period"
+                or bool(re.search(
+                    r"\b(?:immediate(?:ly)?|asap|available\s+now|ready\s+to\s+join|ready\s+for\s+immediate\s+joining|join\s+asap)\b",
+                    source_text,
+                    flags=re.IGNORECASE,
+                ))
+            )
+            if extraction_state == "PARSED" and relative_source and extracted_on_date and (today - extracted_on_date).days > 90:
+                extraction_state = "STALE"
+
+            if extraction_state != "PARSED" or availability_date is None:
+                reason_code = "AVAILABILITY_STALE" if extraction_state == "STALE" else "AVAILABILITY_MISSING"
+                return _unknown_result(
+                    reason_code,
+                    "Could not determine candidate availability evidence reliably.",
+                    availability_date,
+                    availability_end_date,
+                )
+
+            kind = _legacy_constraint_kind()
+            if kind == "status" and (constraint or {}).get("status") in {"immediately", "immediate"}:
+                if availability_date <= today and (availability_end_date is None or today <= availability_end_date):
+                    return self._base_rule_result(
+                        "PASS",
+                        "AVAILABILITY_IMMEDIATE",
+                        "Candidate availability window includes today.",
+                        actual_value=_actual_value(availability_date, availability_end_date),
+                        expected_value=constraint,
+                        confidence=None,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    "AVAILABILITY_NOT_IMMEDIATE",
+                    "Candidate is not immediately available based on the stated availability window.",
+                    actual_value=_actual_value(availability_date, availability_end_date),
+                    expected_value=constraint,
+                    confidence=None,
+                )
+
+            target_date = None
+            if kind == "by_date":
+                target_date = _constraint_target_date("available_by_date", "available_from_date")
+            elif kind == "from_date":
+                target_date = _constraint_target_date("available_from_date", "available_by_date")
+            elif kind == "relative_days":
+                relative_days = (constraint or {}).get("relative_days")
+                if isinstance(relative_days, int):
+                    target_date = today + timedelta(days=relative_days)
+            elif kind == "relative_phrase":
+                relative_days = (constraint or {}).get("relative_days")
+                if isinstance(relative_days, int):
+                    target_date = today + timedelta(days=relative_days)
+                    kind = "by_date"
+            elif kind == "window":
+                window_start = _constraint_target_date("available_from_date")
+                window_end = _constraint_target_date("available_until_date")
+                if window_start is None or window_end is None:
+                    return _unknown_result(
+                        "AVAILABILITY_CONSTRAINT_UNSUPPORTED",
+                        "Availability filter could not be normalized into an evaluable date.",
+                        availability_date,
+                        availability_end_date,
+                    )
+                candidate_end = availability_end_date
+                overlaps = (candidate_end is None or window_start <= candidate_end) and availability_date <= window_end
+                if overlaps:
+                    return self._base_rule_result(
+                        "PASS",
+                        "AVAILABILITY_WINDOW_MATCH",
+                        f"Candidate availability window overlaps {window_start.isoformat()} to {window_end.isoformat()}.",
+                        actual_value=_actual_value(availability_date, availability_end_date),
+                        expected_value=constraint,
+                        confidence=None,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    "AVAILABILITY_WINDOW_MISMATCH",
+                    f"Candidate availability window does not overlap {window_start.isoformat()} to {window_end.isoformat()}.",
+                    actual_value=_actual_value(availability_date, availability_end_date),
+                    expected_value=constraint,
+                    confidence=None,
+                )
+
+            if target_date is None:
+                return _unknown_result(
+                    "AVAILABILITY_CONSTRAINT_UNSUPPORTED",
+                    "Availability filter could not be normalized into an evaluable date.",
+                    availability_date,
+                    availability_end_date,
+                )
+
+            if kind in {"by_date", "relative_days", "relative_phrase"}:
+                if availability_date <= target_date:
+                    return self._base_rule_result(
+                        "PASS",
+                        "AVAILABILITY_BY_DATE_MATCH",
+                        f"Candidate is available by {target_date.isoformat()}.",
+                        actual_value=_actual_value(availability_date, availability_end_date),
+                        expected_value=constraint,
+                        confidence=None,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    "AVAILABILITY_BY_DATE_MISMATCH",
+                    f"Candidate is not available by {target_date.isoformat()}.",
+                    actual_value=_actual_value(availability_date, availability_end_date),
+                    expected_value=constraint,
+                    confidence=None,
+                )
+
+            if kind == "from_date":
+                if availability_date <= target_date and (availability_end_date is None or target_date <= availability_end_date):
+                    return self._base_rule_result(
+                        "PASS",
+                        "AVAILABILITY_WINDOW_MATCH",
+                        f"Candidate availability window covers {target_date.isoformat()}.",
+                        actual_value=_actual_value(availability_date, availability_end_date),
+                        expected_value=constraint,
+                        confidence=None,
+                    )
+                return self._base_rule_result(
+                    "FAIL",
+                    "AVAILABILITY_WINDOW_MISMATCH",
+                    f"Candidate availability window does not cover {target_date.isoformat()}.",
+                    actual_value=_actual_value(availability_date, availability_end_date),
+                    expected_value=constraint,
+                    confidence=None,
+                )
+
+        confidence = ((candidate_facts.get("fact_meta") or {}).get("logistics.availability_date") or {}).get("confidence")
 
         availability_date_raw = logistics.get("availability_date")
         availability_end_raw = logistics.get("availability_end_date")

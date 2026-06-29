@@ -275,22 +275,38 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertEqual(fact["availability_source_label"], "availability_details")
         self.assertEqual(fact["extraction_state"], "PARSED")
 
-    def test_logistics_v1_dual_write_is_opt_in_and_keeps_legacy_fields(self):
+    def test_logistics_v1_is_default_and_legacy_override_keeps_v1_fact_off(self):
         raw_text = (
             "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer "
             "From date - Till date 30-Apr-2026 - 01-May-2026 Personal & Contact Details"
         )
         default_fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
-        self.assertIsNone(default_fact["availability_v1_fact"])
         self.assertEqual(default_fact["availability_date"], date(2026, 4, 30))
         self.assertEqual(default_fact["availability_status"], "PARSED")
+        self.assertEqual(default_fact["availability_v1_fact"]["version"], "v1")
+        self.assertEqual(default_fact["availability_v1_fact"]["availability_date"], date(2026, 4, 30))
 
-        with patch.dict("os.environ", {"NJORDHR_AVAILABILITY_EXTRACTION_MODE": "v1"}):
-            v1_fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
-        self.assertEqual(v1_fact["availability_date"], date(2026, 4, 30))
-        self.assertEqual(v1_fact["availability_status"], "PARSED")
-        self.assertEqual(v1_fact["availability_v1_fact"]["version"], "v1")
-        self.assertEqual(v1_fact["availability_v1_fact"]["availability_date"], date(2026, 4, 30))
+        with patch.dict("os.environ", {"NJORDHR_AVAILABILITY_EXTRACTION_MODE": "legacy"}):
+            legacy_fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(legacy_fact["availability_date"], date(2026, 4, 30))
+        self.assertEqual(legacy_fact["availability_status"], "PARSED")
+        self.assertIsNone(legacy_fact["availability_v1_fact"])
+
+    def test_build_candidate_facts_serializes_availability_v1_fact(self):
+        raw_text = (
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer "
+            "From date - Till date 30-Apr-2026 - 01-May-2026 Personal & Contact Details"
+        )
+        facts = self.analyzer._build_candidate_facts(
+            "candidate.pdf",
+            "2nd_Engineer",
+            [{"metadata": {"raw_text": raw_text}}],
+        )
+        availability_v1 = facts["logistics"]["availability_v1"]
+        self.assertEqual(availability_v1["version"], "v1")
+        self.assertEqual(availability_v1["availability_date"], "2026-04-30")
+        self.assertEqual(availability_v1["availability_end_date"], "2026-05-01")
+        self.assertEqual(availability_v1["extraction_state"], "PARSED")
 
     def test_extract_last_sign_off_fact_handles_multiline_split_seajobs_dates(self):
         raw_text = (
