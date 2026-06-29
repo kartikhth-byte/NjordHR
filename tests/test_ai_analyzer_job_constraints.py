@@ -544,6 +544,156 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertIn("RANK_UNKNOWN", reason_codes)
         self.assertEqual(len(complete_event["unknown_matches"]), 1)
 
+    def test_availability_unknown_match_uses_general_needs_review_summary(self):
+        filename = "2nd_Engineer_1007.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Availability Details: Available from 03/04/2026",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "2nd_engineer",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": 1.0},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+            "logistics": {
+                "availability_v1": {
+                    "version": "v1",
+                    "availability_date": None,
+                    "availability_end_date": None,
+                    "extraction_state": "AMBIGUOUS_NUMERIC",
+                    "availability_source_label": "availability_details",
+                    "availability_source_text": "Available from 03/04/2026",
+                    "availability_extracted_on_date": "2026-04-01",
+                }
+            },
+            "certifications": {"coc": []},
+        }
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "available immediately",
+            availability_filter={
+                "type": "availability",
+                "version": "v1",
+                "value_type": "status",
+                "status": "immediate",
+                "available_by_date": None,
+                "available_from_date": None,
+                "available_until_date": None,
+                "relative_days": None,
+                "resolved_reference_date": "2026-04-06",
+                "display_value": "available immediately",
+            },
+        ))
+
+        unknown_event = next(event for event in events if event["type"] == "hard_filter_unknown")
+        complete_event = next(event for event in events if event["type"] == "complete")
+        self.assertEqual(unknown_event["match"]["result_bucket"], "needs_review")
+        self.assertEqual(
+            unknown_event["match"]["needs_review_availability_summary"],
+            "Could not determine candidate availability reliably from the resume.",
+        )
+        reason_codes = [reason["reason_code"] for reason in unknown_event["match"]["hard_filter_reasons"]]
+        self.assertIn("AVAILABILITY_MISSING", reason_codes)
+        self.assertEqual(len(complete_event["unknown_matches"]), 1)
+        self.assertEqual(
+            complete_event["unknown_matches"][0]["needs_review_availability_summary"],
+            "Could not determine candidate availability reliably from the resume.",
+        )
+
+    def test_availability_pass_does_not_emit_needs_review_summary_when_rank_unknown(self):
+        filename = "2nd_Engineer_1008.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Availability Details: Available from 01-Jan-2026",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": None},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+            "logistics": {
+                "availability_v1": {
+                    "version": "v1",
+                    "availability_date": "2026-01-01",
+                    "availability_end_date": None,
+                    "extraction_state": "PARSED",
+                    "availability_source_label": "availability_details",
+                    "availability_source_text": "Available from 01-Jan-2026",
+                    "availability_extracted_on_date": "2025-12-15",
+                }
+            },
+            "certifications": {"coc": []},
+        }
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "available immediately",
+            present_rank="Chief Officer",
+            availability_filter={
+                "type": "availability",
+                "version": "v1",
+                "value_type": "status",
+                "status": "immediate",
+                "available_by_date": None,
+                "available_from_date": None,
+                "available_until_date": None,
+                "relative_days": None,
+                "resolved_reference_date": "2026-04-06",
+                "display_value": "available immediately",
+            },
+        ))
+
+        unknown_event = next(event for event in events if event["type"] == "hard_filter_unknown")
+        reason_codes = [reason["reason_code"] for reason in unknown_event["match"]["hard_filter_reasons"]]
+        self.assertIn("RANK_UNKNOWN", reason_codes)
+        self.assertIn("AVAILABILITY_IMMEDIATE", reason_codes)
+        self.assertEqual(
+            unknown_event["match"]["needs_review_rank_summary"],
+            "Could not determine current/present rank from this resume.",
+        )
+        self.assertEqual(unknown_event["match"]["needs_review_availability_summary"], "")
+
     def test_run_analysis_stream_uses_indexed_population_without_present_rank_hard_filter(self):
         filename = "2nd_Engineer_1004.pdf"
         (self.rank_folder / filename).write_bytes(b"%PDF-1.4")

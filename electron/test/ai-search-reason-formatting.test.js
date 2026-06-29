@@ -173,11 +173,100 @@ test("needs review rank summary uses explicit present-rank copy", () => {
 
 test("rank needs review summary suppresses duplicate hard-filter rank lines", () => {
   const summary = helpers.buildReasonDisplaySummary({
+    reason: "Could not determine current/present rank from this resume.",
     needs_review_rank_summary: "Could not determine current/present rank from this resume.",
     hard_filter_reasons: [{
       reason_code: "RANK_CONFIDENCE_LOW",
       message: "Could not determine current/present rank from this resume.",
     }],
+  });
+  assert.equal(summary, "");
+});
+
+test("needs review availability summary uses locked recruiter-facing copy", () => {
+  assert.equal(
+    helpers.buildNeedsReviewAvailabilitySummary({
+      needs_review_availability_summary: "Could not determine candidate availability reliably from the resume.",
+    }),
+    "Could not determine candidate availability reliably from the resume.",
+  );
+  assert.equal(
+    helpers.buildNeedsReviewAvailabilitySummary({
+      hard_filter_reasons: [{
+        reason_code: "AVAILABILITY_MISSING",
+        message: "Could not determine candidate availability reliably from the resume.",
+      }],
+    }),
+    "Could not determine candidate availability reliably from the resume.",
+  );
+  assert.equal(
+    helpers.buildNeedsReviewAvailabilitySummary({
+      hard_filter_reasons: [{ reason_code: "PASSPORT_UNKNOWN" }],
+    }),
+    "",
+  );
+  assert.equal(
+    helpers.buildNeedsReviewAvailabilitySummary({
+      hard_filter_reasons: [{
+        reason_code: "AVAILABILITY_IMMEDIATE",
+        message: "Candidate availability window includes today.",
+      }],
+    }),
+    "",
+  );
+});
+
+test("availability needs review summary suppresses duplicate hard-filter availability lines", () => {
+  const summary = helpers.buildReasonDisplaySummary({
+    reason: "Could not determine candidate availability reliably from the resume.",
+    needs_review_availability_summary: "Could not determine candidate availability reliably from the resume.",
+    hard_filter_reasons: [{
+      reason_code: "AVAILABILITY_STALE",
+      message: "Could not determine candidate availability reliably from the resume.",
+    }],
+  });
+  assert.equal(summary, "");
+});
+
+test("availability pass reason stays visible when rank needs review", () => {
+  const summary = helpers.buildReasonDisplaySummary({
+    needs_review_rank_summary: "Could not determine current/present rank from this resume.",
+    reason: [
+      "Could not determine current/present rank from this resume.",
+      "Candidate availability window includes today.",
+    ].join("; "),
+    hard_filter_reasons: [
+      {
+        reason_code: "RANK_UNKNOWN",
+        message: "Could not determine current/present rank from this resume.",
+      },
+      {
+        reason_code: "AVAILABILITY_IMMEDIATE",
+        message: "Candidate availability window includes today.",
+      },
+    ],
+  });
+  assert.equal(summary, "availability immediate: Candidate availability window includes today.");
+});
+
+test("rank and availability needs review summaries both suppress duplicate reason lines", () => {
+  const summary = helpers.buildReasonDisplaySummary({
+    needs_review_rank_summary: "Could not determine current/present rank from this resume.",
+    needs_review_availability_summary: "Could not determine candidate availability reliably from the resume.",
+    reason: [
+      "Could not determine current/present rank from this resume.",
+      "Could not determine candidate availability reliably from the resume.",
+    ].join("; "),
+    hard_filter_reasons: [
+      {
+        reason_code: "RANK_UNKNOWN",
+        message: "Could not determine current/present rank from this resume.",
+      },
+      {
+        reason_code: "AVAILABILITY_MISSING",
+        message: "Could not determine candidate availability reliably from the resume.",
+      },
+    ],
   });
   assert.equal(summary, "");
 });

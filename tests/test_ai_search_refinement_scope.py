@@ -1181,6 +1181,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                 "result_bucket": "unsupported-free-text",
                                 "confidence": 2.0,
                                 "needs_review_rank_summary": "Could not determine current/present rank from this resume.",
+                                "needs_review_availability_summary": "Could not determine candidate availability reliably from the resume.",
                             }],
                         },
                     },
@@ -1337,6 +1338,10 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(
             unknown_card["needs_review_rank_summary"],
             "Could not determine current/present rank from this resume.",
+        )
+        self.assertEqual(
+            unknown_card["needs_review_availability_summary"],
+            "Could not determine candidate availability reliably from the resume.",
         )
 
     def test_recovery_draft_without_completed_results_stays_empty(self):
