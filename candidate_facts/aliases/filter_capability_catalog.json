@@ -97,7 +97,6 @@
       },
       "do_not_use_for": [
         "candidate salary expectations",
-        "day-of-week availability",
         "contract length requirements",
         "ambiguous locale-specific date phrases",
         "travel or recovery offsets after sign-off",

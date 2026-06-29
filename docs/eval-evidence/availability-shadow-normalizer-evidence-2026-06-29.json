@@ -1,0 +1,228 @@
+{
+  "case_results": [
+    {
+      "class": "A",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "A001",
+      "prompt_hash": "bd7055158c7547ad1db6ba32e2e7feaa01cd1c2280762ab05989b67d2944ea01",
+      "prompt_normalized": "Need candidates available immediately",
+      "schema_valid": true,
+      "status": "agreed",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "A",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "A002",
+      "prompt_hash": "36599637093836dd4dd8825c70bffd010bc87a3ab0a297be496b6a97f1e4e447",
+      "prompt_normalized": "Show crew available by 15 Apr 2026",
+      "schema_valid": true,
+      "status": "agreed",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "A",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "A003",
+      "prompt_hash": "9e99738ef186c001b555c5a14119bd5a102dbaf45befc8eb7b2b3bbb412bb34c",
+      "prompt_normalized": "Find officers available from 1 Sep 2026",
+      "schema_valid": true,
+      "status": "agreed",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "A",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "A004",
+      "prompt_hash": "549b9163055e53236a6914c9f8886029798968ac8e5f8c3f46eb693a64d1e898",
+      "prompt_normalized": "2nd engineers available within 30 days",
+      "schema_valid": true,
+      "status": "agreed",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "A",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "A005",
+      "prompt_hash": "a42c2002316a02f39d9b71e2e8c5f13e5a1c00eefdec91d754ed98e364eb3669",
+      "prompt_normalized": "Candidates available between 1 Apr 2026 and 1 May 2026",
+      "schema_valid": true,
+      "status": "agreed",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "B",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "B001",
+      "prompt_hash": "e8f864ea38299cd4955467e5fd6980491d960fd4901a7794d36ff1785d93f28f",
+      "prompt_normalized": "Need 2nd engineer, not available until August",
+      "schema_valid": true,
+      "status": "correct",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "B",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "B002",
+      "prompt_hash": "59dc9c2eb645f9b8b587cb999a0a263ea653caf7fb5bd042f06c0a65cce19a4c",
+      "prompt_normalized": "Chief engineer with tanker experience and available before 20 Aug 2026",
+      "schema_valid": true,
+      "status": "correct",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "B",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "B003",
+      "prompt_hash": "d72e4d29de5af9c3c6523ab17e49344657315e2a86dfa7c7843f09a2c56d0837",
+      "prompt_normalized": "Find ETOs ready to join after 45 days",
+      "schema_valid": true,
+      "status": "correct",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "B",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "B004",
+      "prompt_hash": "c640e1ee7bb9789ced59af4b340a3138d439673336671e60384fc6c0be22d186",
+      "prompt_normalized": "Need master for LPG vessel, can join from 10 Oct 2026",
+      "schema_valid": true,
+      "status": "correct",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "B",
+      "emitted_constraint": true,
+      "expected_route": "constraints",
+      "id": "B005",
+      "prompt_hash": "b2db61e766f485f64b29098dd4e3b7dfac9f040cf442e89fe4e078a1f40857e6",
+      "prompt_normalized": "Looking for officers free 5 Nov 2026 to 20 Dec 2026",
+      "schema_valid": true,
+      "status": "correct",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "C",
+      "emitted_constraint": false,
+      "expected_route": "needs_review",
+      "id": "C001",
+      "prompt_hash": "87595821992c1b4738878da5ea18cb07bf1d7e23c9b6ab701e6dcaf6dbd49b27",
+      "prompt_normalized": "Available immediately but not available until August",
+      "schema_valid": true,
+      "status": "safe_route",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "C",
+      "emitted_constraint": false,
+      "expected_route": "unapplied",
+      "id": "C002",
+      "prompt_hash": "a049190e01106a896aaf94ea934822341cfe829dc0e37c8ac50baa3d8cf1ccbc",
+      "prompt_normalized": "Available only on Tuesdays",
+      "schema_valid": true,
+      "status": "safe_route",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "C",
+      "emitted_constraint": false,
+      "expected_route": "unapplied",
+      "id": "C003",
+      "prompt_hash": "9158c020d4bde19b791cc5c4e7e970277b0dd380495a62b5f68c2bdada709acc",
+      "prompt_normalized": "Available if salary is above 8000 USD",
+      "schema_valid": true,
+      "status": "safe_route",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "C",
+      "emitted_constraint": false,
+      "expected_route": "unapplied",
+      "id": "C004",
+      "prompt_hash": "6dd1c49b90b0c4d7c48338ea0acaf49cd60a52423be092ef9e43ccb7fddc9127",
+      "prompt_normalized": "Need candidates available for 6 month contract only",
+      "schema_valid": true,
+      "status": "safe_route",
+      "unsafe_widening": false,
+      "validator_errors": []
+    },
+    {
+      "class": "C",
+      "emitted_constraint": false,
+      "expected_route": "needs_review",
+      "id": "C005",
+      "prompt_hash": "864081a06334220a056552204db6ba371d8c68e6a93c806a0ca755bcff0a20f5",
+      "prompt_normalized": "Available next quarter but only on Tuesdays",
+      "schema_valid": true,
+      "status": "safe_route",
+      "unsafe_widening": false,
+      "validator_errors": []
+    }
+  ],
+  "catalog_version": "1.0.0",
+  "corpus_id": "availability-shadow-normalizer-corpus-2026-06-29",
+  "corpus_version": "1.0.0",
+  "family": "availability",
+  "live_dispatch": false,
+  "llm_invoked": false,
+  "mode": "shadow_evidence_fixture",
+  "promoted_family": false,
+  "promotion_gate": {
+    "failures": [
+      "corpus_size_below_200",
+      "real_llm_run_required",
+      "class_b_recall_lift_not_measured"
+    ],
+    "passes": false,
+    "thresholds": {
+      "max_reviewed_false_positive_rate": 0.02,
+      "min_class_a_agreement": 0.95,
+      "min_class_b_correct_against_human_label": 0.7,
+      "min_prompts": 200,
+      "min_schema_valid_rate": 0.99,
+      "requires_real_llm_run": true,
+      "zero_unsafe_widening": true
+    }
+  },
+  "prompt_normalization_version": "1.0.0",
+  "summary": {
+    "class_a_fixture_match_rate": 1.0,
+    "class_b_correct_rate_against_human_label": 1.0,
+    "class_b_recall_lift": null,
+    "class_b_recall_lift_status": "not_measured_fixture_only",
+    "class_c_safe_route_rate": 1.0,
+    "class_counts": {
+      "A": 5,
+      "B": 5,
+      "C": 5
+    },
+    "reviewed_false_positive_rate": 0.0,
+    "schema_valid_count": 15,
+    "schema_valid_rate": 1.0,
+    "total_cases": 15,
+    "unsafe_widening_count": 0
+  },
+  "version": "availability_normalizer_evidence.v1"
+}
