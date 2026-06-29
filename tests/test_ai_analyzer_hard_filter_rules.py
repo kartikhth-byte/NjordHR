@@ -2755,6 +2755,158 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "PASS")
 
+    def test_availability_v1_rule_available_by_ignores_end_date(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": "2026-01-01",
+                        "availability_end_date": "2026-03-01",
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "From date - Till date 01-Jan-2026 - 01-Mar-2026",
+                        "availability_extracted_on_date": "2025-12-15",
+                    }
+                }
+            },
+            {"value_type": "by_date", "available_by_date": "2026-04-15", "display_value": "available by 15 Apr"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "AVAILABILITY_BY_DATE_MATCH")
+
+    def test_availability_v1_rule_available_from_means_free_on_date(self):
+        pass_result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": "2026-01-01",
+                        "availability_end_date": None,
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "Available from 01-Jan-2026",
+                        "availability_extracted_on_date": "2025-12-15",
+                    }
+                }
+            },
+            {"value_type": "from_date", "available_from_date": "2026-09-01", "display_value": "available from 1 Sep"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(pass_result["decision"], "PASS")
+
+        fail_result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": "2026-06-01",
+                        "availability_end_date": None,
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "Available from 01-Jun-2026",
+                        "availability_extracted_on_date": "2026-04-01",
+                    }
+                }
+            },
+            {"value_type": "from_date", "available_from_date": "2026-05-01", "display_value": "available from 1 May"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(fail_result["decision"], "FAIL")
+
+    def test_availability_v1_rule_immediate_fails_when_window_ended(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": "2026-03-01",
+                        "availability_end_date": "2026-05-01",
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "From date - Till date 01-Mar-2026 - 01-May-2026",
+                        "availability_extracted_on_date": "2026-02-01",
+                    }
+                }
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 7, 1),
+        )
+        self.assertEqual(result["decision"], "FAIL")
+
+    def test_availability_v1_rule_stale_relative_source_unknown(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": "2026-01-01",
+                        "availability_end_date": None,
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "Availability: Immediate",
+                        "availability_extracted_on_date": "2026-01-01",
+                    }
+                }
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 5, 1),
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "AVAILABILITY_STALE")
+        self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
+
+    def test_availability_v1_rule_non_parsed_state_unknown(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": None,
+                        "availability_end_date": None,
+                        "extraction_state": "AMBIGUOUS_NUMERIC",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "Available from 03/04/2026",
+                        "availability_extracted_on_date": "2026-04-01",
+                    }
+                }
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "UNKNOWN")
+        self.assertEqual(result["reason_code"], "AVAILABILITY_MISSING")
+
+    def test_hard_filter_uses_availability_v1_fact_when_active(self):
+        result = self.analyzer._evaluate_hard_filters(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v1",
+                        "availability_date": "2026-01-01",
+                        "availability_end_date": "2026-03-01",
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "From date - Till date 01-Jan-2026 - 01-Mar-2026",
+                        "availability_extracted_on_date": "2025-12-15",
+                    }
+                }
+            },
+            {
+                "applied_constraints": ["availability"],
+                "hard_constraints": {
+                    "availability": {
+                        "value_type": "by_date",
+                        "available_by_date": "2026-04-15",
+                        "display_value": "available by 15 Apr",
+                    },
+                },
+            },
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["results"][0]["reason_code"], "AVAILABILITY_BY_DATE_MATCH")
+
     def test_availability_rule_unknown_when_missing(self):
         result = self.analyzer._evaluate_availability_rule(
             {
