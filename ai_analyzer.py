@@ -63,6 +63,8 @@ _PROMOTION_STAGE_FAMILIES = [
 _MAX_PROMOTION_STAGE = 5
 _DEFAULT_PROMOTION_STAGE = 0  # opt-in only — existing installs unchanged on upgrade
 _ENGINE_MAP_VERSION = "engine-map-2026-06-19"
+_AVAILABILITY_EXTRACTION_MODE_ENV = "NJORDHR_AVAILABILITY_EXTRACTION_MODE"
+_AVAILABILITY_FACT_VERSION = "v1"
 
 ENGINE_DISPLAY_LABEL_MAP = {
     "man": "MAN / Everllence",
@@ -8233,6 +8235,237 @@ class AIResumeAnalyzer:
             return {"date": parsed_numeric, "status": "PARSED"}
         return self._extract_date_fact_from_snippet(token)
 
+    @staticmethod
+    def _availability_extraction_mode():
+        raw = str(os.getenv(_AVAILABILITY_EXTRACTION_MODE_ENV, "legacy") or "legacy").strip().lower()
+        return "v1" if raw == "v1" else "legacy"
+
+    def _availability_v1_empty_fact(self, extracted_on_date, state="MISSING", source_label=None, source_text=""):
+        return {
+            "version": _AVAILABILITY_FACT_VERSION,
+            "availability_date": None,
+            "availability_end_date": None,
+            "extraction_state": state,
+            "availability_source_label": source_label,
+            "availability_source_text": str(source_text or "").strip(),
+            "availability_extracted_on_date": extracted_on_date,
+        }
+
+    def _parse_availability_v1_date_token(self, token):
+        raw = str(token or "").strip()
+        if not raw:
+            return {"date": None, "state": "MISSING"}
+
+        iso_match = re.fullmatch(r"(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})", raw)
+        if iso_match:
+            try:
+                return {"date": date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))), "state": "PARSED"}
+            except ValueError:
+                return {"date": None, "state": "INVALID"}
+
+        numeric_match = re.fullmatch(r"(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})", raw)
+        if numeric_match:
+            first = int(numeric_match.group(1))
+            second = int(numeric_match.group(2))
+            year = int(numeric_match.group(3))
+            if year < 100:
+                year += 2000 if year < 50 else 1900
+            if 1 <= first <= 12 and 1 <= second <= 12:
+                return {"date": None, "state": "AMBIGUOUS_NUMERIC"}
+            if first > 12 and 1 <= second <= 12:
+                try:
+                    return {"date": date(year, second, first), "state": "PARSED"}
+                except ValueError:
+                    return {"date": None, "state": "INVALID"}
+            if second > 12 and 1 <= first <= 12:
+                try:
+                    return {"date": date(year, first, second), "state": "PARSED"}
+                except ValueError:
+                    return {"date": None, "state": "INVALID"}
+            return {"date": None, "state": "INVALID"}
+
+        parsed = self._extract_date_fact_from_snippet(raw)
+        state = parsed.get("status")
+        if state == "PARSED":
+            return {"date": parsed.get("date"), "state": "PARSED"}
+        if state in {"AMBIGUOUS_NUMERIC", "INVALID"}:
+            return {"date": None, "state": state}
+        return {"date": None, "state": "MISSING"}
+
+    def _availability_v1_date_tokens_from_snippet(self, snippet):
+        return self._extract_ordered_date_tokens(snippet)
+
+    def _availability_v1_source(self, source_label, source_text, start_date, end_date=None):
+        return {
+            "source_label": source_label,
+            "source_text": str(source_text or "").strip(),
+            "availability_date": start_date,
+            "availability_end_date": end_date,
+        }
+
+    def _availability_v1_sources_overlap(self, left, right):
+        left_start = left.get("availability_date")
+        right_start = right.get("availability_date")
+        if not left_start or not right_start:
+            return True
+        left_end = left.get("availability_end_date")
+        right_end = right.get("availability_end_date")
+        if left_end is not None and left_end < right_start:
+            return False
+        if right_end is not None and right_end < left_start:
+            return False
+        return True
+
+    def _availability_v1_same_window(self, left, right):
+        return (
+            left.get("availability_date") == right.get("availability_date")
+            and left.get("availability_end_date") == right.get("availability_end_date")
+        )
+
+    def _select_availability_v1_source(self, sources, extracted_on_date):
+        if not sources:
+            return self._availability_v1_empty_fact(extracted_on_date)
+
+        precedence = {
+            "availability_details": 0,
+            "contract_end": 1,
+            "sign_off": 2,
+            "notice_period": 3,
+            "unknown": 4,
+        }
+        for idx, left in enumerate(sources):
+            for right in sources[idx + 1:]:
+                if not self._availability_v1_sources_overlap(left, right):
+                    return self._availability_v1_empty_fact(
+                        extracted_on_date,
+                        state="CONTRADICTORY",
+                        source_label=left.get("source_label") or right.get("source_label"),
+                        source_text=" | ".join(
+                            part
+                            for part in [left.get("source_text"), right.get("source_text")]
+                            if part
+                        ),
+                    )
+                if (
+                    precedence.get(left.get("source_label"), 99) == precedence.get(right.get("source_label"), 99)
+                    and not self._availability_v1_same_window(left, right)
+                ):
+                    return self._availability_v1_empty_fact(
+                        extracted_on_date,
+                        state="CONTRADICTORY",
+                        source_label=left.get("source_label") or right.get("source_label"),
+                        source_text=" | ".join(
+                            part
+                            for part in [left.get("source_text"), right.get("source_text")]
+                            if part
+                        ),
+                    )
+
+        selected = sorted(sources, key=lambda item: precedence.get(item.get("source_label"), 99))[0]
+        return {
+            "version": _AVAILABILITY_FACT_VERSION,
+            "availability_date": selected.get("availability_date"),
+            "availability_end_date": selected.get("availability_end_date"),
+            "extraction_state": "PARSED",
+            "availability_source_label": selected.get("source_label"),
+            "availability_source_text": selected.get("source_text") or "",
+            "availability_extracted_on_date": extracted_on_date,
+        }
+
+    def _extract_availability_fact_v1_from_text(self, raw_text, availability_extracted_on_date=None):
+        text = str(raw_text or "")
+        extracted_on_date = availability_extracted_on_date or date.today()
+        if not text:
+            return self._availability_v1_empty_fact(extracted_on_date)
+
+        sources = []
+        parse_states = []
+
+        lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
+        snippets = []
+        for idx, line in enumerate(lines):
+            if re.search(r"availability details|from date\s*-\s*till date", line, flags=re.IGNORECASE):
+                snippets.append(" ".join(lines[idx:idx + 4]))
+        if not snippets:
+            for match in re.finditer(r"availability details|from date\s*-\s*till date", text, flags=re.IGNORECASE):
+                snippets.append(text[match.start():match.start() + 260])
+        for snippet in snippets:
+            scoped_snippet = snippet
+            from_till_match = re.search(r"from date\s*-\s*till date", scoped_snippet, flags=re.IGNORECASE)
+            if from_till_match:
+                scoped_snippet = scoped_snippet[from_till_match.start():]
+            ordered_tokens = self._availability_v1_date_tokens_from_snippet(scoped_snippet)
+            if not ordered_tokens:
+                continue
+            start_fact = self._parse_availability_v1_date_token(ordered_tokens[0])
+            end_fact = self._parse_availability_v1_date_token(ordered_tokens[1]) if len(ordered_tokens) >= 2 else {"date": None, "state": "MISSING"}
+            parse_states.extend([start_fact.get("state"), end_fact.get("state")])
+            if start_fact.get("state") == "PARSED" and start_fact.get("date"):
+                sources.append(
+                    self._availability_v1_source(
+                        "availability_details",
+                        snippet,
+                        start_fact.get("date"),
+                        end_fact.get("date") if end_fact.get("state") == "PARSED" else None,
+                    )
+                )
+
+        date_token_pattern = (
+            r"\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}"
+            r"|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}"
+            r"|\d{1,2}[\s\/\-.]+(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)[\s\/\-.]+\d{2,4}"
+            r"|(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)[\s\/\-.]+\d{1,2},?[\s\/\-.]+\d{2,4}"
+        )
+        labeled_patterns = [
+            ("availability_details", rf"\bavailable\s+from\s+({date_token_pattern})"),
+            ("availability_details", rf"\bavailable\s*[:\-]\s*from\s+({date_token_pattern})"),
+            ("availability_details", rf"\bavailable\s+until\s+({date_token_pattern})"),
+            ("contract_end", rf"\b(?:contract\s+(?:ends?|end\s+date)|contracted\s+until)\s*[:\-]?\s*({date_token_pattern})"),
+            ("sign_off", rf"\b(?:sign[-\s]?off(?:\s+date)?)\s*[:\-]?\s*({date_token_pattern})"),
+        ]
+        for source_label, pattern in labeled_patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                parsed = self._parse_availability_v1_date_token(match.group(1))
+                parse_states.append(parsed.get("state"))
+                if parsed.get("state") != "PARSED" or not parsed.get("date"):
+                    continue
+                if source_label == "availability_details" and re.search(r"\buntil\b", match.group(0), flags=re.IGNORECASE):
+                    sources.append(self._availability_v1_source(source_label, match.group(0), extracted_on_date, parsed.get("date")))
+                elif source_label == "sign_off" and parsed.get("date") < extracted_on_date:
+                    continue
+                else:
+                    sources.append(self._availability_v1_source(source_label, match.group(0), parsed.get("date")))
+
+        immediate_match = re.search(
+            r"\b(availability\s*[:\-]?\s*immediate|available\s*[:\-]?\s*immediate|available immediately|immediately available|available now|ready to join|ready for immediate joining|join asap)\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if immediate_match:
+            sources.append(self._availability_v1_source("availability_details", immediate_match.group(0), extracted_on_date))
+
+        for notice_match in re.finditer(
+            r"\b(?:notice\s+period|notice|can\s+join\s+in|joinable\s+in)\s*[:\-]?\s*(?:is\s*)?(\d+)\s+days?\b",
+            text,
+            flags=re.IGNORECASE,
+        ):
+            days = int(notice_match.group(1))
+            sources.append(
+                self._availability_v1_source(
+                    "notice_period",
+                    notice_match.group(0),
+                    extracted_on_date + timedelta(days=days),
+                )
+            )
+
+        selected = self._select_availability_v1_source(sources, extracted_on_date)
+        if selected.get("extraction_state") == "MISSING":
+            if "AMBIGUOUS_NUMERIC" in parse_states:
+                return self._availability_v1_empty_fact(extracted_on_date, state="AMBIGUOUS_NUMERIC", source_label="availability_details")
+            if "INVALID" in parse_states:
+                return self._availability_v1_empty_fact(extracted_on_date, state="INVALID", source_label="availability_details")
+        return selected
+
     def _extract_availability_fact_from_text(self, raw_text, reference_date=None):
         text = str(raw_text or "")
         if not text:
@@ -8516,6 +8749,12 @@ class AIResumeAnalyzer:
         passport_fact = self._extract_passport_expiry_fact_from_text(raw_text)
         visa_fact = self._extract_us_visa_fact_from_text(raw_text)
         availability_fact = self._extract_availability_fact_from_text(raw_text, reference_date=today)
+        availability_v1_fact = None
+        if self._availability_extraction_mode() == "v1":
+            availability_v1_fact = self._extract_availability_fact_v1_from_text(
+                raw_text,
+                availability_extracted_on_date=today,
+            )
 
         passport_expiry = passport_fact.get("expiry_date")
         passport_expiry_status = passport_fact.get("expiry_status", "MISSING")
@@ -8561,6 +8800,7 @@ class AIResumeAnalyzer:
             "passport_fact": passport_fact,
             "visa_fact": visa_fact,
             "availability_fact": availability_fact,
+            "availability_v1_fact": availability_v1_fact,
         }
 
     def _extract_coc_table_fields_from_snippet(self, snippet, grade_patterns, date_token_pattern):

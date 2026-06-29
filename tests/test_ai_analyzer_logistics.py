@@ -2,6 +2,7 @@ import sys
 import types
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 
 def _stub_ai_dependencies():
@@ -141,6 +142,114 @@ class AIAnalyzerLogisticsTests(unittest.TestCase):
         self.assertIsNone(fact["availability_end_date"])
         self.assertEqual(fact["availability_status"], "immediately")
         self.assertEqual(fact["confidence"], 0.85)
+
+    def test_availability_v1_extracts_seajobs_window(self):
+        raw_text = (
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer "
+            "From date - Till date 30-Apr-2026 - 01-May-2026 Personal & Contact Details"
+        )
+        fact = self.analyzer._extract_availability_fact_v1_from_text(
+            raw_text,
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(fact["version"], "v1")
+        self.assertEqual(fact["availability_date"], date(2026, 4, 30))
+        self.assertEqual(fact["availability_end_date"], date(2026, 5, 1))
+        self.assertEqual(fact["extraction_state"], "PARSED")
+        self.assertEqual(fact["availability_source_label"], "availability_details")
+        self.assertEqual(fact["availability_extracted_on_date"], self.reference_date)
+
+    def test_availability_v1_extracts_single_available_from_date(self):
+        fact = self.analyzer._extract_availability_fact_v1_from_text(
+            "Date of availability: Available from 15-May-2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(fact["availability_date"], date(2026, 5, 15))
+        self.assertIsNone(fact["availability_end_date"])
+        self.assertEqual(fact["extraction_state"], "PARSED")
+
+    def test_availability_v1_extracts_available_until_as_window_ending(self):
+        fact = self.analyzer._extract_availability_fact_v1_from_text(
+            "Candidate Available until 15-Jun-2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(fact["availability_date"], self.reference_date)
+        self.assertEqual(fact["availability_end_date"], date(2026, 6, 15))
+        self.assertEqual(fact["extraction_state"], "PARSED")
+
+    def test_availability_v1_extracts_immediate_and_notice_period(self):
+        immediate = self.analyzer._extract_availability_fact_v1_from_text(
+            "Availability: Immediate",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(immediate["availability_date"], self.reference_date)
+        self.assertEqual(immediate["extraction_state"], "PARSED")
+
+        notice = self.analyzer._extract_availability_fact_v1_from_text(
+            "Notice period: 30 days",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(notice["availability_date"], date(2026, 5, 6))
+        self.assertEqual(notice["availability_source_label"], "notice_period")
+        self.assertEqual(notice["extraction_state"], "PARSED")
+
+        can_join = self.analyzer._extract_availability_fact_v1_from_text(
+            "Can join in 45 days",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(can_join["availability_date"], date(2026, 5, 21))
+        self.assertEqual(can_join["availability_source_label"], "notice_period")
+
+    def test_availability_v1_extracts_contract_end_and_future_sign_off(self):
+        contract_end = self.analyzer._extract_availability_fact_v1_from_text(
+            "Current contract ends 20-Aug-2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(contract_end["availability_date"], date(2026, 8, 20))
+        self.assertEqual(contract_end["availability_source_label"], "contract_end")
+        self.assertEqual(contract_end["extraction_state"], "PARSED")
+
+        sign_off = self.analyzer._extract_availability_fact_v1_from_text(
+            "Sign-off date 20-Aug-2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(sign_off["availability_date"], date(2026, 8, 20))
+        self.assertEqual(sign_off["availability_source_label"], "sign_off")
+        self.assertEqual(sign_off["extraction_state"], "PARSED")
+
+    def test_availability_v1_marks_ambiguous_numeric_dates(self):
+        fact = self.analyzer._extract_availability_fact_v1_from_text(
+            "Available from 03/04/2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(fact["availability_date"], None)
+        self.assertEqual(fact["extraction_state"], "AMBIGUOUS_NUMERIC")
+
+    def test_availability_v1_marks_non_overlapping_sources_contradictory(self):
+        fact = self.analyzer._extract_availability_fact_v1_from_text(
+            "Availability Details From date - Till date 01-Jan-2026 - 01-Mar-2026 "
+            "Contract ends 20-Aug-2026",
+            availability_extracted_on_date=self.reference_date,
+        )
+        self.assertEqual(fact["extraction_state"], "CONTRADICTORY")
+        self.assertIsNone(fact["availability_date"])
+
+    def test_logistics_v1_dual_write_is_opt_in_and_keeps_legacy_fields(self):
+        raw_text = (
+            "Availability Details Applied For Rank 2nd Engineer Present Rank 2nd Engineer "
+            "From date - Till date 30-Apr-2026 - 01-May-2026 Personal & Contact Details"
+        )
+        default_fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertIsNone(default_fact["availability_v1_fact"])
+        self.assertEqual(default_fact["availability_date"], date(2026, 4, 30))
+        self.assertEqual(default_fact["availability_status"], "PARSED")
+
+        with patch.dict("os.environ", {"NJORDHR_AVAILABILITY_EXTRACTION_MODE": "v1"}):
+            v1_fact = self.analyzer._extract_logistics_from_text(raw_text, reference_date=self.reference_date)
+        self.assertEqual(v1_fact["availability_date"], date(2026, 4, 30))
+        self.assertEqual(v1_fact["availability_status"], "PARSED")
+        self.assertEqual(v1_fact["availability_v1_fact"]["version"], "v1")
+        self.assertEqual(v1_fact["availability_v1_fact"]["availability_date"], date(2026, 4, 30))
 
     def test_extract_last_sign_off_fact_handles_multiline_split_seajobs_dates(self):
         raw_text = (
