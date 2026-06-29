@@ -15,7 +15,7 @@ import zipfile
 import logging
 import threading
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from queue import Queue, Empty
 import requests
 from urllib.parse import quote
@@ -163,6 +163,7 @@ def _ai_search_request_fingerprint(
     vessel_tonnage_filter=None,
     age_filter=None,
     coc_issue_authority_filter=None,
+    availability_filter=None,
     parent_search_session_id="",
     changed_content_acknowledgement_id="",
 ):
@@ -179,6 +180,7 @@ def _ai_search_request_fingerprint(
         "vessel_tonnage_filter": {} if is_refinement else _normalize_vessel_tonnage_filter(vessel_tonnage_filter),
         "age_filter": {} if is_refinement else _normalize_age_filter(age_filter),
         "coc_issue_authority_filter": {} if is_refinement else _normalize_coc_issue_authority_filter(coc_issue_authority_filter),
+        "availability_filter": {} if is_refinement else _availability_filter_semantic_identity(availability_filter),
         "parent_search_session_id": str(parent_search_session_id or "").strip(),
         "changed_content_acknowledgement_id": (
             str(changed_content_acknowledgement_id or "").strip()
@@ -542,6 +544,12 @@ class AgeFilterInvalid(ValueError):
         self.detail_code = detail_code
 
 
+class AvailabilityFilterInvalid(ValueError):
+    def __init__(self, detail_code, message):
+        super().__init__(message)
+        self.detail_code = detail_code
+
+
 _AGE_BOUND_INVALID = object()
 
 
@@ -595,6 +603,242 @@ def _normalize_age_filter(value, *, strict=False):
     }
 
 
+def _availability_filter_date_or_none(raw, *, field, strict=False):
+    if raw in (None, ""):
+        return None
+    if not isinstance(raw, str):
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_date",
+                f"Availability filter {field} must be an ISO date.",
+            )
+        return None
+    text = raw.strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_date",
+                f"Availability filter {field} must be an ISO date.",
+            )
+        return None
+    try:
+        datetime.strptime(text, "%Y-%m-%d")
+    except ValueError as exc:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_date",
+                f"Availability filter {field} must be an ISO date.",
+            ) from exc
+        return None
+    return text
+
+
+def _availability_filter_relative_days(raw, *, strict=False):
+    if raw in (None, ""):
+        return None
+    if isinstance(raw, bool):
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_relative_days",
+                "Availability within-days value must be a whole number from 0 to 365.",
+            )
+        return None
+    try:
+        parsed = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_relative_days",
+                "Availability within-days value must be a whole number from 0 to 365.",
+            ) from exc
+        return None
+    if 0 <= parsed <= 365:
+        return parsed
+    if strict:
+        raise AvailabilityFilterInvalid(
+            "invalid_relative_days",
+            "Availability within-days value must be a whole number from 0 to 365.",
+        )
+    return None
+
+
+def _availability_display_value(value_type, *, status=None, by_date=None, from_date=None, until_date=None, relative_days=None):
+    if value_type == "status":
+        return "available immediately"
+    if value_type == "by_date":
+        return f"available by {by_date}"
+    if value_type == "from_date":
+        return f"available from {from_date}"
+    if value_type == "relative_days":
+        return f"available within {relative_days} day{'s' if relative_days != 1 else ''}"
+    if value_type == "window":
+        return f"available between {from_date} and {until_date}"
+    return ""
+
+
+def _normalize_availability_filter(value, *, strict=False):
+    if not isinstance(value, dict):
+        if strict and value not in (None, ""):
+            raise AvailabilityFilterInvalid(
+                "malformed",
+                "Availability filter must be an object.",
+            )
+        return {}
+    if value.get("type") not in (None, "", "availability"):
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_type",
+                "Availability filter type must be availability.",
+            )
+        return {}
+    version = str(value.get("version") or "v1").strip()
+    if version != "v1":
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_version",
+                "Availability filter version must be v1.",
+            )
+        return {}
+    value_type = str(value.get("value_type") or "").strip()
+    if not value_type:
+        return {}
+    if value_type not in {"status", "by_date", "from_date", "relative_days", "window"}:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_value_type",
+                "Availability filter mode is not recognized.",
+            )
+        return {}
+
+    status = str(value.get("status") or "").strip().lower() or None
+    available_by_date = _availability_filter_date_or_none(
+        value.get("available_by_date"),
+        field="available_by_date",
+        strict=strict,
+    )
+    available_from_date = _availability_filter_date_or_none(
+        value.get("available_from_date"),
+        field="available_from_date",
+        strict=strict,
+    )
+    available_until_date = _availability_filter_date_or_none(
+        value.get("available_until_date"),
+        field="available_until_date",
+        strict=strict,
+    )
+    relative_days = _availability_filter_relative_days(value.get("relative_days"), strict=strict)
+
+    active_fields = {
+        "status": {"status"},
+        "by_date": {"available_by_date"},
+        "from_date": {"available_from_date"},
+        "relative_days": {"relative_days"},
+        "window": {"available_from_date", "available_until_date"},
+    }[value_type]
+    provided_inactive = []
+    field_values = {
+        "status": status,
+        "available_by_date": available_by_date,
+        "available_from_date": available_from_date,
+        "available_until_date": available_until_date,
+        "relative_days": relative_days,
+    }
+    for field, field_value in field_values.items():
+        if field not in active_fields and field_value is not None:
+            provided_inactive.append(field)
+    if provided_inactive:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "inactive_field",
+                "Availability filter has values outside the selected mode.",
+            )
+        return {}
+
+    if value_type == "status" and status not in {"immediate", "immediately"}:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "invalid_status",
+                "Availability status filter must be immediate.",
+            )
+        return {}
+    if value_type == "by_date" and not available_by_date:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "missing_date",
+                "Availability by-date filter requires a by date.",
+            )
+        return {}
+    if value_type == "from_date" and not available_from_date:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "missing_date",
+                "Availability from-date filter requires a from date.",
+            )
+        return {}
+    if value_type == "relative_days" and relative_days is None:
+        if strict:
+            raise AvailabilityFilterInvalid(
+                "missing_relative_days",
+                "Availability within-days filter requires a day count.",
+            )
+        return {}
+    if value_type == "window":
+        if not available_from_date or not available_until_date:
+            if strict:
+                raise AvailabilityFilterInvalid(
+                    "missing_window_date",
+                    "Availability date-window filter requires start and end dates.",
+                )
+            return {}
+        if available_from_date > available_until_date:
+            if strict:
+                raise AvailabilityFilterInvalid(
+                    "inverted_window",
+                    "Availability date-window start cannot be after the end date.",
+                )
+            return {}
+
+    resolved_reference_date = _availability_filter_date_or_none(
+        value.get("resolved_reference_date"),
+        field="resolved_reference_date",
+        strict=strict,
+    ) or date.today().isoformat()
+    normalized = {
+        "type": "availability",
+        "version": "v1",
+        "value_type": value_type,
+        "status": "immediate" if value_type == "status" else None,
+        "available_by_date": available_by_date if value_type == "by_date" else None,
+        "available_from_date": available_from_date if value_type in {"from_date", "window"} else None,
+        "available_until_date": available_until_date if value_type == "window" else None,
+        "relative_days": relative_days if value_type == "relative_days" else None,
+        "resolved_reference_date": resolved_reference_date,
+    }
+    normalized["display_value"] = _availability_display_value(
+        value_type,
+        status=normalized["status"],
+        by_date=normalized["available_by_date"],
+        from_date=normalized["available_from_date"],
+        until_date=normalized["available_until_date"],
+        relative_days=normalized["relative_days"],
+    )
+    return normalized
+
+
+def _availability_filter_audit_label(value):
+    normalized = _normalize_availability_filter(value)
+    return str(normalized.get("display_value") or "").strip()
+
+
+def _availability_filter_semantic_identity(value):
+    normalized = _normalize_availability_filter(value)
+    if not normalized:
+        return {}
+    identity = dict(normalized)
+    identity.pop("resolved_reference_date", None)
+    return identity
+
+
 def _parse_vessel_tonnage_filter_payload(raw):
     return _parse_json_filter_payload(raw, _normalize_vessel_tonnage_filter)
 
@@ -615,6 +859,20 @@ def _parse_age_filter_payload_strict(raw):
             "Candidate age filter must be valid JSON.",
         ) from exc
     return _normalize_age_filter(payload, strict=True)
+
+
+def _parse_availability_filter_payload_strict(raw):
+    raw_text = str(raw or "").strip()
+    if not raw_text:
+        return {}
+    try:
+        payload = json.loads(raw_text)
+    except (TypeError, ValueError) as exc:
+        raise AvailabilityFilterInvalid(
+            "malformed_json",
+            "Availability filter must be valid JSON.",
+        ) from exc
+    return _normalize_availability_filter(payload, strict=True)
 
 
 def _parse_coc_issue_authority_filter_payload_strict(raw):
@@ -2197,6 +2455,9 @@ def _resolve_refinement_scope_preflight(parent_search_session_id, *, actor_user_
             "coc_issue_authority_filter": _normalize_coc_issue_authority_filter(
                 (parent_session.get("context") or {}).get("coc_issue_authority_filter") or {}
             ),
+            "availability_filter": _normalize_availability_filter(
+                (parent_session.get("context") or {}).get("availability_filter") or {}
+            ),
         },
         "scope_summary": scope_summary,
         "refinement": {
@@ -2256,6 +2517,9 @@ def _safe_recovery_search_context(value):
     )
     result["coc_issue_authority_filter"] = _normalize_coc_issue_authority_filter(
         (value if isinstance(value, dict) else {}).get("coc_issue_authority_filter") or {}
+    )
+    result["availability_filter"] = _normalize_availability_filter(
+        (value if isinstance(value, dict) else {}).get("availability_filter") or {}
     )
     return result
 
@@ -2422,6 +2686,9 @@ def _sanitize_ai_search_recovery_draft(payload):
             ),
             "coc_issue_authority_filter": _normalize_coc_issue_authority_filter(
                 search_state.get("coc_issue_authority_filter") or {}
+            ),
+            "availability_filter": _normalize_availability_filter(
+                search_state.get("availability_filter") or {}
             ),
             "refinement_state": str(search_state.get("refinement_state") or "disabled")[:64],
             "active_search_step_index": _sanitize_recovery_step_index(
@@ -5573,6 +5840,16 @@ def analyze_stream():
         def invalid_coc_issue_authority_filter():
             yield f"data: {json.dumps({'type': 'error', 'message': message, 'error_code': 'COC_ISSUE_AUTHORITY_FILTER_INVALID', 'detail': {'code': detail_code}})}\n\n"
         return Response(invalid_coc_issue_authority_filter(), mimetype='text/event-stream')
+    try:
+        availability_filter = _parse_availability_filter_payload_strict(
+            request.args.get('availability_filter', '')
+        )
+    except AvailabilityFilterInvalid as exc:
+        message = str(exc)
+        detail_code = exc.detail_code
+        def invalid_availability_filter():
+            yield f"data: {json.dumps({'type': 'error', 'message': message, 'error_code': 'AVAILABILITY_FILTER_INVALID', 'detail': {'code': detail_code}})}\n\n"
+        return Response(invalid_availability_filter(), mimetype='text/event-stream')
     search_request_id = request.args.get('search_request_id', '').strip() or str(uuid.uuid4())
     changed_content_acknowledgement_id = request.args.get(
         'changed_content_acknowledgement_id',
@@ -5590,6 +5867,7 @@ def analyze_stream():
         vessel_tonnage_filter=vessel_tonnage_filter,
         age_filter=age_filter,
         coc_issue_authority_filter=coc_issue_authority_filter,
+        availability_filter=availability_filter,
         parent_search_session_id=parent_search_session_id,
         changed_content_acknowledgement_id=changed_content_acknowledgement_id,
     )
@@ -5606,6 +5884,7 @@ def analyze_stream():
         "vessel_tonnage_filter": vessel_tonnage_filter,
         "age_filter": age_filter,
         "coc_issue_authority_filter": coc_issue_authority_filter,
+        "availability_filter": availability_filter,
         "parent_search_session_id": parent_search_session_id,
         "changed_content_acknowledgement_id": changed_content_acknowledgement_id,
     }
@@ -5615,7 +5894,7 @@ def analyze_stream():
     actor_username = _session_username()
     actor_user_id = _session_actor_user_id()
 
-    def _log_ai_search_audit_rows(audit_rows, rank_folder, present_rank, prompt, applied_ship_type, experienced_ship_type, search_session_id, coc_issue_authority_filter):
+    def _log_ai_search_audit_rows(audit_rows, rank_folder, present_rank, prompt, applied_ship_type, experienced_ship_type, search_session_id, coc_issue_authority_filter, availability_filter):
         for row in audit_rows or []:
             filename = str(row.get("filename", "")).strip()
             candidate_id = str(row.get("candidate_id", "")).strip()
@@ -5651,6 +5930,7 @@ def analyze_stream():
                 applied_ship_type_filter=applied_ship_type,
                 experienced_ship_type_filter=experienced_ship_type,
                 coc_issue_authority_filter=_coc_issue_authority_filter_audit_label(coc_issue_authority_filter),
+                availability_filter=_availability_filter_audit_label(availability_filter),
                 hard_filter_decision=str(row.get("hard_filter_decision", "")).strip(),
                 reason_codes=reason_codes,
                 reason_messages=reason_messages,
@@ -5763,6 +6043,7 @@ def analyze_stream():
             effective_vessel_tonnage_filter = dict(vessel_tonnage_filter or {})
             effective_age_filter = dict(age_filter or {})
             effective_coc_issue_authority_filter = dict(coc_issue_authority_filter or {})
+            effective_availability_filter = dict(availability_filter or {})
             search_mode = "root"
             root_search_session_id = search_session_id
             refinement_depth = 0
@@ -5814,6 +6095,11 @@ def analyze_stream():
                 parent_coc_issue_authority_filter = _normalize_coc_issue_authority_filter(
                     parent_context.get("coc_issue_authority_filter") or {}
                 )
+                parent_availability_filter = _normalize_availability_filter(
+                    parent_context.get("availability_filter") or {}
+                )
+                parent_availability_identity = _availability_filter_semantic_identity(parent_availability_filter)
+                effective_availability_identity = _availability_filter_semantic_identity(effective_availability_filter)
                 context_mismatch = (
                     (effective_rank_folder and effective_rank_folder != parent_rank_folder)
                     or (effective_present_rank and effective_present_rank != parent_present_rank)
@@ -5842,10 +6128,14 @@ def analyze_stream():
                         effective_coc_issue_authority_filter
                         and effective_coc_issue_authority_filter != parent_coc_issue_authority_filter
                     )
+                    or (
+                        effective_availability_identity
+                        and effective_availability_identity != parent_availability_identity
+                    )
                 )
                 if context_mismatch:
                     yield _error_sse(
-                        "Refinement must use the rank, ship-type, age, and tonnage filters saved with the previous verified search.",
+                        "Refinement must use the rank, ship-type, age, tonnage, CoC issue authority, and availability filters saved with the previous verified search.",
                         error_code="REFINEMENT_CONTEXT_MISMATCH",
                         retryable=False,
                     )
@@ -5881,6 +6171,7 @@ def analyze_stream():
                 effective_vessel_tonnage_filter = parent_vessel_tonnage_filter
                 effective_age_filter = parent_age_filter
                 effective_coc_issue_authority_filter = parent_coc_issue_authority_filter
+                effective_availability_filter = parent_availability_filter
                 authoritative_context = authoritative_preflight.get("search_context") or {}
                 effective_rank_folder_id = str(
                     authoritative_context.get("rank_folder_id") or ""
@@ -6010,6 +6301,7 @@ def analyze_stream():
                     "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                     "age_filter": effective_age_filter,
                     "coc_issue_authority_filter": effective_coc_issue_authority_filter,
+                    "availability_filter": effective_availability_filter,
                     "search_session_id": search_session_id,
                     "search_mode": search_mode,
                     "parent_search_session_id": parent_search_session_id,
@@ -6040,6 +6332,7 @@ def analyze_stream():
                 vessel_tonnage_filter=effective_vessel_tonnage_filter,
                 age_filter=effective_age_filter,
                 coc_issue_authority_filter=effective_coc_issue_authority_filter,
+                availability_filter=effective_availability_filter,
                 review_capture_callback=_candidate_facts_review_capture_callback,
                 candidate_scope_ids=candidate_scope_ids,
                 candidate_scope_memberships=candidate_scope_memberships,
@@ -6058,6 +6351,7 @@ def analyze_stream():
                             effective_experienced_ship_type,
                             search_session_id,
                             effective_coc_issue_authority_filter,
+                            effective_availability_filter,
                         )
                     except Exception as audit_exc:
                         print(f"[BACKEND WARN] Failed to persist AI search audit rows: {audit_exc}")
@@ -6138,6 +6432,7 @@ def analyze_stream():
                                 "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                                 "age_filter": effective_age_filter,
                                 "coc_issue_authority_filter": effective_coc_issue_authority_filter,
+                                "availability_filter": effective_availability_filter,
                             },
                             input_scope=scope_summary,
                             output=output_counts,
@@ -6182,6 +6477,7 @@ def analyze_stream():
                         "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                         "age_filter": effective_age_filter,
                         "coc_issue_authority_filter": effective_coc_issue_authority_filter,
+                        "availability_filter": effective_availability_filter,
                     }
                     event_to_client["scope_summary"] = scope_summary
                     event_to_client["refinement"] = refinement_payload
@@ -6200,6 +6496,7 @@ def analyze_stream():
                             "vessel_tonnage_filter": effective_vessel_tonnage_filter,
                             "age_filter": effective_age_filter,
                             "coc_issue_authority_filter": effective_coc_issue_authority_filter,
+                            "availability_filter": effective_availability_filter,
                             "search_session_id": search_session_id,
                             "search_mode": search_mode,
                             "parent_search_session_id": parent_search_session_id,
@@ -6252,6 +6549,7 @@ def analyze_stream():
                     "experienced_ship_type": experienced_ship_type,
                     "search_session_id": search_session_id,
                     "coc_issue_authority_filter": coc_issue_authority_filter,
+                    "availability_filter": availability_filter,
                     "error": f"{type(e).__name__}: {e}",
                 },
                 actor_role=actor_role,
@@ -6289,6 +6587,7 @@ def analyze():
     vessel_tonnage_filter = {}
     age_filter = {}
     coc_issue_authority_filter = {}
+    availability_filter = {}
     try:
         data = request.json
         prompt = data.get('prompt')
@@ -6354,6 +6653,18 @@ def analyze():
                 "error_code": "COC_ISSUE_AUTHORITY_FILTER_INVALID",
                 "detail": {"code": exc.detail_code},
             }), 400
+        try:
+            availability_filter = _normalize_availability_filter(
+                data.get('availability_filter') or {},
+                strict=bool(data.get('availability_filter')),
+            )
+        except AvailabilityFilterInvalid as exc:
+            return jsonify({
+                "success": False,
+                "message": str(exc),
+                "error_code": "AVAILABILITY_FILTER_INVALID",
+                "detail": {"code": exc.detail_code},
+            }), 400
 
         print(f"[BACKEND] Starting analysis for rank folder: {rank_folder}")
         print(f"[BACKEND] Prompt: {prompt}")
@@ -6381,6 +6692,7 @@ def analyze():
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "age_filter": age_filter,
                 "coc_issue_authority_filter": coc_issue_authority_filter,
+                "availability_filter": availability_filter,
             },
             actor_role=actor_role,
             actor_username=actor_username,
@@ -6404,6 +6716,7 @@ def analyze():
             vessel_tonnage_filter=vessel_tonnage_filter,
             age_filter=age_filter,
             coc_issue_authority_filter=coc_issue_authority_filter,
+            availability_filter=availability_filter,
             review_capture_callback=_candidate_facts_review_capture_callback,
             candidate_population_paths=population.get("candidate_population_paths"),
             candidate_population_notice=population.get("notice"),
@@ -6429,6 +6742,7 @@ def analyze():
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "age_filter": age_filter,
                 "coc_issue_authority_filter": coc_issue_authority_filter,
+                "availability_filter": availability_filter,
                 "success": bool(result.get("success")),
                 "notices": result.get("notices", []),
                 "verified_matches": len(result.get("verified_matches", [])),
@@ -6460,6 +6774,7 @@ def analyze():
                 "vessel_tonnage_filter": vessel_tonnage_filter,
                 "age_filter": age_filter,
                 "coc_issue_authority_filter": coc_issue_authority_filter,
+                "availability_filter": availability_filter,
                 "error": f"{type(e).__name__}: {e}",
             },
             actor_role=actor_role,

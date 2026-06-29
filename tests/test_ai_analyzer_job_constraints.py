@@ -270,6 +270,24 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         )
         self.assertNotIn("coc_issue_authority", constraints["hard_constraints"])
 
+    def test_structured_availability_scope_suppresses_prompt_availability_hard_constraint(self):
+        constraints = self.analyzer._extract_job_constraints(
+            "available immediately",
+            rank=self.rank,
+            suppress_prompt_availability=True,
+        )
+        self.assertEqual(constraints["applied_constraints"], [])
+        self.assertEqual(constraints["observability_applied_constraints"], ["availability"])
+        self.assertEqual(
+            constraints["observability_constraint_reasons"],
+            {"availability": "picker_override"},
+        )
+        self.assertEqual(
+            constraints["observability_constraints"]["availability"]["status"],
+            "immediately",
+        )
+        self.assertNotIn("availability", constraints["hard_constraints"])
+
     def test_shared_picker_override_helper_applies_picker_and_routes_prompt_observability(self):
         constraints = {
             "hard_constraints": {},
@@ -740,6 +758,99 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         self.assertEqual(prompt_authority_entries[0]["reason"], "picker_override")
         self.assertNotIn("uk_mca", json.dumps(prompt_authority_entries))
         self.assertNotIn("india_dg_shipping", json.dumps(prompt_authority_entries))
+
+    def test_run_analysis_stream_injects_availability_picker_constraint(self):
+        filename = "2nd_Engineer_1006.pdf"
+        (self.rank_folder / filename).write_bytes(b"%PDF-1.4")
+        captured = {}
+
+        self.analyzer._enumerate_rank_candidates = lambda *_args, **_kwargs: {
+            Path(filename).stem: [
+                {
+                    "id": "chunk-1",
+                    "score": 1.0,
+                    "metadata": {
+                        "resume_id": Path(filename).stem,
+                        "rank": self.rank,
+                        "raw_text": "Availability Details: From date - Till date 01-Jan-2026 - 01-Mar-2026",
+                    },
+                }
+            ]
+        }
+        self.analyzer._build_candidate_facts = lambda *args, **kwargs: {
+            "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            "role": {
+                "current_rank_normalized": "2nd_engineer",
+                "applied_rank_normalized": "2nd_engineer",
+            },
+            "fact_meta": {
+                "role.current_rank_normalized": {"confidence": 1.0},
+                "role.applied_rank_normalized": {"confidence": 1.0},
+            },
+            "personal": {"dob": None},
+            "derived": {"age_years": None},
+            "application": {"applied_ship_types": []},
+            "experience": {"vessel_types": [], "engine_types": []},
+            "logistics": {
+                "availability_v1": {
+                    "version": "v1",
+                    "availability_date": "2026-01-01",
+                    "availability_end_date": "2026-03-01",
+                    "extraction_state": "PARSED",
+                    "availability_source_label": "availability_details",
+                    "availability_source_text": "From date - Till date 01-Jan-2026 - 01-Mar-2026",
+                    "availability_extracted_on_date": "2025-12-15",
+                }
+            },
+            "certifications": {"coc": []},
+        }
+
+        def capture_hard_filters(_candidate_facts, job_constraints):
+            captured["job_constraints"] = job_constraints
+            return {
+                "decision": "PASS",
+                "results": [],
+                "evaluation_date_used": "2026-06-25",
+                "facts_version": AIResumeAnalyzer.FACTS_VERSION,
+            }
+
+        self.analyzer._evaluate_hard_filters = capture_hard_filters
+        self.analyzer._reason_with_llm = lambda *_args, **_kwargs: {
+            "is_match": True,
+            "confidence": 0.91,
+            "reason": "Availability picker constraint reached deterministic evaluation.",
+        }
+
+        events = list(self.analyzer.run_analysis_stream(
+            self.rank,
+            "available immediately",
+            availability_filter={
+                "type": "availability",
+                "version": "v1",
+                "value_type": "by_date",
+                "status": None,
+                "available_by_date": "2026-04-15",
+                "available_from_date": None,
+                "available_until_date": None,
+                "relative_days": None,
+                "resolved_reference_date": "2026-04-06",
+                "display_value": "available by 2026-04-15",
+            },
+        ))
+
+        self.assertTrue(any(event["type"] == "complete" for event in events))
+        availability_constraint = captured["job_constraints"]["hard_constraints"]["availability"]
+        self.assertEqual(availability_constraint["value_type"], "by_date")
+        self.assertEqual(availability_constraint["available_by_date"], "2026-04-15")
+        self.assertIn("availability", captured["job_constraints"]["applied_constraints"])
+        self.assertEqual(
+            captured["job_constraints"]["observability_constraint_reasons"],
+            {"availability": "picker_override"},
+        )
+        self.assertEqual(
+            captured["job_constraints"]["observability_constraints"]["availability"]["status"],
+            "immediately",
+        )
 
     def test_coc_issue_authority_bare_mmd_does_not_match_india(self):
         self.assertIsNone(self.analyzer._extract_coc_issue_authority_constraint("CoC issued by MMD"))

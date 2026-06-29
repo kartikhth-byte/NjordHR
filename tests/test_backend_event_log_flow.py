@@ -1736,6 +1736,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 vessel_tonnage_filter=None,
                 age_filter=None,
                 coc_issue_authority_filter=None,
+                availability_filter=None,
                 **_kwargs,
             ):
                 captured["rank_folder"] = rank_folder
@@ -1747,6 +1748,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
                 captured["vessel_tonnage_filter"] = vessel_tonnage_filter
                 captured["age_filter"] = age_filter
                 captured["coc_issue_authority_filter"] = coc_issue_authority_filter
+                captured["availability_filter"] = availability_filter
                 yield {
                     "type": "complete",
                     "verified_matches": [],
@@ -1794,6 +1796,17 @@ class BackendEventLogFlowTests(unittest.TestCase):
                     "coc_issue_authority_filter": json.dumps({
                         "type": "coc_issue_authority",
                         "authorities": ["india_dg_shipping", "uk_mca"],
+                    }),
+                    "availability_filter": json.dumps({
+                        "type": "availability",
+                        "version": "v1",
+                        "value_type": "by_date",
+                        "status": None,
+                        "available_by_date": "2026-04-15",
+                        "available_from_date": None,
+                        "available_until_date": None,
+                        "relative_days": None,
+                        "display_value": "available by 2026-04-15",
                     }),
                 },
             )
@@ -1854,6 +1867,21 @@ class BackendEventLogFlowTests(unittest.TestCase):
             {
                 "type": "coc_issue_authority",
                 "authorities": ["india_dg_shipping", "uk_mca"],
+            },
+        )
+        self.assertEqual(
+            captured["availability_filter"],
+            {
+                "type": "availability",
+                "version": "v1",
+                "value_type": "by_date",
+                "status": None,
+                "available_by_date": "2026-04-15",
+                "available_from_date": None,
+                "available_until_date": None,
+                "relative_days": None,
+                "resolved_reference_date": date.today().isoformat(),
+                "display_value": "available by 2026-04-15",
             },
         )
 
@@ -2205,6 +2233,129 @@ class BackendEventLogFlowTests(unittest.TestCase):
         body = resp.get_json()
         self.assertEqual(body["error_code"], "COC_ISSUE_AUTHORITY_FILTER_INVALID")
         self.assertEqual(body["detail"]["code"], "unknown_authority")
+
+    def test_availability_filter_regenerates_display_value_and_status_literal(self):
+        normalized = backend_server._normalize_availability_filter({
+            "type": "availability",
+            "version": "v1",
+            "value_type": "status",
+            "status": "immediately",
+            "display_value": "{extraction_state: PARSED, leaked: yes}",
+        }, strict=True)
+
+        self.assertEqual(normalized["status"], "immediate")
+        self.assertEqual(normalized["display_value"], "available immediately")
+        self.assertNotIn("extraction_state", normalized["display_value"])
+
+    def test_availability_filter_fingerprint_ignores_client_display_value(self):
+        base_filter = {
+            "type": "availability",
+            "version": "v1",
+            "value_type": "by_date",
+            "status": None,
+            "available_by_date": "2026-04-15",
+            "available_from_date": None,
+            "available_until_date": None,
+            "relative_days": None,
+            "resolved_reference_date": "2026-04-06",
+        }
+        first = backend_server._ai_search_request_fingerprint(
+            prompt="show candidates",
+            rank_folder="Chief_Officer",
+            availability_filter={
+                **base_filter,
+                "display_value": "available by 2026-04-15",
+            },
+        )
+        second = backend_server._ai_search_request_fingerprint(
+            prompt="show candidates",
+            rank_folder="Chief_Officer",
+            availability_filter={
+                **base_filter,
+                "display_value": "{value_type: by_date, extraction_state: PARSED}",
+            },
+        )
+
+        self.assertEqual(first, second)
+
+    def test_availability_filter_fingerprint_ignores_resolved_reference_date(self):
+        base_filter = {
+            "type": "availability",
+            "version": "v1",
+            "value_type": "relative_days",
+            "status": None,
+            "available_by_date": None,
+            "available_from_date": None,
+            "available_until_date": None,
+            "relative_days": 30,
+        }
+        first = backend_server._ai_search_request_fingerprint(
+            prompt="show candidates",
+            rank_folder="Chief_Officer",
+            availability_filter={
+                **base_filter,
+                "resolved_reference_date": "2026-04-06",
+            },
+        )
+        second = backend_server._ai_search_request_fingerprint(
+            prompt="show candidates",
+            rank_folder="Chief_Officer",
+            availability_filter={
+                **base_filter,
+                "resolved_reference_date": "2026-04-07",
+            },
+        )
+
+        self.assertEqual(first, second)
+
+    def test_analyze_stream_rejects_invalid_availability_filter_payload(self):
+        invalid_payloads = [
+            ({"type": "wrong", "value_type": "status", "status": "immediately"}, "invalid_type"),
+            ({"type": "availability", "version": "v0", "value_type": "status", "status": "immediately"}, "invalid_version"),
+            ({"type": "availability", "version": "v1", "value_type": "by_date", "available_by_date": "15-04-2026"}, "invalid_date"),
+            ({"type": "availability", "version": "v1", "value_type": "relative_days", "relative_days": 366}, "invalid_relative_days"),
+            ({"type": "availability", "version": "v1", "value_type": "window", "available_from_date": "2026-05-01", "available_until_date": "2026-04-01"}, "inverted_window"),
+            ("not-json", "malformed_json"),
+        ]
+        for payload, detail_code in invalid_payloads:
+            with self.subTest(payload=payload):
+                raw_filter = payload if isinstance(payload, str) else json.dumps(payload)
+                with patch.object(backend_server, "Analyzer") as analyzer:
+                    resp = self.client.get(
+                        "/analyze_stream",
+                        query_string={
+                            "rank_folder": "Chief_Officer",
+                            "prompt": "show candidates",
+                            "availability_filter": raw_filter,
+                        },
+                    )
+
+                events = _sse_events(resp)
+                self.assertEqual(events[0]["type"], "error")
+                self.assertEqual(events[0]["error_code"], "AVAILABILITY_FILTER_INVALID")
+                self.assertEqual(events[0]["detail"]["code"], detail_code)
+                analyzer.assert_not_called()
+
+    def test_analyze_rejects_invalid_availability_filter_payload(self):
+        resp = self.client.post(
+            "/analyze",
+            json={
+                "rank_folder": "Chief_Officer",
+                "prompt": "show candidates",
+                "availability_filter": {
+                    "type": "availability",
+                    "version": "v1",
+                    "value_type": "window",
+                    "available_from_date": "2026-05-01",
+                    "available_until_date": "2026-04-01",
+                },
+            },
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        body = resp.get_json()
+        self.assertEqual(body["error_code"], "AVAILABILITY_FILTER_INVALID")
+        self.assertEqual(body["detail"]["code"], "inverted_window")
 
     def test_analyze_stream_accepts_opaque_rank_folder_id(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
@@ -2729,6 +2880,17 @@ class BackendEventLogFlowTests(unittest.TestCase):
                         "type": "coc_issue_authority",
                         "authorities": ["india_dg_shipping", "uk_mca"],
                     }),
+                    "availability_filter": json.dumps({
+                        "type": "availability",
+                        "version": "v1",
+                        "value_type": "status",
+                        "status": "immediately",
+                        "available_by_date": None,
+                        "available_from_date": None,
+                        "available_until_date": None,
+                        "relative_days": None,
+                        "display_value": "available immediately",
+                    }),
                 },
             )
 
@@ -2753,6 +2915,7 @@ class BackendEventLogFlowTests(unittest.TestCase):
         )
         self.assertNotIn("india_dg_shipping", audit_rows[1]["CoC_Issue_Authority_Filter"])
         self.assertNotIn("uk_mca", audit_rows[1]["CoC_Issue_Authority_Filter"])
+        self.assertEqual(audit_rows[1]["Availability_Filter"], "available immediately")
         payload = resp.get_data(as_text=True)
         self.assertIn('"type": "complete"', payload)
         self.assertNotIn('"hard_filter_audit"', payload)

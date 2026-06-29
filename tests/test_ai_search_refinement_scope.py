@@ -102,7 +102,44 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         present_rank="chief_officer",
         content_hash_at_event="content-a",
         lineage_warning_codes=None,
+        availability_filter=None,
     ):
+        context = {
+            "present_rank": present_rank,
+            "experience_ship_type_filter": {
+                "type": "experience_ship_type",
+                "match_mode": "any_of",
+                "items": [{
+                    "ship_family": "bulk carrier",
+                    "minimum_months": 12,
+                    "years_back": 3,
+                    "contract_count": None,
+                }],
+            },
+            "engine_experience_filter": {
+                "type": "engine_experience",
+                "match_mode": "any_of",
+                "items": [{
+                    "engine_family": "wingd_x_engines",
+                    "minimum_months": None,
+                    "years_back": None,
+                    "contract_count": 2,
+                }],
+            },
+            "vessel_tonnage_filter": {
+                "type": "vessel_tonnage",
+                "min_value": 30000,
+                "max_value": None,
+                "unit": "dwt",
+                "years_back": 4,
+            },
+            "coc_issue_authority_filter": {
+                "type": "coc_issue_authority",
+                "authorities": ["india_dg_shipping", "uk_mca"],
+            },
+        }
+        if availability_filter is not None:
+            context["availability_filter"] = availability_filter
         backend_server.search_scope_repo.complete_search_session(
             search_session_id=search_session_id,
             actor_user_id="local:test-recruiter",
@@ -112,40 +149,7 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             applied_ship_type="Bulk Carrier",
             experienced_ship_type="Tanker",
             prompt="has valid passport",
-            context={
-                "present_rank": present_rank,
-                "experience_ship_type_filter": {
-                    "type": "experience_ship_type",
-                    "match_mode": "any_of",
-                    "items": [{
-                        "ship_family": "bulk carrier",
-                        "minimum_months": 12,
-                        "years_back": 3,
-                        "contract_count": None,
-                    }],
-                },
-                "engine_experience_filter": {
-                    "type": "engine_experience",
-                    "match_mode": "any_of",
-                    "items": [{
-                        "engine_family": "wingd_x_engines",
-                        "minimum_months": None,
-                        "years_back": None,
-                        "contract_count": 2,
-                    }],
-                },
-                "vessel_tonnage_filter": {
-                    "type": "vessel_tonnage",
-                    "min_value": 30000,
-                    "max_value": None,
-                    "unit": "dwt",
-                    "years_back": 4,
-                },
-                "coc_issue_authority_filter": {
-                    "type": "coc_issue_authority",
-                    "authorities": ["india_dg_shipping", "uk_mca"],
-                },
-            },
+            context=context,
             memberships=[{
                 "candidate_scope_id": "candidate-scope-a",
                 "content_hash_at_event": content_hash_at_event,
@@ -566,6 +570,53 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
         self.assertEqual(events[0].get("type"), "request_status")
         self.assertEqual(events[0].get("request_status"), "SEARCH_REQUEST_IN_PROGRESS")
         build_analyzer.assert_not_called()
+
+    def test_refinement_context_match_ignores_availability_reference_date(self):
+        self._save_parent_scope(
+            availability_filter={
+                "type": "availability",
+                "version": "v1",
+                "value_type": "relative_days",
+                "status": None,
+                "available_by_date": None,
+                "available_from_date": None,
+                "available_until_date": None,
+                "relative_days": 30,
+                "resolved_reference_date": "2026-04-06",
+                "display_value": "available within 30 days",
+            }
+        )
+        client = self._client()
+
+        with (
+            patch("backend_server._active_download_root", return_value=self.temp_dir.name),
+            patch("backend_server._build_analyzer", return_value=_FakeAnalyzer()),
+            patch("backend_server._record_supabase_telemetry", return_value=None),
+            patch("backend_server._schedule_search_prompt_audit", return_value=None),
+        ):
+            response = client.get(
+                "/analyze_stream",
+                query_string={
+                    "prompt": "strong leadership under pressure",
+                    "parent_search_session_id": "parent-search",
+                    "availability_filter": json.dumps({
+                        "type": "availability",
+                        "version": "v1",
+                        "value_type": "relative_days",
+                        "status": None,
+                        "available_by_date": None,
+                        "available_from_date": None,
+                        "available_until_date": None,
+                        "relative_days": 30,
+                        "resolved_reference_date": "2026-04-07",
+                        "display_value": "client text ignored",
+                    }),
+                },
+            )
+
+        events = _sse_events(response)
+        self.assertTrue(any(event.get("type") == "complete" for event in events))
+        self.assertFalse(any(event.get("error_code") == "REFINEMENT_CONTEXT_MISMATCH" for event in events))
 
     def test_missing_parent_scope_request_does_not_fall_back_to_root_search(self):
         client = self._client()
@@ -1031,6 +1082,19 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                             "ignored": "must-not-survive",
                             "years_back": 2,
                         },
+                        "availability_filter": {
+                            "type": "availability",
+                            "version": "v1",
+                            "value_type": "relative_days",
+                            "status": None,
+                            "available_by_date": None,
+                            "available_from_date": None,
+                            "available_until_date": None,
+                            "relative_days": 30,
+                            "resolved_reference_date": "2026-04-06",
+                            "display_value": "available within 30 days",
+                            "ignored": "must-not-survive",
+                        },
                         "experience_ship_type_filter": {
                             "type": "experience_ship_type",
                             "match_mode": "any_of",
@@ -1084,6 +1148,19 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
                                     "authorities": ["MCA UK"],
                                     "ignored": "must-not-survive",
                                 },
+                                "availability_filter": {
+                                    "type": "availability",
+                                    "version": "v1",
+                                    "value_type": "window",
+                                    "status": None,
+                                    "available_by_date": None,
+                                    "available_from_date": "2026-04-01",
+                                    "available_until_date": "2026-05-01",
+                                    "relative_days": None,
+                                    "resolved_reference_date": "2026-04-06",
+                                    "display_value": "available between 2026-04-01 and 2026-05-01",
+                                    "ignored": "must-not-survive",
+                                },
                                 "raw_nested": {"secret": "must-not-survive"},
                             },
                             "verified_matches": [{
@@ -1133,6 +1210,21 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             },
         )
         self.assertEqual(
+            loaded["search_state"]["availability_filter"],
+            {
+                "type": "availability",
+                "version": "v1",
+                "value_type": "relative_days",
+                "status": None,
+                "available_by_date": None,
+                "available_from_date": None,
+                "available_until_date": None,
+                "relative_days": 30,
+                "resolved_reference_date": "2026-04-06",
+                "display_value": "available within 30 days",
+            },
+        )
+        self.assertEqual(
             loaded["search_state"]["experience_ship_type_filter"],
             {
                 "type": "experience_ship_type",
@@ -1177,6 +1269,21 @@ class AISearchRefinementScopeRouteTests(unittest.TestCase):
             {
                 "type": "coc_issue_authority",
                 "authorities": ["uk_mca"],
+            },
+        )
+        self.assertEqual(
+            loaded["search_state"]["current_completed_results"]["search_context"]["availability_filter"],
+            {
+                "type": "availability",
+                "version": "v1",
+                "value_type": "window",
+                "status": None,
+                "available_by_date": None,
+                "available_from_date": "2026-04-01",
+                "available_until_date": "2026-05-01",
+                "relative_days": None,
+                "resolved_reference_date": "2026-04-06",
+                "display_value": "available between 2026-04-01 and 2026-05-01",
             },
         )
         self.assertEqual(
