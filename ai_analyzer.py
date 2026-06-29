@@ -10669,7 +10669,7 @@ class AIResumeAnalyzer:
                 unknown_reason="FACTUAL_UNKNOWN",
             )
 
-        if v1_fact:
+        if v1_fact and str(v1_fact.get("version") or "") == _AVAILABILITY_FACT_VERSION:
             extraction_state = str(v1_fact.get("extraction_state") or "MISSING")
             availability_date = _parse_availability_date(v1_fact.get("availability_date"))
             availability_end_date = _parse_availability_date(v1_fact.get("availability_end_date"))
@@ -10679,7 +10679,11 @@ class AIResumeAnalyzer:
 
             relative_source = (
                 source_label == "notice_period"
-                or bool(re.search(r"\b(?:immediate|asap|ready to join|ready for immediate joining|join asap)\b", source_text, flags=re.IGNORECASE))
+                or bool(re.search(
+                    r"\b(?:immediate(?:ly)?|asap|available\s+now|ready\s+to\s+join|ready\s+for\s+immediate\s+joining|join\s+asap)\b",
+                    source_text,
+                    flags=re.IGNORECASE,
+                ))
             )
             if extraction_state == "PARSED" and relative_source and extracted_on_date and (today - extracted_on_date).days > 90:
                 extraction_state = "STALE"
@@ -10691,7 +10695,6 @@ class AIResumeAnalyzer:
                     "Could not determine candidate availability evidence reliably.",
                     availability_date,
                     availability_end_date,
-                    extra={"extraction_state": extraction_state},
                 )
 
             kind = _legacy_constraint_kind()

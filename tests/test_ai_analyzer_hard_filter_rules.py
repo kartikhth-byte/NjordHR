@@ -2857,6 +2857,34 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "AVAILABILITY_STALE")
         self.assertEqual(result["unknown_reason"], "FACTUAL_UNKNOWN")
 
+    def test_availability_v1_rule_stale_immediate_phrase_variants_unknown(self):
+        phrases = [
+            "Available immediately",
+            "Immediately available",
+            "Available now",
+        ]
+        for phrase in phrases:
+            with self.subTest(phrase=phrase):
+                result = self.analyzer._evaluate_availability_rule(
+                    {
+                        "logistics": {
+                            "availability_v1": {
+                                "version": "v1",
+                                "availability_date": "2026-01-01",
+                                "availability_end_date": None,
+                                "extraction_state": "PARSED",
+                                "availability_source_label": "availability_details",
+                                "availability_source_text": phrase,
+                                "availability_extracted_on_date": "2026-01-01",
+                            }
+                        }
+                    },
+                    {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+                    reference_date=date(2026, 5, 1),
+                )
+                self.assertEqual(result["decision"], "UNKNOWN")
+                self.assertEqual(result["reason_code"], "AVAILABILITY_STALE")
+
     def test_availability_v1_rule_non_parsed_state_unknown(self):
         result = self.analyzer._evaluate_availability_rule(
             {
@@ -2877,6 +2905,32 @@ class AIAnalyzerHardFilterRuleTests(unittest.TestCase):
         )
         self.assertEqual(result["decision"], "UNKNOWN")
         self.assertEqual(result["reason_code"], "AVAILABILITY_MISSING")
+        self.assertNotIn("extraction_state", result["actual_value"])
+
+    def test_availability_v1_wrong_version_falls_back_to_legacy_fields(self):
+        result = self.analyzer._evaluate_availability_rule(
+            {
+                "logistics": {
+                    "availability_v1": {
+                        "version": "v0",
+                        "availability_date": "2026-06-01",
+                        "availability_end_date": None,
+                        "extraction_state": "PARSED",
+                        "availability_source_label": "availability_details",
+                        "availability_source_text": "Available from 01-Jun-2026",
+                        "availability_extracted_on_date": "2026-04-01",
+                    },
+                    "availability_date": "2026-03-30",
+                    "availability_end_date": "2026-04-30",
+                    "availability_status": "immediately",
+                },
+                "fact_meta": {"logistics.availability_date": {"confidence": 0.9}},
+            },
+            {"value_type": "status", "status": "immediately", "display_value": "available immediately"},
+            reference_date=date(2026, 4, 6),
+        )
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["reason_code"], "AVAILABILITY_IMMEDIATE")
 
     def test_hard_filter_uses_availability_v1_fact_when_active(self):
         result = self.analyzer._evaluate_hard_filters(
