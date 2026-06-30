@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
@@ -131,6 +132,28 @@ QUERY_PLAN_RESPONSE_SCHEMA: Mapping[str, Any] = {
         },
     },
     "required": ["version", "constraints", "soft_signals", "unapplied", "needs_review"],
+}
+VESSEL_TONNAGE_QUERY_PLAN_RESPONSE_SCHEMA = deepcopy(QUERY_PLAN_RESPONSE_SCHEMA)
+VESSEL_TONNAGE_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"]["properties"]["parameters"] = {
+    "type": "OBJECT",
+    "properties": {
+        "version": {"type": "STRING"},
+        "value_type": {"type": "STRING"},
+        "min_value": {"type": "INTEGER", "nullable": True},
+        "max_value": {"type": "INTEGER", "nullable": True},
+        "unit": {"type": "STRING"},
+        "years_back": {"type": "INTEGER", "nullable": True},
+        "display_value": {"type": "STRING"},
+    },
+    "required": [
+        "version",
+        "value_type",
+        "min_value",
+        "max_value",
+        "unit",
+        "years_back",
+        "display_value",
+    ],
 }
 
 
@@ -444,4 +467,73 @@ def call_gemini_availability_normalizer(
             helper_tool_version=HELPER_TOOL_VERSION if use_helper_tools else None,
             helper_tool_calls=tuple(helper_audit),
             helper_tool_context=tuple(helper_context),
+        )
+
+
+def call_gemini_vessel_tonnage_normalizer(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    api_key: str | None = None,
+    model: str = COMPOUND_NORMALIZER_DEFAULT_MODEL,
+    timeout: int = 45,
+    catalog: FilterCapabilityCatalog | None = None,
+    post: Callable[..., Any] = requests.post,
+) -> AvailabilityNormalizerProviderResult:
+    """Call Gemini for an audit-only vessel-tonnage normalizer run."""
+
+    selected_model = str(model or COMPOUND_NORMALIZER_DEFAULT_MODEL).strip() or COMPOUND_NORMALIZER_DEFAULT_MODEL
+    selected_api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not selected_api_key:
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error="missing_api_credentials",
+        )
+
+    provider_prompt = build_vessel_tonnage_normalizer_prompt(
+        prompt,
+        prompt_normalized=prompt_normalized,
+        reference_date=reference_date,
+        catalog=catalog,
+    )
+    request_body = {
+        "contents": [{"parts": [{"text": provider_prompt}]}],
+        "generationConfig": {
+            "temperature": 0,
+            "topP": 1,
+            "topK": 1,
+            "seed": COMPOUND_NORMALIZER_RESPONSE_SEED,
+            "responseMimeType": "application/json",
+            "responseSchema": VESSEL_TONNAGE_QUERY_PLAN_RESPONSE_SCHEMA,
+        },
+    }
+    try:
+        response = post(
+            COMPOUND_NORMALIZER_API_URL.format(model=selected_model),
+            headers={"x-goog-api-key": selected_api_key, "Content-Type": "application/json"},
+            json=request_body,
+            timeout=timeout,
+        )
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
+        response_payload = response.json()
+        raw_output = _gemini_text_from_response(response_payload if isinstance(response_payload, Mapping) else {})
+        parsed_payload = _extract_json_payload(raw_output)
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=raw_output,
+            parsed_payload=parsed_payload,
+        )
+    except Exception as exc:  # pragma: no cover - exercised with fake post in tests.
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error=f"{type(exc).__name__}: {exc}",
         )
