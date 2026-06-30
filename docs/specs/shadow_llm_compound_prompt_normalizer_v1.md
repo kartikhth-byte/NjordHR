@@ -688,6 +688,14 @@ fingerprints, recovery drafts, existing hard-filter audit CSV columns,
 telemetry events, frontend, hard-filter evaluator branches, and
 `PROMOTED_FAMILIES`.
 
+The PR-5 fixture artifact is
+`docs/eval-evidence/availability-helper-tool-pilot-fixture-evidence-2026-06-30.json`.
+It records helper-tool plumbing on the 200-prompt corpus without invoking the
+LLM: schema-valid rate 1.0 (200/200), unsafe widening count 0, Class A fixture
+match rate 1.0, Class B correct rate 1.0 with recall lift 1.0, Class C
+safe-route rate 1.0, helper accepted count 464, helper rejected count 60, and
+promotion gate `passes=false` with only `real_llm_run_required` remaining.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.

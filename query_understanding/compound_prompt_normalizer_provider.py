@@ -14,6 +14,10 @@ from candidate_facts.aliases.filter_capability_catalog import (
     FilterCapabilityCatalog,
     llm_facing_catalog,
 )
+from query_understanding.compound_prompt_normalizer_tools import (
+    HELPER_TOOL_VERSION,
+    availability_helper_tool_context,
+)
 
 
 COMPOUND_NORMALIZER_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.availability.v1"
@@ -138,6 +142,9 @@ class AvailabilityNormalizerProviderResult:
     raw_llm_output: str | None
     parsed_payload: Mapping[str, Any] | None
     transport_error: str | None = None
+    helper_tool_version: str | None = None
+    helper_tool_calls: tuple[Mapping[str, Any], ...] = ()
+    helper_tool_context: tuple[Mapping[str, Any], ...] = ()
 
 
 def _normalize_text(text: Any) -> str:
@@ -169,14 +176,24 @@ def build_availability_normalizer_prompt(
     prompt_normalized: str,
     reference_date: str | None = None,
     catalog: FilterCapabilityCatalog | None = None,
+    helper_tool_context: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
 ) -> str:
     """Build the framework-independent prompt for the availability normalizer."""
 
     public_catalog = llm_facing_catalog(catalog)
     catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
+    helper_context = list(helper_tool_context or [])
+    helper_context_text = json.dumps(helper_context, indent=2, sort_keys=True)
+    helper_instruction = (
+        "Provider helper tool outputs are available below. Treat accepted helper results as deterministic hints, "
+        "but still return one final query_plan.v1 and obey the schema. Rejected helper results must route the affected phrase to needs_review or unapplied.\n"
+        if helper_context
+        else ""
+    )
     return (
         "You are the NjordHR compound-prompt normalizer for audit-only evidence runs.\n"
         "Return JSON only. Do not call tools. Do not include markdown.\n\n"
+        f"{helper_instruction}"
         "Output schema root keys:\n"
         "- version: exactly \"v1\"\n"
         "- constraints: list of filter constraints\n"
@@ -217,6 +234,7 @@ def build_availability_normalizer_prompt(
         f"prompt_raw: {json.dumps(str(prompt or ''))}\n"
         f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
         f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
+        f"provider_helper_tool_outputs: {helper_context_text}\n\n"
         f"catalog: {catalog_text}\n"
     )
 
@@ -245,6 +263,7 @@ def call_gemini_availability_normalizer(
     model: str = COMPOUND_NORMALIZER_DEFAULT_MODEL,
     timeout: int = 45,
     catalog: FilterCapabilityCatalog | None = None,
+    use_helper_tools: bool = False,
     post: Callable[..., Any] = requests.post,
 ) -> AvailabilityNormalizerProviderResult:
     """Call Gemini for an audit-only availability normalizer run."""
@@ -259,12 +278,21 @@ def call_gemini_availability_normalizer(
             parsed_payload=None,
             transport_error="missing_api_credentials",
         )
+    helper_context: list[Mapping[str, Any]] = []
+    helper_audit: list[Mapping[str, Any]] = []
+    if use_helper_tools:
+        helper_context, helper_audit = availability_helper_tool_context(
+            prompt_normalized,
+            reference_date=reference_date,
+            catalog=catalog,
+        )
 
     provider_prompt = build_availability_normalizer_prompt(
         prompt,
         prompt_normalized=prompt_normalized,
         reference_date=reference_date,
         catalog=catalog,
+        helper_tool_context=helper_context,
     )
     request_body = {
         "contents": [{"parts": [{"text": provider_prompt}]}],
@@ -294,6 +322,9 @@ def call_gemini_availability_normalizer(
             prompt_template_version=COMPOUND_NORMALIZER_PROMPT_TEMPLATE_VERSION,
             raw_llm_output=raw_output,
             parsed_payload=parsed_payload,
+            helper_tool_version=HELPER_TOOL_VERSION if use_helper_tools else None,
+            helper_tool_calls=tuple(helper_audit),
+            helper_tool_context=tuple(helper_context),
         )
     except Exception as exc:  # pragma: no cover - exercised with fake post in tests.
         return AvailabilityNormalizerProviderResult(
@@ -302,4 +333,7 @@ def call_gemini_availability_normalizer(
             raw_llm_output=None,
             parsed_payload=None,
             transport_error=f"{type(exc).__name__}: {exc}",
+            helper_tool_version=HELPER_TOOL_VERSION if use_helper_tools else None,
+            helper_tool_calls=tuple(helper_audit),
+            helper_tool_context=tuple(helper_context),
         )

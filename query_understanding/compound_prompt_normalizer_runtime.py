@@ -115,6 +115,10 @@ def promoted_availability_constraint_from_prompt(
     diagnostics["model_id"] = getattr(result, "model_id", None)
     diagnostics["prompt_template_version"] = getattr(result, "prompt_template_version", None)
     diagnostics["transport_error"] = getattr(result, "transport_error", None)
+    helper_tool_calls = getattr(result, "helper_tool_calls", ())
+    diagnostics["helper_tool_version"] = getattr(result, "helper_tool_version", None)
+    diagnostics["helper_tool_call_count"] = len(helper_tool_calls) if isinstance(helper_tool_calls, tuple) else 0
+    diagnostics["helper_tool_calls"] = list(helper_tool_calls) if isinstance(helper_tool_calls, tuple) else []
     raw_payload = getattr(result, "parsed_payload", None)
     if not isinstance(raw_payload, Mapping):
         diagnostics["validator_result"] = "rejected"
