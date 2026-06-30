@@ -696,6 +696,30 @@ match rate 1.0, Class B correct rate 1.0 with recall lift 1.0, Class C
 safe-route rate 1.0, helper accepted count 464, helper rejected count 60, and
 promotion gate `passes=false` with only `real_llm_run_required` remaining.
 
+The PR-5 real-LLM comparison uses three artifacts:
+
+- `docs/eval-evidence/availability-normalizer-json-only-llm-evidence-2026-06-30.json`: JSON-only baseline, 200 prompts, schema-valid rate 1.0, unsafe widening count 0, Class A LLM match rate 0.9875, Class B correct rate 1.0, Class B recall lift 1.0, Class C safe-route rate 1.0, reviewed false-positive rate 0.0, helper accepted count 0, helper rejected count 0, promotion gate `passes=true`.
+- `docs/eval-evidence/availability-normalizer-helper-tools-llm-evidence-2026-06-30.json`: first helper-assisted run, 200 prompts, schema-valid rate 0.995, unsafe widening count 0, Class A LLM match rate 0.8, Class B correct rate 0.75, Class B recall lift 0.75, Class C safe-route rate 0.975, reviewed false-positive rate 0.0, helper accepted count 464, helper rejected count 60, promotion gate `passes=false`. The failure was prompt/context induced: helper results caused display-value shortening and one Class C invalid route. This failed artifact remains part of the durable record.
+- `docs/eval-evidence/availability-normalizer-helper-tools-prompt-fix-llm-evidence-2026-06-30.json`: prompt-fixed helper-assisted run, 200 prompts, schema-valid rate 1.0, unsafe widening count 0, Class A LLM match rate 1.0, Class B correct rate 1.0, Class B recall lift 1.0, Class C safe-route rate 1.0, reviewed false-positive rate 0.0, helper accepted count 464, helper rejected count 60, promotion gate `passes=true`.
+
+Helper adoption for `availability` requires the prompt-fixed helper run to keep
+unsafe widening at 0, keep schema-valid rate and Class C safe-route rate at
+least equal to the JSON-only baseline, keep Class B correct rate at least
+0.95 times the JSON-only baseline, and improve at least one of schema-valid
+rate, Class A match rate, or Class B correct rate by at least 0.01 without
+regressing any of the others. If the helper run does not meet that kill
+criterion, helper use for `availability` is abandoned and JSON-only remains the
+provider path. The prompt-fixed run meets the rule by improving Class A from
+0.9875 to 1.0, a +0.0125 delta, while keeping schema-valid rate, Class B
+correct rate, Class C safe-route rate, reviewed false-positive rate, and unsafe
+widening unchanged.
+
+The evidence schema records `failure_reason` and `quality_failure_class` on
+each case result and each LLM audit record. The summary also records
+`failure_reason_counts` and `quality_failure_class_counts` so schema failures,
+display-value-only failures, parameter mismatches, and Class C unsafe routes
+remain grep-able after each rerun.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.

@@ -217,6 +217,16 @@ def _parameters_equal(left: Mapping[str, Any] | None, right: Mapping[str, Any] |
     return json.dumps(left, sort_keys=True, separators=(",", ":")) == json.dumps(right, sort_keys=True, separators=(",", ":"))
 
 
+def _parameters_equal_except_display_value(left: Mapping[str, Any] | None, right: Mapping[str, Any] | None) -> bool:
+    if left is None or right is None:
+        return False
+    left_copy = dict(left)
+    right_copy = dict(right)
+    left_copy.pop("display_value", None)
+    right_copy.pop("display_value", None)
+    return json.dumps(left_copy, sort_keys=True, separators=(",", ":")) == json.dumps(right_copy, sort_keys=True, separators=(",", ":"))
+
+
 def _rate(numerator: int, denominator: int) -> float | None:
     if denominator <= 0:
         return None
@@ -490,6 +500,8 @@ def _evaluate_availability_payloads(
     helper_tool_call_count = 0
     helper_tool_accepted_count = 0
     helper_tool_rejected_count = 0
+    failure_reason_counts: dict[str, int] = {}
+    quality_failure_class_by_case_id: dict[str, str] = {}
     if llm_audit_records:
         for record in llm_audit_records:
             calls = record.get("helper_tool_calls") if isinstance(record, Mapping) else []
@@ -532,6 +544,7 @@ def _evaluate_availability_payloads(
         status = "not_scored"
         correct = False
         unsafe = False
+        failure_reason = ""
 
         if case_class == "A":
             class_a_total += 1
@@ -540,6 +553,15 @@ def _evaluate_availability_payloads(
             if correct:
                 class_a_agree += 1
             status = "agreed" if correct else "disagreed"
+            if not correct:
+                if not validation.accepted:
+                    failure_reason = "schema_invalid"
+                elif not emitted_constraint:
+                    failure_reason = "missing_constraint"
+                elif _parameters_equal_except_display_value(first_parameters, expected):
+                    failure_reason = "display_value_mismatch_only"
+                else:
+                    failure_reason = "parameter_mismatch"
             false_positive_review_denominator += 1
         elif case_class == "B":
             class_b_total += 1
@@ -551,6 +573,15 @@ def _evaluate_availability_payloads(
             if _parameters_equal(baseline, expected):
                 class_b_baseline_correct += 1
             status = "correct" if correct else "incorrect"
+            if not correct:
+                if not validation.accepted:
+                    failure_reason = "schema_invalid"
+                elif not emitted_constraint:
+                    failure_reason = "missing_constraint"
+                elif _parameters_equal_except_display_value(first_parameters, expected):
+                    failure_reason = "display_value_mismatch_only"
+                else:
+                    failure_reason = "parameter_mismatch"
             false_positive_review_denominator += 1
         elif case_class == "C":
             class_c_total += 1
@@ -561,9 +592,19 @@ def _evaluate_availability_payloads(
             if unsafe:
                 unsafe_widening += 1
             status = "safe_route" if correct else "unsafe_or_invalid"
+            if not correct:
+                if not validation.accepted:
+                    failure_reason = "schema_invalid"
+                elif emitted_constraint:
+                    failure_reason = "class_c_emitted_constraint"
+                else:
+                    failure_reason = "class_c_missing_review_route"
 
         if bool(case.get("reviewed_false_positive")):
             false_positive_reviewed += 1
+        if failure_reason:
+            failure_reason_counts[failure_reason] = failure_reason_counts.get(failure_reason, 0) + 1
+        quality_failure_class_by_case_id[case_id] = failure_reason
 
         case_results.append(
             {
@@ -576,6 +617,8 @@ def _evaluate_availability_payloads(
                 "emitted_constraint": emitted_constraint,
                 "expected_route": expected_route,
                 "status": status,
+                "failure_reason": failure_reason,
+                "quality_failure_class": failure_reason,
                 "unsafe_widening": unsafe,
             }
         )
@@ -610,6 +653,14 @@ def _evaluate_availability_payloads(
         gate_failures.append("class_c_not_all_safe")
     if reviewed_false_positive_rate >= MAX_FALSE_POSITIVE_RATE:
         gate_failures.append("reviewed_false_positive_rate_not_below_2_percent")
+    enriched_audit_records: list[Mapping[str, Any]] = []
+    for record in llm_audit_records or []:
+        if not isinstance(record, Mapping):
+            continue
+        case_id = str(record.get("case_id") or "")
+        enriched = dict(record)
+        enriched["quality_failure_class"] = quality_failure_class_by_case_id.get(case_id, "")
+        enriched_audit_records.append(enriched)
 
     return {
         "version": "availability_normalizer_evidence.v1",
@@ -638,6 +689,8 @@ def _evaluate_availability_payloads(
             "helper_tool_call_count": helper_tool_call_count,
             "helper_tool_accepted_count": helper_tool_accepted_count,
             "helper_tool_rejected_count": helper_tool_rejected_count,
+            "failure_reason_counts": dict(failure_reason_counts),
+            "quality_failure_class_counts": dict(failure_reason_counts),
         },
         "promotion_gate": {
             "passes": not gate_failures,
@@ -653,7 +706,7 @@ def _evaluate_availability_payloads(
             },
         },
         "case_results": case_results,
-        "llm_audit_records": llm_audit_records or [],
+        "llm_audit_records": enriched_audit_records,
     }
 
 
