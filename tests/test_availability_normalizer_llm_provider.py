@@ -235,7 +235,7 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
 
             self.assertEqual(_gemini_api_key_from_config(config_path), "test-key")
 
-    def test_llm_evidence_mode_uses_provider_payloads_and_stays_unpromoted(self):
+    def test_llm_evidence_mode_uses_provider_payloads_without_live_dispatch(self):
         corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
         fixture_payloads = {
             case["id"]: case["llm_query_plan"]
@@ -259,7 +259,7 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
 
         self.assertTrue(report["llm_invoked"])
         self.assertFalse(report["live_dispatch"])
-        self.assertFalse(report["promoted_family"])
+        self.assertTrue(report["promoted_family"])
         self.assertEqual(report["mode"], "shadow_llm_evidence")
         self.assertEqual(report["summary"]["class_a_llm_match_rate"], 1.0)
         self.assertEqual(report["summary"]["class_b_correct_rate_against_human_label"], 1.0)
@@ -273,7 +273,7 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertEqual(report["llm_audit_records"][0]["validator_result"], "accepted")
         self.assertEqual(set(reference_dates), {"2026-06-29"})
 
-    def test_vessel_tonnage_llm_evidence_mode_uses_provider_payloads_and_stays_unpromoted(self):
+    def test_vessel_tonnage_llm_evidence_mode_uses_provider_payloads_without_live_dispatch(self):
         corpus = json.loads(json.dumps(load_corpus(VESSEL_TONNAGE_CORPUS_FILE)))
         fixture_payloads = {
             case["id"]: case["llm_query_plan"]
@@ -294,7 +294,7 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
 
         self.assertTrue(report["llm_invoked"])
         self.assertFalse(report["live_dispatch"])
-        self.assertFalse(report["promoted_family"])
+        self.assertTrue(report["promoted_family"])
         self.assertEqual(report["family"], "vessel_tonnage")
         self.assertEqual(report["mode"], "shadow_llm_evidence")
         self.assertEqual(report["summary"]["class_a_llm_match_rate"], 1.0)

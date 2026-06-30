@@ -51,13 +51,13 @@ def _vessel_tonnage_parameters(**overrides):
 
 
 class FilterCapabilityCatalogTests(unittest.TestCase):
-    def test_catalog_loads_availability_promoted_and_vessel_tonnage_unpromoted(self):
+    def test_catalog_loads_promoted_availability_and_vessel_tonnage(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
         self.assertEqual(catalog.version, "1.0.0")
         self.assertIn("availability", catalog.families_by_id)
         self.assertIn("vessel_tonnage", catalog.families_by_id)
-        self.assertEqual(PROMOTED_FAMILIES, {"availability"})
+        self.assertEqual(PROMOTED_FAMILIES, {"availability", "vessel_tonnage"})
         availability = catalog.families_by_id["availability"]
         self.assertEqual(availability["executor_id"], "availability")
         self.assertEqual(

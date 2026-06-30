@@ -19,7 +19,7 @@ class AvailabilityNormalizerEvidenceTests(unittest.TestCase):
         self.assertEqual(report["family"], "availability")
         self.assertFalse(report["llm_invoked"])
         self.assertFalse(report["live_dispatch"])
-        self.assertFalse(report["promoted_family"])
+        self.assertTrue(report["promoted_family"])
         self.assertEqual(report["summary"]["total_cases"], 200)
         self.assertEqual(report["summary"]["class_counts"], {"A": 80, "B": 80, "C": 40})
         self.assertEqual(report["summary"]["schema_valid_rate"], 1.0)
