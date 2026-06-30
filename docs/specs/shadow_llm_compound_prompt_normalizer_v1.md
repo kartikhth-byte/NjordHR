@@ -520,6 +520,16 @@ Changes to a generic helper require each family listed in that helper's
 `families using` cell to re-cite Class A, Class B, and Class C test evidence in
 the change PR.
 
+#### Availability promotion enforcement citations
+
+The `availability` promotion cites these deterministic enforcement tests:
+
+- `tests/test_availability_normalizer_evidence.py::AvailabilityNormalizerEvidenceTests::test_query_plan_fixture_rejects_bad_span` for `source_span_exact_replay`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_availability_schema_accepts_all_value_types` and `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_availability_schema_rejects_invalid_dates_and_reversed_window` for `catalog_parameter_validator`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_availability_schema_rejects_relative_days_out_of_bounds` for `plausibility_bounds_checker`.
+- `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_deterministic_mode_does_not_invoke_provider_or_dispatch`, `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_shadow_mode_invokes_provider_but_does_not_dispatch`, and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_dispatches_valid_promoted_availability_constraint` for `promoted_family_dispatch_gate`.
+- `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_needs_review_suppresses_deterministic_availability_fallback` for Class C unsafe-widening suppression after a validator-accepted `needs_review` plan.
+
 ## Rollout slices
 
 The migration follows the same per-PR discipline as `coc_country_alias_migration_v1.md`.
@@ -539,6 +549,8 @@ Adds the evidence harness and a fixed evaluation corpus split across Classes A, 
 ### PR-4 — availability promotion
 
 Adds `"availability"` to `PROMOTED_FAMILIES`. Flips the deployment default of `NJORDHR_LLM_NORMALIZER_MODE` to `"live"`. `live` mode dispatches only constraints whose family ID is in `PROMOTED_FAMILIES`; constraints for unpromoted families remain audit-only, identical to their shadow-mode behavior. After PR-4, the only family dispatched is `availability`. The env var remains the global kill switch; operators set it back to `"shadow"` or `"deterministic"` at any time without a code change. Adds a kill-switch regression test verifying that `mode=shadow` does not dispatch `availability` and that `mode=deterministic` does not invoke the normalizer at all. `CAPABILITY_REGISTRY` is unchanged by this PR.
+
+The PR-4 evidence artifact is `docs/eval-evidence/availability-shadow-normalizer-llm-evidence-2026-06-30.json`: 200 prompts with class distribution A=80, B=80, C=40; schema-valid rate 0.99 (198/200); unsafe widening count 0; Class A LLM match rate 1.0; Class B correct rate 0.9625 with deterministic baseline 0.0 and recall lift 0.9625; Class C safe-route rate 1.0; reviewed false-positive rate 0.0; promotion gate `passes=true`.
 
 ### PR-N — next family
 

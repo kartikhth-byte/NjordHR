@@ -66,6 +66,21 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertFalse(diagnostics["provider_invoked"])
         self.assertFalse(diagnostics["dispatched"])
 
+    def test_unknown_mode_falls_back_to_deterministic_without_provider_call(self):
+        provider = Mock()
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "surprise"}, clear=False):
+            constraint, diagnostics = promoted_availability_constraint_from_prompt(
+                "Need crew available immediately",
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_not_called()
+        self.assertIsNone(constraint)
+        self.assertEqual(diagnostics["mode"], "deterministic")
+        self.assertFalse(diagnostics["provider_invoked"])
+        self.assertFalse(diagnostics["dispatched"])
+
     def test_shadow_mode_invokes_provider_but_does_not_dispatch(self):
         prompt = "Need crew available immediately"
         provider = Mock(return_value=_provider_result(_availability_payload(prompt)))
@@ -137,6 +152,30 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertTrue(diagnostics["provider_invoked"])
         self.assertFalse(diagnostics["dispatched"])
         self.assertEqual(diagnostics["transport_error"], "missing_api_credentials")
+
+    def test_live_mode_provider_transport_error_does_not_dispatch(self):
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error="Timeout: request timed out",
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraint, diagnostics = promoted_availability_constraint_from_prompt(
+                "Need crew available immediately",
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertIsNone(constraint)
+        self.assertTrue(diagnostics["provider_invoked"])
+        self.assertFalse(diagnostics["dispatched"])
+        self.assertEqual(diagnostics["transport_error"], "Timeout: request timed out")
+        self.assertEqual(diagnostics["validator_result"], "rejected")
+        self.assertEqual(diagnostics["validator_errors"], ["provider returned no parsed payload"])
 
 
 if __name__ == "__main__":
