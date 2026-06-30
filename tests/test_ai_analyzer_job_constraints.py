@@ -6,6 +6,7 @@ import unittest
 import json
 from datetime import date
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 
 def _stub_ai_dependencies():
@@ -37,6 +38,7 @@ def _stub_ai_dependencies():
 
 _stub_ai_dependencies()
 from ai_analyzer import AIResumeAnalyzer  # noqa: E402
+from query_understanding.compound_prompt_normalizer_provider import AvailabilityNormalizerProviderResult  # noqa: E402
 
 
 class _FakeRegistry:
@@ -287,6 +289,123 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "immediately",
         )
         self.assertNotIn("availability", constraints["hard_constraints"])
+
+    def test_live_compound_normalizer_availability_dispatches_through_prompt_path(self):
+        prompt = "Need crew free from 1 Apr 2026 to 1 May 2026"
+        phrase = "free from 1 Apr 2026 to 1 May 2026"
+        start = prompt.index(phrase)
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output="{}",
+            parsed_payload={
+                "version": "v1",
+                "constraints": [{
+                    "filter_family": "availability",
+                    "parameters": {
+                        "version": "v1",
+                        "value_type": "window",
+                        "status": None,
+                        "available_by_date": None,
+                        "available_from_date": "2026-04-01",
+                        "available_until_date": "2026-05-01",
+                        "relative_days": None,
+                        "resolved_reference_date": "2026-06-30",
+                        "display_value": phrase,
+                    },
+                    "source_span": {"text": phrase, "start": start, "end": start + len(phrase)},
+                }],
+                "soft_signals": [],
+                "unapplied": [],
+                "needs_review": [],
+            },
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints = self.analyzer._extract_job_constraints(
+                prompt,
+                rank=self.rank,
+                llm_normalizer_provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(constraints["applied_constraints"], ["availability"])
+        self.assertEqual(
+            constraints["hard_constraints"]["availability"],
+            {
+                "value_type": "window",
+                "display_value": phrase,
+                "resolved_reference_date": "2026-06-30",
+                "available_from_date": "2026-04-01",
+                "available_until_date": "2026-05-01",
+            },
+        )
+        self.assertTrue(constraints["llm_normalizer_audit"]["availability"]["dispatched"])
+
+    def test_shadow_compound_normalizer_availability_does_not_dispatch(self):
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output="{}",
+            parsed_payload={
+                "version": "v1",
+                "constraints": [],
+                "soft_signals": [],
+                "unapplied": [],
+                "needs_review": [],
+            },
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "shadow"}, clear=False):
+            constraints = self.analyzer._extract_job_constraints(
+                "Need crew free from 1 Apr 2026 to 1 May 2026",
+                rank=self.rank,
+                llm_normalizer_provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertNotIn("availability", constraints["hard_constraints"])
+        self.assertNotIn("availability", constraints["applied_constraints"])
+        self.assertFalse(constraints["llm_normalizer_audit"]["availability"]["dispatched"])
+
+    def test_live_compound_normalizer_needs_review_suppresses_deterministic_availability_fallback(self):
+        prompt = "Available immediately but not available until 15 Apr 2026"
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output="{}",
+            parsed_payload={
+                "version": "v1",
+                "constraints": [],
+                "soft_signals": [],
+                "unapplied": [],
+                "needs_review": [{
+                    "span": {
+                        "text": prompt,
+                        "start": 0,
+                        "end": len(prompt),
+                    },
+                    "candidate_families": ["availability"],
+                    "reason": "contradictory availability instructions",
+                }],
+            },
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints = self.analyzer._extract_job_constraints(
+                prompt,
+                rank=self.rank,
+                llm_normalizer_provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(constraints["applied_constraints"], [])
+        self.assertNotIn("availability", constraints["hard_constraints"])
+        self.assertFalse(constraints["llm_normalizer_audit"]["availability"]["dispatched"])
+        self.assertEqual(
+            constraints["llm_normalizer_audit"]["availability"]["validator_result"],
+            "accepted",
+        )
 
     def test_shared_picker_override_helper_applies_picker_and_routes_prompt_observability(self):
         constraints = {

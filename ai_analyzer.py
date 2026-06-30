@@ -52,6 +52,9 @@ from query_understanding.hard_filter_catalog import (
     SUPPORTED_FAMILY_IDS,
     canonical_engine_family_values,
 )
+from query_understanding.compound_prompt_normalizer_runtime import (
+    promoted_availability_constraint_from_prompt,
+)
 
 _PROMOTION_STAGE_FAMILIES = [
     "certificate_requirement",
@@ -4729,6 +4732,7 @@ class AIResumeAnalyzer:
         suppress_prompt_rank=False,
         suppress_prompt_coc_issue_authority=False,
         suppress_prompt_availability=False,
+        llm_normalizer_provider=None,
     ):
         constraints = {
             "rank": str(rank or "").strip(),
@@ -4895,7 +4899,19 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["vessel_type"] = vessel_type_constraint
             constraints["unapplied_constraints"].append("vessel_type")
 
-        availability_constraint = self._extract_availability_constraint(user_prompt)
+        availability_constraint, availability_normalizer_diagnostics = promoted_availability_constraint_from_prompt(
+            user_prompt,
+            provider=llm_normalizer_provider,
+            api_key=getattr(getattr(self, "config", None), "gemini_api_key", None),
+        )
+        if availability_normalizer_diagnostics.get("provider_invoked"):
+            constraints.setdefault("llm_normalizer_audit", {})["availability"] = availability_normalizer_diagnostics
+        availability_live_authoritative = (
+            availability_normalizer_diagnostics.get("mode") == "live"
+            and availability_normalizer_diagnostics.get("validator_result") == "accepted"
+        )
+        if not availability_constraint and not availability_live_authoritative:
+            availability_constraint = self._extract_availability_constraint(user_prompt)
         if availability_constraint:
             if not suppress_prompt_availability:
                 constraints["hard_constraints"]["availability"] = availability_constraint
