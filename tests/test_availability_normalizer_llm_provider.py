@@ -128,8 +128,8 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         )
 
         self.assertEqual(result.helper_tool_version, "1.0.0")
-        self.assertGreater(result.helper_tool_calls, ())
-        self.assertGreater(result.helper_tool_context, ())
+        self.assertTrue(result.helper_tool_calls)
+        self.assertTrue(result.helper_tool_context)
         provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
         self.assertIn("provider_helper_tool_outputs", provider_prompt)
         self.assertIn("locate_prompt_span.v1", provider_prompt)

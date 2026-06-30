@@ -49,6 +49,10 @@ class CompoundPromptNormalizerHelperToolTests(unittest.TestCase):
         self.assertFalse(ambiguous["accepted"])
         self.assertIn("ambiguous numeric date", ambiguous["errors"])
 
+        invalid_iso = parse_availability_date_phrase("2026-02-30")
+        self.assertFalse(invalid_iso["accepted"])
+        self.assertIn("invalid calendar date", invalid_iso["errors"])
+
     def test_check_availability_parameters_uses_catalog_validation(self):
         parameters = {
             "version": "v1",

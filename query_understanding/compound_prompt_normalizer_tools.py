@@ -154,6 +154,8 @@ def parse_availability_date_phrase(text: str, reference_date: str | date | None 
         return _tool_result(PARSE_AVAILABILITY_DATE_PHRASE_TOOL_ID, True, {"date": parsed.isoformat(), "kind": "absolute"})
     except ValueError:
         pass
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", phrase):
+        return _tool_result(PARSE_AVAILABILITY_DATE_PHRASE_TOOL_ID, False, errors=["invalid calendar date"])
     parsed, error = _parse_numeric_date(phrase)
     if parsed:
         return _tool_result(PARSE_AVAILABILITY_DATE_PHRASE_TOOL_ID, True, {"date": parsed.isoformat(), "kind": "absolute"})
@@ -272,6 +274,7 @@ def availability_helper_tool_context(
         record(param_input, check_availability_parameters(parameters, catalog=loaded))
 
     if len(helper_outputs) == 1:
+        # Ensure every prompt records at least one span-locator attempt for the helper pilot audit.
         locate_input = {"prompt_normalized": prompt_normalized, "text": "available"}
         record(locate_input, locate_prompt_span(prompt_normalized, "available"))
 
