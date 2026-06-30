@@ -68,6 +68,10 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("Unit must be one of: any, unspecified, gt_grt, dwt", prompt)
         self.assertIn("available", prompt)
         self.assertIn("Do not put unrelated availability", prompt)
+        self.assertIn("source_span must include the full tonnage phrase", prompt)
+        self.assertIn("reversed tonnage range", prompt)
+        self.assertIn("do not add extra unapplied entries", prompt)
+        self.assertIn("67k -> 67500", prompt)
         self.assertNotIn("executor_id", prompt)
 
     def test_gemini_provider_parses_json_payload(self):
@@ -298,6 +302,50 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertEqual(report["summary"]["class_b_recall_lift"], 1.0)
         self.assertEqual(report["summary"]["class_c_safe_route_rate"], 1.0)
         self.assertNotIn("real_llm_run_required", report["promotion_gate"]["failures"])
+
+    def test_vessel_tonnage_llm_evidence_marks_unsafe_widening_audit_records(self):
+        corpus = json.loads(json.dumps(load_corpus(VESSEL_TONNAGE_CORPUS_FILE)))
+        corpus["cases"] = [next(case for case in corpus["cases"] if case["id"] == "C006")]
+        unsafe_payload = {
+            "version": "v1",
+            "constraints": [
+                {
+                    "filter_family": "vessel_tonnage",
+                    "parameters": {
+                        "version": "v1",
+                        "value_type": "range",
+                        "min_value": 55000,
+                        "max_value": 95000,
+                        "unit": "unspecified",
+                        "years_back": None,
+                        "display_value": "between 95000 and 55000 tonnage",
+                    },
+                    "source_span": {
+                        "text": "between 95000 and 55000 tonnage",
+                        "start": 29,
+                        "end": 60,
+                    },
+                }
+            ],
+            "soft_signals": [],
+            "unapplied": [],
+            "needs_review": [],
+        }
+
+        def provider(prompt, *, prompt_normalized, reference_date, catalog):
+            return AvailabilityNormalizerProviderResult(
+                model_id="fake-model",
+                prompt_template_version="fake-tonnage-template",
+                raw_llm_output=json.dumps(unsafe_payload),
+                parsed_payload=unsafe_payload,
+            )
+
+        report = evaluate_vessel_tonnage_llm_corpus(corpus, provider=provider)
+
+        self.assertEqual(report["summary"]["unsafe_widening_count"], 1)
+        self.assertTrue(report["case_results"][0]["unsafe_widening"])
+        self.assertTrue(report["llm_audit_records"][0]["unsafe_widening"])
+        self.assertEqual(report["llm_audit_records"][0]["quality_failure_class"], "class_c_emitted_constraint")
 
     def test_llm_evidence_records_helper_tool_audit_counts(self):
         corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))

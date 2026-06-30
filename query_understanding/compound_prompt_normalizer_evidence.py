@@ -592,6 +592,7 @@ def _evaluate_family_payloads(
     helper_tool_rejected_count = 0
     failure_reason_counts: dict[str, int] = {}
     quality_failure_class_by_case_id: dict[str, str] = {}
+    unsafe_widening_by_case_id: dict[str, bool] = {}
     if llm_audit_records:
         for record in llm_audit_records:
             calls = record.get("helper_tool_calls") if isinstance(record, Mapping) else []
@@ -695,6 +696,7 @@ def _evaluate_family_payloads(
         if failure_reason:
             failure_reason_counts[failure_reason] = failure_reason_counts.get(failure_reason, 0) + 1
         quality_failure_class_by_case_id[case_id] = failure_reason
+        unsafe_widening_by_case_id[case_id] = unsafe
 
         case_results.append(
             {
@@ -750,6 +752,7 @@ def _evaluate_family_payloads(
         case_id = str(record.get("case_id") or "")
         enriched = dict(record)
         enriched["quality_failure_class"] = quality_failure_class_by_case_id.get(case_id, "")
+        enriched["unsafe_widening"] = bool(unsafe_widening_by_case_id.get(case_id))
         enriched_audit_records.append(enriched)
 
     return {
