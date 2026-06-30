@@ -170,6 +170,51 @@ def _extract_json_payload(text: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _helper_prompt_context(helper_context: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...]) -> list[Mapping[str, Any]]:
+    """Return the compact LLM-facing helper summary.
+
+    Full helper outputs remain available to audit. The provider prompt receives
+    only accepted, task-relevant hints so helper metadata does not crowd out the
+    core query-plan instructions.
+    """
+
+    result: list[Mapping[str, Any]] = []
+    for item in helper_context:
+        if not isinstance(item, Mapping) or item.get("accepted") is not True:
+            continue
+        tool_id = item.get("tool_id")
+        raw_result = item.get("result")
+        if not isinstance(raw_result, Mapping):
+            continue
+        if tool_id == "locate_prompt_span.v1" and isinstance(raw_result.get("span"), Mapping):
+            result.append({"tool_id": tool_id, "span": dict(raw_result["span"])})
+        elif tool_id == "parse_availability_date_phrase.v1":
+            summary = {"tool_id": tool_id}
+            for key in ("date", "kind", "relative_days"):
+                if key in raw_result:
+                    summary[key] = raw_result[key]
+            result.append(summary)
+        elif tool_id == "check_availability_parameters.v1" and isinstance(raw_result.get("parameters"), Mapping):
+            parameters = raw_result["parameters"]
+            result.append(
+                {
+                    "tool_id": tool_id,
+                    "value_type": parameters.get("value_type"),
+                    "display_value": parameters.get("display_value"),
+                    "relative_days": parameters.get("relative_days"),
+                    "available_by_date": parameters.get("available_by_date"),
+                    "available_from_date": parameters.get("available_from_date"),
+                    "available_until_date": parameters.get("available_until_date"),
+                }
+            )
+        elif tool_id == "classify_availability_conflict.v1":
+            summary = {"tool_id": tool_id, "route": raw_result.get("route")}
+            if raw_result.get("reason"):
+                summary["reason"] = raw_result.get("reason")
+            result.append(summary)
+    return result
+
+
 def build_availability_normalizer_prompt(
     prompt: str,
     *,
@@ -182,7 +227,7 @@ def build_availability_normalizer_prompt(
 
     public_catalog = llm_facing_catalog(catalog)
     catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
-    helper_context = list(helper_tool_context or [])
+    helper_context = _helper_prompt_context(list(helper_tool_context or []))
     helper_context_text = json.dumps(helper_context, indent=2, sort_keys=True)
     helper_instruction = (
         "Provider helper tool outputs are available below. Treat accepted helper results as deterministic hints, "
@@ -214,6 +259,7 @@ def build_availability_normalizer_prompt(
         "Fields inactive for the selected value_type must be null.\n\n"
         "Every availability parameters object must include all of these keys exactly:\n"
         "version, value_type, status, available_by_date, available_from_date, available_until_date, relative_days, resolved_reference_date, display_value.\n"
+        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the recruiter's exact phrase in display_value; helper output describes parsed meaning, not how to rewrite the prompt. Do not shorten, expand, paraphrase, or use only a date/number subphrase as display_value.\n"
         "Set version to \"v1\". Set resolved_reference_date to evidence_reference_date on every emitted availability constraint.\n"
         "Absolute date constraints still carry resolved_reference_date; it records the search-submission anchor, not the extracted date.\n\n"
         "Semantic mapping examples:\n"

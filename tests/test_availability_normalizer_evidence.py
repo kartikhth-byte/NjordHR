@@ -78,6 +78,18 @@ class AvailabilityNormalizerEvidenceTests(unittest.TestCase):
         self.assertEqual(report["summary"]["unsafe_widening_count"], 1)
         self.assertIn("unsafe_widening_present", report["promotion_gate"]["failures"])
 
+    def test_display_value_only_mismatch_is_counted_separately(self):
+        corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
+        corpus["cases"] = [next(case for case in corpus["cases"] if case["id"] == "A049")]
+        corpus["cases"][0]["llm_query_plan"]["constraints"][0]["parameters"]["display_value"] = "within 7 days"
+
+        report = evaluate_availability_evidence_corpus(corpus)
+
+        result = report["case_results"][0]
+        self.assertEqual(result["status"], "disagreed")
+        self.assertEqual(result["failure_reason"], "display_value_mismatch_only")
+        self.assertEqual(report["summary"]["failure_reason_counts"], {"display_value_mismatch_only": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

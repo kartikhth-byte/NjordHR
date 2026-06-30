@@ -132,8 +132,10 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertTrue(result.helper_tool_context)
         provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
         self.assertIn("provider_helper_tool_outputs", provider_prompt)
+        self.assertIn("display_value MUST equal source_span.text exactly", provider_prompt)
         self.assertIn("locate_prompt_span.v1", provider_prompt)
         self.assertIn("check_availability_parameters.v1", provider_prompt)
+        self.assertNotIn("text appears more than once", provider_prompt)
         self.assertNotIn("executor_id", provider_prompt)
 
     def test_gemini_provider_reports_missing_credentials(self):
@@ -232,7 +234,28 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
             set(report["llm_audit_records"][0]["helper_tool_calls"][0]),
             {"tool_id", "input_hash", "accepted", "result_hash", "errors"},
         )
+        self.assertEqual(report["llm_audit_records"][0]["quality_failure_class"], "")
         self.assertNotIn("available immediately", json.dumps(report["llm_audit_records"][0]["helper_tool_calls"]))
+
+    def test_llm_evidence_records_quality_failure_class_per_audit_record(self):
+        corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
+        corpus["cases"] = [next(case for case in corpus["cases"] if case["id"] == "A049")]
+        payload = json.loads(json.dumps(corpus["cases"][0]["llm_query_plan"]))
+        payload["constraints"][0]["parameters"]["display_value"] = "within 7 days"
+
+        def provider(prompt, *, prompt_normalized, reference_date, catalog):
+            return AvailabilityNormalizerProviderResult(
+                model_id="fake-model",
+                prompt_template_version="fake-template",
+                raw_llm_output=json.dumps(payload),
+                parsed_payload=payload,
+            )
+
+        report = evaluate_availability_llm_corpus(corpus, provider=provider)
+
+        self.assertEqual(report["summary"]["quality_failure_class_counts"], {"display_value_mismatch_only": 1})
+        self.assertEqual(report["case_results"][0]["quality_failure_class"], "display_value_mismatch_only")
+        self.assertEqual(report["llm_audit_records"][0]["quality_failure_class"], "display_value_mismatch_only")
 
     def test_helper_tool_fixture_evidence_compares_without_claiming_real_llm_run(self):
         corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
