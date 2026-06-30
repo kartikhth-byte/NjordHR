@@ -427,6 +427,41 @@ def evaluate_availability_llm_corpus(
     dispatches constraints and never marks the family promoted.
     """
 
+    return _evaluate_llm_corpus(
+        corpus,
+        family="availability",
+        provider=provider,
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+    )
+
+
+def evaluate_vessel_tonnage_llm_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    provider,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate a vessel-tonnage corpus by invoking a provider per prompt."""
+
+    return _evaluate_llm_corpus(
+        corpus,
+        family="vessel_tonnage",
+        provider=provider,
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+    )
+
+
+def _evaluate_llm_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    family: str,
+    provider,
+    catalog: FilterCapabilityCatalog | None,
+    class_b_min_correct: float,
+) -> Mapping[str, Any]:
     provider_payloads: dict[str, Mapping[str, Any]] = {}
     audit_records: list[Mapping[str, Any]] = []
     loaded = catalog or load_filter_capability_catalog()
@@ -483,8 +518,9 @@ def evaluate_availability_llm_corpus(
             }
         )
 
-    return _evaluate_availability_payloads(
+    return _evaluate_family_payloads(
         corpus,
+        family=family,
         catalog=loaded,
         class_b_min_correct=class_b_min_correct,
         mode="shadow_llm_evidence",
