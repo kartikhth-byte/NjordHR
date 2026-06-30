@@ -1,7 +1,8 @@
 """Evidence harness for the compound-prompt normalizer catalog.
 
-This module validates fixed shadow-normalizer fixture payloads against the
-catalog contract. It does not call an LLM and does not dispatch constraints.
+This module validates shadow-normalizer payloads against the catalog contract.
+Fixture mode does not call an LLM. LLM mode records provider output for audit
+only. Neither mode dispatches constraints.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -18,6 +20,9 @@ from candidate_facts.aliases.filter_capability_catalog import (
     FilterCapabilityCatalog,
     load_filter_capability_catalog,
     validate_catalog_parameters,
+)
+from query_understanding.compound_prompt_normalizer_provider import (
+    AvailabilityNormalizerProviderResult,
 )
 
 
@@ -214,6 +219,80 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return numerator / denominator
 
 
+def _span_replays(span: Mapping[str, Any], prompt_normalized: str) -> bool:
+    text = span.get("text")
+    start = span.get("start")
+    end = span.get("end")
+    return (
+        isinstance(text, str)
+        and isinstance(start, int)
+        and not isinstance(start, bool)
+        and isinstance(end, int)
+        and not isinstance(end, bool)
+        and 0 <= start < end <= len(prompt_normalized)
+        and prompt_normalized[start:end] == text
+    )
+
+
+def _repair_span_offsets(
+    item: dict[str, Any],
+    span_key: str,
+    *,
+    prompt_normalized: str,
+    path: str,
+    repair_actions: list[str],
+) -> None:
+    if span_key not in item and all(key in item for key in ("text", "start", "end")):
+        item[span_key] = {"text": item.pop("text"), "start": item.pop("start"), "end": item.pop("end")}
+        repair_actions.append(f"{path}.{span_key}.wrapped_flat_span")
+    span = item.get(span_key)
+    if not isinstance(span, dict):
+        return
+    if _span_replays(span, prompt_normalized):
+        return
+    text = span.get("text")
+    if not isinstance(text, str) or not text:
+        return
+    start = prompt_normalized.find(text)
+    if start < 0 or prompt_normalized.find(text, start + 1) >= 0:
+        return
+    span["start"] = start
+    span["end"] = start + len(text)
+    repair_actions.append(f"{path}.{span_key}.offsets_replayed")
+
+
+def repair_query_plan_payload(
+    payload: Mapping[str, Any],
+    *,
+    prompt_normalized: str,
+) -> tuple[Mapping[str, Any], tuple[str, ...]]:
+    """Repair mechanical span-shape issues without changing extracted intent."""
+
+    if not isinstance(payload, Mapping):
+        return {}, ()
+    repaired = deepcopy(dict(payload))
+    repair_actions: list[str] = []
+    for list_key, span_key in (
+        ("constraints", "source_span"),
+        ("soft_signals", "span"),
+        ("unapplied", "span"),
+        ("needs_review", "span"),
+    ):
+        items = repaired.get(list_key)
+        if not isinstance(items, list):
+            continue
+        for index, item in enumerate(items):
+            if isinstance(item, dict):
+                _repair_span_offsets(
+                    item,
+                    span_key,
+                    prompt_normalized=prompt_normalized,
+                    path=f"query_plan.{list_key}[{index}]",
+                    repair_actions=repair_actions,
+                )
+    return repaired, tuple(repair_actions)
+
+
 def evaluate_availability_evidence_corpus(
     corpus: Mapping[str, Any],
     *,
@@ -222,6 +301,109 @@ def evaluate_availability_evidence_corpus(
 ) -> Mapping[str, Any]:
     """Evaluate a fixed availability normalizer evidence corpus."""
 
+    return _evaluate_availability_payloads(
+        corpus,
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+        mode="shadow_evidence_fixture",
+        llm_invoked=False,
+        class_a_rate_key="class_a_fixture_match_rate",
+        class_a_gate_failure="class_a_fixture_match_rate_below_95_percent",
+        class_b_recall_lift_status="measured_against_corpus_deterministic_baseline",
+    )
+
+
+def evaluate_availability_llm_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    provider,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate an availability corpus by invoking a provider per prompt.
+
+    The provider output is scored for evidence only. This function never
+    dispatches constraints and never marks the family promoted.
+    """
+
+    provider_payloads: dict[str, Mapping[str, Any]] = {}
+    audit_records: list[Mapping[str, Any]] = []
+    loaded = catalog or load_filter_capability_catalog()
+    cases = corpus.get("cases") if isinstance(corpus.get("cases"), list) else []
+    reference_date = str(corpus.get("reference_date") or "")
+    for case in cases:
+        if not isinstance(case, Mapping):
+            continue
+        case_id = str(case.get("id") or "")
+        prompt_raw = str(case.get("prompt") or "")
+        prompt_normalized = normalize_prompt_text(prompt_raw)
+        result = provider(prompt_raw, prompt_normalized=prompt_normalized, reference_date=reference_date, catalog=loaded)
+        if isinstance(result, AvailabilityNormalizerProviderResult):
+            provider_result = result
+        elif isinstance(result, Mapping):
+            provider_result = AvailabilityNormalizerProviderResult(
+                model_id=str(result.get("model_id") or ""),
+                prompt_template_version=str(result.get("prompt_template_version") or ""),
+                raw_llm_output=result.get("raw_llm_output") if isinstance(result.get("raw_llm_output"), str) else None,
+                parsed_payload=result.get("parsed_payload") if isinstance(result.get("parsed_payload"), Mapping) else None,
+                transport_error=result.get("transport_error") if isinstance(result.get("transport_error"), str) else None,
+            )
+        else:
+            provider_result = AvailabilityNormalizerProviderResult(
+                model_id="",
+                prompt_template_version="",
+                raw_llm_output=None,
+                parsed_payload=None,
+                transport_error="provider_returned_invalid_result",
+            )
+        raw_payload = provider_result.parsed_payload if isinstance(provider_result.parsed_payload, Mapping) else {}
+        payload, repair_actions = repair_query_plan_payload(raw_payload, prompt_normalized=prompt_normalized)
+        provider_payloads[case_id] = payload
+        validation = validate_query_plan_fixture(payload, prompt_normalized=prompt_normalized, catalog=loaded)
+        audit_records.append(
+            {
+                "case_id": case_id,
+                "prompt_hash": _sha256_text(prompt_raw),
+                "prompt_normalized": prompt_normalized,
+                "model_id": provider_result.model_id,
+                "prompt_template_version": provider_result.prompt_template_version,
+                "raw_llm_output": provider_result.raw_llm_output,
+                "raw_parsed_payload": provider_result.parsed_payload,
+                "parsed_payload": payload,
+                "repair_actions": list(repair_actions),
+                "transport_error": provider_result.transport_error,
+                "validator_result": "accepted" if validation.accepted else "rejected",
+                "validator_errors": list(validation.errors),
+            }
+        )
+
+    return _evaluate_availability_payloads(
+        corpus,
+        catalog=loaded,
+        class_b_min_correct=class_b_min_correct,
+        mode="shadow_llm_evidence",
+        llm_invoked=True,
+        payloads_by_case_id=provider_payloads,
+        llm_audit_records=audit_records,
+        class_a_rate_key="class_a_llm_match_rate",
+        class_a_gate_failure="class_a_llm_match_rate_below_95_percent",
+        class_b_recall_lift_status="measured_against_corpus_deterministic_baseline",
+    )
+
+
+def _evaluate_availability_payloads(
+    corpus: Mapping[str, Any],
+    *,
+    catalog: FilterCapabilityCatalog | None,
+    class_b_min_correct: float,
+    mode: str,
+    llm_invoked: bool,
+    class_a_rate_key: str,
+    class_a_gate_failure: str,
+    class_b_recall_lift_status: str,
+    payloads_by_case_id: Mapping[str, Mapping[str, Any]] | None = None,
+    llm_audit_records: list[Mapping[str, Any]] | None = None,
+) -> Mapping[str, Any]:
     loaded = catalog or load_filter_capability_catalog()
     cases = corpus.get("cases") if isinstance(corpus.get("cases"), list) else []
     case_results: list[Mapping[str, Any]] = []
@@ -232,6 +414,7 @@ def evaluate_availability_evidence_corpus(
     false_positive_review_denominator = 0
     class_a_total = class_a_agree = 0
     class_b_total = class_b_correct = 0
+    class_b_baseline_correct = 0
     class_c_total = class_c_safe = 0
 
     for case in cases:
@@ -240,7 +423,10 @@ def evaluate_availability_evidence_corpus(
         case_id = str(case.get("id") or "")
         prompt_raw = str(case.get("prompt") or "")
         prompt_normalized = normalize_prompt_text(prompt_raw)
-        payload = case.get("llm_query_plan") if isinstance(case.get("llm_query_plan"), Mapping) else {}
+        if payloads_by_case_id is not None:
+            payload = payloads_by_case_id.get(case_id) if isinstance(payloads_by_case_id.get(case_id), Mapping) else {}
+        else:
+            payload = case.get("llm_query_plan") if isinstance(case.get("llm_query_plan"), Mapping) else {}
         validation = validate_query_plan_fixture(payload, prompt_normalized=prompt_normalized, catalog=loaded)
         if validation.accepted:
             schema_valid += 1
@@ -271,9 +457,12 @@ def evaluate_availability_evidence_corpus(
         elif case_class == "B":
             class_b_total += 1
             expected = _case_expected_parameters(case, "human_label")
+            baseline = _case_expected_parameters(case, "deterministic_baseline")
             correct = validation.accepted and emitted_constraint and _parameters_equal(first_parameters, expected)
             if correct:
                 class_b_correct += 1
+            if _parameters_equal(baseline, expected):
+                class_b_baseline_correct += 1
             status = "correct" if correct else "incorrect"
             false_positive_review_denominator += 1
         elif case_class == "C":
@@ -307,7 +496,8 @@ def evaluate_availability_evidence_corpus(
     total = len(cases)
     class_a_rate = _rate(class_a_agree, class_a_total)
     class_b_rate = _rate(class_b_correct, class_b_total)
-    class_b_recall_lift = None
+    class_b_baseline_rate = _rate(class_b_baseline_correct, class_b_total)
+    class_b_recall_lift = None if class_b_rate is None or class_b_baseline_rate is None else class_b_rate - class_b_baseline_rate
     class_c_rate = _rate(class_c_safe, class_c_total)
     schema_valid_rate = _rate(schema_valid, total) or 0.0
     reviewed_false_positive_rate = _rate(false_positive_reviewed, false_positive_review_denominator) or 0.0
@@ -319,9 +509,10 @@ def evaluate_availability_evidence_corpus(
         gate_failures.append("schema_valid_rate_below_99_percent")
     if unsafe_widening:
         gate_failures.append("unsafe_widening_present")
-    gate_failures.append("real_llm_run_required")
+    if not llm_invoked:
+        gate_failures.append("real_llm_run_required")
     if class_a_rate is None or class_a_rate < CLASS_A_MIN_AGREEMENT:
-        gate_failures.append("class_a_fixture_match_rate_below_95_percent")
+        gate_failures.append(class_a_gate_failure)
     if class_b_rate is None or class_b_rate < class_b_min_correct:
         gate_failures.append("class_b_human_label_fixture_rate_below_floor")
     if class_b_recall_lift is None:
@@ -340,8 +531,8 @@ def evaluate_availability_evidence_corpus(
         "prompt_normalization_version": PROMPT_NORMALIZATION_VERSION,
         "corpus_id": corpus.get("corpus_id"),
         "corpus_version": corpus.get("version"),
-        "mode": "shadow_evidence_fixture",
-        "llm_invoked": False,
+        "mode": mode,
+        "llm_invoked": llm_invoked,
         "live_dispatch": False,
         "promoted_family": False,
         "summary": {
@@ -350,10 +541,11 @@ def evaluate_availability_evidence_corpus(
             "schema_valid_count": schema_valid,
             "schema_valid_rate": schema_valid_rate,
             "unsafe_widening_count": unsafe_widening,
-            "class_a_fixture_match_rate": class_a_rate,
+            class_a_rate_key: class_a_rate,
             "class_b_correct_rate_against_human_label": class_b_rate,
+            "class_b_deterministic_baseline_correct_rate": class_b_baseline_rate,
             "class_b_recall_lift": class_b_recall_lift,
-            "class_b_recall_lift_status": "not_measured_fixture_only",
+            "class_b_recall_lift_status": class_b_recall_lift_status,
             "class_c_safe_route_rate": class_c_rate,
             "reviewed_false_positive_rate": reviewed_false_positive_rate,
         },
@@ -371,6 +563,7 @@ def evaluate_availability_evidence_corpus(
             },
         },
         "case_results": case_results,
+        "llm_audit_records": llm_audit_records or [],
     }
 
 

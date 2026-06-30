@@ -100,7 +100,7 @@
         "contract length requirements",
         "ambiguous locale-specific date phrases",
         "travel or recovery offsets after sign-off",
-        "combined availability plus ship-type clauses",
+        "ship-type clauses without an availability requirement",
         "contradictory availability instructions",
         "availability mixed with day-of-week constraints"
       ],
