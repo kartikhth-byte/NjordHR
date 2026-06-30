@@ -769,6 +769,20 @@ The PR-8 artifact is preserved even when the promotion gate fails. A failing
 artifact blocks live promotion and feeds the next remediation PR. A passing
 artifact unblocks the explicit promotion PR.
 
+### PR-9 — vessel_tonnage prompt fix and passing JSON-only evidence
+
+Tightens the `vessel_tonnage` prompt for full-phrase `display_value` /
+`source_span` preservation, malformed reversed-range routing, malformed
+negative-tonnage routing, and out-of-scope context handling. Re-runs Gemini
+with `use_helper_tools=false` against the PR-7 corpus and stores the prompt-fix
+evidence artifact at
+`docs/eval-evidence/vessel-tonnage-normalizer-json-only-prompt-fix-llm-evidence-2026-06-30.json`.
+
+The PR-9 artifact passes the promotion gate. It remains evidence-only. It does
+not add `vessel_tonnage` to `PROMOTED_FAMILIES`, adopt helper tools, add a
+dispatcher branch, change `/analyze` or `/analyze_stream`, change frontend
+behavior, add telemetry, add CSV columns, or add durable audit-event fields.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
