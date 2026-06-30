@@ -4,7 +4,7 @@
 
 Active spec. Locked contract for the shadow LLM compound-prompt normalizer. Implementation slices follow the migration discipline established by `coc_country_alias_migration_v1.md`.
 
-This spec defines the wire format, capability catalog, validator, canonicalizer, sanity checker, dispatcher, audit trace, kill switch, and promotion gate. It enumerates one initial family (`vessel_tonnage`). It does not change any live runtime behavior; implementation is gated to a shadow path.
+This spec defines the wire format, capability catalog, validator, canonicalizer, sanity checker, dispatcher, audit trace, kill switch, and promotion gate. It enumerates one initial family (`availability`). Live dispatch is gated by per-family promotion PRs.
 
 ## Purpose
 
@@ -34,7 +34,7 @@ The normalizer is a single LLM call per prompt. Multi-call orchestration is out 
 - **Filter family** — a closed-list identifier for a class of hard-filter constraints (e.g., `vessel_tonnage`, `coc_country_match`, `age_range`). Family IDs are wire-format contract.
 - **Capability catalog** — the JSON file describing each supported family's schema, accepted phrases, and disallowed uses. LLM-facing.
 - **Capability registry** — `CAPABILITY_REGISTRY`: the backend mapping from family ID to evaluator callable for every family the catalog declares. Populated at process startup. Backend-private. Never seen by the LLM.
-- **Promoted families** — `PROMOTED_FAMILIES`: the subset of `CAPABILITY_REGISTRY` whose constraints are dispatched in live mode. Modified only by promotion PRs. Initially empty.
+- **Promoted families** — `PROMOTED_FAMILIES`: the subset of `CAPABILITY_REGISTRY` whose constraints are dispatched in live mode. Modified only by promotion PRs. Empty until the first promotion PR lands.
 - **`query_plan.v1`** — the wire format emitted by the LLM, validated by this spec.
 - **Shadow mode** — normalizer runs alongside the deterministic parser. Output is recorded as evidence and is not dispatched to evaluators.
 - **Live mode** — normalizer output is dispatched. Per-family. Gated by promotion PR with evidence.
@@ -238,7 +238,7 @@ Dispatch consumes `canonical_query_plan.v1` and runs each constraint's evaluator
 
 ```python
 CAPABILITY_REGISTRY: dict[str, Evaluator] = {
-    "vessel_tonnage": evaluate_vessel_tonnage,
+    "availability": evaluate_availability,
     # every family the catalog declares lives here, regardless of promotion status
 }
 ```
@@ -248,10 +248,10 @@ CAPABILITY_REGISTRY: dict[str, Evaluator] = {
 ### Promoted families
 
 ```python
-PROMOTED_FAMILIES: set[str] = set()  # populated by promotion PRs
+PROMOTED_FAMILIES: set[str] = {"availability"}  # populated by promotion PRs
 ```
 
-`PROMOTED_FAMILIES` is the closed subset of `CAPABILITY_REGISTRY` whose constraints are dispatched in live mode. PR-2 ships with `PROMOTED_FAMILIES = set()` and the catalog already populated. Promotion PRs add family IDs to this set; no other PR is allowed to modify it. Startup verifies `PROMOTED_FAMILIES <= CAPABILITY_REGISTRY.keys()`.
+`PROMOTED_FAMILIES` is the closed subset of `CAPABILITY_REGISTRY` whose constraints are dispatched in live mode. PR-2 ships with `PROMOTED_FAMILIES = set()` and the catalog already populated. The `availability` promotion PR adds the first family to this set after its 200-prompt evidence gate and deterministic enforcement coverage gate pass. Promotion PRs add family IDs to this set; no other PR is allowed to modify it. Startup verifies `PROMOTED_FAMILIES <= CAPABILITY_REGISTRY.keys()`.
 
 ### Dispatch loop
 
@@ -338,38 +338,33 @@ No separate `_SHADOW_ONLY` env var exists; the tri-state subsumes it.
 
 The catalog ships with exactly one family in v1.
 
-### `vessel_tonnage`
+### `availability`
 
-- `purpose` — match requested vessel tonnage experience.
-- `accepted_phrases` — `["above 50000 GT", "minimum 40000 GRT", "between 30000 and 80000 DWT"]`.
-- `output_schema` —
-  ```json
-  {
-    "type": "object",
-    "required": ["unit"],
-    "properties": {
-      "min_tonnage": {"type": ["number", "null"]},
-      "max_tonnage": {"type": ["number", "null"]},
-      "unit": {"enum": ["gt", "grt", "dwt", "any"]}
-    }
-  }
-  ```
-- `do_not_use_for` — `["vessel age", "engine power", "gross salary"]`.
-- `plausibility_bounds` — `min_tonnage` and `max_tonnage` in `[0, 600000]`.
-- `executor_id` — `"hard_filter.vessel_tonnage.v1"`.
+- `purpose` — match recruiter availability requirements against candidate
+  availability windows extracted from resumes.
+- `accepted_phrases` — `["available immediately", "available by 15 Apr 2026", "available from 1 Sep 2026", "available within 30 days", "available between 1 Apr 2026 and 1 May 2026"]`.
+- `output_schema` — discriminated by `value_type` with exactly one active shape:
+  `status`, `by_date`, `from_date`, `relative_days`, or `window`.
+- `do_not_use_for` — salary expectations, contract length requirements,
+  ambiguous locale-specific dates, travel or recovery offsets after sign-off,
+  ship-type clauses without an availability requirement, contradictory
+  availability instructions, and day-of-week availability.
+- `plausibility_bounds` — `relative_days` in `[0, 365]`.
+- `executor_id` — `"availability"`.
 
 No other families are enumerated in v1. Additional families enter via their own per-family PRs following the rollout below.
 
 ## Family rollout and backfill inventory
 
-This spec starts with `vessel_tonnage` because it has a bounded numeric schema
-and is not already live through the legacy rescue path. After `vessel_tonnage`
-completes the harness, evidence, and promotion sequence, remaining families
-enter the compound-prompt normalizer one at a time.
+This spec starts with `availability` because the availability filter has a
+bounded schema, deterministic candidate facts, and a completed 200-prompt
+real-LLM evidence artifact. After `availability` completes the harness,
+evidence, and promotion sequence, remaining families enter the compound-prompt
+normalizer one at a time.
 
 ### Current v1 family
 
-- `vessel_tonnage` — first catalog row and first shadow/evidence/promotion
+- `availability` — first catalog row and first shadow/evidence/promotion
   target for this normalizer.
 
 ### Already-promoted rescue families to backfill
@@ -415,7 +410,7 @@ decision.
 - `stcw_endorsement`
 - `rank_certificate_expectation`
 - `experience_ship_type`
-- `availability`
+- `vessel_tonnage`
 
 ### Unsupported / unapplied families
 
@@ -525,6 +520,16 @@ Changes to a generic helper require each family listed in that helper's
 `families using` cell to re-cite Class A, Class B, and Class C test evidence in
 the change PR.
 
+#### Availability promotion enforcement citations
+
+The `availability` promotion cites these deterministic enforcement tests:
+
+- `tests/test_availability_normalizer_evidence.py::AvailabilityNormalizerEvidenceTests::test_query_plan_fixture_rejects_bad_span` for `source_span_exact_replay`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_availability_schema_accepts_all_value_types` and `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_availability_schema_rejects_invalid_dates_and_reversed_window` for `catalog_parameter_validator`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_availability_schema_rejects_relative_days_out_of_bounds` for `plausibility_bounds_checker`.
+- `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_deterministic_mode_does_not_invoke_provider_or_dispatch`, `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_shadow_mode_invokes_provider_but_does_not_dispatch`, and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_dispatches_valid_promoted_availability_constraint` for `promoted_family_dispatch_gate`.
+- `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_needs_review_suppresses_deterministic_availability_fallback` for Class C unsafe-widening suppression after a validator-accepted `needs_review` plan.
+
 ## Rollout slices
 
 The migration follows the same per-PR discipline as `coc_country_alias_migration_v1.md`.
@@ -535,15 +540,17 @@ Locks the contracts above. No code changes. Adds this file and any cross-referen
 
 ### PR-2 — harness
 
-Adds the LLM-call harness (raw Anthropic SDK or a thin provider adapter that uses LangChain internally, per non-goals), validator, canonicalizer, sanity checker, audit recorder, and catalog loader. Adds the catalog file with `vessel_tonnage` only. Adds Pydantic models for `query_plan.v1`. Populates `CAPABILITY_REGISTRY` with `vessel_tonnage` → evaluator. Initializes `PROMOTED_FAMILIES = set()`. Kill switch wired and defaulting to `"deterministic"`. No dispatch. No live behavior change. Scope guard: zero diff to `/analyze`, `/analyze_stream`, fingerprint, existing hard-filter audit CSV columns, telemetry, recovery, frontend. The `llm_normalizer_audit` sink is added as a new, separate audit channel.
+Adds the LLM-call harness (raw Anthropic SDK or a thin provider adapter that uses LangChain internally, per non-goals), validator, canonicalizer, sanity checker, audit recorder, and catalog loader. Adds the catalog file with `availability` only. Adds Pydantic models for `query_plan.v1`. Populates `CAPABILITY_REGISTRY` with `availability` → evaluator. Initializes `PROMOTED_FAMILIES = set()`. Kill switch wired and defaulting to `"deterministic"`. No dispatch. No live behavior change. Scope guard: zero diff to `/analyze`, `/analyze_stream`, fingerprint, existing hard-filter audit CSV columns, telemetry, recovery, frontend. The `llm_normalizer_audit` sink is added as a new, separate audit channel.
 
-### PR-3 — vessel_tonnage shadow corpus
+### PR-3 — availability shadow corpus
 
 Adds the evidence harness and a fixed evaluation corpus split across Classes A, B, and C as defined in the promotion gate. Runs the corpus in shadow mode (`NJORDHR_LLM_NORMALIZER_MODE=shadow`) and records the evidence ledger. Does not modify dispatch. Does not add anything to `PROMOTED_FAMILIES`.
 
-### PR-4 — vessel_tonnage promotion
+### PR-4 — availability promotion
 
-Adds `"vessel_tonnage"` to `PROMOTED_FAMILIES`. Flips the deployment default of `NJORDHR_LLM_NORMALIZER_MODE` to `"live"`. `live` mode dispatches only constraints whose family ID is in `PROMOTED_FAMILIES`; constraints for unpromoted families remain audit-only, identical to their shadow-mode behavior. After PR-4, the only family dispatched is `vessel_tonnage`. The env var remains the global kill switch; operators set it back to `"shadow"` or `"deterministic"` at any time without a code change. Adds a kill-switch regression test verifying that `mode=shadow` does not dispatch `vessel_tonnage` and that `mode=deterministic` does not invoke the normalizer at all. `CAPABILITY_REGISTRY` is unchanged by this PR.
+Adds `"availability"` to `PROMOTED_FAMILIES`. Flips the deployment default of `NJORDHR_LLM_NORMALIZER_MODE` to `"live"`. `live` mode dispatches only constraints whose family ID is in `PROMOTED_FAMILIES`; constraints for unpromoted families remain audit-only, identical to their shadow-mode behavior. After PR-4, the only family dispatched is `availability`. The env var remains the global kill switch; operators set it back to `"shadow"` or `"deterministic"` at any time without a code change. Adds a kill-switch regression test verifying that `mode=shadow` does not dispatch `availability` and that `mode=deterministic` does not invoke the normalizer at all. `CAPABILITY_REGISTRY` is unchanged by this PR.
+
+The PR-4 evidence artifact is `docs/eval-evidence/availability-shadow-normalizer-llm-evidence-2026-06-30.json`: 200 prompts with class distribution A=80, B=80, C=40; schema-valid rate 0.99 (198/200); unsafe widening count 0; Class A LLM match rate 1.0; Class B correct rate 0.9625 with deterministic baseline 0.0 and recall lift 0.9625; Class C safe-route rate 1.0; reviewed false-positive rate 0.0; promotion gate `passes=true`.
 
 ### PR-N — next family
 
@@ -586,4 +593,4 @@ This spec follows the discipline established by `coc_country_alias_migration_v1.
 
 ## Summary
 
-The shadow LLM compound-prompt normalizer is a single LLM call that emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names or executor IDs. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, and deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher. v1 ships with one family (`vessel_tonnage`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic multi-call orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
+The shadow LLM compound-prompt normalizer is a single LLM call that emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names or executor IDs. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, and deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher. v1 ships with one family (`availability`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic multi-call orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.

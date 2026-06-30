@@ -37,12 +37,12 @@ def _base_parameters(**overrides):
 
 
 class FilterCapabilityCatalogTests(unittest.TestCase):
-    def test_catalog_loads_availability_as_audit_only_family(self):
+    def test_catalog_loads_availability_as_promoted_family(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
         self.assertEqual(catalog.version, "1.0.0")
         self.assertIn("availability", catalog.families_by_id)
-        self.assertEqual(PROMOTED_FAMILIES, set())
+        self.assertEqual(PROMOTED_FAMILIES, {"availability"})
         availability = catalog.families_by_id["availability"]
         self.assertEqual(availability["executor_id"], "availability")
         self.assertEqual(
