@@ -36,12 +36,27 @@ def _base_parameters(**overrides):
     return value
 
 
+def _vessel_tonnage_parameters(**overrides):
+    value = {
+        "version": "v1",
+        "value_type": "minimum",
+        "min_value": 50000,
+        "max_value": None,
+        "unit": "gt_grt",
+        "years_back": None,
+        "display_value": "vessels above 50000 GT",
+    }
+    value.update(overrides)
+    return value
+
+
 class FilterCapabilityCatalogTests(unittest.TestCase):
-    def test_catalog_loads_availability_as_promoted_family(self):
+    def test_catalog_loads_availability_promoted_and_vessel_tonnage_unpromoted(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
         self.assertEqual(catalog.version, "1.0.0")
         self.assertIn("availability", catalog.families_by_id)
+        self.assertIn("vessel_tonnage", catalog.families_by_id)
         self.assertEqual(PROMOTED_FAMILIES, {"availability"})
         availability = catalog.families_by_id["availability"]
         self.assertEqual(availability["executor_id"], "availability")
@@ -49,16 +64,29 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
             availability["plausibility_bounds"],
             {"relative_days": {"min": 0, "max": 365}},
         )
+        vessel_tonnage = catalog.families_by_id["vessel_tonnage"]
+        self.assertEqual(vessel_tonnage["executor_id"], "vessel_tonnage")
+        self.assertEqual(
+            vessel_tonnage["plausibility_bounds"],
+            {
+                "min_value": {"min": 1, "max": 600000},
+                "max_value": {"min": 1, "max": 600000},
+                "years_back": {"min": 0, "max": 50},
+            },
+        )
 
     def test_llm_facing_catalog_redacts_executor_id(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
-        backend_row = backend_catalog(catalog)[0]
-        public_row = llm_facing_catalog(catalog)[0]
+        backend_rows = {row["family"]: row for row in backend_catalog(catalog)}
+        public_rows = {row["family"]: row for row in llm_facing_catalog(catalog)}
 
-        self.assertEqual(backend_row["executor_id"], "availability")
-        self.assertNotIn("executor_id", public_row)
-        self.assertEqual(public_row["family"], "availability")
+        self.assertEqual(backend_rows["availability"]["executor_id"], "availability")
+        self.assertEqual(backend_rows["vessel_tonnage"]["executor_id"], "vessel_tonnage")
+        for public_row in public_rows.values():
+            self.assertNotIn("executor_id", public_row)
+        self.assertEqual(public_rows["availability"]["family"], "availability")
+        self.assertEqual(public_rows["vessel_tonnage"]["family"], "vessel_tonnage")
 
     def test_catalog_views_do_not_poison_cached_rows(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
@@ -280,6 +308,69 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
             validate_catalog_parameters(
                 "availability",
                 {**_base_parameters(), "availability_extracted_on_date": "2026-04-01"},
+            )
+
+    def test_vessel_tonnage_schema_accepts_all_value_types(self):
+        cases = [
+            _vessel_tonnage_parameters(),
+            _vessel_tonnage_parameters(
+                value_type="maximum",
+                min_value=None,
+                max_value=80000,
+                unit="dwt",
+                display_value="vessels below 80000 DWT",
+            ),
+            _vessel_tonnage_parameters(
+                value_type="range",
+                min_value=30000,
+                max_value=80000,
+                unit="any",
+                years_back=5,
+                display_value="vessel tonnage between 30000 and 80000 in last 5 years",
+            ),
+            _vessel_tonnage_parameters(
+                value_type="range",
+                min_value=50000,
+                max_value=50000,
+                unit="unspecified",
+                years_back=0,
+                display_value="exactly 50000 vessel tonnage",
+            ),
+        ]
+
+        for parameters in cases:
+            with self.subTest(value_type=parameters["value_type"]):
+                validate_catalog_parameters("vessel_tonnage", parameters)
+
+    def test_vessel_tonnage_schema_rejects_inactive_and_invalid_fields(self):
+        with self.assertRaisesRegex(ValueError, "exactly one value_type schema"):
+            validate_catalog_parameters(
+                "vessel_tonnage",
+                _vessel_tonnage_parameters(max_value=80000),
+            )
+
+        with self.assertRaisesRegex(ValueError, "min_value cannot exceed max_value"):
+            validate_catalog_parameters(
+                "vessel_tonnage",
+                _vessel_tonnage_parameters(value_type="range", min_value=90000, max_value=80000),
+            )
+
+        with self.assertRaisesRegex(ValueError, "outside plausibility bounds"):
+            validate_catalog_parameters(
+                "vessel_tonnage",
+                _vessel_tonnage_parameters(min_value=700000),
+            )
+
+        with self.assertRaisesRegex(ValueError, "unit"):
+            validate_catalog_parameters(
+                "vessel_tonnage",
+                _vessel_tonnage_parameters(unit="nrt"),
+            )
+
+        with self.assertRaisesRegex(ValueError, "display_value"):
+            validate_catalog_parameters(
+                "vessel_tonnage",
+                _vessel_tonnage_parameters(display_value=""),
             )
 
 

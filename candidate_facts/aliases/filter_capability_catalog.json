@@ -108,6 +108,81 @@
         "relative_days": {"min": 0, "max": 365}
       },
       "executor_id": "availability"
+    },
+    {
+      "family": "vessel_tonnage",
+      "purpose": "Match recruiter vessel tonnage requirements against candidate sea-service tonnage evidence.",
+      "accepted_phrases": [
+        "vessels above 50000 GT",
+        "minimum 30000 DWT",
+        "vessel tonnage between 30000 and 80000",
+        "ships below 60000 tonnage",
+        "50000+ GRT experience",
+        "vessel tonnage above 50000 in the last 5 years",
+        "minimum 50000 vessel tonnage"
+      ],
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "value_type",
+          "min_value",
+          "max_value",
+          "unit",
+          "years_back",
+          "display_value"
+        ],
+        "properties": {
+          "version": {"const": "v1"},
+          "value_type": {"enum": ["minimum", "maximum", "range"]},
+          "min_value": {"type": ["integer", "null"]},
+          "max_value": {"type": ["integer", "null"]},
+          "unit": {"enum": ["any", "unspecified", "gt_grt", "dwt"]},
+          "years_back": {"type": ["integer", "null"]},
+          "display_value": {"type": "string"}
+        },
+        "oneOf": [
+          {
+            "required": ["value_type", "min_value"],
+            "properties": {
+              "value_type": {"const": "minimum"},
+              "min_value": {"type": "integer"},
+              "max_value": {"const": null}
+            }
+          },
+          {
+            "required": ["value_type", "max_value"],
+            "properties": {
+              "value_type": {"const": "maximum"},
+              "min_value": {"const": null},
+              "max_value": {"type": "integer"}
+            }
+          },
+          {
+            "required": ["value_type", "min_value", "max_value"],
+            "properties": {
+              "value_type": {"const": "range"},
+              "min_value": {"type": "integer"},
+              "max_value": {"type": "integer"}
+            }
+          }
+        ]
+      },
+      "do_not_use_for": [
+        "candidate age",
+        "minimum sea-service duration",
+        "engine power or kilowatt requirements",
+        "ship-type clauses without a tonnage requirement",
+        "contract count requirements",
+        "net tonnage or NRT requirements"
+      ],
+      "plausibility_bounds": {
+        "min_value": {"min": 1, "max": 600000},
+        "max_value": {"min": 1, "max": 600000},
+        "years_back": {"min": 0, "max": 50}
+      },
+      "executor_id": "vessel_tonnage"
     }
   ]
 }
