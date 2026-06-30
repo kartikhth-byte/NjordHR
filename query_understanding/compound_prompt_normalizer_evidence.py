@@ -194,12 +194,16 @@ def validate_query_plan_fixture(
 
 
 def _availability_constraints(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return _family_constraints(payload, "availability")
+
+
+def _family_constraints(payload: Mapping[str, Any], family: str) -> list[Mapping[str, Any]]:
     constraints = payload.get("constraints") if isinstance(payload, Mapping) else []
     if not isinstance(constraints, list):
         return []
     result: list[Mapping[str, Any]] = []
     for item in constraints:
-        if isinstance(item, Mapping) and item.get("filter_family") == "availability" and isinstance(item.get("parameters"), Mapping):
+        if isinstance(item, Mapping) and item.get("filter_family") == family and isinstance(item.get("parameters"), Mapping):
             result.append(item)
     return result
 
@@ -317,6 +321,27 @@ def evaluate_availability_evidence_corpus(
 
     return _evaluate_availability_payloads(
         corpus,
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+        mode="shadow_evidence_fixture",
+        llm_invoked=False,
+        class_a_rate_key="class_a_fixture_match_rate",
+        class_a_gate_failure="class_a_fixture_match_rate_below_95_percent",
+        class_b_recall_lift_status="measured_against_corpus_deterministic_baseline",
+    )
+
+
+def evaluate_vessel_tonnage_evidence_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate a fixed vessel-tonnage normalizer evidence corpus."""
+
+    return _evaluate_family_payloads(
+        corpus,
+        family="vessel_tonnage",
         catalog=catalog,
         class_b_min_correct=class_b_min_correct,
         mode="shadow_evidence_fixture",
@@ -485,6 +510,35 @@ def _evaluate_availability_payloads(
     payloads_by_case_id: Mapping[str, Mapping[str, Any]] | None = None,
     llm_audit_records: list[Mapping[str, Any]] | None = None,
 ) -> Mapping[str, Any]:
+    return _evaluate_family_payloads(
+        corpus,
+        family="availability",
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+        mode=mode,
+        llm_invoked=llm_invoked,
+        class_a_rate_key=class_a_rate_key,
+        class_a_gate_failure=class_a_gate_failure,
+        class_b_recall_lift_status=class_b_recall_lift_status,
+        payloads_by_case_id=payloads_by_case_id,
+        llm_audit_records=llm_audit_records,
+    )
+
+
+def _evaluate_family_payloads(
+    corpus: Mapping[str, Any],
+    *,
+    family: str,
+    catalog: FilterCapabilityCatalog | None,
+    class_b_min_correct: float,
+    mode: str,
+    llm_invoked: bool,
+    class_a_rate_key: str,
+    class_a_gate_failure: str,
+    class_b_recall_lift_status: str,
+    payloads_by_case_id: Mapping[str, Mapping[str, Any]] | None = None,
+    llm_audit_records: list[Mapping[str, Any]] | None = None,
+) -> Mapping[str, Any]:
     loaded = catalog or load_filter_capability_catalog()
     cases = corpus.get("cases") if isinstance(corpus.get("cases"), list) else []
     case_results: list[Mapping[str, Any]] = []
@@ -533,7 +587,7 @@ def _evaluate_availability_payloads(
         case_class = str(case.get("class") or "")
         if case_class in class_counts:
             class_counts[case_class] += 1
-        constraints = _availability_constraints(payload)
+        constraints = _family_constraints(payload, family)
         emitted_constraint = bool(constraints)
         first_parameters = constraints[0].get("parameters") if constraints else None
         expected_route = str(case.get("expected_route") or "")
@@ -663,8 +717,8 @@ def _evaluate_availability_payloads(
         enriched_audit_records.append(enriched)
 
     return {
-        "version": "availability_normalizer_evidence.v1",
-        "family": "availability",
+        "version": f"{family}_normalizer_evidence.v1",
+        "family": family,
         "catalog_version": loaded.version,
         "prompt_normalization_version": PROMPT_NORMALIZATION_VERSION,
         "corpus_id": corpus.get("corpus_id"),

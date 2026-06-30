@@ -735,6 +735,25 @@ This PR does not add a `vessel_tonnage` provider prompt, evidence corpus,
 Gemini run, helper-tool adoption, dispatcher branch, `/analyze` payload change,
 frontend change, telemetry field, CSV column, or durable audit-event field.
 
+### PR-7 — vessel_tonnage prompt and fixture corpus
+
+Adds a `vessel_tonnage` provider prompt and a fixed 200-prompt fixture corpus at
+`docs/eval-evidence/vessel-tonnage-shadow-normalizer-corpus-2026-06-30.json`.
+The corpus distribution is Class A=80, Class B=80, Class C=40. Class A covers
+minimum, maximum, range, exact-range, `years_back`, unit-specific GT/GRT and DWT
+phrases, and unit-unspecified phrases. Class B covers deterministic-missed
+tonnage phrasings. Class C covers unsupported or out-of-scope phrases including
+NRT/net tonnage, contract length, engine power, ship-type-only clauses,
+malformed numbers, reversed ranges, age, and minimum sea-service duration.
+
+The corpus includes cross-family prompts combining `availability` with
+`vessel_tonnage` across Class A, Class B, and Class C, because `availability` is
+already in `PROMOTED_FAMILIES`. This PR adds fixture validation only. It does
+not invoke Gemini, adopt helper tools, add a dispatcher branch, add
+`vessel_tonnage` to `PROMOTED_FAMILIES`, change `/analyze` or
+`/analyze_stream`, change frontend behavior, add telemetry, add CSV columns, or
+add durable audit-event fields.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.

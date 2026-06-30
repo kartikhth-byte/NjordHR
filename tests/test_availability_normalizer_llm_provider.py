@@ -15,6 +15,7 @@ from query_understanding.compound_prompt_normalizer_provider import (
     COMPOUND_NORMALIZER_DEFAULT_MODEL,
     AvailabilityNormalizerProviderResult,
     build_availability_normalizer_prompt,
+    build_vessel_tonnage_normalizer_prompt,
     call_gemini_availability_normalizer,
 )
 
@@ -48,6 +49,21 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("source_span", prompt)
         self.assertIn("candidate_families", prompt)
         self.assertIn("availability mixed with day-of-week constraints", prompt)
+        self.assertNotIn("executor_id", prompt)
+
+    def test_vessel_tonnage_prompt_uses_catalog_without_executor_ids(self):
+        prompt = build_vessel_tonnage_normalizer_prompt(
+            "Need candidates with vessel tonnage above 50000 GT",
+            prompt_normalized="Need candidates with vessel tonnage above 50000 GT",
+            reference_date="2026-06-29",
+        )
+
+        self.assertIn('"family": "vessel_tonnage"', prompt)
+        self.assertIn('"family": "availability"', prompt)
+        self.assertIn("filter_family=\"vessel_tonnage\"", prompt)
+        self.assertIn("Unit must be one of: any, unspecified, gt_grt, dwt", prompt)
+        self.assertIn("available", prompt)
+        self.assertIn("Do not put unrelated availability", prompt)
         self.assertNotIn("executor_id", prompt)
 
     def test_gemini_provider_parses_json_payload(self):

@@ -21,6 +21,7 @@ from query_understanding.compound_prompt_normalizer_tools import (
 
 
 COMPOUND_NORMALIZER_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.availability.v1"
+COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.vessel_tonnage.v1"
 COMPOUND_NORMALIZER_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 COMPOUND_NORMALIZER_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 COMPOUND_NORMALIZER_RESPONSE_SEED = 0
@@ -45,17 +46,15 @@ QUERY_PLAN_RESPONSE_SCHEMA: Mapping[str, Any] = {
                             "available_until_date": {"type": "STRING", "nullable": True},
                             "relative_days": {"type": "INTEGER", "nullable": True},
                             "resolved_reference_date": {"type": "STRING", "nullable": True},
+                            "min_value": {"type": "INTEGER", "nullable": True},
+                            "max_value": {"type": "INTEGER", "nullable": True},
+                            "unit": {"type": "STRING", "nullable": True},
+                            "years_back": {"type": "INTEGER", "nullable": True},
                             "display_value": {"type": "STRING"},
                         },
                         "required": [
                             "version",
                             "value_type",
-                            "status",
-                            "available_by_date",
-                            "available_from_date",
-                            "available_until_date",
-                            "relative_days",
-                            "resolved_reference_date",
                             "display_value",
                         ],
                     },
@@ -249,7 +248,7 @@ def build_availability_normalizer_prompt(
         "Do not emit constraints for day-of-week availability, salary, ship type, contract length, travel/recovery offsets, "
         "ambiguous locale-specific dates, or contradictory availability instructions. Route those to unapplied or needs_review.\n"
         "If the prompt contains rank, ship type, experience, or urgency text plus a clear availability clause, still emit the availability constraint and ignore unrelated clauses.\n"
-        "Do not put unrelated rank, ship type, experience, or urgency clauses into needs_review. The v1 catalog contains only availability.\n"
+        "Do not put unrelated rank, ship type, experience, or urgency clauses into needs_review. This run scores availability only.\n"
         "Every span object must be {\"text\": <verbatim>, \"start\": <int>, \"end\": <int>} and must replay against prompt_normalized.\n"
         "Constraints must use source_span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on a constraint.\n"
         "Soft signals, unapplied entries, and needs_review entries must use span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on those entries.\n"
@@ -281,6 +280,69 @@ def build_availability_normalizer_prompt(
         f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
         f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
         f"provider_helper_tool_outputs: {helper_context_text}\n\n"
+        f"catalog: {catalog_text}\n"
+    )
+
+
+def build_vessel_tonnage_normalizer_prompt(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    catalog: FilterCapabilityCatalog | None = None,
+) -> str:
+    """Build the framework-independent prompt for the vessel-tonnage normalizer."""
+
+    public_catalog = llm_facing_catalog(catalog)
+    catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
+    return (
+        "You are the NjordHR compound-prompt normalizer for audit-only evidence runs.\n"
+        "Return JSON only. Do not call tools. Do not include markdown.\n\n"
+        "Output schema root keys:\n"
+        "- version: exactly \"v1\"\n"
+        "- constraints: list of filter constraints\n"
+        "- soft_signals: list\n"
+        "- unapplied: list\n"
+        "- needs_review: list\n\n"
+        "Only emit filter_family=\"vessel_tonnage\" constraints when the prompt clearly asks for vessel tonnage experience.\n"
+        "Do not emit vessel_tonnage constraints for candidate age, minimum sea-service duration, engine power or kilowatt requirements, ship-type-only clauses, contract count requirements, net tonnage, or NRT requirements. Route those to unapplied or needs_review.\n"
+        "If the prompt contains availability, rank, ship type, or urgency text plus a clear tonnage clause, still emit the vessel_tonnage constraint and ignore unrelated clauses.\n"
+        "Do not put unrelated availability, rank, ship type, experience, or urgency clauses into needs_review. This run scores vessel_tonnage only.\n"
+        "Every span object must be {\"text\": <verbatim>, \"start\": <int>, \"end\": <int>} and must replay against prompt_normalized.\n"
+        "Constraints must use source_span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on a constraint.\n"
+        "Soft signals, unapplied entries, and needs_review entries must use span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on those entries.\n"
+        "needs_review entries must include candidate_families, for example [\"vessel_tonnage\"].\n"
+        "unapplied.reason must be one of: no matching capability, out of scope, unclear intent.\n"
+        "Fields inactive for the selected value_type must be null.\n\n"
+        "Every vessel_tonnage parameters object must include all of these keys exactly:\n"
+        "version, value_type, min_value, max_value, unit, years_back, display_value.\n"
+        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the recruiter's exact phrase in display_value. Do not shorten, expand, paraphrase, or use only a number/unit subphrase as display_value.\n"
+        "Set version to \"v1\". Unit must be one of: any, unspecified, gt_grt, dwt.\n"
+        "Use unit=\"gt_grt\" for GT or GRT wording. Use unit=\"dwt\" for DWT/deadweight wording. Use unit=\"unspecified\" when the prompt asks for tonnage without a unit. Use unit=\"any\" only for broad wording that accepts any tonnage unit.\n"
+        "Use value_type=\"minimum\" for above, at least, minimum, more than, greater than, or plus phrasing. Put the number in min_value and set max_value to null.\n"
+        "Use value_type=\"maximum\" for below, up to, at most, less than, or under phrasing. Put the number in max_value and set min_value to null.\n"
+        "Use value_type=\"range\" for between/from-to/exactly phrasing. Put both bounds in min_value and max_value. Exact-tonnage requirements use the same value for both.\n"
+        "Use years_back only when the prompt explicitly limits recency, for example last 5 years. Otherwise set years_back to null.\n"
+        "Numbers must be integers from 1 through 600000. years_back must be an integer from 0 through 50 or null.\n\n"
+        "Semantic mapping examples:\n"
+        "- vessels above 50000 GT -> value_type=minimum, min_value=50000, max_value=null, unit=gt_grt.\n"
+        "- minimum 30000 DWT -> value_type=minimum, min_value=30000, max_value=null, unit=dwt.\n"
+        "- vessel tonnage between 30000 and 80000 -> value_type=range, min_value=30000, max_value=80000, unit=unspecified.\n"
+        "- ships below 60000 tonnage -> value_type=maximum, min_value=null, max_value=60000, unit=unspecified.\n"
+        "- exactly 50000 vessel tonnage -> value_type=range, min_value=50000, max_value=50000, unit=unspecified.\n"
+        "- vessel tonnage above 50000 in the last 5 years -> value_type=minimum, min_value=50000, max_value=null, unit=unspecified, years_back=5.\n"
+        "The source_span text should cover only the tonnage phrase, not surrounding rank/ship/availability context words.\n\n"
+        "Example shape:\n"
+        "{\n"
+        "  \"version\": \"v1\",\n"
+        "  \"constraints\": [{\"filter_family\": \"vessel_tonnage\", \"parameters\": {\"version\": \"v1\", \"value_type\": \"minimum\", \"min_value\": 50000, \"max_value\": null, \"unit\": \"gt_grt\", \"years_back\": null, \"display_value\": \"vessels above 50000 GT\"}, \"source_span\": {\"text\": \"vessels above 50000 GT\", \"start\": 18, \"end\": 41}}],\n"
+        "  \"soft_signals\": [],\n"
+        "  \"unapplied\": [],\n"
+        "  \"needs_review\": []\n"
+        "}\n\n"
+        f"prompt_raw: {json.dumps(str(prompt or ''))}\n"
+        f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
+        f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
         f"catalog: {catalog_text}\n"
     )
 
