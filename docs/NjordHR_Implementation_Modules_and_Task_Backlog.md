@@ -345,7 +345,7 @@ Suggested overlap:
 - `P1` Shadow-LLM rescue promotion copy is clarified:
   - `LLM_Promotion_Stage` applies only to the five eval-cleared rescue families: `certificate_requirement`, `rank_match`, `stcw_basic`, `us_visa`, and `age_range`
   - remaining shadow-LLM normalization families are still pending separate evidence runs and promotion PRs
-  - compound-prompt normalizer contract is locked in `docs/specs/shadow_llm_compound_prompt_normalizer_v1.md`; v1 starts with `vessel_tonnage` in shadow mode only, then backfills the five eval-cleared rescue families one by one before future active families
+  - compound-prompt normalizer contract is locked in `docs/specs/shadow_llm_compound_prompt_normalizer_v1.md`; v1 starts with `vessel_tonnage` in shadow mode only, then backfills the five eval-cleared rescue families one by one before future active families; live promotion also requires deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher
 - `P1` Availability filter rollout contract is locked in `docs/specs/availability_filter_v1.md`; deterministic extraction, picker semantics, and Needs Review behavior are implemented, the audit-only `availability` capability catalog row is added, and the seed shadow-normalizer evidence harness is tracked in `docs/eval-evidence/availability-shadow-normalizer-corpus-2026-06-29.json`. Live promotion remains pending a real LLM run and the 200-prompt evidence gate.
 
 ### 6.2 P0 (Start immediately)

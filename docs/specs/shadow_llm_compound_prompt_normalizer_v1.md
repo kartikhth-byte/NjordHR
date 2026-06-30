@@ -455,6 +455,7 @@ Across all classes:
 - **Reviewed false-positive rate below 2%** on the union of Classes A and B, where false-positive is defined as a constraint that survives validation, canonicalization, and sanity check but would produce a wrong dispatch decision in live mode.
 - **Corpus size** of at least 200 distinct prompts for the family, with explicit class distribution recorded.
 - **Kill-switch test** verifying `NJORDHR_LLM_NORMALIZER_MODE=shadow` reverts the family from live to shadow with no dispatch.
+- **Deterministic enforcement coverage** proving the validator, canonicalizer, sanity checker, and dispatcher can validate the family safely before live dispatch.
 
 The corpus is append-only. Once a case enters the ledger, it stays. Regressions are annotated, not deleted.
 
@@ -463,6 +464,66 @@ Promotion is binary: a family is in `PROMOTED_FAMILIES` or it is not. No partial
 An empty `constraints` array with non-empty `unapplied` or `needs_review` is
 not a shadow-mode failure. The deterministic parser still drives live behavior
 for that prompt.
+
+### Deterministic enforcement coverage by family
+
+No family is promoted because the LLM can emit valid JSON for it. A family is
+promoted only when the deterministic enforcement layers can validate,
+canonicalize, sanity-check, and dispatch that family's emitted constraints
+safely.
+
+Each promotion PR must include a deterministic enforcement coverage table for
+the family being promoted. The table lists the concrete helpers, functions, or
+checks used by each enforcement layer:
+
+- `validator` — schema shape, required fields, source spans, type checks, enum
+  membership, numeric bounds, and per-family parameter validation.
+- `canonicalizer` — vocabulary lookup, alias resolution, date, numeric, unit,
+  and enum normalization, conflict routing, and canonical label production.
+- `sanity_checker` — plausibility bounds, unsafe-widening guards,
+  contradictory-shape routing, and out-of-scope routing.
+- `dispatcher` — `PROMOTED_FAMILIES` membership, executor lookup, live-mode
+  routing, shadow-mode bypass, deterministic-mode bypass, and kill-switch
+  behavior.
+
+The promotion PR must cite direct tests proving the listed enforcement coverage
+is exercised by at least one Class A prompt, one Class B prompt, and one Class C
+prompt from the append-only corpus. Test citations must name the test function
+and file.
+
+- A family-specific helper is required only when the generic helper set cannot
+  validate that family safely.
+
+The promotion corpus must include compound prompts that combine the family being
+promoted with every family already present in `PROMOTED_FAMILIES` at the time of
+evaluation. The required minimum is one cross-family prompt per already-promoted
+family, not every pairwise combination of promoted families. These cross-family
+prompts must include Class A and Class B cases. Class C cases must include at
+least one prompt where another promoted family is valid but the family under
+promotion must route to `needs_review` or `unapplied`.
+
+#### Enforcement helper registry
+
+The registry below is backend-private documentation. It is not part of the
+LLM-facing capability catalog, and `executor_id` values are still hidden from
+the LLM.
+
+| helper_id | layer | families using | contract |
+| --- | --- | --- | --- |
+| `source_span_exact_replay` | validator | `vessel_tonnage`, `availability` | Verifies `normalized_prompt[start:end] == text`; repeated text requires exact offsets and is not guessed. |
+| `catalog_parameter_validator` | validator | `vessel_tonnage`, `availability` | Validates emitted parameters against the catalog `output_schema`, enums, numeric ranges, and per-family required-field rules. |
+| `date_phrase_normalizer` | canonicalizer | `availability` | Converts supported date phrases to ISO dates using the prompt reference date; unsupported or ambiguous dates route to review. |
+| `numeric_unit_normalizer` | canonicalizer | `vessel_tonnage` | Converts numeric quantity and unit text into canonical numeric fields and unit enums. |
+| `plausibility_bounds_checker` | sanity_checker | `vessel_tonnage`, `availability` | Enforces catalog `plausibility_bounds`; out-of-range values route to review. |
+| `promoted_family_dispatch_gate` | dispatcher | all promoted families | Dispatches only when mode is `live` and the family is present in `PROMOTED_FAMILIES`; shadow and deterministic modes do not dispatch. |
+
+Future promotion PRs add rows when they introduce new generic helpers or
+family-specific helpers. Reused helpers update the `families using` cell in the
+same PR that relies on them.
+
+Changes to a generic helper require each family listed in that helper's
+`families using` cell to re-cite Class A, Class B, and Class C test evidence in
+the change PR.
 
 ## Rollout slices
 
@@ -517,10 +578,12 @@ This spec follows the discipline established by `coc_country_alias_migration_v1.
 
 - Set-theoretic mode definitions (shadow vs live, per family).
 - Behavior-level parity requirements (LLM output vs deterministic baseline).
+- Deterministic enforcement coverage requirements across validator,
+  canonicalizer, sanity checker, and dispatcher.
 - Kill switch via env var.
 - Snapshot discipline (the evidence corpus is append-only; regressions are annotated, not deleted).
 - Closed-list wording throughout this spec. PR-73 hedge terms are excluded.
 
 ## Summary
 
-The shadow LLM compound-prompt normalizer is a single LLM call that emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names or executor IDs. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial) with explicit thresholds. v1 ships with one family (`vessel_tonnage`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic multi-call orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
+The shadow LLM compound-prompt normalizer is a single LLM call that emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names or executor IDs. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, and deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher. v1 ships with one family (`vessel_tonnage`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic multi-call orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
