@@ -1,0 +1,530 @@
+{
+  "version": "1.0.0",
+  "corpus_id": "availability-shadow-normalizer-corpus-2026-06-29",
+  "family": "availability",
+  "status": "seed_evidence_not_promotion_ready",
+  "reference_date": "2026-06-29",
+  "notes": [
+    "This seed corpus validates the availability query_plan.v1 harness shape.",
+    "It does not invoke an LLM and is below the 200-prompt promotion gate."
+  ],
+  "cases": [
+    {
+      "id": "A001",
+      "class": "A",
+      "prompt": "Need candidates available immediately",
+      "expected_route": "constraints",
+      "deterministic_baseline": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "status",
+          "status": "immediate",
+          "available_by_date": null,
+          "available_from_date": null,
+          "available_until_date": null,
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "available immediately"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "status",
+              "status": "immediate",
+              "available_by_date": null,
+              "available_from_date": null,
+              "available_until_date": null,
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "available immediately"
+            },
+            "source_span": {"text": "available immediately", "start": 16, "end": 37}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "A002",
+      "class": "A",
+      "prompt": "Show crew available by 15 Apr 2026",
+      "expected_route": "constraints",
+      "deterministic_baseline": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "by_date",
+          "status": null,
+          "available_by_date": "2026-04-15",
+          "available_from_date": null,
+          "available_until_date": null,
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "available by 15 Apr 2026"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "by_date",
+              "status": null,
+              "available_by_date": "2026-04-15",
+              "available_from_date": null,
+              "available_until_date": null,
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "available by 15 Apr 2026"
+            },
+            "source_span": {"text": "available by 15 Apr 2026", "start": 10, "end": 34}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "A003",
+      "class": "A",
+      "prompt": "Find officers available from 1 Sep 2026",
+      "expected_route": "constraints",
+      "deterministic_baseline": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "from_date",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": "2026-09-01",
+          "available_until_date": null,
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "available from 1 Sep 2026"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "from_date",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": "2026-09-01",
+              "available_until_date": null,
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "available from 1 Sep 2026"
+            },
+            "source_span": {"text": "available from 1 Sep 2026", "start": 14, "end": 39}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "A004",
+      "class": "A",
+      "prompt": "2nd engineers available within 30 days",
+      "expected_route": "constraints",
+      "deterministic_baseline": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "relative_days",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": null,
+          "available_until_date": null,
+          "relative_days": 30,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "available within 30 days"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "relative_days",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": null,
+              "available_until_date": null,
+              "relative_days": 30,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "available within 30 days"
+            },
+            "source_span": {"text": "available within 30 days", "start": 14, "end": 38}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "A005",
+      "class": "A",
+      "prompt": "Candidates available between 1 Apr 2026 and 1 May 2026",
+      "expected_route": "constraints",
+      "deterministic_baseline": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "window",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": "2026-04-01",
+          "available_until_date": "2026-05-01",
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "available between 1 Apr 2026 and 1 May 2026"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "window",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": "2026-04-01",
+              "available_until_date": "2026-05-01",
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "available between 1 Apr 2026 and 1 May 2026"
+            },
+            "source_span": {"text": "available between 1 Apr 2026 and 1 May 2026", "start": 11, "end": 54}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "B001",
+      "class": "B",
+      "prompt": "Need 2nd engineer, not available until August",
+      "expected_route": "constraints",
+      "deterministic_baseline": {"status": "missed"},
+      "human_label": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "from_date",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": "2026-08-01",
+          "available_until_date": null,
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "not available until August"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "from_date",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": "2026-08-01",
+              "available_until_date": null,
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "not available until August"
+            },
+            "source_span": {"text": "not available until August", "start": 19, "end": 45}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "B002",
+      "class": "B",
+      "prompt": "Chief engineer with tanker experience and available before 20 Aug 2026",
+      "expected_route": "constraints",
+      "deterministic_baseline": {"status": "missed"},
+      "human_label": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "by_date",
+          "status": null,
+          "available_by_date": "2026-08-20",
+          "available_from_date": null,
+          "available_until_date": null,
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "available before 20 Aug 2026"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "by_date",
+              "status": null,
+              "available_by_date": "2026-08-20",
+              "available_from_date": null,
+              "available_until_date": null,
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "available before 20 Aug 2026"
+            },
+            "source_span": {"text": "available before 20 Aug 2026", "start": 42, "end": 70}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "B003",
+      "class": "B",
+      "prompt": "Find ETOs ready to join after 45 days",
+      "expected_route": "constraints",
+      "deterministic_baseline": {"status": "missed"},
+      "human_label": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "relative_days",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": null,
+          "available_until_date": null,
+          "relative_days": 45,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "ready to join after 45 days"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "relative_days",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": null,
+              "available_until_date": null,
+              "relative_days": 45,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "ready to join after 45 days"
+            },
+            "source_span": {"text": "ready to join after 45 days", "start": 10, "end": 37}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "B004",
+      "class": "B",
+      "prompt": "Need master for LPG vessel, can join from 10 Oct 2026",
+      "expected_route": "constraints",
+      "deterministic_baseline": {"status": "missed"},
+      "human_label": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "from_date",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": "2026-10-10",
+          "available_until_date": null,
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "can join from 10 Oct 2026"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "from_date",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": "2026-10-10",
+              "available_until_date": null,
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "can join from 10 Oct 2026"
+            },
+            "source_span": {"text": "can join from 10 Oct 2026", "start": 28, "end": 53}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "B005",
+      "class": "B",
+      "prompt": "Looking for officers free 5 Nov 2026 to 20 Dec 2026",
+      "expected_route": "constraints",
+      "deterministic_baseline": {"status": "missed"},
+      "human_label": {
+        "parameters": {
+          "version": "v1",
+          "value_type": "window",
+          "status": null,
+          "available_by_date": null,
+          "available_from_date": "2026-11-05",
+          "available_until_date": "2026-12-20",
+          "relative_days": null,
+          "resolved_reference_date": "2026-06-29",
+          "display_value": "free 5 Nov 2026 to 20 Dec 2026"
+        }
+      },
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [
+          {
+            "filter_family": "availability",
+            "parameters": {
+              "version": "v1",
+              "value_type": "window",
+              "status": null,
+              "available_by_date": null,
+              "available_from_date": "2026-11-05",
+              "available_until_date": "2026-12-20",
+              "relative_days": null,
+              "resolved_reference_date": "2026-06-29",
+              "display_value": "free 5 Nov 2026 to 20 Dec 2026"
+            },
+            "source_span": {"text": "free 5 Nov 2026 to 20 Dec 2026", "start": 21, "end": 51}
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "C001",
+      "class": "C",
+      "prompt": "Available immediately but not available until August",
+      "expected_route": "needs_review",
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": [
+          {
+            "span": {"text": "Available immediately but not available until August", "start": 0, "end": 52},
+            "candidate_families": ["availability"],
+            "reason": "contradictory availability instructions"
+          }
+        ]
+      }
+    },
+    {
+      "id": "C002",
+      "class": "C",
+      "prompt": "Available only on Tuesdays",
+      "expected_route": "unapplied",
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "span": {"text": "Available only on Tuesdays", "start": 0, "end": 26},
+            "reason": "out of scope"
+          }
+        ],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "C003",
+      "class": "C",
+      "prompt": "Available if salary is above 8000 USD",
+      "expected_route": "unapplied",
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "span": {"text": "Available if salary is above 8000 USD", "start": 0, "end": 37},
+            "reason": "out of scope"
+          }
+        ],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "C004",
+      "class": "C",
+      "prompt": "Need candidates available for 6 month contract only",
+      "expected_route": "unapplied",
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "span": {"text": "available for 6 month contract only", "start": 16, "end": 51},
+            "reason": "out of scope"
+          }
+        ],
+        "needs_review": []
+      }
+    },
+    {
+      "id": "C005",
+      "class": "C",
+      "prompt": "Available next quarter but only on Tuesdays",
+      "expected_route": "needs_review",
+      "llm_query_plan": {
+        "version": "v1",
+        "constraints": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": [
+          {
+            "span": {"text": "Available next quarter but only on Tuesdays", "start": 0, "end": 43},
+            "candidate_families": ["availability"],
+            "reason": "availability mixed with day-of-week constraints"
+          }
+        ]
+      }
+    }
+  ]
+}
