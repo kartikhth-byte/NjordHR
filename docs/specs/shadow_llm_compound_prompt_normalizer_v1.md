@@ -4,13 +4,19 @@
 
 Active spec. Locked contract for the shadow LLM compound-prompt normalizer. Implementation slices follow the migration discipline established by `coc_country_alias_migration_v1.md`.
 
-This spec defines the wire format, capability catalog, optional provider-scoped helper tools, validator, canonicalizer, sanity checker, dispatcher, audit trace, kill switch, and promotion gate. It enumerates one initial family (`availability`). Live dispatch is gated by per-family promotion PRs.
+This spec defines the wire format, capability catalog, provider-scoped helper tools when used by a family, validator, canonicalizer, sanity checker, dispatcher, audit trace, kill switch, and promotion gate. It enumerates one initial family (`availability`). Live dispatch is gated by per-family promotion PRs.
 
 ## Purpose
 
 Convert free-text AI Search prompts — including compound prompts with multiple constraints, negation, ranges, units, and soft preferences — into a validated `query_plan.v1` JSON. A deterministic dispatcher then maps that JSON to the existing hard-filter evaluators via a closed registry.
 
 The normalizer produces one final `query_plan.v1` per prompt. A provider adapter is permitted to use deterministic helper-tool calls while constructing that final plan, but the backend dispatch contract consumes only the validated `query_plan.v1`.
+
+A prompt-normalization run starts when one recruiter prompt enters the provider
+adapter and ends when that adapter returns one final `query_plan.v1` or a
+transport/parse failure. Multiple provider turns inside that run are not
+agentic orchestration. Cross-run helper loops are prohibited and remain
+LangGraph territory.
 
 ## Goal
 
@@ -588,6 +594,11 @@ and at least one rejected helper call. Helper-assisted prompts count toward the
 same three-class evidence thresholds; there is no separate helper-only promotion
 path.
 
+When a cross-family prompt includes a family already using provider helper
+tools, that prompt must trigger at least one helper invocation for the
+helper-using promoted family. This requirement applies in addition to the
+cross-family prompt count above.
+
 #### Enforcement helper registry
 
 The registry below is backend-private documentation. It is not part of the
@@ -719,4 +730,4 @@ This spec follows the discipline established by `coc_country_alias_migration_v1.
 
 ## Summary
 
-The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; optional provider-scoped helper tools improve span, date, parameter, and conflict exactness; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 ships with one family (`availability`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
+The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 ships with one family (`availability`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
