@@ -4,7 +4,7 @@
 
 Active spec. Locked contract for the shadow LLM compound-prompt normalizer. Implementation slices follow the migration discipline established by `coc_country_alias_migration_v1.md`.
 
-This spec defines the wire format, capability catalog, provider-scoped helper tools when used by a family, validator, canonicalizer, sanity checker, dispatcher, audit trace, kill switch, and promotion gate. It enumerates one initial family (`availability`). Live dispatch is gated by per-family promotion PRs.
+This spec defines the wire format, capability catalog, provider-scoped helper tools when used by a family, validator, canonicalizer, sanity checker, dispatcher, audit trace, kill switch, and promotion gate. It enumerates catalog-declared families separately from promoted live-dispatch families. Live dispatch is gated by per-family promotion PRs.
 
 ## Purpose
 
@@ -227,7 +227,8 @@ The sanity checker runs after the canonicalizer. It enforces per-family plausibi
 
 | Family            | Field                       | Bound                |
 | ----------------- | --------------------------- | -------------------- |
-| `vessel_tonnage`  | `min_tonnage`, `max_tonnage`| `[0, 600000]`        |
+| `vessel_tonnage`  | `min_value`, `max_value`    | `[1, 600000]`        |
+| `vessel_tonnage`  | `years_back`                | `[0, 50]`            |
 | `age_range`       | `min_age`, `max_age`        | `[16, 75]`           |
 
 Additional families add bounds when they enter the catalog. Bounds are required for every numeric field.
@@ -237,6 +238,7 @@ Additional families add bounds when they enter the catalog. Bounds are required 
 - Values inside the bound — constraint stays in `constraints[]`.
 - Values outside the bound — constraint moves to `needs_review` with reason `"value out of plausible range"`.
 - The sanity checker does not clamp values silently. Out-of-range values always route to review.
+- For range-valued tonnage constraints, `min_value == max_value` is valid and means an exact-tonnage requirement.
 
 ## Dispatcher contract
 
@@ -659,7 +661,7 @@ Locks the contracts above. No code changes. Adds this file and any cross-referen
 
 ### PR-2 — harness
 
-Adds the LLM-call harness (raw Anthropic SDK or a thin provider adapter that uses LangChain internally, per non-goals), validator, canonicalizer, sanity checker, audit recorder, and catalog loader. Adds the catalog file with `availability` only. Adds Pydantic models for `query_plan.v1`. Populates `CAPABILITY_REGISTRY` with `availability` → evaluator. Initializes `PROMOTED_FAMILIES = set()`. Kill switch wired and defaulting to `"deterministic"`. No dispatch. No live behavior change. Scope guard: zero diff to `/analyze`, `/analyze_stream`, fingerprint, existing hard-filter audit CSV columns, telemetry, recovery, frontend. The `llm_normalizer_audit` sink is added as a new, separate audit channel.
+Adds the LLM-call harness (raw Anthropic SDK or a thin provider adapter that uses LangChain internally, per non-goals), validator, canonicalizer, sanity checker, audit recorder, and catalog loader. Adds the initial catalog file with `availability`. Adds Pydantic models for `query_plan.v1`. Populates `CAPABILITY_REGISTRY` with `availability` -> evaluator. Initializes `PROMOTED_FAMILIES = set()`. Kill switch wired and defaulting to `"deterministic"`. No dispatch. No live behavior change. Scope guard: zero diff to `/analyze`, `/analyze_stream`, fingerprint, existing hard-filter audit CSV columns, telemetry, recovery, frontend. The `llm_normalizer_audit` sink is added as a new, separate audit channel.
 
 ### PR-3 — availability shadow corpus
 
@@ -720,6 +722,19 @@ each case result and each LLM audit record. The summary also records
 display-value-only failures, parameter mismatches, and Class C unsafe routes
 remain grep-able after each rerun.
 
+### PR-6 — vessel_tonnage catalog row
+
+Adds `vessel_tonnage` to the capability catalog with `version`, `value_type`,
+`min_value`, `max_value`, `unit`, `years_back`, and `display_value` parameters.
+The row remains unpromoted: `PROMOTED_FAMILIES` stays `{"availability"}` and
+live dispatch remains unchanged. The catalog validator enforces inactive-field
+rules, `min_value <= max_value`, unit enum membership, and plausibility bounds
+for `min_value`, `max_value`, and `years_back`.
+
+This PR does not add a `vessel_tonnage` provider prompt, evidence corpus,
+Gemini run, helper-tool adoption, dispatcher branch, `/analyze` payload change,
+frontend change, telemetry field, CSV column, or durable audit-event field.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
@@ -762,4 +777,4 @@ This spec follows the discipline established by `coc_country_alias_migration_v1.
 
 ## Summary
 
-The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 ships with one family (`availability`); additional families enter through their own per-family PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
+The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 live dispatch ships with one promoted family (`availability`); additional catalog-declared families enter live dispatch only through their own per-family promotion PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.

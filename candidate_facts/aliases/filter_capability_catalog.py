@@ -241,6 +241,8 @@ def validate_catalog_parameters(
     _validate_schema_value(schema, parameters, f"parameters.{family}")
     if family == "availability":
         _validate_availability_parameters(parameters)
+    if family == "vessel_tonnage":
+        _validate_vessel_tonnage_parameters(parameters)
     bounds = _validate_mapping(row.get("plausibility_bounds"), f"filter_capability_catalog.families.{family}.plausibility_bounds")
     for field, bound_value in bounds.items():
         value = parameters.get(field)
@@ -268,3 +270,12 @@ def _validate_availability_parameters(parameters: Mapping[str, Any]) -> None:
         end = parameters.get("available_until_date")
         if isinstance(start, str) and isinstance(end, str) and start > end:
             raise ValueError("parameters.availability.available_from_date cannot exceed available_until_date")
+
+
+def _validate_vessel_tonnage_parameters(parameters: Mapping[str, Any]) -> None:
+    if not isinstance(parameters.get("display_value"), str) or not parameters.get("display_value", "").strip():
+        raise ValueError("parameters.vessel_tonnage.display_value must be a non-empty string")
+    min_value = parameters.get("min_value")
+    max_value = parameters.get("max_value")
+    if isinstance(min_value, int) and isinstance(max_value, int) and min_value > max_value:
+        raise ValueError("parameters.vessel_tonnage.min_value cannot exceed max_value")
