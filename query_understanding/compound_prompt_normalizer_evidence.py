@@ -24,6 +24,10 @@ from candidate_facts.aliases.filter_capability_catalog import (
 from query_understanding.compound_prompt_normalizer_provider import (
     AvailabilityNormalizerProviderResult,
 )
+from query_understanding.compound_prompt_normalizer_tools import (
+    HELPER_TOOL_VERSION,
+    availability_helper_tool_context,
+)
 
 
 QUERY_PLAN_VERSION = "v1"
@@ -313,6 +317,68 @@ def evaluate_availability_evidence_corpus(
     )
 
 
+def evaluate_availability_helper_tool_fixture_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate fixture payloads while recording provider helper-tool audit fields."""
+
+    loaded = catalog or load_filter_capability_catalog()
+    payloads_by_case_id: dict[str, Mapping[str, Any]] = {}
+    audit_records: list[Mapping[str, Any]] = []
+    cases = corpus.get("cases") if isinstance(corpus.get("cases"), list) else []
+    reference_date = str(corpus.get("reference_date") or "")
+    for case in cases:
+        if not isinstance(case, Mapping):
+            continue
+        case_id = str(case.get("id") or "")
+        prompt_raw = str(case.get("prompt") or "")
+        prompt_normalized = normalize_prompt_text(prompt_raw)
+        payload = case.get("llm_query_plan") if isinstance(case.get("llm_query_plan"), Mapping) else {}
+        payloads_by_case_id[case_id] = payload
+        helper_outputs, helper_audit = availability_helper_tool_context(
+            prompt_normalized,
+            reference_date=reference_date,
+            catalog=loaded,
+        )
+        validation = validate_query_plan_fixture(payload, prompt_normalized=prompt_normalized, catalog=loaded)
+        audit_records.append(
+            {
+                "case_id": case_id,
+                "prompt_hash": _sha256_text(prompt_raw),
+                "prompt_normalized": prompt_normalized,
+                "model_id": "fixture-helper-tools",
+                "prompt_template_version": "fixture-helper-tools",
+                "raw_llm_output": None,
+                "raw_parsed_payload": payload,
+                "parsed_payload": payload,
+                "repair_actions": [],
+                "transport_error": None,
+                "validator_result": "accepted" if validation.accepted else "rejected",
+                "validator_errors": list(validation.errors),
+                "helper_tool_version": HELPER_TOOL_VERSION,
+                "helper_tool_call_count": len(helper_audit),
+                "helper_tool_calls": helper_audit,
+                "helper_tool_context_count": len(helper_outputs),
+            }
+        )
+
+    return _evaluate_availability_payloads(
+        corpus,
+        catalog=loaded,
+        class_b_min_correct=class_b_min_correct,
+        mode="shadow_helper_tool_fixture_evidence",
+        llm_invoked=False,
+        payloads_by_case_id=payloads_by_case_id,
+        llm_audit_records=audit_records,
+        class_a_rate_key="class_a_fixture_match_rate",
+        class_a_gate_failure="class_a_fixture_match_rate_below_95_percent",
+        class_b_recall_lift_status="measured_against_corpus_deterministic_baseline",
+    )
+
+
 def evaluate_availability_llm_corpus(
     corpus: Mapping[str, Any],
     *,
@@ -347,6 +413,8 @@ def evaluate_availability_llm_corpus(
                 raw_llm_output=result.get("raw_llm_output") if isinstance(result.get("raw_llm_output"), str) else None,
                 parsed_payload=result.get("parsed_payload") if isinstance(result.get("parsed_payload"), Mapping) else None,
                 transport_error=result.get("transport_error") if isinstance(result.get("transport_error"), str) else None,
+                helper_tool_version=result.get("helper_tool_version") if isinstance(result.get("helper_tool_version"), str) else None,
+                helper_tool_calls=tuple(result.get("helper_tool_calls") if isinstance(result.get("helper_tool_calls"), list) else ()),
             )
         else:
             provider_result = AvailabilityNormalizerProviderResult(
@@ -374,6 +442,9 @@ def evaluate_availability_llm_corpus(
                 "transport_error": provider_result.transport_error,
                 "validator_result": "accepted" if validation.accepted else "rejected",
                 "validator_errors": list(validation.errors),
+                "helper_tool_version": provider_result.helper_tool_version,
+                "helper_tool_call_count": len(provider_result.helper_tool_calls),
+                "helper_tool_calls": list(provider_result.helper_tool_calls),
             }
         )
 
@@ -416,6 +487,22 @@ def _evaluate_availability_payloads(
     class_b_total = class_b_correct = 0
     class_b_baseline_correct = 0
     class_c_total = class_c_safe = 0
+    helper_tool_call_count = 0
+    helper_tool_accepted_count = 0
+    helper_tool_rejected_count = 0
+    if llm_audit_records:
+        for record in llm_audit_records:
+            calls = record.get("helper_tool_calls") if isinstance(record, Mapping) else []
+            if not isinstance(calls, list):
+                continue
+            for call in calls:
+                if not isinstance(call, Mapping):
+                    continue
+                helper_tool_call_count += 1
+                if call.get("accepted") is True:
+                    helper_tool_accepted_count += 1
+                else:
+                    helper_tool_rejected_count += 1
 
     for case in cases:
         if not isinstance(case, Mapping):
@@ -548,6 +635,9 @@ def _evaluate_availability_payloads(
             "class_b_recall_lift_status": class_b_recall_lift_status,
             "class_c_safe_route_rate": class_c_rate,
             "reviewed_false_positive_rate": reviewed_false_positive_rate,
+            "helper_tool_call_count": helper_tool_call_count,
+            "helper_tool_accepted_count": helper_tool_accepted_count,
+            "helper_tool_rejected_count": helper_tool_rejected_count,
         },
         "promotion_gate": {
             "passes": not gate_failures,

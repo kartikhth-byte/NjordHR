@@ -17,6 +17,25 @@ def _provider_result(payload):
     )
 
 
+def _provider_result_with_helpers(payload):
+    return AvailabilityNormalizerProviderResult(
+        model_id="fake-model",
+        prompt_template_version="test-template",
+        raw_llm_output="{}",
+        parsed_payload=payload,
+        helper_tool_version="1.0.0",
+        helper_tool_calls=(
+            {
+                "tool_id": "locate_prompt_span.v1",
+                "input_hash": "input-hash",
+                "accepted": True,
+                "result_hash": "result-hash",
+                "errors": [],
+            },
+        ),
+    )
+
+
 def _availability_payload(prompt, phrase="available immediately"):
     start = prompt.index(phrase)
     return {
@@ -122,6 +141,23 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertTrue(diagnostics["provider_invoked"])
         self.assertTrue(diagnostics["dispatched"])
         self.assertEqual(diagnostics["validator_result"], "accepted")
+
+    def test_live_mode_preserves_helper_tool_diagnostics(self):
+        prompt = "Need crew available immediately"
+        provider = Mock(return_value=_provider_result_with_helpers(_availability_payload(prompt)))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraint, diagnostics = promoted_availability_constraint_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        self.assertIsNotNone(constraint)
+        self.assertTrue(diagnostics["dispatched"])
+        self.assertEqual(diagnostics["helper_tool_version"], "1.0.0")
+        self.assertEqual(diagnostics["helper_tool_call_count"], 1)
+        self.assertEqual(diagnostics["helper_tool_calls"][0]["tool_id"], "locate_prompt_span.v1")
 
     def test_live_mode_rejects_invalid_payload_before_dispatch(self):
         prompt = "Need crew available immediately"

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from scripts.availability_normalizer_evidence import _gemini_api_key_from_config
 from query_understanding.compound_prompt_normalizer_evidence import (
+    evaluate_availability_helper_tool_fixture_corpus,
     evaluate_availability_llm_corpus,
     load_corpus,
     repair_query_plan_payload,
@@ -97,6 +98,44 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
         self.assertNotIn("executor_id", provider_prompt)
 
+    def test_gemini_provider_includes_helper_context_when_enabled(self):
+        calls = []
+        payload = {
+            "version": "v1",
+            "constraints": [],
+            "soft_signals": [],
+            "unapplied": [],
+            "needs_review": [],
+        }
+
+        def fake_post(url, *, headers, json, timeout):
+            calls.append({"json": json})
+            return _FakeGeminiResponse(
+                {
+                    "candidates": [
+                        {"content": {"parts": [{"text": __import__("json").dumps(payload)}]}}
+                    ]
+                }
+            )
+
+        result = call_gemini_availability_normalizer(
+            "Need crew available within 30 days",
+            prompt_normalized="Need crew available within 30 days",
+            reference_date="2026-06-29",
+            api_key="test-key",
+            use_helper_tools=True,
+            post=fake_post,
+        )
+
+        self.assertEqual(result.helper_tool_version, "1.0.0")
+        self.assertGreater(result.helper_tool_calls, ())
+        self.assertGreater(result.helper_tool_context, ())
+        provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
+        self.assertIn("provider_helper_tool_outputs", provider_prompt)
+        self.assertIn("locate_prompt_span.v1", provider_prompt)
+        self.assertIn("check_availability_parameters.v1", provider_prompt)
+        self.assertNotIn("executor_id", provider_prompt)
+
     def test_gemini_provider_reports_missing_credentials(self):
         with patch.dict("os.environ", {}, clear=True):
             result = call_gemini_availability_normalizer(
@@ -154,6 +193,62 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertEqual(len(report["llm_audit_records"]), len(corpus["cases"]))
         self.assertEqual(report["llm_audit_records"][0]["validator_result"], "accepted")
         self.assertEqual(set(reference_dates), {"2026-06-29"})
+
+    def test_llm_evidence_records_helper_tool_audit_counts(self):
+        corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
+        corpus["cases"] = corpus["cases"][:3]
+
+        def provider(prompt, *, prompt_normalized, reference_date, catalog):
+            result = call_gemini_availability_normalizer(
+                prompt,
+                prompt_normalized=prompt_normalized,
+                reference_date=reference_date,
+                api_key="test-key",
+                catalog=catalog,
+                use_helper_tools=True,
+                post=lambda *_, **__: _FakeGeminiResponse(
+                    {
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {"text": __import__("json").dumps(next(case for case in corpus["cases"] if case["prompt"] == prompt)["llm_query_plan"])}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ),
+            )
+            self.assertTrue(result.helper_tool_calls)
+            return result
+
+        report = evaluate_availability_llm_corpus(corpus, provider=provider)
+
+        self.assertGreater(report["summary"]["helper_tool_call_count"], 0)
+        self.assertGreater(report["summary"]["helper_tool_accepted_count"], 0)
+        self.assertIn("helper_tool_calls", report["llm_audit_records"][0])
+        self.assertEqual(
+            set(report["llm_audit_records"][0]["helper_tool_calls"][0]),
+            {"tool_id", "input_hash", "accepted", "result_hash", "errors"},
+        )
+        self.assertNotIn("available immediately", json.dumps(report["llm_audit_records"][0]["helper_tool_calls"]))
+
+    def test_helper_tool_fixture_evidence_compares_without_claiming_real_llm_run(self):
+        corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
+        corpus["cases"] = corpus["cases"][:5]
+
+        report = evaluate_availability_helper_tool_fixture_corpus(corpus)
+
+        self.assertFalse(report["llm_invoked"])
+        self.assertFalse(report["live_dispatch"])
+        self.assertEqual(report["mode"], "shadow_helper_tool_fixture_evidence")
+        self.assertEqual(report["summary"]["class_a_fixture_match_rate"], 1.0)
+        self.assertGreater(report["summary"]["helper_tool_call_count"], 0)
+        self.assertGreater(report["summary"]["helper_tool_accepted_count"], 0)
+        self.assertGreaterEqual(report["summary"]["helper_tool_rejected_count"], 0)
+        self.assertIn("real_llm_run_required", report["promotion_gate"]["failures"])
+        self.assertEqual(len(report["llm_audit_records"]), 5)
 
     def test_llm_evidence_mode_repairs_unambiguous_span_offsets_only(self):
         corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))

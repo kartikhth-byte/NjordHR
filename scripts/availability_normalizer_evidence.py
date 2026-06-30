@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from query_understanding.compound_prompt_normalizer_evidence import (
+    evaluate_availability_helper_tool_fixture_corpus,
     evaluate_availability_llm_corpus,
     evaluate_corpus_file,
     load_corpus,
@@ -57,6 +58,11 @@ def main() -> int:
     )
     parser.add_argument("--model", default=COMPOUND_NORMALIZER_DEFAULT_MODEL, help="Provider model id for --invoke-llm.")
     parser.add_argument(
+        "--use-helper-tools",
+        action="store_true",
+        help="Include provider-scoped availability helper-tool context in --invoke-llm prompts.",
+    )
+    parser.add_argument(
         "--api-key-env",
         default="GEMINI_API_KEY",
         help="Environment variable that contains the Gemini API key for --invoke-llm.",
@@ -84,9 +90,12 @@ def main() -> int:
                 api_key=api_key,
                 model=args.model,
                 catalog=catalog,
+                use_helper_tools=args.use_helper_tools,
             )
 
         report = evaluate_availability_llm_corpus(load_corpus(Path(args.corpus)), provider=provider)
+    elif args.use_helper_tools:
+        report = evaluate_availability_helper_tool_fixture_corpus(load_corpus(Path(args.corpus)))
     else:
         report = evaluate_corpus_file(Path(args.corpus))
     if args.output:
