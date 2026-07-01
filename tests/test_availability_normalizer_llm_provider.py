@@ -15,11 +15,14 @@ from query_understanding.compound_prompt_normalizer_evidence import (
 )
 from query_understanding.compound_prompt_normalizer_provider import (
     COMPOUND_NORMALIZER_DEFAULT_MODEL,
+    COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
     COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
     AvailabilityNormalizerProviderResult,
     build_availability_normalizer_prompt,
+    build_coc_country_normalizer_prompt,
     build_vessel_tonnage_normalizer_prompt,
     call_gemini_availability_normalizer,
+    call_gemini_coc_country_normalizer,
     call_gemini_vessel_tonnage_normalizer,
 )
 
@@ -75,6 +78,23 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("minimum 60k -> 60000", prompt)
         self.assertIn("67k -> 67500", prompt)
         self.assertIn("below 102k -> 102500", prompt)
+        self.assertNotIn("executor_id", prompt)
+
+    def test_coc_country_prompt_uses_catalog_without_executor_ids(self):
+        prompt = build_coc_country_normalizer_prompt(
+            "Need candidates with Indian CoC and available within 30 days",
+            prompt_normalized="Need candidates with Indian CoC and available within 30 days",
+            reference_date="2026-07-01",
+        )
+
+        self.assertIn('"family": "coc_country_match"', prompt)
+        self.assertIn('"family": "availability"', prompt)
+        self.assertIn('"family": "vessel_tonnage"', prompt)
+        self.assertIn("filter_family=\"coc_country_match\"", prompt)
+        self.assertIn("prefer contains_any", prompt.lower())
+        self.assertIn("Panama Maritime Authority", prompt)
+        self.assertIn("Preserve the full recruiter phrase", prompt)
+        self.assertIn("Do not put unrelated availability", prompt)
         self.assertNotIn("executor_id", prompt)
 
     def test_gemini_provider_parses_json_payload(self):
@@ -177,6 +197,58 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         schema_parameters = calls[0]["json"]["generationConfig"]["responseSchema"]["properties"]["constraints"]["items"]["properties"]["parameters"]
         self.assertIn("max_value", schema_parameters["required"])
         self.assertNotIn("available_by_date", schema_parameters["properties"])
+
+    def test_coc_country_gemini_provider_parses_json_payload(self):
+        calls = []
+        payload = {
+            "version": "v1",
+            "constraints": [
+                {
+                    "filter_family": "coc_country_match",
+                    "parameters": {
+                        "version": "v1",
+                        "type": "coc_country_match",
+                        "countries": ["india"],
+                        "operator": "contains_any",
+                        "display_value": "Indian CoC",
+                    },
+                    "source_span": {"text": "Indian CoC", "start": 21, "end": 31},
+                }
+            ],
+            "soft_signals": [],
+            "unapplied": [],
+            "needs_review": [],
+        }
+
+        def fake_post(url, *, headers, json, timeout):
+            calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+            return _FakeGeminiResponse(
+                {
+                    "candidates": [
+                        {"content": {"parts": [{"text": __import__("json").dumps(payload)}]}}
+                    ]
+                }
+            )
+
+        result = call_gemini_coc_country_normalizer(
+            "Need candidates with Indian CoC",
+            prompt_normalized="Need candidates with Indian CoC",
+            reference_date="2026-07-01",
+            api_key="test-key",
+            post=fake_post,
+        )
+
+        self.assertEqual(result.model_id, COMPOUND_NORMALIZER_DEFAULT_MODEL)
+        self.assertEqual(result.prompt_template_version, COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION)
+        self.assertEqual(result.parsed_payload, payload)
+        self.assertIsNone(result.transport_error)
+        provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
+        self.assertIn("filter_family=\"coc_country_match\"", provider_prompt)
+        self.assertNotIn("executor_id", provider_prompt)
+        schema_parameters = calls[0]["json"]["generationConfig"]["responseSchema"]["properties"]["constraints"]["items"]["properties"]["parameters"]
+        self.assertIn("countries", schema_parameters["required"])
+        self.assertIn("operator", schema_parameters["required"])
+        self.assertNotIn("value_type", schema_parameters["properties"])
 
     def test_gemini_provider_includes_helper_context_when_enabled(self):
         calls = []

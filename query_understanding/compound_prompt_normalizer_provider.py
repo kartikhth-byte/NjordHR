@@ -24,6 +24,7 @@ from query_understanding.compound_prompt_normalizer_tools import (
 
 COMPOUND_NORMALIZER_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.availability.v1"
 COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.vessel_tonnage.v1"
+COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.coc_country_match.v1"
 COMPOUND_NORMALIZER_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 COMPOUND_NORMALIZER_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 COMPOUND_NORMALIZER_RESPONSE_SEED = 0
@@ -153,6 +154,24 @@ VESSEL_TONNAGE_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"][
         "max_value",
         "unit",
         "years_back",
+        "display_value",
+    ],
+}
+COC_COUNTRY_QUERY_PLAN_RESPONSE_SCHEMA = deepcopy(QUERY_PLAN_RESPONSE_SCHEMA)
+COC_COUNTRY_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"]["properties"]["parameters"] = {
+    "type": "OBJECT",
+    "properties": {
+        "version": {"type": "STRING"},
+        "type": {"type": "STRING"},
+        "countries": {"type": "ARRAY", "items": {"type": "STRING"}},
+        "operator": {"type": "STRING"},
+        "display_value": {"type": "STRING"},
+    },
+    "required": [
+        "version",
+        "type",
+        "countries",
+        "operator",
         "display_value",
     ],
 }
@@ -414,6 +433,65 @@ def build_vessel_tonnage_normalizer_prompt(
     )
 
 
+def build_coc_country_normalizer_prompt(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    catalog: FilterCapabilityCatalog | None = None,
+) -> str:
+    """Build the framework-independent prompt for the CoC country normalizer."""
+
+    public_catalog = llm_facing_catalog(catalog)
+    catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
+    return (
+        "You are the NjordHR compound-prompt normalizer for audit-only evidence runs.\n"
+        "Return JSON only. Do not call tools. Do not include markdown.\n\n"
+        "Output schema root keys:\n"
+        "- version: exactly \"v1\"\n"
+        "- constraints: list of filter constraints\n"
+        "- soft_signals: list\n"
+        "- unapplied: list\n"
+        "- needs_review: list\n\n"
+        "Only emit filter_family=\"coc_country_match\" constraints when the prompt clearly asks for Certificate of Competency country or CoC country.\n"
+        "Do not emit coc_country_match constraints for CoC issue-authority organization names, candidate nationality without CoC/certificate context, work-location countries, route countries, flag states, travel countries, or visa countries. Route ambiguous CoC country-vs-authority phrasing to needs_review.\n"
+        "If the prompt contains availability, vessel tonnage, rank, ship type, or urgency text plus a clear CoC country clause, still emit only the coc_country_match constraint and ignore unrelated clauses.\n"
+        "Do not put unrelated availability, vessel_tonnage, rank, ship type, or urgency clauses into needs_review. This run scores coc_country_match only.\n"
+        "Every span object must be {\"text\": <verbatim>, \"start\": <int>, \"end\": <int>} and must replay against prompt_normalized.\n"
+        "Constraints must use source_span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on a constraint.\n"
+        "Soft signals, unapplied entries, and needs_review entries must use span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on those entries.\n"
+        "needs_review entries must include candidate_families, for example [\"coc_country_match\"].\n"
+        "unapplied.reason must be one of: no matching capability, out of scope, unclear intent.\n\n"
+        "Every coc_country_match parameters object must include all of these keys exactly:\n"
+        "version, type, countries, operator, display_value.\n"
+        "Set version to \"v1\". Set type to \"coc_country_match\". countries must contain canonical country IDs from the catalog's CoC country alias source, not raw aliases or ambiguous shortcuts.\n"
+        "Never output ambiguous shortcuts such as in, us, or u s as country IDs. Use canonical IDs like india, usa, uk, uae, philippines, panama, marshall islands, and south africa.\n"
+        "Prefer contains_any for OR-style recruiter phrasing, including multi-country prompts such as India or Panama. Use operator=\"contains_any\" for those cases. Use operator=\"equals\" only when the prompt explicitly demands a single exact CoC country.\n"
+        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the full recruiter phrase in display_value. Do not shorten to only the country word when the phrase includes CoC, certificate, issued, or from wording.\n"
+        "The source_span text should cover the full CoC country phrase, not surrounding rank/availability/tonnage context words.\n\n"
+        "Semantic mapping examples:\n"
+        "- Indian CoC -> countries=[\"india\"], operator=\"contains_any\".\n"
+        "- CoC issued in India -> countries=[\"india\"], operator=\"contains_any\".\n"
+        "- UK certificate of competency -> countries=[\"uk\"], operator=\"contains_any\".\n"
+        "- CoC from India or Panama -> countries=[\"india\", \"panama\"], operator=\"contains_any\".\n"
+        "- exactly USA CoC only -> countries=[\"usa\"], operator=\"equals\".\n"
+        "- Panama Maritime Authority, MCA, MARINA, DG Shipping -> needs_review with candidate_families=[\"coc_country_match\"] because those phrases refer to issue authority.\n"
+        "- Indian crew, work in Singapore, route via Panama, US visa -> unapplied because the phrase is not a CoC country requirement.\n\n"
+        "Example shape:\n"
+        "{\n"
+        "  \"version\": \"v1\",\n"
+        "  \"constraints\": [{\"filter_family\": \"coc_country_match\", \"parameters\": {\"version\": \"v1\", \"type\": \"coc_country_match\", \"countries\": [\"india\"], \"operator\": \"contains_any\", \"display_value\": \"Indian CoC\"}, \"source_span\": {\"text\": \"Indian CoC\", \"start\": 18, \"end\": 28}}],\n"
+        "  \"soft_signals\": [],\n"
+        "  \"unapplied\": [],\n"
+        "  \"needs_review\": []\n"
+        "}\n\n"
+        f"prompt_raw: {json.dumps(str(prompt or ''))}\n"
+        f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
+        f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
+        f"catalog: {catalog_text}\n"
+    )
+
+
 def _gemini_text_from_response(payload: Mapping[str, Any]) -> str:
     parts: list[str] = []
     candidates = payload.get("candidates")
@@ -596,4 +674,73 @@ def call_gemini_vessel_tonnage_normalizer(
             helper_tool_version=HELPER_TOOL_VERSION if use_helper_tools else None,
             helper_tool_calls=tuple(helper_audit),
             helper_tool_context=tuple(helper_context),
+        )
+
+
+def call_gemini_coc_country_normalizer(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    api_key: str | None = None,
+    model: str = COMPOUND_NORMALIZER_DEFAULT_MODEL,
+    timeout: int = 45,
+    catalog: FilterCapabilityCatalog | None = None,
+    post: Callable[..., Any] = requests.post,
+) -> AvailabilityNormalizerProviderResult:
+    """Call Gemini for an audit-only CoC country normalizer run."""
+
+    selected_model = str(model or COMPOUND_NORMALIZER_DEFAULT_MODEL).strip() or COMPOUND_NORMALIZER_DEFAULT_MODEL
+    selected_api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not selected_api_key:
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error="missing_api_credentials",
+        )
+
+    provider_prompt = build_coc_country_normalizer_prompt(
+        prompt,
+        prompt_normalized=prompt_normalized,
+        reference_date=reference_date,
+        catalog=catalog,
+    )
+    request_body = {
+        "contents": [{"parts": [{"text": provider_prompt}]}],
+        "generationConfig": {
+            "temperature": 0,
+            "topP": 1,
+            "topK": 1,
+            "seed": COMPOUND_NORMALIZER_RESPONSE_SEED,
+            "responseMimeType": "application/json",
+            "responseSchema": COC_COUNTRY_QUERY_PLAN_RESPONSE_SCHEMA,
+        },
+    }
+    try:
+        response = post(
+            COMPOUND_NORMALIZER_API_URL.format(model=selected_model),
+            headers={"x-goog-api-key": selected_api_key, "Content-Type": "application/json"},
+            json=request_body,
+            timeout=timeout,
+        )
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
+        response_payload = response.json()
+        raw_output = _gemini_text_from_response(response_payload if isinstance(response_payload, Mapping) else {})
+        parsed_payload = _extract_json_payload(raw_output)
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=raw_output,
+            parsed_payload=parsed_payload,
+        )
+    except Exception as exc:  # pragma: no cover - exercised with fake post in tests.
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error=f"{type(exc).__name__}: {exc}",
         )
