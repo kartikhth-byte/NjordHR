@@ -50,10 +50,6 @@ QUERY_PLAN_RESPONSE_SCHEMA: Mapping[str, Any] = {
                             "available_until_date": {"type": "STRING", "nullable": True},
                             "relative_days": {"type": "INTEGER", "nullable": True},
                             "resolved_reference_date": {"type": "STRING", "nullable": True},
-                            "min_value": {"type": "INTEGER", "nullable": True},
-                            "max_value": {"type": "INTEGER", "nullable": True},
-                            "unit": {"type": "STRING", "nullable": True},
-                            "years_back": {"type": "INTEGER", "nullable": True},
                             "display_value": {"type": "STRING"},
                         },
                         "required": [
