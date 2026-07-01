@@ -155,6 +155,13 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertEqual(calls[0]["headers"]["x-goog-api-key"], "test-key")
         self.assertEqual(calls[0]["json"]["generationConfig"]["responseMimeType"], "application/json")
         self.assertIn("responseSchema", calls[0]["json"]["generationConfig"])
+        schema_parameters = calls[0]["json"]["generationConfig"]["responseSchema"]["properties"]["constraints"]["items"]["properties"]["parameters"]
+        self.assertIn("available_by_date", schema_parameters["properties"])
+        self.assertIn("resolved_reference_date", schema_parameters["properties"])
+        self.assertNotIn("min_value", schema_parameters["properties"])
+        self.assertNotIn("max_value", schema_parameters["properties"])
+        self.assertNotIn("unit", schema_parameters["properties"])
+        self.assertNotIn("years_back", schema_parameters["properties"])
         provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
         self.assertNotIn("executor_id", provider_prompt)
 
