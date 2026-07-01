@@ -1885,6 +1885,151 @@ class BackendEventLogFlowTests(unittest.TestCase):
             },
         )
 
+    def test_analyze_stream_completion_telemetry_records_compound_normalizer_mode_and_strategy(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis_stream(self, *_args, **_kwargs):
+                yield {
+                    "type": "complete",
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "unknown_matches": [],
+                    "hard_filter_summary": {"scanned": 0, "passed": 0, "failed": 0, "unknown": 0, "matched": 0},
+                    "message": "ok",
+                }
+
+        for strategy in ("parallel_per_family", "sequential_per_family"):
+            with self.subTest(strategy=strategy):
+                telemetry_events = []
+
+                def fake_record(**kwargs):
+                    telemetry_events.append(kwargs)
+                    return {"success": True}
+
+                with patch.dict(os.environ, {
+                    "NJORDHR_LLM_NORMALIZER_MODE": "live",
+                    "NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY": strategy,
+                }, clear=False), \
+                     patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+                     patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record):
+                    resp = self.client.get(
+                        "/analyze_stream",
+                        query_string={
+                            "rank_folder": "Chief_Officer",
+                            "prompt": "show candidates",
+                        },
+                    )
+
+                self.assertEqual(resp.status_code, 200)
+                complete_events = [
+                    event for event in telemetry_events
+                    if event.get("telemetry_kind") == "system_log" and event.get("status") == "complete"
+                ]
+                self.assertEqual(len(complete_events), 1)
+                self.assertEqual(complete_events[0]["payload"]["compound_normalizer_mode"], "live")
+                self.assertEqual(
+                    complete_events[0]["payload"]["compound_normalizer_dispatch_strategy"],
+                    strategy,
+                )
+                response_text = resp.get_data(as_text=True)
+                self.assertNotIn("compound_normalizer_mode", response_text)
+                self.assertNotIn("compound_normalizer_dispatch_strategy", response_text)
+
+    def test_analyze_completion_telemetry_records_compound_normalizer_mode_and_strategy(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, *_args, **_kwargs):
+                return {
+                    "success": True,
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "notices": [],
+                }
+
+        for strategy in ("parallel_per_family", "sequential_per_family"):
+            with self.subTest(strategy=strategy):
+                telemetry_events = []
+
+                def fake_record(**kwargs):
+                    telemetry_events.append(kwargs)
+                    return {"success": True}
+
+                with patch.dict(os.environ, {
+                    "NJORDHR_LLM_NORMALIZER_MODE": "live",
+                    "NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY": strategy,
+                }, clear=False), \
+                     patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+                     patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record), \
+                     patch("backend_server._schedule_search_prompt_audit", return_value=None):
+                    resp = self.client.post(
+                        "/analyze",
+                        json={"prompt": "show candidates", "rank_folder": "Chief_Officer"},
+                    )
+
+                self.assertEqual(resp.status_code, 200)
+                complete_events = [
+                    event for event in telemetry_events
+                    if event.get("telemetry_kind") == "system_log" and event.get("status") == "complete"
+                ]
+                self.assertEqual(len(complete_events), 1)
+                self.assertEqual(complete_events[0]["payload"]["compound_normalizer_mode"], "live")
+                self.assertEqual(
+                    complete_events[0]["payload"]["compound_normalizer_dispatch_strategy"],
+                    strategy,
+                )
+
+    def test_analyze_completion_telemetry_disambiguates_deterministic_mode(self):
+        self._write_fake_resume("Chief_Officer_1001.pdf")
+        telemetry_events = []
+
+        class CaptureAnalyzer:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_analysis(self, *_args, **_kwargs):
+                return {
+                    "success": True,
+                    "verified_matches": [],
+                    "uncertain_matches": [],
+                    "notices": [],
+                }
+
+        def fake_record(**kwargs):
+            telemetry_events.append(kwargs)
+            return {"success": True}
+
+        with patch.dict(os.environ, {
+            "NJORDHR_LLM_NORMALIZER_MODE": "deterministic",
+            "NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY": "parallel_per_family",
+        }, clear=False), \
+             patch.object(backend_server, "Analyzer", CaptureAnalyzer), \
+             patch.object(backend_server, "_record_supabase_telemetry", side_effect=fake_record), \
+             patch("backend_server._schedule_search_prompt_audit", return_value=None):
+            resp = self.client.post(
+                "/analyze",
+                json={"prompt": "show candidates", "rank_folder": "Chief_Officer"},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        complete_events = [
+            event for event in telemetry_events
+            if event.get("telemetry_kind") == "system_log" and event.get("status") == "complete"
+        ]
+        self.assertEqual(len(complete_events), 1)
+        self.assertEqual(complete_events[0]["payload"]["compound_normalizer_mode"], "deterministic")
+        self.assertEqual(
+            complete_events[0]["payload"]["compound_normalizer_dispatch_strategy"],
+            "parallel_per_family",
+        )
+
     def test_analyze_stream_serializes_date_objects_in_match_payloads(self):
         self._write_fake_resume("Chief_Officer_1001.pdf")
 

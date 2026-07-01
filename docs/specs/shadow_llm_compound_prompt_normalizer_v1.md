@@ -1149,6 +1149,21 @@ Parallel dispatch keeps the existing family-scoped semantics:
 Unified dispatch remains rejected for the current N=3 family set. PR-21 does
 not add a runtime path for `unified_multi_family`.
 
+### PR-22 — parallel dispatch telemetry
+
+Adds `compound_normalizer_mode` and `compound_normalizer_dispatch_strategy` to
+backend AI Search completion telemetry for both `/analyze` and
+`/analyze_stream`. The strategy value records the runtime strategy resolved from
+`NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY`, after default and invalid-value
+fallback handling. The mode value records the runtime mode resolved from
+`NJORDHR_LLM_NORMALIZER_MODE` so deterministic and shadow-mode requests cannot
+be mistaken for live LLM dispatch.
+
+This PR does not change `/analyze` response payloads, `/analyze_stream` SSE
+payloads, request fingerprints, recovery drafts, frontend behavior, CSV
+columns, durable audit-event fields, helper-tool adoption, `PROMOTED_FAMILIES`,
+or provider dispatch behavior.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
