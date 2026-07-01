@@ -22,7 +22,7 @@ FAMILY_ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
 # PR-6 validates executor membership against the existing hard-filter catalog.
 # The callable-backed normalizer registry replaces this membership-only map when live dispatch lands.
 CAPABILITY_REGISTRY = {family_id: family_id for family_id in ACTIVE_FAMILY_IDS}
-PROMOTED_FAMILIES: set[str] = {"availability", "vessel_tonnage"}
+PROMOTED_FAMILIES: set[str] = {"availability", "coc_country_match", "vessel_tonnage"}
 
 
 @dataclass(frozen=True)

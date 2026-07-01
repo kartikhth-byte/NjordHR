@@ -4802,12 +4802,14 @@ class AIResumeAnalyzer:
                 "coc_valid_required": True,
                 "display_value": coc_issue_authority_constraint.get("display_value"),
             }
+        coc_document_gate_from_coc_country = False
         if coc_country_constraint and not coc_constraint:
             coc_constraint = {
                 "coc_required": True,
                 "coc_valid_required": True,
                 "display_value": coc_country_constraint.get("display_value"),
             }
+            coc_document_gate_from_coc_country = True
         if coc_constraint:
             constraints["hard_constraints"]["certifications"] = coc_constraint
             constraints["applied_constraints"].append("coc_document_gate")
@@ -4873,6 +4875,47 @@ class AIResumeAnalyzer:
         for family, diagnostics in (llm_normalizer_diagnostics or {}).items():
             if isinstance(diagnostics, dict) and diagnostics.get("provider_invoked"):
                 constraints.setdefault("llm_normalizer_audit", {})[family] = diagnostics
+
+        llm_coc_country_constraint = (
+            llm_normalizer_constraints.get("coc_country_match")
+            if isinstance(llm_normalizer_constraints, dict)
+            else None
+        )
+        coc_country_normalizer_diagnostics = (
+            llm_normalizer_diagnostics.get("coc_country_match")
+            if isinstance(llm_normalizer_diagnostics, dict)
+            else {}
+        )
+        coc_country_live_authoritative = (
+            coc_country_normalizer_diagnostics.get("mode") == "live"
+            and coc_country_normalizer_diagnostics.get("validator_result") == "accepted"
+            and coc_country_normalizer_diagnostics.get("family_seen") is True
+        )
+        if coc_country_live_authoritative:
+            constraints["hard_constraints"].pop("coc_country", None)
+            constraints["applied_constraints"] = [
+                applied
+                for applied in constraints["applied_constraints"]
+                if applied != "coc_country_match"
+            ]
+            if coc_document_gate_from_coc_country:
+                constraints["hard_constraints"].pop("certifications", None)
+                constraints["applied_constraints"] = [
+                    applied
+                    for applied in constraints["applied_constraints"]
+                    if applied != "coc_document_gate"
+                ]
+        if llm_coc_country_constraint:
+            constraints["hard_constraints"]["coc_country"] = llm_coc_country_constraint
+            constraints["applied_constraints"].append("coc_country_match")
+            if coc_document_gate_from_coc_country or "certifications" not in constraints["hard_constraints"]:
+                constraints["hard_constraints"]["certifications"] = {
+                    "coc_required": True,
+                    "coc_valid_required": True,
+                    "display_value": llm_coc_country_constraint.get("display_value"),
+                }
+                if "coc_document_gate" not in constraints["applied_constraints"]:
+                    constraints["applied_constraints"].append("coc_document_gate")
 
         vessel_tonnage_constraint = (
             llm_normalizer_constraints.get("vessel_tonnage")

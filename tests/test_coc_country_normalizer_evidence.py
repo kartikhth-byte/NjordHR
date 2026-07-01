@@ -13,13 +13,13 @@ CORPUS_FILE = Path("docs/eval-evidence/coc-country-shadow-normalizer-corpus-2026
 
 
 class CocCountryNormalizerEvidenceTests(unittest.TestCase):
-    def test_seed_corpus_metrics_are_audit_only_and_not_promotion_ready(self):
+    def test_seed_corpus_metrics_are_fixture_only_and_not_promotion_ready(self):
         report = evaluate_coc_country_evidence_corpus(load_corpus(CORPUS_FILE))
 
         self.assertEqual(report["family"], "coc_country_match")
         self.assertFalse(report["llm_invoked"])
         self.assertFalse(report["live_dispatch"])
-        self.assertFalse(report["promoted_family"])
+        self.assertTrue(report["promoted_family"])
         self.assertEqual(report["summary"]["total_cases"], 200)
         self.assertEqual(report["summary"]["class_counts"], {"A": 80, "B": 80, "C": 40})
         self.assertEqual(report["summary"]["schema_valid_rate"], 1.0)

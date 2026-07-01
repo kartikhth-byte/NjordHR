@@ -17,6 +17,7 @@ from query_understanding.compound_prompt_normalizer_evidence import (
 )
 from query_understanding.compound_prompt_normalizer_provider import (
     call_gemini_availability_normalizer,
+    call_gemini_coc_country_normalizer,
     call_gemini_vessel_tonnage_normalizer,
 )
 
@@ -88,11 +89,33 @@ def _vessel_tonnage_constraint_from_parameters(parameters: Mapping[str, Any]) ->
     return None
 
 
+def _coc_country_constraint_from_parameters(parameters: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    countries = parameters.get("countries")
+    operator = str(parameters.get("operator") or "").strip()
+    display_value = str(parameters.get("display_value") or "").strip()
+    if not isinstance(countries, list) or not countries:
+        return None
+    normalized_countries = [str(country).strip() for country in countries if isinstance(country, str) and country.strip()]
+    if not normalized_countries:
+        return None
+    if operator not in {"contains_any", "equals"}:
+        return None
+    constraint: dict[str, Any] = {
+        "countries": normalized_countries,
+        "operator": operator,
+    }
+    if display_value:
+        constraint["display_value"] = display_value
+    return constraint
+
+
 def _constraint_from_parameters(family: str, parameters: Mapping[str, Any]) -> Mapping[str, Any] | None:
     if family == "availability":
         return _availability_constraint_from_parameters(parameters)
     if family == "vessel_tonnage":
         return _vessel_tonnage_constraint_from_parameters(parameters)
+    if family == "coc_country_match":
+        return _coc_country_constraint_from_parameters(parameters)
     return None
 
 
@@ -115,6 +138,14 @@ def _provider_result_for_family(
         )
     if family == "vessel_tonnage":
         return call_gemini_vessel_tonnage_normalizer(
+            prompt,
+            prompt_normalized=prompt_normalized,
+            reference_date=reference_date,
+            catalog=catalog,
+            api_key=api_key,
+        )
+    if family == "coc_country_match":
+        return call_gemini_coc_country_normalizer(
             prompt,
             prompt_normalized=prompt_normalized,
             reference_date=reference_date,
