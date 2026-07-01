@@ -948,6 +948,34 @@ PR-15 is evidence-only: it does not add `coc_country_match` to
 `/analyze` or `/analyze_stream`, change frontend behavior, add telemetry, add
 CSV columns, or add durable audit-event fields.
 
+### PR-16 — coc_country_match prompt fix and JSON-only rerun
+
+Tightens the `coc_country_match` prompt for operator selection and full-phrase
+`source_span` / `display_value` preservation. Compound modifiers such as
+`USA-issued CoC` remain `contains_any`; `equals` requires an explicit exclusion
+word such as `only`, `strictly`, `exactly`, `sole`, or `single`. Strict phrases
+such as `exactly USA CoC only`, `strictly Indian CoC only`, and
+`only UK CoC accepted` preserve the full CoC-country phrase in
+`source_span.text` and `display_value`.
+
+The PR-16 rerun criterion is locked before the rerun: Class A must be at least
+0.95, schema-valid rate must stay at 1.0, unsafe widening must stay 0, Class B
+correct rate must stay at least 0.9125, Class B deterministic baseline must stay
+0.1125 or the change must be explicitly reconciled, Class C safe-route rate
+must stay 1.0, and reviewed false-positive rate must stay 0.0.
+
+The PR-16 artifact is
+`docs/eval-evidence/coc-country-normalizer-json-only-prompt-fix-llm-evidence-2026-07-01.json`:
+200 prompts with class distribution A=80, B=80, C=40; schema-valid rate 1.0;
+unsafe widening count 0; Class A match rate 1.0; Class B correct rate 1.0 with
+deterministic baseline 0.1125 and recall lift 0.8875; Class C safe-route rate
+1.0; reviewed false-positive rate 0.0; promotion gate `passes=true`.
+
+PR-16 remains evidence-only. It does not add `coc_country_match` to
+`PROMOTED_FAMILIES`, adopt helper tools, add a dispatcher branch, change
+`/analyze` or `/analyze_stream`, change frontend behavior, add telemetry, add
+CSV columns, or add durable audit-event fields.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
