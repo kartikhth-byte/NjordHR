@@ -880,6 +880,25 @@ led the model to choose the minimal parseable substring, such as
 `use_helper_tools=false`. The helper path remains opt-in for audit experiments
 only.
 
+### PR-13 — coc_country_match catalog row
+
+Adds `coc_country_match` to the capability catalog with `version`, `type`,
+`countries`, `operator`, and `display_value` parameters. The row uses the
+existing query-plan wire shape: `type` must equal `coc_country_match`,
+`countries` is a non-empty list of canonical CoC country IDs from
+`candidate_facts/aliases/coc_country.json`, `operator` is `contains_any` or
+`equals`, and `display_value` is the exact recruiter phrase selected by the
+provider.
+
+The row remains unpromoted: `PROMOTED_FAMILIES` stays
+`{"availability", "vessel_tonnage"}` and live dispatch remains unchanged. The
+catalog validator enforces executor membership, empty numeric
+`plausibility_bounds`, non-empty `display_value`, and canonical country
+membership against the migrated CoC country alias file. This PR does not add a
+`coc_country_match` provider prompt, evidence corpus, Gemini run, helper-tool
+adoption, dispatcher branch, `/analyze` payload change, frontend change,
+telemetry field, CSV column, or durable audit-event field.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
