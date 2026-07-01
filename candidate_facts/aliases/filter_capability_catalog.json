@@ -1,7 +1,70 @@
 {
   "version": "1.0.0",
-  "last_updated": "2026-06-29",
+  "last_updated": "2026-07-01",
   "families": [
+    {
+      "family": "age_range",
+      "purpose": "Match recruiter age requirements against candidate derived age facts.",
+      "accepted_phrases": [
+        "age between 30 and 50",
+        "below 45 years old",
+        "minimum age 28",
+        "older than 35",
+        "under 55"
+      ],
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "type",
+          "minimum_years",
+          "maximum_years",
+          "display_value"
+        ],
+        "properties": {
+          "version": {"const": "v1"},
+          "type": {"const": "age_range"},
+          "minimum_years": {"type": ["integer", "null"]},
+          "maximum_years": {"type": ["integer", "null"]},
+          "display_value": {"type": "string"}
+        },
+        "oneOf": [
+          {
+            "required": ["minimum_years", "maximum_years"],
+            "properties": {
+              "minimum_years": {"type": "integer"},
+              "maximum_years": {"type": "integer"}
+            }
+          },
+          {
+            "required": ["minimum_years", "maximum_years"],
+            "properties": {
+              "minimum_years": {"type": "integer"},
+              "maximum_years": {"const": null}
+            }
+          },
+          {
+            "required": ["minimum_years", "maximum_years"],
+            "properties": {
+              "minimum_years": {"const": null},
+              "maximum_years": {"type": "integer"}
+            }
+          }
+        ]
+      },
+      "do_not_use_for": [
+        "years of sea-service experience",
+        "years back windows for experience filters",
+        "candidate date of birth without an age requirement",
+        "vessel age or ship build year"
+      ],
+      "plausibility_bounds": {
+        "minimum_years": {"min": 16, "max": 75},
+        "maximum_years": {"min": 16, "max": 75}
+      },
+      "executor_id": "age_range"
+    },
     {
       "family": "availability",
       "purpose": "Match recruiter availability requirements against candidate availability windows extracted from resumes.",
