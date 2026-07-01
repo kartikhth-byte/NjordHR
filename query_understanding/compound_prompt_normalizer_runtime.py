@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import date
 from typing import Any, Callable, Mapping
 
@@ -23,7 +24,13 @@ from query_understanding.compound_prompt_normalizer_provider import (
 
 
 LLM_NORMALIZER_MODE_ENV = "NJORDHR_LLM_NORMALIZER_MODE"
+LLM_NORMALIZER_DISPATCH_STRATEGY_ENV = "NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY"
+LLM_NORMALIZER_FAMILY_TIMEOUT_SECONDS_ENV = "NJORDHR_LLM_NORMALIZER_FAMILY_TIMEOUT_SECONDS"
 NORMALIZER_MODES = {"deterministic", "shadow", "live"}
+DISPATCH_STRATEGIES = {"parallel_per_family", "sequential_per_family"}
+DEFAULT_DISPATCH_STRATEGY = "parallel_per_family"
+FALLBACK_DISPATCH_STRATEGY = "sequential_per_family"
+DEFAULT_FAMILY_TIMEOUT_SECONDS = 20.0
 
 
 def llm_normalizer_mode() -> str:
@@ -32,6 +39,25 @@ def llm_normalizer_mode() -> str:
     raw = os.getenv(LLM_NORMALIZER_MODE_ENV, "live")
     normalized = str(raw or "live").strip().lower()
     return normalized if normalized in NORMALIZER_MODES else "deterministic"
+
+
+def llm_normalizer_dispatch_strategy() -> str:
+    """Return the runtime provider dispatch strategy."""
+
+    raw = os.getenv(LLM_NORMALIZER_DISPATCH_STRATEGY_ENV, DEFAULT_DISPATCH_STRATEGY)
+    normalized = str(raw or DEFAULT_DISPATCH_STRATEGY).strip().lower()
+    return normalized if normalized in DISPATCH_STRATEGIES else FALLBACK_DISPATCH_STRATEGY
+
+
+def llm_normalizer_family_timeout_seconds() -> float:
+    """Return the per-family provider timeout for parallel dispatch."""
+
+    raw = os.getenv(LLM_NORMALIZER_FAMILY_TIMEOUT_SECONDS_ENV, str(DEFAULT_FAMILY_TIMEOUT_SECONDS))
+    try:
+        parsed = float(str(raw or "").strip())
+    except (TypeError, ValueError):
+        return DEFAULT_FAMILY_TIMEOUT_SECONDS
+    return parsed if parsed > 0 else DEFAULT_FAMILY_TIMEOUT_SECONDS
 
 
 def _availability_constraint_from_parameters(parameters: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -127,7 +153,9 @@ def _provider_result_for_family(
     reference_date: str,
     catalog,
     api_key: str | None,
+    timeout_seconds: float | None = None,
 ):
+    provider_timeout = timeout_seconds if timeout_seconds is not None else 45
     if family == "availability":
         return call_gemini_availability_normalizer(
             prompt,
@@ -135,6 +163,7 @@ def _provider_result_for_family(
             reference_date=reference_date,
             catalog=catalog,
             api_key=api_key,
+            timeout=provider_timeout,
         )
     if family == "vessel_tonnage":
         return call_gemini_vessel_tonnage_normalizer(
@@ -143,6 +172,7 @@ def _provider_result_for_family(
             reference_date=reference_date,
             catalog=catalog,
             api_key=api_key,
+            timeout=provider_timeout,
         )
     if family == "coc_country_match":
         return call_gemini_coc_country_normalizer(
@@ -151,6 +181,7 @@ def _provider_result_for_family(
             reference_date=reference_date,
             catalog=catalog,
             api_key=api_key,
+            timeout=provider_timeout,
         )
     return None
 
@@ -158,6 +189,7 @@ def _provider_result_for_family(
 def _base_diagnostics(mode: str) -> dict[str, Any]:
     return {
         "mode": mode,
+        "dispatch_strategy": llm_normalizer_dispatch_strategy(),
         "promoted_families": sorted(PROMOTED_FAMILIES),
         "dispatched": False,
         "provider_invoked": False,
@@ -166,6 +198,15 @@ def _base_diagnostics(mode: str) -> dict[str, Any]:
         "repair_actions": [],
         "family_seen": False,
     }
+
+
+def _provider_failure_diagnostics(mode: str, *, error: str) -> dict[str, Any]:
+    diagnostics = _base_diagnostics(mode)
+    diagnostics["provider_invoked"] = True
+    diagnostics["validator_result"] = "rejected"
+    diagnostics["validator_errors"] = ["provider returned no parsed payload"]
+    diagnostics["transport_error"] = error
+    return diagnostics
 
 
 def _diagnostics_from_result(mode: str, result, *, provider_invoked: bool) -> dict[str, Any]:
@@ -248,6 +289,72 @@ def _constraints_from_provider_result(
     return constraints_by_family, diagnostics_by_family
 
 
+def _sequential_provider_results(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str,
+    catalog,
+    api_key: str | None,
+):
+    results = {}
+    for family in sorted(PROMOTED_FAMILIES):
+        results[family] = _provider_result_for_family(
+            family,
+            prompt,
+            prompt_normalized=prompt_normalized,
+            reference_date=reference_date,
+            catalog=catalog,
+            api_key=api_key,
+        )
+    return results
+
+
+def _parallel_provider_results(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str,
+    catalog,
+    api_key: str | None,
+    mode: str,
+):
+    timeout_seconds = llm_normalizer_family_timeout_seconds()
+    executor = ThreadPoolExecutor(max_workers=max(1, len(PROMOTED_FAMILIES)))
+    futures = {
+        family: executor.submit(
+            _provider_result_for_family,
+            family,
+            prompt,
+            prompt_normalized=prompt_normalized,
+            reference_date=reference_date,
+            catalog=catalog,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+        )
+        for family in sorted(PROMOTED_FAMILIES)
+    }
+    results: dict[str, Any] = {}
+    try:
+        for family, future in futures.items():
+            try:
+                results[family] = future.result(timeout=timeout_seconds)
+            except FutureTimeoutError:
+                future.cancel()
+                results[family] = _provider_failure_diagnostics(
+                    mode,
+                    error=f"{family} provider timed out after {timeout_seconds:g}s",
+                )
+            except Exception as exc:  # Defensive: provider failures must not block fallback paths.
+                results[family] = _provider_failure_diagnostics(
+                    mode,
+                    error=f"{family} provider error: {exc}",
+                )
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return results
+
+
 def promoted_constraints_from_prompt(
     prompt: str,
     *,
@@ -288,20 +395,35 @@ def promoted_constraints_from_prompt(
 
     constraints_by_family: dict[str, Mapping[str, Any]] = {}
     diagnostics_by_family: dict[str, Mapping[str, Any]] = {}
-    for family in sorted(PROMOTED_FAMILIES):
-        result = _provider_result_for_family(
-            family,
+    dispatch_strategy = llm_normalizer_dispatch_strategy()
+    provider_results = (
+        _parallel_provider_results(
+            prompt,
+            prompt_normalized=prompt_normalized,
+            reference_date=selected_reference_date,
+            catalog=loaded_catalog,
+            api_key=api_key,
+            mode=mode,
+        )
+        if dispatch_strategy == "parallel_per_family"
+        else _sequential_provider_results(
             prompt,
             prompt_normalized=prompt_normalized,
             reference_date=selected_reference_date,
             catalog=loaded_catalog,
             api_key=api_key,
         )
+    )
+    for family in sorted(PROMOTED_FAMILIES):
+        result = provider_results.get(family)
         if result is None:
-            family_diagnostics = _base_diagnostics(mode)
-            family_diagnostics["validator_result"] = "rejected"
-            family_diagnostics["validator_errors"] = [f"{family} has no provider"]
-            diagnostics_by_family[family] = family_diagnostics
+            diagnostics_by_family[family] = _provider_failure_diagnostics(
+                mode,
+                error=f"{family} has no provider",
+            )
+            continue
+        if isinstance(result, Mapping):
+            diagnostics_by_family[family] = dict(result)
             continue
         family_constraints, family_diagnostics = _constraints_from_provider_result(
             prompt_normalized,
