@@ -50,13 +50,26 @@ def _vessel_tonnage_parameters(**overrides):
     return value
 
 
+def _coc_country_parameters(**overrides):
+    value = {
+        "version": "v1",
+        "type": "coc_country_match",
+        "countries": ["india"],
+        "operator": "contains_any",
+        "display_value": "Indian CoC",
+    }
+    value.update(overrides)
+    return value
+
+
 class FilterCapabilityCatalogTests(unittest.TestCase):
-    def test_catalog_loads_promoted_availability_and_vessel_tonnage(self):
+    def test_catalog_loads_declared_families_and_promoted_subset(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
         self.assertEqual(catalog.version, "1.0.0")
         self.assertIn("availability", catalog.families_by_id)
         self.assertIn("vessel_tonnage", catalog.families_by_id)
+        self.assertIn("coc_country_match", catalog.families_by_id)
         self.assertEqual(PROMOTED_FAMILIES, {"availability", "vessel_tonnage"})
         availability = catalog.families_by_id["availability"]
         self.assertEqual(availability["executor_id"], "availability")
@@ -74,6 +87,9 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
                 "years_back": {"min": 0, "max": 50},
             },
         )
+        coc_country = catalog.families_by_id["coc_country_match"]
+        self.assertEqual(coc_country["executor_id"], "coc_country_match")
+        self.assertEqual(coc_country["plausibility_bounds"], {})
 
     def test_llm_facing_catalog_redacts_executor_id(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
@@ -83,10 +99,12 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
         self.assertEqual(backend_rows["availability"]["executor_id"], "availability")
         self.assertEqual(backend_rows["vessel_tonnage"]["executor_id"], "vessel_tonnage")
+        self.assertEqual(backend_rows["coc_country_match"]["executor_id"], "coc_country_match")
         for public_row in public_rows.values():
             self.assertNotIn("executor_id", public_row)
         self.assertEqual(public_rows["availability"]["family"], "availability")
         self.assertEqual(public_rows["vessel_tonnage"]["family"], "vessel_tonnage")
+        self.assertEqual(public_rows["coc_country_match"]["family"], "coc_country_match")
 
     def test_catalog_views_do_not_poison_cached_rows(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
@@ -372,6 +390,51 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
                 "vessel_tonnage",
                 _vessel_tonnage_parameters(display_value=""),
             )
+
+    def test_coc_country_schema_accepts_canonical_countries(self):
+        cases = [
+            _coc_country_parameters(countries=["india"], display_value="Indian CoC"),
+            _coc_country_parameters(countries=["usa"], display_value="USA-issued CoC"),
+            _coc_country_parameters(countries=["uk", "uae"], display_value="UK or UAE CoC"),
+        ]
+
+        for parameters in cases:
+            with self.subTest(countries=parameters["countries"]):
+                validate_catalog_parameters("coc_country_match", parameters)
+
+    def test_coc_country_schema_rejects_invalid_shape(self):
+        with self.assertRaisesRegex(ValueError, "type must equal"):
+            validate_catalog_parameters(
+                "coc_country_match",
+                _coc_country_parameters(type="coc_issue_authority_match"),
+            )
+
+        with self.assertRaisesRegex(ValueError, "countries must be a non-empty list"):
+            validate_catalog_parameters(
+                "coc_country_match",
+                _coc_country_parameters(countries=[]),
+            )
+
+        with self.assertRaisesRegex(ValueError, "operator"):
+            validate_catalog_parameters(
+                "coc_country_match",
+                _coc_country_parameters(operator="gte"),
+            )
+
+        with self.assertRaisesRegex(ValueError, "display_value"):
+            validate_catalog_parameters(
+                "coc_country_match",
+                _coc_country_parameters(display_value=""),
+            )
+
+    def test_coc_country_schema_rejects_unknown_country(self):
+        for country in ("atlantis", "in"):
+            with self.subTest(country=country):
+                with self.assertRaisesRegex(ValueError, "canonical CoC country"):
+                    validate_catalog_parameters(
+                        "coc_country_match",
+                        _coc_country_parameters(countries=[country]),
+                    )
 
 
 if __name__ == "__main__":

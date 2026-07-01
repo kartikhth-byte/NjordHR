@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Mapping
 
+from candidate_facts.aliases.coc_country import load_coc_country_aliases
 from query_understanding.hard_filter_catalog import ACTIVE_FAMILY_IDS
 
 
@@ -243,6 +244,8 @@ def validate_catalog_parameters(
         _validate_availability_parameters(parameters)
     if family == "vessel_tonnage":
         _validate_vessel_tonnage_parameters(parameters)
+    if family == "coc_country_match":
+        _validate_coc_country_match_parameters(parameters)
     bounds = _validate_mapping(row.get("plausibility_bounds"), f"filter_capability_catalog.families.{family}.plausibility_bounds")
     for field, bound_value in bounds.items():
         value = parameters.get(field)
@@ -279,3 +282,15 @@ def _validate_vessel_tonnage_parameters(parameters: Mapping[str, Any]) -> None:
     max_value = parameters.get("max_value")
     if isinstance(min_value, int) and isinstance(max_value, int) and min_value > max_value:
         raise ValueError("parameters.vessel_tonnage.min_value cannot exceed max_value")
+
+
+def _validate_coc_country_match_parameters(parameters: Mapping[str, Any]) -> None:
+    if not isinstance(parameters.get("display_value"), str) or not parameters.get("display_value", "").strip():
+        raise ValueError("parameters.coc_country_match.display_value must be a non-empty string")
+    countries = parameters.get("countries")
+    if not isinstance(countries, list) or not countries:
+        raise ValueError("parameters.coc_country_match.countries must be a non-empty list")
+    canonical_countries = set(load_coc_country_aliases().display_labels)
+    for index, country in enumerate(countries):
+        if country not in canonical_countries:
+            raise ValueError(f"parameters.coc_country_match.countries[{index}] must be a canonical CoC country")
