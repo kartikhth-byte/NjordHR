@@ -89,6 +89,25 @@ def _vessel_tonnage_constraint(prompt, phrase="vessels above 50000 GT"):
     }
 
 
+def _coc_country_constraint(prompt, phrase="Indian CoC"):
+    start = prompt.index(phrase)
+    return {
+        "filter_family": "coc_country_match",
+        "parameters": {
+            "version": "v1",
+            "type": "coc_country_match",
+            "countries": ["india"],
+            "operator": "contains_any",
+            "display_value": phrase,
+        },
+        "source_span": {
+            "text": phrase,
+            "start": start,
+            "end": start + len(phrase),
+        },
+    }
+
+
 def _availability_constraint(prompt, phrase="available immediately"):
     return _availability_payload(prompt, phrase=phrase)["constraints"][0]
 
@@ -106,9 +125,23 @@ def _combined_payload(prompt):
     }
 
 
+def _combined_three_family_payload(prompt):
+    return {
+        "version": "v1",
+        "constraints": [
+            _availability_constraint(prompt),
+            _vessel_tonnage_constraint(prompt),
+            _coc_country_constraint(prompt),
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": [],
+    }
+
+
 class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
-    def test_promoted_families_include_availability_and_vessel_tonnage(self):
-        self.assertEqual(PROMOTED_FAMILIES, {"availability", "vessel_tonnage"})
+    def test_promoted_families_include_availability_vessel_tonnage_and_coc_country(self):
+        self.assertEqual(PROMOTED_FAMILIES, {"availability", "coc_country_match", "vessel_tonnage"})
 
     def test_deterministic_mode_does_not_invoke_provider_or_dispatch(self):
         provider = Mock()
@@ -135,8 +168,9 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
 
         provider.assert_not_called()
         self.assertEqual(constraints, {})
-        self.assertEqual(set(diagnostics), {"availability", "vessel_tonnage"})
+        self.assertEqual(set(diagnostics), {"availability", "coc_country_match", "vessel_tonnage"})
         self.assertFalse(diagnostics["availability"]["dispatched"])
+        self.assertFalse(diagnostics["coc_country_match"]["dispatched"])
         self.assertFalse(diagnostics["vessel_tonnage"]["dispatched"])
 
     def test_unknown_mode_falls_back_to_deterministic_without_provider_call(self):
@@ -185,8 +219,10 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         provider.assert_called_once()
         self.assertEqual(constraints, {})
         self.assertFalse(diagnostics["availability"]["dispatched"])
+        self.assertFalse(diagnostics["coc_country_match"]["dispatched"])
         self.assertFalse(diagnostics["vessel_tonnage"]["dispatched"])
         self.assertEqual(diagnostics["availability"]["validator_result"], "accepted")
+        self.assertEqual(diagnostics["coc_country_match"]["validator_result"], "accepted")
         self.assertEqual(diagnostics["vessel_tonnage"]["validator_result"], "accepted")
 
     def test_live_mode_dispatches_valid_promoted_availability_constraint(self):
@@ -248,6 +284,31 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertEqual(diagnostics["availability"]["validator_result"], "accepted")
         self.assertEqual(diagnostics["vessel_tonnage"]["validator_result"], "accepted")
 
+    def test_live_mode_dispatches_three_promoted_families_independently(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT and Indian CoC"
+        provider = Mock(return_value=_provider_result(_combined_three_family_payload(prompt)))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(set(constraints), {"availability", "coc_country_match", "vessel_tonnage"})
+        self.assertEqual(
+            constraints["coc_country_match"],
+            {
+                "countries": ["india"],
+                "operator": "contains_any",
+                "display_value": "Indian CoC",
+            },
+        )
+        self.assertTrue(diagnostics["availability"]["dispatched"])
+        self.assertTrue(diagnostics["coc_country_match"]["dispatched"])
+        self.assertTrue(diagnostics["vessel_tonnage"]["dispatched"])
+
     def test_live_mode_marks_only_families_seen_in_provider_payload(self):
         prompt = "Need crew available immediately with vessels above 50000 GT"
         provider = Mock(return_value=_provider_result(_availability_payload(prompt)))
@@ -262,8 +323,11 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         provider.assert_called_once()
         self.assertEqual(set(constraints), {"availability"})
         self.assertTrue(diagnostics["availability"]["family_seen"])
+        self.assertFalse(diagnostics["coc_country_match"]["family_seen"])
         self.assertFalse(diagnostics["vessel_tonnage"]["family_seen"])
+        self.assertFalse(diagnostics["coc_country_match"]["dispatched"])
         self.assertFalse(diagnostics["vessel_tonnage"]["dispatched"])
+        self.assertEqual(diagnostics["coc_country_match"]["validator_result"], "accepted")
         self.assertEqual(diagnostics["vessel_tonnage"]["validator_result"], "accepted")
 
     def test_live_mode_preserves_helper_tool_diagnostics(self):

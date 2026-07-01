@@ -70,7 +70,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
         self.assertIn("availability", catalog.families_by_id)
         self.assertIn("vessel_tonnage", catalog.families_by_id)
         self.assertIn("coc_country_match", catalog.families_by_id)
-        self.assertEqual(PROMOTED_FAMILIES, {"availability", "vessel_tonnage"})
+        self.assertEqual(PROMOTED_FAMILIES, {"availability", "coc_country_match", "vessel_tonnage"})
         availability = catalog.families_by_id["availability"]
         self.assertEqual(availability["executor_id"], "availability")
         self.assertEqual(

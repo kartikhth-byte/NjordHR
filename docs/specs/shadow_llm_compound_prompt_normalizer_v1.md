@@ -662,6 +662,14 @@ The `vessel_tonnage` promotion cites these deterministic enforcement tests:
 - `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_deterministic_mode_does_not_dispatch_any_promoted_family`, `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_shadow_mode_invokes_provider_but_dispatches_no_promoted_families`, and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_dispatches_availability_and_vessel_tonnage_independently` for `promoted_family_dispatch_gate`.
 - `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_marks_only_families_seen_in_provider_payload` and `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_keeps_deterministic_tonnage_when_provider_only_sees_availability` for family-scoped live fallback suppression.
 
+The `coc_country_match` promotion cites these deterministic enforcement tests:
+
+- `tests/test_availability_normalizer_evidence.py::AvailabilityNormalizerEvidenceTests::test_query_plan_fixture_rejects_bad_span` for `source_span_exact_replay`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_coc_country_schema_accepts_canonical_countries`, `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_coc_country_schema_rejects_invalid_shape`, and `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_coc_country_schema_rejects_unknown_country` for `catalog_parameter_validator`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_coc_country_schema_rejects_unknown_country` for canonical country sanity checking and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_promoted_families_include_availability_vessel_tonnage_and_coc_country` for promoted membership after promotion.
+- `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_deterministic_mode_does_not_dispatch_any_promoted_family`, `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_shadow_mode_invokes_provider_but_dispatches_no_promoted_families`, and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_dispatches_three_promoted_families_independently` for `promoted_family_dispatch_gate`.
+- `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_keeps_deterministic_coc_when_provider_only_sees_availability`, `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_coc_dispatch_keeps_other_family_fallbacks`, and `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_coc_needs_review_suppresses_deterministic_coc_fallback` for family-scoped live fallback suppression and Class C unsafe-widening suppression.
+
 ## Rollout slices
 
 The migration follows the same per-PR discipline as `coc_country_alias_migration_v1.md`.
@@ -976,6 +984,36 @@ PR-16 remains evidence-only. It does not add `coc_country_match` to
 `/analyze` or `/analyze_stream`, change frontend behavior, add telemetry, add
 CSV columns, or add durable audit-event fields.
 
+### PR-17 — coc_country_match live promotion
+
+Adds `"coc_country_match"` to `PROMOTED_FAMILIES`. `PROMOTED_FAMILIES` becomes
+`{"availability", "coc_country_match", "vessel_tonnage"}`. Live mode dispatches
+all three promoted families through the generic compound-normalizer runtime.
+
+The analyzer records `llm_normalizer_audit` per promoted family when the
+provider is invoked. Deterministic fallback suppression is family-scoped:
+a validator-accepted payload suppresses a deterministic parser only for a
+family that appears in `constraints[].filter_family` or
+`needs_review[].candidate_families`. An accepted `coc_country_match` payload
+does not suppress deterministic availability or vessel-tonnage parsing. An
+accepted availability-only or vessel-tonnage-only payload does not suppress
+deterministic CoC country parsing.
+
+The PR-17 promotion cites the PR-16 evidence artifact
+`docs/eval-evidence/coc-country-normalizer-json-only-prompt-fix-llm-evidence-2026-07-01.json`:
+200 prompts with class distribution A=80, B=80, C=40; schema-valid rate 1.0;
+unsafe widening count 0; Class A match rate 1.0; Class B correct rate 1.0 with
+deterministic baseline 0.1125 and recall lift 0.8875; Class C safe-route rate
+1.0; reviewed false-positive rate 0.0; promotion gate `passes=true`.
+
+The PR-17 promotion does not adopt helper tools for `coc_country_match`.
+
+The PR-17 scope guard is: no frontend change, no `/analyze` or
+`/analyze_stream` payload-shape change, no request-fingerprint change, no
+recovery-draft change, no existing hard-filter audit CSV column change, no
+telemetry field change, no durable audit-event field change, no helper-tool
+adoption, and no evidence-artifact rewrite.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
@@ -1023,4 +1061,4 @@ This spec follows the discipline established by `coc_country_alias_migration_v1.
 
 ## Summary
 
-The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 live dispatch currently has two promoted families (`availability` and `vessel_tonnage`); additional catalog-declared families enter live dispatch only through their own per-family promotion PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
+The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 live dispatch currently has three promoted families (`availability`, `vessel_tonnage`, and `coc_country_match`); additional catalog-declared families enter live dispatch only through their own per-family promotion PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
