@@ -1,9 +1,11 @@
 import unittest
+import time
 from unittest.mock import Mock, patch
 
 from candidate_facts.aliases.filter_capability_catalog import PROMOTED_FAMILIES
 from query_understanding.compound_prompt_normalizer_provider import AvailabilityNormalizerProviderResult
 from query_understanding.compound_prompt_normalizer_runtime import (
+    llm_normalizer_dispatch_strategy,
     promoted_constraints_from_prompt,
     promoted_availability_constraint_from_prompt,
 )
@@ -187,6 +189,163 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertEqual(diagnostics["mode"], "deterministic")
         self.assertFalse(diagnostics["provider_invoked"])
         self.assertFalse(diagnostics["dispatched"])
+
+    def test_unknown_dispatch_strategy_falls_back_to_sequential(self):
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY": "unified_multi_family"}, clear=False):
+            self.assertEqual(llm_normalizer_dispatch_strategy(), "sequential_per_family")
+
+    def test_live_mode_defaults_to_parallel_per_family_dispatch(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT and Indian CoC"
+        calls = []
+
+        def provider_for_family(family, prompt, **kwargs):
+            calls.append(family)
+            if family == "availability":
+                return _provider_result(_availability_payload(prompt))
+            if family == "vessel_tonnage":
+                return _provider_result(
+                    {
+                        "version": "v1",
+                        "constraints": [_vessel_tonnage_constraint(prompt)],
+                        "soft_signals": [],
+                        "unapplied": [],
+                        "needs_review": [],
+                    }
+                )
+            if family == "coc_country_match":
+                return _provider_result(
+                    {
+                        "version": "v1",
+                        "constraints": [_coc_country_constraint(prompt)],
+                        "soft_signals": [],
+                        "unapplied": [],
+                        "needs_review": [],
+                    }
+                )
+            return None
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False), patch(
+            "query_understanding.compound_prompt_normalizer_runtime._provider_result_for_family",
+            side_effect=provider_for_family,
+        ):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+            )
+
+        self.assertEqual(sorted(calls), ["availability", "coc_country_match", "vessel_tonnage"])
+        self.assertEqual(set(constraints), {"availability", "coc_country_match", "vessel_tonnage"})
+        self.assertEqual(diagnostics["availability"]["dispatch_strategy"], "parallel_per_family")
+        self.assertEqual(diagnostics["coc_country_match"]["dispatch_strategy"], "parallel_per_family")
+        self.assertEqual(diagnostics["vessel_tonnage"]["dispatch_strategy"], "parallel_per_family")
+        self.assertTrue(diagnostics["availability"]["dispatched"])
+        self.assertTrue(diagnostics["coc_country_match"]["dispatched"])
+        self.assertTrue(diagnostics["vessel_tonnage"]["dispatched"])
+
+    def test_live_mode_dispatch_strategy_can_fall_back_to_sequential(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT and Indian CoC"
+        calls = []
+
+        def provider_for_family(family, prompt, **kwargs):
+            calls.append(family)
+            if family == "availability":
+                return _provider_result(_availability_payload(prompt))
+            if family == "vessel_tonnage":
+                return _provider_result(
+                    {
+                        "version": "v1",
+                        "constraints": [_vessel_tonnage_constraint(prompt)],
+                        "soft_signals": [],
+                        "unapplied": [],
+                        "needs_review": [],
+                    }
+                )
+            if family == "coc_country_match":
+                return _provider_result(
+                    {
+                        "version": "v1",
+                        "constraints": [_coc_country_constraint(prompt)],
+                        "soft_signals": [],
+                        "unapplied": [],
+                        "needs_review": [],
+                    }
+                )
+            return None
+
+        with patch.dict(
+            "os.environ",
+            {
+                "NJORDHR_LLM_NORMALIZER_MODE": "live",
+                "NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY": "sequential_per_family",
+            },
+            clear=False,
+        ), patch(
+            "query_understanding.compound_prompt_normalizer_runtime._provider_result_for_family",
+            side_effect=provider_for_family,
+        ):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+            )
+
+        self.assertEqual(calls, ["availability", "coc_country_match", "vessel_tonnage"])
+        self.assertEqual(set(constraints), {"availability", "coc_country_match", "vessel_tonnage"})
+        self.assertEqual(diagnostics["availability"]["dispatch_strategy"], "sequential_per_family")
+        self.assertEqual(diagnostics["coc_country_match"]["dispatch_strategy"], "sequential_per_family")
+        self.assertEqual(diagnostics["vessel_tonnage"]["dispatch_strategy"], "sequential_per_family")
+
+    def test_parallel_dispatch_times_out_one_family_without_blocking_others(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT and Indian CoC"
+
+        def provider_for_family(family, prompt, **kwargs):
+            if family == "availability":
+                time.sleep(0.05)
+                return _provider_result(_availability_payload(prompt))
+            if family == "vessel_tonnage":
+                return _provider_result(
+                    {
+                        "version": "v1",
+                        "constraints": [_vessel_tonnage_constraint(prompt)],
+                        "soft_signals": [],
+                        "unapplied": [],
+                        "needs_review": [],
+                    }
+                )
+            if family == "coc_country_match":
+                return _provider_result(
+                    {
+                        "version": "v1",
+                        "constraints": [_coc_country_constraint(prompt)],
+                        "soft_signals": [],
+                        "unapplied": [],
+                        "needs_review": [],
+                    }
+                )
+            return None
+
+        with patch.dict(
+            "os.environ",
+            {
+                "NJORDHR_LLM_NORMALIZER_MODE": "live",
+                "NJORDHR_LLM_NORMALIZER_FAMILY_TIMEOUT_SECONDS": "0.001",
+            },
+            clear=False,
+        ), patch(
+            "query_understanding.compound_prompt_normalizer_runtime._provider_result_for_family",
+            side_effect=provider_for_family,
+        ):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+            )
+
+        self.assertNotIn("availability", constraints)
+        self.assertEqual(set(constraints), {"coc_country_match", "vessel_tonnage"})
+        self.assertEqual(diagnostics["availability"]["validator_result"], "rejected")
+        self.assertIn("timed out", diagnostics["availability"]["transport_error"])
+        self.assertFalse(diagnostics["availability"]["dispatched"])
+        self.assertTrue(diagnostics["coc_country_match"]["dispatched"])
+        self.assertTrue(diagnostics["vessel_tonnage"]["dispatched"])
 
     def test_shadow_mode_invokes_provider_but_does_not_dispatch(self):
         prompt = "Need crew available immediately"

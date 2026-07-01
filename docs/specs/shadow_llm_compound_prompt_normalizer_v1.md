@@ -1114,6 +1114,41 @@ live dispatch from `sequential_per_family` to `parallel_per_family` for the
 current N=3 family set. Unified dispatch remains rejected for the current N=3
 family set.
 
+### PR-21 — N=3 parallel live dispatch switch
+
+Switches live compound-normalizer provider dispatch from
+`sequential_per_family` to `parallel_per_family` for the current N=3 promoted
+family set.
+
+Runtime controls:
+
+- `NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY=parallel_per_family` selects
+  parallel per-family dispatch.
+- `NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY=sequential_per_family` rolls live
+  dispatch back to sequential per-family dispatch without a redeploy.
+- Missing `NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY` defaults to
+  `parallel_per_family`.
+- Invalid `NJORDHR_LLM_NORMALIZER_DISPATCH_STRATEGY` values fall back to
+  `sequential_per_family`.
+- `NJORDHR_LLM_NORMALIZER_FAMILY_TIMEOUT_SECONDS` sets the per-family provider
+  timeout used by parallel dispatch. Missing, invalid, zero, or negative values
+  use the default timeout.
+
+Parallel dispatch keeps the existing family-scoped semantics:
+
+- every promoted family uses its existing family-specific provider prompt;
+- validator, repair, canonicalization, sanity-checker, and dispatcher behavior
+  remain per-family;
+- a timeout or transport error in one family rejects that family only;
+- deterministic fallback suppression remains family-scoped via `family_seen`;
+- `/analyze` and `/analyze_stream` payload shape, request fingerprints,
+  recovery drafts, frontend behavior, CSV columns, telemetry fields, durable
+  audit-event fields, helper-tool adoption, `PROMOTED_FAMILIES`, and unified
+  dispatch remain unchanged.
+
+Unified dispatch remains rejected for the current N=3 family set. PR-21 does
+not add a runtime path for `unified_multi_family`.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
