@@ -4794,8 +4794,37 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["passport_validity"] = passport_constraint
             constraints["applied_constraints"].append("passport_validity")
 
+        llm_normalizer_constraints, llm_normalizer_diagnostics = promoted_constraints_from_prompt(
+            user_prompt,
+            provider=llm_normalizer_provider,
+            api_key=getattr(getattr(self, "config", None), "gemini_api_key", None),
+        )
+        for family, diagnostics in (llm_normalizer_diagnostics or {}).items():
+            if isinstance(diagnostics, dict) and diagnostics.get("provider_invoked"):
+                constraints.setdefault("llm_normalizer_audit", {})[family] = diagnostics
+
+        llm_coc_country_constraint = (
+            llm_normalizer_constraints.get("coc_country_match")
+            if isinstance(llm_normalizer_constraints, dict)
+            else None
+        )
+        coc_country_normalizer_diagnostics = (
+            llm_normalizer_diagnostics.get("coc_country_match")
+            if isinstance(llm_normalizer_diagnostics, dict)
+            else {}
+        )
+        coc_country_live_authoritative = (
+            coc_country_normalizer_diagnostics.get("mode") == "live"
+            and coc_country_normalizer_diagnostics.get("validator_result") == "accepted"
+            and coc_country_normalizer_diagnostics.get("family_seen") is True
+        )
+
         coc_constraint = self._extract_coc_requirement_constraint(user_prompt)
-        coc_country_constraint = self._extract_coc_country_constraint(user_prompt)
+        coc_country_constraint = (
+            None
+            if coc_country_live_authoritative
+            else self._extract_coc_country_constraint(user_prompt)
+        )
         if coc_issue_authority_constraint and not coc_constraint:
             coc_constraint = {
                 "coc_required": True,
@@ -4867,44 +4896,6 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["rank_duration_experience"] = rank_duration_experience_constraint
             constraints["applied_constraints"].append("rank_duration_experience")
 
-        llm_normalizer_constraints, llm_normalizer_diagnostics = promoted_constraints_from_prompt(
-            user_prompt,
-            provider=llm_normalizer_provider,
-            api_key=getattr(getattr(self, "config", None), "gemini_api_key", None),
-        )
-        for family, diagnostics in (llm_normalizer_diagnostics or {}).items():
-            if isinstance(diagnostics, dict) and diagnostics.get("provider_invoked"):
-                constraints.setdefault("llm_normalizer_audit", {})[family] = diagnostics
-
-        llm_coc_country_constraint = (
-            llm_normalizer_constraints.get("coc_country_match")
-            if isinstance(llm_normalizer_constraints, dict)
-            else None
-        )
-        coc_country_normalizer_diagnostics = (
-            llm_normalizer_diagnostics.get("coc_country_match")
-            if isinstance(llm_normalizer_diagnostics, dict)
-            else {}
-        )
-        coc_country_live_authoritative = (
-            coc_country_normalizer_diagnostics.get("mode") == "live"
-            and coc_country_normalizer_diagnostics.get("validator_result") == "accepted"
-            and coc_country_normalizer_diagnostics.get("family_seen") is True
-        )
-        if coc_country_live_authoritative:
-            constraints["hard_constraints"].pop("coc_country", None)
-            constraints["applied_constraints"] = [
-                applied
-                for applied in constraints["applied_constraints"]
-                if applied != "coc_country_match"
-            ]
-            if coc_document_gate_from_coc_country:
-                constraints["hard_constraints"].pop("certifications", None)
-                constraints["applied_constraints"] = [
-                    applied
-                    for applied in constraints["applied_constraints"]
-                    if applied != "coc_document_gate"
-                ]
         if llm_coc_country_constraint:
             constraints["hard_constraints"]["coc_country"] = llm_coc_country_constraint
             constraints["applied_constraints"].append("coc_country_match")

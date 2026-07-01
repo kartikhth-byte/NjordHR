@@ -608,6 +608,68 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
             "immediately",
         )
 
+    def test_live_compound_normalizer_keeps_deterministic_coc_when_provider_only_sees_vessel_tonnage(self):
+        prompt = "Need crew with vessels above 50000 GT and Indian CoC"
+        tonnage_phrase = "vessels above 50000 GT"
+        tonnage_start = prompt.index(tonnage_phrase)
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output="{}",
+            parsed_payload={
+                "version": "v1",
+                "constraints": [{
+                    "filter_family": "vessel_tonnage",
+                    "parameters": {
+                        "version": "v1",
+                        "value_type": "minimum",
+                        "min_value": 50000,
+                        "max_value": None,
+                        "unit": "gt_grt",
+                        "years_back": None,
+                        "display_value": tonnage_phrase,
+                    },
+                    "source_span": {
+                        "text": tonnage_phrase,
+                        "start": tonnage_start,
+                        "end": tonnage_start + len(tonnage_phrase),
+                    },
+                }],
+                "soft_signals": [],
+                "unapplied": [],
+                "needs_review": [],
+            },
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints = self.analyzer._extract_job_constraints(
+                prompt,
+                rank=self.rank,
+                llm_normalizer_provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertTrue(constraints["llm_normalizer_audit"]["vessel_tonnage"]["family_seen"])
+        self.assertFalse(constraints["llm_normalizer_audit"]["coc_country_match"]["family_seen"])
+        self.assertTrue(constraints["llm_normalizer_audit"]["vessel_tonnage"]["dispatched"])
+        self.assertFalse(constraints["llm_normalizer_audit"]["coc_country_match"]["dispatched"])
+        self.assertEqual(
+            constraints["hard_constraints"]["coc_country"],
+            {
+                "countries": ["india"],
+                "operator": "contains_any",
+                "display_value": "GT and Indian CoC",
+            },
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["vessel_tonnage"],
+            {
+                "min_value": 50000,
+                "max_value": None,
+                "unit": "gt_grt",
+            },
+        )
+
     def test_live_compound_normalizer_coc_needs_review_suppresses_deterministic_coc_fallback(self):
         prompt = "Need crew with Indian CoC"
         phrase = "Indian CoC"
