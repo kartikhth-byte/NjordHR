@@ -25,6 +25,7 @@ from query_understanding.compound_prompt_normalizer_tools import (
 COMPOUND_NORMALIZER_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.availability.v1"
 COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.vessel_tonnage.v1"
 COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.coc_country_match.v1"
+COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.age_range.v1"
 COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.unified_n3.v1"
 COMPOUND_NORMALIZER_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 COMPOUND_NORMALIZER_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -169,6 +170,24 @@ COC_COUNTRY_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"]["pr
         "type",
         "countries",
         "operator",
+        "display_value",
+    ],
+}
+AGE_RANGE_QUERY_PLAN_RESPONSE_SCHEMA = deepcopy(QUERY_PLAN_RESPONSE_SCHEMA)
+AGE_RANGE_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"]["properties"]["parameters"] = {
+    "type": "OBJECT",
+    "properties": {
+        "version": {"type": "STRING"},
+        "type": {"type": "STRING"},
+        "minimum_years": {"type": "INTEGER", "nullable": True},
+        "maximum_years": {"type": "INTEGER", "nullable": True},
+        "display_value": {"type": "STRING"},
+    },
+    "required": [
+        "version",
+        "type",
+        "minimum_years",
+        "maximum_years",
         "display_value",
     ],
 }
@@ -522,6 +541,66 @@ def build_coc_country_normalizer_prompt(
     )
 
 
+def build_age_range_normalizer_prompt(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    catalog: FilterCapabilityCatalog | None = None,
+) -> str:
+    """Build the framework-independent prompt for the age-range normalizer."""
+
+    public_catalog = llm_facing_catalog(catalog)
+    catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
+    return (
+        "You are the NjordHR compound-prompt normalizer for audit-only evidence runs.\n"
+        "Return JSON only. Do not call tools. Do not include markdown.\n\n"
+        "Output schema root keys:\n"
+        "- version: exactly \"v1\"\n"
+        "- constraints: list of filter constraints\n"
+        "- soft_signals: list\n"
+        "- unapplied: list\n"
+        "- needs_review: list\n\n"
+        "Only emit filter_family=\"age_range\" constraints when the prompt clearly asks for candidate age in years.\n"
+        "Do not emit age_range constraints for years of sea-service experience, years-back windows, vessel age, ship build year, date of birth, birth year, or DOB-only wording. Route those phrases to unapplied with reason=\"no matching capability\" or needs_review when the age intent is ambiguous.\n"
+        "If the prompt contains availability, vessel tonnage, CoC country, rank, ship type, or urgency text plus a clear age clause, still emit only the age_range constraint and ignore unrelated clauses.\n"
+        "Do not put unrelated availability, vessel_tonnage, coc_country_match, rank, ship type, or urgency clauses into needs_review. This run scores age_range only.\n"
+        "Every span object must be {\"text\": <verbatim>, \"start\": <int>, \"end\": <int>} and must replay against prompt_normalized.\n"
+        "Constraints must use source_span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on a constraint.\n"
+        "Soft signals, unapplied entries, and needs_review entries must use span: {\"text\": ..., \"start\": ..., \"end\": ...}. Do not put text/start/end directly on those entries.\n"
+        "needs_review entries must include candidate_families, for example [\"age_range\"].\n"
+        "unapplied.reason must be one of: no matching capability, out of scope, unclear intent.\n\n"
+        "Every age_range parameters object must include all of these keys exactly:\n"
+        "version, type, minimum_years, maximum_years, display_value.\n"
+        "Set version to \"v1\". Set type to \"age_range\".\n"
+        "At least one of minimum_years or maximum_years must be an integer. The other bound may be null. If both are present, minimum_years must be <= maximum_years.\n"
+        "Both numeric fields must be integers from 16 through 75. Values outside that range route to needs_review with candidate_families=[\"age_range\"].\n"
+        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the full recruiter age phrase in display_value. Do not shorten to only the number.\n"
+        "The source_span text should cover the full age phrase, not surrounding availability/tonnage/CoC/rank context words.\n\n"
+        "Semantic mapping examples:\n"
+        "- age between 30 and 50 -> minimum_years=30, maximum_years=50.\n"
+        "- below 45 years old, under 45, no older than 45, max age 45 -> minimum_years=null, maximum_years=45.\n"
+        "- minimum age 28, at least 28 years old, older than 35, 35+ years old -> minimum_years=28 or 35, maximum_years=null.\n"
+        "- exactly 40 years old -> minimum_years=40, maximum_years=40.\n"
+        "- age 50 to 30 -> needs_review with candidate_families=[\"age_range\"] because the age range is reversed.\n"
+        "- age below 12, age above 90 -> needs_review with candidate_families=[\"age_range\"] because the value is outside plausibility bounds.\n"
+        "- born after 1990, DOB after 1990, date of birth before 1980 -> unapplied with reason=\"no matching capability\" because v1 does not convert date-of-birth or birth-year wording into age_range.\n"
+        "- 5 years sea service, last 5 years, vessel age below 15 years, built after 2010 -> unapplied because those phrases are not candidate age requirements.\n\n"
+        "Example shape:\n"
+        "{\n"
+        "  \"version\": \"v1\",\n"
+        "  \"constraints\": [{\"filter_family\": \"age_range\", \"parameters\": {\"version\": \"v1\", \"type\": \"age_range\", \"minimum_years\": 30, \"maximum_years\": 50, \"display_value\": \"age between 30 and 50\"}, \"source_span\": {\"text\": \"age between 30 and 50\", \"start\": 18, \"end\": 39}}],\n"
+        "  \"soft_signals\": [],\n"
+        "  \"unapplied\": [],\n"
+        "  \"needs_review\": []\n"
+        "}\n\n"
+        f"prompt_raw: {json.dumps(str(prompt or ''))}\n"
+        f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
+        f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
+        f"catalog: {catalog_text}\n"
+    )
+
+
 def build_unified_compound_normalizer_prompt(
     prompt: str,
     *,
@@ -823,6 +902,75 @@ def call_gemini_coc_country_normalizer(
         return AvailabilityNormalizerProviderResult(
             model_id=selected_model,
             prompt_template_version=COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def call_gemini_age_range_normalizer(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    api_key: str | None = None,
+    model: str = COMPOUND_NORMALIZER_DEFAULT_MODEL,
+    timeout: int = 45,
+    catalog: FilterCapabilityCatalog | None = None,
+    post: Callable[..., Any] = requests.post,
+) -> AvailabilityNormalizerProviderResult:
+    """Call Gemini for an audit-only age-range normalizer run."""
+
+    selected_model = str(model or COMPOUND_NORMALIZER_DEFAULT_MODEL).strip() or COMPOUND_NORMALIZER_DEFAULT_MODEL
+    selected_api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not selected_api_key:
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error="missing_api_credentials",
+        )
+
+    provider_prompt = build_age_range_normalizer_prompt(
+        prompt,
+        prompt_normalized=prompt_normalized,
+        reference_date=reference_date,
+        catalog=catalog,
+    )
+    request_body = {
+        "contents": [{"parts": [{"text": provider_prompt}]}],
+        "generationConfig": {
+            "temperature": 0,
+            "topP": 1,
+            "topK": 1,
+            "seed": COMPOUND_NORMALIZER_RESPONSE_SEED,
+            "responseMimeType": "application/json",
+            "responseSchema": AGE_RANGE_QUERY_PLAN_RESPONSE_SCHEMA,
+        },
+    }
+    try:
+        response = post(
+            COMPOUND_NORMALIZER_API_URL.format(model=selected_model),
+            headers={"x-goog-api-key": selected_api_key, "Content-Type": "application/json"},
+            json=request_body,
+            timeout=timeout,
+        )
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
+        response_payload = response.json()
+        raw_output = _gemini_text_from_response(response_payload if isinstance(response_payload, Mapping) else {})
+        parsed_payload = _extract_json_payload(raw_output)
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=raw_output,
+            parsed_payload=parsed_payload,
+        )
+    except Exception as exc:  # pragma: no cover - exercised with fake post in tests.
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION,
             raw_llm_output=None,
             parsed_payload=None,
             transport_error=f"{type(exc).__name__}: {exc}",

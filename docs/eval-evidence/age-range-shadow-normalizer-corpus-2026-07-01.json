@@ -1,0 +1,7067 @@
+{
+  "cases": [
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 24 and 36",
+          "maximum_years": 36,
+          "minimum_years": 24,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A001",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 24 and 36",
+              "maximum_years": 36,
+              "minimum_years": 24,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 24 and 36"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 001: shortlist candidates with age between 24 and 36"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 25 and 38",
+          "maximum_years": 38,
+          "minimum_years": 25,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A002",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 25 and 38",
+              "maximum_years": 38,
+              "minimum_years": 25,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 25 and 38"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 002: shortlist candidates with age between 25 and 38"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 26 and 40",
+          "maximum_years": 40,
+          "minimum_years": 26,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A003",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 26 and 40",
+              "maximum_years": 40,
+              "minimum_years": 26,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 26 and 40"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 003: shortlist candidates with age between 26 and 40"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 27 and 42",
+          "maximum_years": 42,
+          "minimum_years": 27,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A004",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 27 and 42",
+              "maximum_years": 42,
+              "minimum_years": 27,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 27 and 42"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 004: shortlist candidates with age between 27 and 42"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 28 and 44",
+          "maximum_years": 44,
+          "minimum_years": 28,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A005",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 28 and 44",
+              "maximum_years": 44,
+              "minimum_years": 28,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 28 and 44"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 005: shortlist candidates with age between 28 and 44"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 29 and 46",
+          "maximum_years": 46,
+          "minimum_years": 29,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A006",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 29 and 46",
+              "maximum_years": 46,
+              "minimum_years": 29,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 29 and 46"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 006: shortlist candidates with age between 29 and 46"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 30 and 48",
+          "maximum_years": 48,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A007",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 30 and 48",
+              "maximum_years": 48,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 30 and 48"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 007: shortlist candidates with age between 30 and 48"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 31 and 50",
+          "maximum_years": 50,
+          "minimum_years": 31,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A008",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 31 and 50",
+              "maximum_years": 50,
+              "minimum_years": 31,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 31 and 50"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 008: shortlist candidates with age between 31 and 50"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 32 and 44",
+          "maximum_years": 44,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A009",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 32 and 44",
+              "maximum_years": 44,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 32 and 44"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 009: shortlist candidates with age between 32 and 44"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 33 and 46",
+          "maximum_years": 46,
+          "minimum_years": 33,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A010",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 33 and 46",
+              "maximum_years": 46,
+              "minimum_years": 33,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 33 and 46"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 010: shortlist candidates with age between 33 and 46"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 34 and 48",
+          "maximum_years": 48,
+          "minimum_years": 34,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A011",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 34 and 48",
+              "maximum_years": 48,
+              "minimum_years": 34,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 34 and 48"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 011: shortlist candidates with age between 34 and 48"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 35 and 50",
+          "maximum_years": 50,
+          "minimum_years": 35,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A012",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 35 and 50",
+              "maximum_years": 50,
+              "minimum_years": 35,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 35 and 50"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 012: shortlist candidates with age between 35 and 50"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 36 and 52",
+          "maximum_years": 52,
+          "minimum_years": 36,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A013",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 36 and 52",
+              "maximum_years": 52,
+              "minimum_years": 36,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 36 and 52"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 013: shortlist candidates with age between 36 and 52"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 37 and 54",
+          "maximum_years": 54,
+          "minimum_years": 37,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A014",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 37 and 54",
+              "maximum_years": 54,
+              "minimum_years": 37,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 37 and 54"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 014: shortlist candidates with age between 37 and 54"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 38 and 56",
+          "maximum_years": 56,
+          "minimum_years": 38,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A015",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 38 and 56",
+              "maximum_years": 56,
+              "minimum_years": 38,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 38 and 56"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 015: shortlist candidates with age between 38 and 56"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 39 and 58",
+          "maximum_years": 58,
+          "minimum_years": 39,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A016",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 39 and 58",
+              "maximum_years": 58,
+              "minimum_years": 39,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 39 and 58"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 016: shortlist candidates with age between 39 and 58"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 24 and 36",
+          "maximum_years": 36,
+          "minimum_years": 24,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A017",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 24 and 36",
+              "maximum_years": 36,
+              "minimum_years": 24,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 24 and 36"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 017: shortlist candidates with age between 24 and 36"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 25 and 38",
+          "maximum_years": 38,
+          "minimum_years": 25,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A018",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 25 and 38",
+              "maximum_years": 38,
+              "minimum_years": 25,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 25 and 38"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 018: shortlist candidates with age between 25 and 38"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 26 and 40",
+          "maximum_years": 40,
+          "minimum_years": 26,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A019",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 26 and 40",
+              "maximum_years": 40,
+              "minimum_years": 26,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 26 and 40"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 019: shortlist candidates with age between 26 and 40"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 27 and 42",
+          "maximum_years": 42,
+          "minimum_years": 27,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A020",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 27 and 42",
+              "maximum_years": 42,
+              "minimum_years": 27,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 60,
+              "start": 39,
+              "text": "age between 27 and 42"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 020: shortlist candidates with age between 27 and 42"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 38 years old",
+          "maximum_years": 38,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A021",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 38 years old",
+              "maximum_years": 38,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 38 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 021: show officers below 38 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 39 years old",
+          "maximum_years": 39,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A022",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 39 years old",
+              "maximum_years": 39,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 39 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 022: show officers below 39 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 40 years old",
+          "maximum_years": 40,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A023",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 40 years old",
+              "maximum_years": 40,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 40 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 023: show officers below 40 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 41 years old",
+          "maximum_years": 41,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A024",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 41 years old",
+              "maximum_years": 41,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 41 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 024: show officers below 41 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 42 years old",
+          "maximum_years": 42,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A025",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 42 years old",
+              "maximum_years": 42,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 42 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 025: show officers below 42 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 43 years old",
+          "maximum_years": 43,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A026",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 43 years old",
+              "maximum_years": 43,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 43 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 026: show officers below 43 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 44 years old",
+          "maximum_years": 44,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A027",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 44 years old",
+              "maximum_years": 44,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 44 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 027: show officers below 44 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 45 years old",
+          "maximum_years": 45,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A028",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 45 years old",
+              "maximum_years": 45,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 45 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 028: show officers below 45 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 46 years old",
+          "maximum_years": 46,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A029",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 46 years old",
+              "maximum_years": 46,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 46 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 029: show officers below 46 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 47 years old",
+          "maximum_years": 47,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A030",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 47 years old",
+              "maximum_years": 47,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 47 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 030: show officers below 47 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 48 years old",
+          "maximum_years": 48,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A031",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 48 years old",
+              "maximum_years": 48,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 48 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 031: show officers below 48 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 49 years old",
+          "maximum_years": 49,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A032",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 49 years old",
+              "maximum_years": 49,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 49 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 032: show officers below 49 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 50 years old",
+          "maximum_years": 50,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A033",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 50 years old",
+              "maximum_years": 50,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 50 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 033: show officers below 50 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 51 years old",
+          "maximum_years": 51,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A034",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 51 years old",
+              "maximum_years": 51,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 51 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 034: show officers below 51 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "below 52 years old",
+          "maximum_years": 52,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A035",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "below 52 years old",
+              "maximum_years": 52,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 27,
+              "text": "below 52 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 035: show officers below 52 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 25",
+          "maximum_years": null,
+          "minimum_years": 25,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A036",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 25",
+              "maximum_years": null,
+              "minimum_years": 25,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 25"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 036: require minimum age 25 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 26",
+          "maximum_years": null,
+          "minimum_years": 26,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A037",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 26",
+              "maximum_years": null,
+              "minimum_years": 26,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 26"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 037: require minimum age 26 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 27",
+          "maximum_years": null,
+          "minimum_years": 27,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A038",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 27",
+              "maximum_years": null,
+              "minimum_years": 27,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 27"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 038: require minimum age 27 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 28",
+          "maximum_years": null,
+          "minimum_years": 28,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A039",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 28",
+              "maximum_years": null,
+              "minimum_years": 28,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 28"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 039: require minimum age 28 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 29",
+          "maximum_years": null,
+          "minimum_years": 29,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A040",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 29",
+              "maximum_years": null,
+              "minimum_years": 29,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 29"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 040: require minimum age 29 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 30",
+          "maximum_years": null,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A041",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 30",
+              "maximum_years": null,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 30"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 041: require minimum age 30 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 31",
+          "maximum_years": null,
+          "minimum_years": 31,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A042",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 31",
+              "maximum_years": null,
+              "minimum_years": 31,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 31"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 042: require minimum age 31 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 32",
+          "maximum_years": null,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A043",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 32",
+              "maximum_years": null,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 32"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 043: require minimum age 32 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 33",
+          "maximum_years": null,
+          "minimum_years": 33,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A044",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 33",
+              "maximum_years": null,
+              "minimum_years": 33,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 33"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 044: require minimum age 33 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 34",
+          "maximum_years": null,
+          "minimum_years": 34,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A045",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 34",
+              "maximum_years": null,
+              "minimum_years": 34,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 34"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 045: require minimum age 34 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 35",
+          "maximum_years": null,
+          "minimum_years": 35,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A046",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 35",
+              "maximum_years": null,
+              "minimum_years": 35,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 35"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 046: require minimum age 35 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 36",
+          "maximum_years": null,
+          "minimum_years": 36,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A047",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 36",
+              "maximum_years": null,
+              "minimum_years": 36,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 36"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 047: require minimum age 36 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 37",
+          "maximum_years": null,
+          "minimum_years": 37,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A048",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 37",
+              "maximum_years": null,
+              "minimum_years": 37,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 37"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 048: require minimum age 37 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 38",
+          "maximum_years": null,
+          "minimum_years": 38,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A049",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 38",
+              "maximum_years": null,
+              "minimum_years": 38,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 38"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 049: require minimum age 38 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum age 39",
+          "maximum_years": null,
+          "minimum_years": 39,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A050",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum age 39",
+              "maximum_years": null,
+              "minimum_years": 39,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 21,
+              "text": "minimum age 39"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 050: require minimum age 39 for applicants"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 26 years old",
+          "maximum_years": 26,
+          "minimum_years": 26,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A051",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 26 years old",
+              "maximum_years": 26,
+              "minimum_years": 26,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 26 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 051: candidates exactly 26 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 27 years old",
+          "maximum_years": 27,
+          "minimum_years": 27,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A052",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 27 years old",
+              "maximum_years": 27,
+              "minimum_years": 27,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 27 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 052: candidates exactly 27 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 28 years old",
+          "maximum_years": 28,
+          "minimum_years": 28,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A053",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 28 years old",
+              "maximum_years": 28,
+              "minimum_years": 28,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 28 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 053: candidates exactly 28 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 29 years old",
+          "maximum_years": 29,
+          "minimum_years": 29,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A054",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 29 years old",
+              "maximum_years": 29,
+              "minimum_years": 29,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 29 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 054: candidates exactly 29 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 30 years old",
+          "maximum_years": 30,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A055",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 30 years old",
+              "maximum_years": 30,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 30 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 055: candidates exactly 30 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 31 years old",
+          "maximum_years": 31,
+          "minimum_years": 31,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A056",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 31 years old",
+              "maximum_years": 31,
+              "minimum_years": 31,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 31 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 056: candidates exactly 31 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 32 years old",
+          "maximum_years": 32,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A057",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 32 years old",
+              "maximum_years": 32,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 32 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 057: candidates exactly 32 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 33 years old",
+          "maximum_years": 33,
+          "minimum_years": 33,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A058",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 33 years old",
+              "maximum_years": 33,
+              "minimum_years": 33,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 33 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 058: candidates exactly 33 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 34 years old",
+          "maximum_years": 34,
+          "minimum_years": 34,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A059",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 34 years old",
+              "maximum_years": 34,
+              "minimum_years": 34,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 34 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 059: candidates exactly 34 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 35 years old",
+          "maximum_years": 35,
+          "minimum_years": 35,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A060",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 35 years old",
+              "maximum_years": 35,
+              "minimum_years": 35,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 35 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 060: candidates exactly 35 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 36 years old",
+          "maximum_years": 36,
+          "minimum_years": 36,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A061",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 36 years old",
+              "maximum_years": 36,
+              "minimum_years": 36,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 36 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 061: candidates exactly 36 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 37 years old",
+          "maximum_years": 37,
+          "minimum_years": 37,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A062",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 37 years old",
+              "maximum_years": 37,
+              "minimum_years": 37,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 37 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 062: candidates exactly 37 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 38 years old",
+          "maximum_years": 38,
+          "minimum_years": 38,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A063",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 38 years old",
+              "maximum_years": 38,
+              "minimum_years": 38,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 38 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 063: candidates exactly 38 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 39 years old",
+          "maximum_years": 39,
+          "minimum_years": 39,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A064",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 39 years old",
+              "maximum_years": 39,
+              "minimum_years": 39,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 39 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 064: candidates exactly 39 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "exactly 40 years old",
+          "maximum_years": 40,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A065",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "exactly 40 years old",
+              "maximum_years": 40,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 24,
+              "text": "exactly 40 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 065: candidates exactly 40 years old only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "under 55",
+          "maximum_years": 55,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A066",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "under 55",
+              "maximum_years": 55,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 39,
+              "start": 31,
+              "text": "under 55"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 066: please filter for under 55"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "no older than 50",
+          "maximum_years": 50,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A067",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "no older than 50",
+              "maximum_years": 50,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 47,
+              "start": 31,
+              "text": "no older than 50"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 067: please filter for no older than 50"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "at least 32 years old",
+          "maximum_years": null,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A068",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "at least 32 years old",
+              "maximum_years": null,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 52,
+              "start": 31,
+              "text": "at least 32 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 068: please filter for at least 32 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "older than 35",
+          "maximum_years": null,
+          "minimum_years": 35,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A069",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "older than 35",
+              "maximum_years": null,
+              "minimum_years": 35,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 44,
+              "start": 31,
+              "text": "older than 35"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 069: please filter for older than 35"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "max age 45",
+          "maximum_years": 45,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A070",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "max age 45",
+              "maximum_years": 45,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 41,
+              "start": 31,
+              "text": "max age 45"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 070: please filter for max age 45"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age 30 to 45",
+          "maximum_years": 45,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A071",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age 30 to 45",
+              "maximum_years": 45,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 43,
+              "start": 31,
+              "text": "age 30 to 45"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 071: please filter for age 30 to 45"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "candidate age from 29 to 52",
+          "maximum_years": 52,
+          "minimum_years": 29,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A072",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "candidate age from 29 to 52",
+              "maximum_years": 52,
+              "minimum_years": 29,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 58,
+              "start": 31,
+              "text": "candidate age from 29 to 52"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 072: please filter for candidate age from 29 to 52"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "minimum 40 years old",
+          "maximum_years": null,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A073",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum 40 years old",
+              "maximum_years": null,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 51,
+              "start": 31,
+              "text": "minimum 40 years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 073: please filter for minimum 40 years old"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "maximum age 60",
+          "maximum_years": 60,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A074",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "maximum age 60",
+              "maximum_years": 60,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 45,
+              "start": 31,
+              "text": "maximum age 60"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 074: please filter for maximum age 60"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "between ages 34 and 49",
+          "maximum_years": 49,
+          "minimum_years": 34,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A075",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "between ages 34 and 49",
+              "maximum_years": 49,
+              "minimum_years": 34,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 31,
+              "text": "between ages 34 and 49"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 075: please filter for between ages 34 and 49"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age range 28-44",
+          "maximum_years": 44,
+          "minimum_years": 28,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A076",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age range 28-44",
+              "maximum_years": 44,
+              "minimum_years": 28,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 46,
+              "start": 31,
+              "text": "age range 28-44"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 076: please filter for age range 28-44"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "45 years old exactly",
+          "maximum_years": 45,
+          "minimum_years": 45,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A077",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "45 years old exactly",
+              "maximum_years": 45,
+              "minimum_years": 45,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 51,
+              "start": 31,
+              "text": "45 years old exactly"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 077: please filter for 45 years old exactly"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 30 and 50",
+          "maximum_years": 50,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A078",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 30 and 50",
+              "maximum_years": 50,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 63,
+              "start": 42,
+              "text": "age between 30 and 50"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 078: available within 30 days and age between 30 and 50"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 32 and 48",
+          "maximum_years": 48,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A079",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 32 and 48",
+              "maximum_years": 48,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 69,
+              "start": 48,
+              "text": "age between 32 and 48"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 079: vessel tonnage above 50000 GT with age between 32 and 48"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "display_value": "age between 28 and 42",
+          "maximum_years": 42,
+          "minimum_years": 28,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A080",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age between 28 and 42",
+              "maximum_years": 42,
+              "minimum_years": 28,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 61,
+              "start": 40,
+              "text": "age between 28 and 42"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 080: Indian CoC candidates with age between 28 and 42"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 36",
+          "maximum_years": 36,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B001",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 36",
+              "maximum_years": 36,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 36"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B001: use age cap 36 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 37",
+          "maximum_years": 37,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B002",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 37",
+              "maximum_years": 37,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 37"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B002: use age cap 37 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 38",
+          "maximum_years": 38,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B003",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 38",
+              "maximum_years": 38,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 38"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B003: use age cap 38 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 39",
+          "maximum_years": 39,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B004",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 39",
+              "maximum_years": 39,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 39"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B004: use age cap 39 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 40",
+          "maximum_years": 40,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B005",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 40",
+              "maximum_years": 40,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 40"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B005: use age cap 40 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 41",
+          "maximum_years": 41,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B006",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 41",
+              "maximum_years": 41,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 41"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B006: use age cap 41 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 42",
+          "maximum_years": 42,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B007",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 42",
+              "maximum_years": 42,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 42"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B007: use age cap 42 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 43",
+          "maximum_years": 43,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B008",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 43",
+              "maximum_years": 43,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 43"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B008: use age cap 43 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 44",
+          "maximum_years": 44,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B009",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 44",
+              "maximum_years": 44,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 44"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B009: use age cap 44 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 45",
+          "maximum_years": 45,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B010",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 45",
+              "maximum_years": 45,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 45"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B010: use age cap 45 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 46",
+          "maximum_years": 46,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B011",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 46",
+              "maximum_years": 46,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 46"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B011: use age cap 46 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 47",
+          "maximum_years": 47,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B012",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 47",
+              "maximum_years": 47,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 47"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B012: use age cap 47 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 48",
+          "maximum_years": 48,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B013",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 48",
+              "maximum_years": 48,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 48"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B013: use age cap 48 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 49",
+          "maximum_years": 49,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B014",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 49",
+              "maximum_years": 49,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 49"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B014: use age cap 49 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 50",
+          "maximum_years": 50,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B015",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 50",
+              "maximum_years": 50,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 50"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B015: use age cap 50 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 51",
+          "maximum_years": 51,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B016",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 51",
+              "maximum_years": 51,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 51"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B016: use age cap 51 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 52",
+          "maximum_years": 52,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B017",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 52",
+              "maximum_years": 52,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 52"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B017: use age cap 52 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 53",
+          "maximum_years": 53,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B018",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 53",
+              "maximum_years": 53,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 53"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B018: use age cap 53 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 54",
+          "maximum_years": 54,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B019",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 54",
+              "maximum_years": 54,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 54"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B019: use age cap 54 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 55",
+          "maximum_years": 55,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B020",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 55",
+              "maximum_years": 55,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 27,
+              "start": 17,
+              "text": "age cap 55"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B020: use age cap 55 for this shortlist"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "28+ years old",
+          "maximum_years": null,
+          "minimum_years": 28,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B021",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "28+ years old",
+              "maximum_years": null,
+              "minimum_years": 28,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "28+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B021: candidates 28+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "29+ years old",
+          "maximum_years": null,
+          "minimum_years": 29,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B022",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "29+ years old",
+              "maximum_years": null,
+              "minimum_years": 29,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "29+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B022: candidates 29+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "30+ years old",
+          "maximum_years": null,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B023",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "30+ years old",
+              "maximum_years": null,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "30+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B023: candidates 30+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "31+ years old",
+          "maximum_years": null,
+          "minimum_years": 31,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B024",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "31+ years old",
+              "maximum_years": null,
+              "minimum_years": 31,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "31+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B024: candidates 31+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "32+ years old",
+          "maximum_years": null,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B025",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "32+ years old",
+              "maximum_years": null,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "32+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B025: candidates 32+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "33+ years old",
+          "maximum_years": null,
+          "minimum_years": 33,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B026",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "33+ years old",
+              "maximum_years": null,
+              "minimum_years": 33,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "33+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B026: candidates 33+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "34+ years old",
+          "maximum_years": null,
+          "minimum_years": 34,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B027",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "34+ years old",
+              "maximum_years": null,
+              "minimum_years": 34,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "34+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B027: candidates 34+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "35+ years old",
+          "maximum_years": null,
+          "minimum_years": 35,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B028",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "35+ years old",
+              "maximum_years": null,
+              "minimum_years": 35,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "35+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B028: candidates 35+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "36+ years old",
+          "maximum_years": null,
+          "minimum_years": 36,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B029",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "36+ years old",
+              "maximum_years": null,
+              "minimum_years": 36,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "36+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B029: candidates 36+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "37+ years old",
+          "maximum_years": null,
+          "minimum_years": 37,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B030",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "37+ years old",
+              "maximum_years": null,
+              "minimum_years": 37,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "37+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B030: candidates 37+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "38+ years old",
+          "maximum_years": null,
+          "minimum_years": 38,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B031",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "38+ years old",
+              "maximum_years": null,
+              "minimum_years": 38,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "38+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B031: candidates 38+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "39+ years old",
+          "maximum_years": null,
+          "minimum_years": 39,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B032",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "39+ years old",
+              "maximum_years": null,
+              "minimum_years": 39,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "39+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B032: candidates 39+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "40+ years old",
+          "maximum_years": null,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B033",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "40+ years old",
+              "maximum_years": null,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "40+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B033: candidates 40+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "41+ years old",
+          "maximum_years": null,
+          "minimum_years": 41,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B034",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "41+ years old",
+              "maximum_years": null,
+              "minimum_years": 41,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "41+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B034: candidates 41+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "42+ years old",
+          "maximum_years": null,
+          "minimum_years": 42,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B035",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "42+ years old",
+              "maximum_years": null,
+              "minimum_years": 42,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "42+ years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B035: candidates 42+ years old preferred"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 20s",
+          "maximum_years": 29,
+          "minimum_years": 20,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B036",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 20s",
+              "maximum_years": 29,
+              "minimum_years": 20,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 20s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B036: crew in their 20s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 30s",
+          "maximum_years": 39,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B037",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 30s",
+              "maximum_years": 39,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 30s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B037: crew in their 30s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 40s",
+          "maximum_years": 49,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B038",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 40s",
+              "maximum_years": 49,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 40s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B038: crew in their 40s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 50s",
+          "maximum_years": 59,
+          "minimum_years": 50,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B039",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 50s",
+              "maximum_years": 59,
+              "minimum_years": 50,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 50s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B039: crew in their 50s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 20s",
+          "maximum_years": 29,
+          "minimum_years": 20,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B040",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 20s",
+              "maximum_years": 29,
+              "minimum_years": 20,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 20s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B040: crew in their 20s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 30s",
+          "maximum_years": 39,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B041",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 30s",
+              "maximum_years": 39,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 30s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B041: crew in their 30s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 40s",
+          "maximum_years": 49,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B042",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 40s",
+              "maximum_years": 49,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 40s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B042: crew in their 40s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 50s",
+          "maximum_years": 59,
+          "minimum_years": 50,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B043",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 50s",
+              "maximum_years": 59,
+              "minimum_years": 50,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 50s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B043: crew in their 50s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 20s",
+          "maximum_years": 29,
+          "minimum_years": 20,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B044",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 20s",
+              "maximum_years": 29,
+              "minimum_years": 20,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 20s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B044: crew in their 20s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 30s",
+          "maximum_years": 39,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B045",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 30s",
+              "maximum_years": 39,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 30s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B045: crew in their 30s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 40s",
+          "maximum_years": 49,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B046",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 40s",
+              "maximum_years": 49,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 40s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B046: crew in their 40s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 50s",
+          "maximum_years": 59,
+          "minimum_years": 50,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B047",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 50s",
+              "maximum_years": 59,
+              "minimum_years": 50,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 50s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B047: crew in their 50s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 20s",
+          "maximum_years": 29,
+          "minimum_years": 20,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B048",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 20s",
+              "maximum_years": 29,
+              "minimum_years": 20,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 20s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B048: crew in their 20s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 30s",
+          "maximum_years": 39,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B049",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 30s",
+              "maximum_years": 39,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 30s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B049: crew in their 30s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 40s",
+          "maximum_years": 49,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B050",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 40s",
+              "maximum_years": 49,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 40s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B050: crew in their 40s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 50s",
+          "maximum_years": 59,
+          "minimum_years": 50,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B051",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 50s",
+              "maximum_years": 59,
+              "minimum_years": 50,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 30,
+              "start": 18,
+              "text": "in their 50s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B051: crew in their 50s for this role"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 42",
+          "maximum_years": 42,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B052",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 42",
+              "maximum_years": 42,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 42"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B052: please keep candidates not older than 42"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 43",
+          "maximum_years": 43,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B053",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 43",
+              "maximum_years": 43,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 43"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B053: please keep candidates not older than 43"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 44",
+          "maximum_years": 44,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B054",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 44",
+              "maximum_years": 44,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 44"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B054: please keep candidates not older than 44"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 45",
+          "maximum_years": 45,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B055",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 45",
+              "maximum_years": 45,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 45"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B055: please keep candidates not older than 45"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 46",
+          "maximum_years": 46,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B056",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 46",
+              "maximum_years": 46,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 46"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B056: please keep candidates not older than 46"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 47",
+          "maximum_years": 47,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B057",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 47",
+              "maximum_years": 47,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 47"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B057: please keep candidates not older than 47"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 48",
+          "maximum_years": 48,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B058",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 48",
+              "maximum_years": 48,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 48"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B058: please keep candidates not older than 48"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 49",
+          "maximum_years": 49,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B059",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 49",
+              "maximum_years": 49,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 49"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B059: please keep candidates not older than 49"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 50",
+          "maximum_years": 50,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B060",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 50",
+              "maximum_years": 50,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 50"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B060: please keep candidates not older than 50"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 51",
+          "maximum_years": 51,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B061",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 51",
+              "maximum_years": 51,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 51"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B061: please keep candidates not older than 51"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 52",
+          "maximum_years": 52,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B062",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 52",
+              "maximum_years": 52,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 52"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B062: please keep candidates not older than 52"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 53",
+          "maximum_years": 53,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B063",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 53",
+              "maximum_years": 53,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 53"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B063: please keep candidates not older than 53"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 54",
+          "maximum_years": 54,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B064",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 54",
+              "maximum_years": 54,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 54"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B064: please keep candidates not older than 54"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 55",
+          "maximum_years": 55,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B065",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 55",
+              "maximum_years": 55,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 55"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B065: please keep candidates not older than 55"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "not older than 56",
+          "maximum_years": 56,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B066",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "not older than 56",
+              "maximum_years": 56,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 53,
+              "start": 36,
+              "text": "not older than 56"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B066: please keep candidates not older than 56"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "thirty two to forty eight years old",
+          "maximum_years": 48,
+          "minimum_years": 32,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B067",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "thirty two to forty eight years old",
+              "maximum_years": 48,
+              "minimum_years": 32,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 59,
+              "start": 24,
+              "text": "thirty two to forty eight years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B067: filter for thirty two to forty eight years old"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "minimum thirty years old",
+          "maximum_years": null,
+          "minimum_years": 30,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B068",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "minimum thirty years old",
+              "maximum_years": null,
+              "minimum_years": 30,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 48,
+              "start": 24,
+              "text": "minimum thirty years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B068: filter for minimum thirty years old"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "maximum fifty five years old",
+          "maximum_years": 55,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B069",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "maximum fifty five years old",
+              "maximum_years": 55,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 52,
+              "start": 24,
+              "text": "maximum fifty five years old"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B069: filter for maximum fifty five years old"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "early forties",
+          "maximum_years": 44,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B070",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "early forties",
+              "maximum_years": 44,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "early forties"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B070: filter for early forties"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "late thirties",
+          "maximum_years": 39,
+          "minimum_years": 37,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B071",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "late thirties",
+              "maximum_years": 39,
+              "minimum_years": 37,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 37,
+              "start": 24,
+              "text": "late thirties"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B071: filter for late thirties"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "mid forties",
+          "maximum_years": 46,
+          "minimum_years": 44,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B072",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "mid forties",
+              "maximum_years": 46,
+              "minimum_years": 44,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 35,
+              "start": 24,
+              "text": "mid forties"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B072: filter for mid forties"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "forty plus",
+          "maximum_years": null,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B073",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "forty plus",
+              "maximum_years": null,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 34,
+              "start": 24,
+              "text": "forty plus"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B073: filter for forty plus"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "no more than fifty",
+          "maximum_years": 50,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B074",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "no more than fifty",
+              "maximum_years": 50,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 42,
+              "start": 24,
+              "text": "no more than fifty"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B074: filter for no more than fifty"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "around forty two",
+          "maximum_years": 42,
+          "minimum_years": 42,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B075",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "around forty two",
+              "maximum_years": 42,
+              "minimum_years": 42,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 40,
+              "start": 24,
+              "text": "around forty two"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B075: filter for around forty two"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age bracket thirty five to fifty",
+          "maximum_years": 50,
+          "minimum_years": 35,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B076",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age bracket thirty five to fifty",
+              "maximum_years": 50,
+              "minimum_years": 35,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 56,
+              "start": 24,
+              "text": "age bracket thirty five to fifty"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B076: filter for age bracket thirty five to fifty"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "candidate age not exceeding forty six",
+          "maximum_years": 46,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B077",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "candidate age not exceeding forty six",
+              "maximum_years": 46,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 61,
+              "start": 24,
+              "text": "candidate age not exceeding forty six"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B077: filter for candidate age not exceeding forty six"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "age cap 45",
+          "maximum_years": 45,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B078",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "age cap 45",
+              "maximum_years": 45,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 49,
+              "start": 39,
+              "text": "age cap 45"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B078: available immediately but age cap 45"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "in their 40s",
+          "maximum_years": 49,
+          "minimum_years": 40,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B079",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "in their 40s",
+              "maximum_years": 49,
+              "minimum_years": 40,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 64,
+              "start": 52,
+              "text": "in their 40s"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B079: vessel tonnage above 60000 GT and crew in their 40s"
+    },
+    {
+      "class": "B",
+      "deterministic_baseline": null,
+      "expected_route": "constraints",
+      "human_label": {
+        "parameters": {
+          "display_value": "no more than fifty",
+          "maximum_years": 50,
+          "minimum_years": null,
+          "type": "age_range",
+          "version": "v1"
+        }
+      },
+      "id": "B080",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "age_range",
+            "parameters": {
+              "display_value": "no more than fifty",
+              "maximum_years": 50,
+              "minimum_years": null,
+              "type": "age_range",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 42,
+              "start": 24,
+              "text": "no more than fifty"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Search B080: UK CoC and no more than fifty"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C001",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 3 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C001: minimum 3 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C002",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 4 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C002: minimum 4 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C003",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 5 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C003: minimum 5 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C004",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 6 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C004: minimum 6 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C005",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 7 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C005: minimum 7 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C006",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 8 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C006: minimum 8 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C007",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 40,
+              "start": 13,
+              "text": "minimum 9 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C007: minimum 9 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C008",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 41,
+              "start": 13,
+              "text": "minimum 10 years sea service"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C008: minimum 10 years sea service required"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C009",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 2 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C009: ask for last 2 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C010",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 3 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C010: ask for last 3 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C011",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 4 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C011: ask for last 4 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C012",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 5 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C012: ask for last 5 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C013",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 6 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C013: ask for last 6 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C014",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 7 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C014: ask for last 7 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C015",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 8 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C015: ask for last 8 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C016",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 44,
+              "start": 21,
+              "text": "last 9 years experience"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C016: ask for last 9 years experience"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C017",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 37,
+              "start": 13,
+              "text": "vessel age below 8 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C017: vessel age below 8 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C018",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 37,
+              "start": 13,
+              "text": "vessel age below 9 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C018: vessel age below 9 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C019",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 38,
+              "start": 13,
+              "text": "vessel age below 10 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C019: vessel age below 10 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C020",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 38,
+              "start": 13,
+              "text": "vessel age below 11 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C020: vessel age below 11 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C021",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 38,
+              "start": 13,
+              "text": "vessel age below 12 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C021: vessel age below 12 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C022",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 38,
+              "start": 13,
+              "text": "vessel age below 13 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C022: vessel age below 13 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C023",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 38,
+              "start": 13,
+              "text": "vessel age below 14 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C023: vessel age below 14 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C024",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 38,
+              "start": 13,
+              "text": "vessel age below 15 years"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C024: vessel age below 15 years only"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C025",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1980"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C025: candidates born after 1980"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C026",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1981"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C026: candidates born after 1981"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C027",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1982"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C027: candidates born after 1982"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C028",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1983"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C028: candidates born after 1983"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C029",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1984"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C029: candidates born after 1984"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C030",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1985"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C030: candidates born after 1985"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C031",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1986"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C031: candidates born after 1986"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C032",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 39,
+              "start": 24,
+              "text": "born after 1987"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C032: candidates born after 1987"
+    },
+    {
+      "class": "C",
+      "expected_route": "needs_review",
+      "id": "C033",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [
+          {
+            "candidate_families": [
+              "age_range"
+            ],
+            "reason": "reversed age range",
+            "span": {
+              "end": 36,
+              "start": 24,
+              "text": "age 50 to 30"
+            }
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Reject C033: candidates age 50 to 30"
+    },
+    {
+      "class": "C",
+      "expected_route": "needs_review",
+      "id": "C034",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [
+          {
+            "candidate_families": [
+              "age_range"
+            ],
+            "reason": "age outside plausibility bounds",
+            "span": {
+              "end": 25,
+              "start": 13,
+              "text": "age below 12"
+            }
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Reject C034: age below 12 with available immediately"
+    },
+    {
+      "class": "C",
+      "expected_route": "needs_review",
+      "id": "C035",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [
+          {
+            "candidate_families": [
+              "age_range"
+            ],
+            "reason": "age outside plausibility bounds",
+            "span": {
+              "end": 25,
+              "start": 13,
+              "text": "age above 90"
+            }
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Reject C035: age above 90 on vessels above 50000 GT"
+    },
+    {
+      "class": "C",
+      "expected_route": "needs_review",
+      "id": "C036",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [
+          {
+            "candidate_families": [
+              "age_range"
+            ],
+            "reason": "age outside plausibility bounds",
+            "span": {
+              "end": 44,
+              "start": 23,
+              "text": "age between 18 and 80"
+            }
+          }
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Reject C036: candidate age between 18 and 80"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C037",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 56,
+              "start": 42,
+              "text": "DOB after 1990"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C037: available within 30 days and DOB after 1990"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C038",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 72,
+              "start": 47,
+              "text": "date of birth before 1980"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C038: vessel tonnage above 50000 GT and date of birth before 1980"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C039",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 43,
+              "start": 28,
+              "text": "born after 1995"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C039: Indian CoC and born after 1995"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C040",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "no matching capability",
+            "span": {
+              "end": 55,
+              "start": 35,
+              "text": "max age of vessel 12"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Reject C040: built after 2010 with max age of vessel 12"
+    }
+  ],
+  "corpus_id": "age-range-shadow-normalizer-corpus-2026-07-01",
+  "family": "age_range",
+  "notes": [
+    "Fixture corpus for age_range compound-normalizer PR-135.",
+    "Includes Class A deterministic-covered, Class B deterministic-missed/human-labeled, and Class C adversarial/out-of-scope cases.",
+    "Includes cross-family prompts combining age_range with availability, vessel_tonnage, and coc_country_match across Classes A, B, and C while scoring age_range only.",
+    "DOB and birth-year phrasing is routed to unapplied in v1; the catalog row represents candidate age in years, not date-of-birth conversion."
+  ],
+  "reference_date": "2026-07-01",
+  "status": "fixture_only",
+  "version": "1.0.0"
+}
