@@ -929,10 +929,24 @@ telemetry, add CSV columns, or add durable audit-event fields.
 ### PR-15 — coc_country_match real Gemini JSON-only evidence
 
 Runs Gemini against the PR-14 corpus with `use_helper_tools=false` and stores
-the JSON-only evidence artifact. PR-15 is evidence-only: it does not add
-`coc_country_match` to `PROMOTED_FAMILIES`, adopt helper tools, add a dispatcher
-branch, change `/analyze` or `/analyze_stream`, change frontend behavior, add
-telemetry, add CSV columns, or add durable audit-event fields.
+the JSON-only evidence artifact at
+`docs/eval-evidence/coc-country-normalizer-json-only-llm-evidence-2026-07-01.json`.
+The artifact fails the promotion gate: schema-valid rate 1.0, unsafe widening
+count 0, Class A match rate 0.9375, Class B correct rate 0.9125 with
+deterministic baseline 0.1125 and recall lift 0.8, Class C safe-route rate 1.0,
+reviewed false-positive rate 0.0, and promotion gate `passes=false`.
+
+The failure mechanism is narrow: strict CoC-country phrases such as
+`exactly USA CoC only`, `strictly Indian CoC only`, and `only UK CoC accepted`
+sometimes narrow `source_span.text` / `display_value` to the bare country-CoC
+phrase, and `USA-issued CoC` sometimes uses `equals` where the corpus expects
+`contains_any`. The artifact is preserved and blocks live promotion until a
+prompt-fix rerun passes the gate.
+
+PR-15 is evidence-only: it does not add `coc_country_match` to
+`PROMOTED_FAMILIES`, adopt helper tools, add a dispatcher branch, change
+`/analyze` or `/analyze_stream`, change frontend behavior, add telemetry, add
+CSV columns, or add durable audit-event fields.
 
 ### PR-N — next family
 
