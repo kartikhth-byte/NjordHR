@@ -90,6 +90,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
         coc_country = catalog.families_by_id["coc_country_match"]
         self.assertEqual(coc_country["executor_id"], "coc_country_match")
         self.assertEqual(coc_country["plausibility_bounds"], {})
+        self.assertEqual(coc_country["output_schema"]["properties"]["countries"]["minItems"], 1)
 
     def test_llm_facing_catalog_redacts_executor_id(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
