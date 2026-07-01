@@ -873,7 +873,10 @@ rejected count 24, and promotion gate `passes=false`.
 Helper adoption for `vessel_tonnage` fails this A/B run. The helper-assisted
 run improves schema-valid rate, Class B correct rate, and Class C safe-route
 rate, but it regresses Class A from 0.975 to 0.825 and falls below the 0.95
-Class A floor. The provider path remains JSON-only by default:
+Class A floor. The failure mechanism is source-span narrowing: helper context
+led the model to choose the minimal parseable substring, such as
+`below 45000 tonnage`, instead of the wider corpus-expected phrase, such as
+`ships below 45000 tonnage`. The provider path remains JSON-only by default:
 `use_helper_tools=false`. The helper path remains opt-in for audit experiments
 only.
 
