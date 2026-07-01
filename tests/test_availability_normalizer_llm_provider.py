@@ -17,12 +17,14 @@ from query_understanding.compound_prompt_normalizer_provider import (
     COMPOUND_NORMALIZER_DEFAULT_MODEL,
     COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
     COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
+    COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION,
     AvailabilityNormalizerProviderResult,
     build_availability_normalizer_prompt,
     build_coc_country_normalizer_prompt,
     build_vessel_tonnage_normalizer_prompt,
     call_gemini_availability_normalizer,
     call_gemini_coc_country_normalizer,
+    call_gemini_unified_compound_normalizer,
     call_gemini_vessel_tonnage_normalizer,
 )
 
@@ -260,6 +262,88 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("countries", schema_parameters["required"])
         self.assertIn("operator", schema_parameters["required"])
         self.assertNotIn("value_type", schema_parameters["properties"])
+
+    def test_unified_gemini_provider_parses_n3_payload(self):
+        calls = []
+        payload = {
+            "version": "v1",
+            "constraints": [
+                {
+                    "filter_family": "availability",
+                    "parameters": {
+                        "version": "v1",
+                        "value_type": "status",
+                        "status": "immediate",
+                        "available_by_date": None,
+                        "available_from_date": None,
+                        "available_until_date": None,
+                        "relative_days": None,
+                        "resolved_reference_date": "2026-07-01",
+                        "display_value": "available immediately",
+                    },
+                    "source_span": {"text": "available immediately", "start": 10, "end": 31},
+                },
+                {
+                    "filter_family": "vessel_tonnage",
+                    "parameters": {
+                        "version": "v1",
+                        "value_type": "minimum",
+                        "min_value": 50000,
+                        "max_value": None,
+                        "unit": "gt_grt",
+                        "years_back": None,
+                        "display_value": "vessels above 50000 GT",
+                    },
+                    "source_span": {"text": "vessels above 50000 GT", "start": 37, "end": 60},
+                },
+                {
+                    "filter_family": "coc_country_match",
+                    "parameters": {
+                        "version": "v1",
+                        "type": "coc_country_match",
+                        "countries": ["india"],
+                        "operator": "contains_any",
+                        "display_value": "Indian CoC",
+                    },
+                    "source_span": {"text": "Indian CoC", "start": 66, "end": 76},
+                },
+            ],
+            "soft_signals": [],
+            "unapplied": [],
+            "needs_review": [],
+        }
+
+        def fake_post(url, *, headers, json, timeout):
+            calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+            return _FakeGeminiResponse(
+                {
+                    "candidates": [
+                        {"content": {"parts": [{"text": __import__("json").dumps(payload)}]}}
+                    ]
+                }
+            )
+
+        prompt = "Need crew available immediately with vessels above 50000 GT and Indian CoC"
+        result = call_gemini_unified_compound_normalizer(
+            prompt,
+            prompt_normalized=prompt,
+            reference_date="2026-07-01",
+            api_key="test-key",
+            post=fake_post,
+        )
+
+        self.assertEqual(result.model_id, COMPOUND_NORMALIZER_DEFAULT_MODEL)
+        self.assertEqual(result.prompt_template_version, COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION)
+        self.assertEqual(result.parsed_payload, payload)
+        self.assertIsNone(result.transport_error)
+        provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
+        self.assertIn("Supported filter families in this N=3 experiment", provider_prompt)
+        self.assertIn("availability, vessel_tonnage, coc_country_match", provider_prompt)
+        self.assertNotIn("executor_id", provider_prompt)
+        schema_parameters = calls[0]["json"]["generationConfig"]["responseSchema"]["properties"]["constraints"]["items"]["properties"]["parameters"]
+        self.assertIn("available_by_date", schema_parameters["properties"])
+        self.assertIn("min_value", schema_parameters["properties"])
+        self.assertIn("countries", schema_parameters["properties"])
 
     def test_gemini_provider_includes_helper_context_when_enabled(self):
         calls = []

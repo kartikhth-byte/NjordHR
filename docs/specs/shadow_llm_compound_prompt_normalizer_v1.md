@@ -1014,6 +1014,47 @@ recovery-draft change, no existing hard-filter audit CSV column change, no
 telemetry field change, no durable audit-event field change, no helper-tool
 adoption, and no evidence-artifact rewrite.
 
+### PR-18 — N=3 dispatch strategy evaluation harness
+
+Adds an evidence-only harness for comparing three provider dispatch strategies
+with the current N=3 promoted-family set:
+
+- `sequential_per_family` — calls one family-specific provider at a time and
+  merges the resulting `query_plan.v1` channels.
+- `parallel_per_family` — calls the same family-specific providers concurrently
+  and merges the resulting `query_plan.v1` channels.
+- `unified_multi_family` — calls one provider prompt that can emit all three
+  promoted families in a single `query_plan.v1`.
+
+The evaluation corpus is
+`docs/eval-evidence/compound-dispatch-strategy-n3-corpus-2026-07-01.json`.
+It contains 25 cases covering availability-only, vessel-tonnage-only,
+CoC-country-only, every
+two-family combination, all three families together, issue-authority ambiguity,
+unsupported prompts, reversed-tonnage review routing, and cross-family context
+where nationality, flag, route, or work-location country text must not become a
+CoC-country constraint.
+
+The adoption bar for a future production switch is closed-list:
+
+- schema-valid rate >= 0.99;
+- unsafe widening count = 0;
+- constraint-family match rate = 1.0;
+- review-family match rate = 1.0;
+- unified output must not regress any family that passes in
+  `parallel_per_family`;
+- `parallel_per_family` must show p50 total-elapsed reduction >= 30% or >=
+  200ms absolute, whichever threshold is smaller, against
+  `sequential_per_family` before replacing sequential runtime dispatch;
+- `unified_multi_family` must show p50 total-elapsed reduction >= 30% or >=
+  200ms absolute, whichever threshold is smaller, against
+  `parallel_per_family` before replacing per-family runtime dispatch.
+
+PR-18 does not change live runtime dispatch. It does not change
+`PROMOTED_FAMILIES`, `/analyze` or `/analyze_stream` payload shape, frontend
+behavior, request fingerprints, recovery, CSV columns, telemetry fields,
+durable audit-event fields, helper-tool adoption, or any family promotion state.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.

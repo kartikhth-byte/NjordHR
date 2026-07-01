@@ -1,0 +1,183 @@
+{
+  "corpus_id": "compound-dispatch-strategy-n3",
+  "version": "1.0.0",
+  "reference_date": "2026-07-01",
+  "description": "N=3 dispatch-strategy comparison corpus for sequential per-family, parallel per-family, and unified multi-family provider calls. This corpus is evidence-only and does not change live dispatch.",
+  "cases": [
+    {
+      "id": "N3-001",
+      "class": "all_three",
+      "prompt": "Need Indian CoC candidates available by 1 Aug 2026 with vessels above 50000 GT.",
+      "expected_constraint_families": ["availability", "coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-002",
+      "class": "availability_tonnage",
+      "prompt": "Find crew available immediately with vessel tonnage between 30000 and 80000.",
+      "expected_constraint_families": ["availability", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-003",
+      "class": "availability_coc",
+      "prompt": "Need UK certificate of competency and available within 30 days.",
+      "expected_constraint_families": ["availability", "coc_country_match"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-004",
+      "class": "tonnage_coc",
+      "prompt": "Shortlist exactly USA CoC only on vessels below 45000 tonnage.",
+      "expected_constraint_families": ["coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-005",
+      "class": "all_three_review",
+      "prompt": "Need Panama Maritime Authority with availability by 1 Aug 2026 and ships above 60000 GT.",
+      "expected_constraint_families": ["availability", "vessel_tonnage"],
+      "expected_review_families": ["coc_country_match"]
+    },
+    {
+      "id": "N3-006",
+      "class": "all_three_multi_country",
+      "prompt": "Need CoC from India or Panama, ready to join ASAP, with minimum 50000 vessel tonnage.",
+      "expected_constraint_families": ["availability", "coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-007",
+      "class": "availability_only",
+      "prompt": "Need crew available between 1 Sep 2026 and 30 Sep 2026.",
+      "expected_constraint_families": ["availability"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-008",
+      "class": "tonnage_only",
+      "prompt": "Need chief engineers with experience on vessels above 70000 GT.",
+      "expected_constraint_families": ["vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-009",
+      "class": "coc_only",
+      "prompt": "Only show resumes that mention Indian CoC.",
+      "expected_constraint_families": ["coc_country_match"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-010",
+      "class": "unsupported",
+      "prompt": "Need crew with US visa and STCW basic only.",
+      "expected_constraint_families": [],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-011",
+      "class": "all_three_strict",
+      "prompt": "Strictly Indian CoC only, available from 15 Aug 2026, vessel tonnage from 30000 to 80000.",
+      "expected_constraint_families": ["availability", "coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-012",
+      "class": "ambiguous_tonnage",
+      "prompt": "Need Indian CoC and availability now with tonnage between 90000 and 50000.",
+      "expected_constraint_families": ["availability", "coc_country_match"],
+      "expected_review_families": ["vessel_tonnage"]
+    },
+    {
+      "id": "N3-013",
+      "class": "cross_family_context_flag",
+      "prompt": "Need Filipino crew on Indian-flag vessels above 50000 GT.",
+      "expected_constraint_families": ["vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-014",
+      "class": "cross_family_context_nationality",
+      "prompt": "Find Indian nationals available immediately with ships below 60000 tonnage.",
+      "expected_constraint_families": ["availability", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-015",
+      "class": "cross_family_context_route",
+      "prompt": "Need crew for Panama route, available from 10 Sep 2026, vessel tonnage above 40000 GT.",
+      "expected_constraint_families": ["availability", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-016",
+      "class": "all_three_variant",
+      "prompt": "Shortlist USA-issued CoC holders ready to join ASAP with DWT above 75000.",
+      "expected_constraint_families": ["availability", "coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-017",
+      "class": "all_three_variant",
+      "prompt": "Need CoC issued in India, available within 45 days, and ships below 67500 tonnage.",
+      "expected_constraint_families": ["availability", "coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-018",
+      "class": "availability_coc_variant",
+      "prompt": "Find candidates with Philippines-issued certificate of competency who can join from 5 Oct 2026.",
+      "expected_constraint_families": ["availability", "coc_country_match"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-019",
+      "class": "tonnage_coc_variant",
+      "prompt": "Need CoC from India or Panama with approximately 55000 DWT experience.",
+      "expected_constraint_families": ["coc_country_match", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-020",
+      "class": "availability_tonnage_variant",
+      "prompt": "Need crew available by 20 Dec 2026 and minimum 60000 vessel tonnage in the last 5 years.",
+      "expected_constraint_families": ["availability", "vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-021",
+      "class": "coc_only_variant",
+      "prompt": "Only UK CoC accepted.",
+      "expected_constraint_families": ["coc_country_match"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-022",
+      "class": "tonnage_only_variant",
+      "prompt": "Need vessel tonnage exactly 50000.",
+      "expected_constraint_families": ["vessel_tonnage"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-023",
+      "class": "availability_only_variant",
+      "prompt": "Ready to join after 14 days.",
+      "expected_constraint_families": ["availability"],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-024",
+      "class": "unsupported_variant",
+      "prompt": "Need Dutch nationality and Schengen travel history only.",
+      "expected_constraint_families": [],
+      "expected_review_families": []
+    },
+    {
+      "id": "N3-025",
+      "class": "issue_authority_review_variant",
+      "prompt": "Need MARINA certificate authority, available now, with vessels above 45000 GT.",
+      "expected_constraint_families": ["availability", "vessel_tonnage"],
+      "expected_review_families": ["coc_country_match"]
+    }
+  ]
+}
