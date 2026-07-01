@@ -25,6 +25,7 @@ from query_understanding.compound_prompt_normalizer_tools import (
 COMPOUND_NORMALIZER_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.availability.v1"
 COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.vessel_tonnage.v1"
 COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.coc_country_match.v1"
+COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION = "compound_prompt_normalizer.unified_n3.v1"
 COMPOUND_NORMALIZER_DEFAULT_MODEL = "gemini-3.1-flash-lite"
 COMPOUND_NORMALIZER_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 COMPOUND_NORMALIZER_RESPONSE_SEED = 0
@@ -172,6 +173,32 @@ COC_COUNTRY_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"]["pr
         "type",
         "countries",
         "operator",
+        "display_value",
+    ],
+}
+UNIFIED_QUERY_PLAN_RESPONSE_SCHEMA = deepcopy(QUERY_PLAN_RESPONSE_SCHEMA)
+UNIFIED_QUERY_PLAN_RESPONSE_SCHEMA["properties"]["constraints"]["items"]["properties"]["parameters"] = {
+    "type": "OBJECT",
+    "properties": {
+        "version": {"type": "STRING"},
+        "value_type": {"type": "STRING", "nullable": True},
+        "status": {"type": "STRING", "nullable": True},
+        "available_by_date": {"type": "STRING", "nullable": True},
+        "available_from_date": {"type": "STRING", "nullable": True},
+        "available_until_date": {"type": "STRING", "nullable": True},
+        "relative_days": {"type": "INTEGER", "nullable": True},
+        "resolved_reference_date": {"type": "STRING", "nullable": True},
+        "min_value": {"type": "INTEGER", "nullable": True},
+        "max_value": {"type": "INTEGER", "nullable": True},
+        "unit": {"type": "STRING", "nullable": True},
+        "years_back": {"type": "INTEGER", "nullable": True},
+        "type": {"type": "STRING", "nullable": True},
+        "countries": {"type": "ARRAY", "items": {"type": "STRING"}, "nullable": True},
+        "operator": {"type": "STRING", "nullable": True},
+        "display_value": {"type": "STRING"},
+    },
+    "required": [
+        "version",
         "display_value",
     ],
 }
@@ -499,6 +526,59 @@ def build_coc_country_normalizer_prompt(
     )
 
 
+def build_unified_compound_normalizer_prompt(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    catalog: FilterCapabilityCatalog | None = None,
+) -> str:
+    """Build the experiment-only unified prompt for all currently promoted families."""
+
+    public_catalog = llm_facing_catalog(catalog)
+    catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
+    return (
+        "You are the NjordHR unified compound-prompt normalizer for audit-only evidence runs.\n"
+        "Return JSON only. Do not call tools. Do not include markdown.\n"
+        "This experiment compares one unified multi-family call against per-family calls. It does not change live dispatch.\n\n"
+        "Output schema root keys:\n"
+        "- version: exactly \"v1\"\n"
+        "- constraints: list of filter constraints\n"
+        "- soft_signals: list\n"
+        "- unapplied: list\n"
+        "- needs_review: list\n\n"
+        "Supported filter families in this N=3 experiment: availability, vessel_tonnage, coc_country_match.\n"
+        "Emit every clearly supported constraint from the recruiter prompt. Ignore unrelated rank, ship type, urgency, route, nationality, visa, or issue-authority text unless it makes one supported family ambiguous.\n"
+        "Do not emit constraints for unsupported families. Route unsupported but resume-relevant text to unapplied with reason \"no matching capability\" or \"out of scope\". Route ambiguous supported-family text to needs_review with candidate_families naming the affected family.\n"
+        "Every span object must be {\"text\": <verbatim>, \"start\": <int>, \"end\": <int>} and must replay against prompt_normalized.\n"
+        "Constraints must use source_span. Soft signals, unapplied entries, and needs_review entries must use span.\n"
+        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the full recruiter phrase; do not shorten, expand, or paraphrase.\n\n"
+        "Availability parameters must include: version, value_type, status, available_by_date, available_from_date, available_until_date, relative_days, resolved_reference_date, display_value. Inactive fields must be null. Set resolved_reference_date to evidence_reference_date.\n"
+        "Availability mapping: ready to join/join ASAP/immediately available/available now -> status immediate; available by/before DATE -> by_date; available from/after/not available until DATE -> from_date; available within N days -> relative_days; available between START and END -> window. Ambiguous numeric dates route to needs_review.\n\n"
+        "Vessel-tonnage parameters must include: version, value_type, min_value, max_value, unit, years_back, display_value. Inactive fields must be null. Unit must be any, unspecified, gt_grt, or dwt.\n"
+        "Vessel-tonnage mapping: above/at least/minimum -> minimum; below/up to/at most -> maximum; between/from-to/exactly/approximately -> range. Preserve full tonnage phrases including leading nouns such as ships, vessels, or vessel tonnage. NRT/net tonnage, engine power, sea-service duration, malformed negative tonnage, and reversed ranges route to needs_review or unapplied.\n\n"
+        "CoC-country parameters must include: version, type, countries, operator, display_value. Set type to \"coc_country_match\". countries must contain canonical country IDs from the catalog. operator is contains_any unless the CoC-country phrase explicitly excludes all other countries with words like only, strictly, exactly, sole, or single.\n"
+        "CoC-country mapping: Indian CoC, CoC issued in India, USA-issued CoC, UK certificate of competency -> coc_country_match. CoC issue-authority organizations such as Panama Maritime Authority, MCA, MARINA, or DG Shipping route to needs_review. Candidate nationality, work location, route, flag state, visa, and travel countries are not CoC-country constraints.\n\n"
+        "Concrete combined examples:\n"
+        "- Indian CoC candidates available by 1 Aug 2026 on vessels above 50000 GT -> emit coc_country_match, availability, and vessel_tonnage constraints.\n"
+        "- Need crew available immediately with vessels above 50000 GT -> emit availability and vessel_tonnage only.\n"
+        "- Panama Maritime Authority with availability by 1 Aug 2026 -> emit availability and needs_review for coc_country_match.\n"
+        "- exactly USA CoC only and vessel tonnage between 30000 and 80000 -> emit coc_country_match with operator equals and vessel_tonnage range.\n\n"
+        "Example shape:\n"
+        "{\n"
+        "  \"version\": \"v1\",\n"
+        "  \"constraints\": [],\n"
+        "  \"soft_signals\": [],\n"
+        "  \"unapplied\": [],\n"
+        "  \"needs_review\": []\n"
+        "}\n\n"
+        f"prompt_raw: {json.dumps(str(prompt or ''))}\n"
+        f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
+        f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
+        f"catalog: {catalog_text}\n"
+    )
+
+
 def _gemini_text_from_response(payload: Mapping[str, Any]) -> str:
     parts: list[str] = []
     candidates = payload.get("candidates")
@@ -747,6 +827,75 @@ def call_gemini_coc_country_normalizer(
         return AvailabilityNormalizerProviderResult(
             model_id=selected_model,
             prompt_template_version=COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def call_gemini_unified_compound_normalizer(
+    prompt: str,
+    *,
+    prompt_normalized: str,
+    reference_date: str | None = None,
+    api_key: str | None = None,
+    model: str = COMPOUND_NORMALIZER_DEFAULT_MODEL,
+    timeout: int = 45,
+    catalog: FilterCapabilityCatalog | None = None,
+    post: Callable[..., Any] = requests.post,
+) -> AvailabilityNormalizerProviderResult:
+    """Call Gemini once for all currently promoted families in an audit-only experiment."""
+
+    selected_model = str(model or COMPOUND_NORMALIZER_DEFAULT_MODEL).strip() or COMPOUND_NORMALIZER_DEFAULT_MODEL
+    selected_api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not selected_api_key:
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=None,
+            parsed_payload=None,
+            transport_error="missing_api_credentials",
+        )
+
+    provider_prompt = build_unified_compound_normalizer_prompt(
+        prompt,
+        prompt_normalized=prompt_normalized,
+        reference_date=reference_date,
+        catalog=catalog,
+    )
+    request_body = {
+        "contents": [{"parts": [{"text": provider_prompt}]}],
+        "generationConfig": {
+            "temperature": 0,
+            "topP": 1,
+            "topK": 1,
+            "seed": COMPOUND_NORMALIZER_RESPONSE_SEED,
+            "responseMimeType": "application/json",
+            "responseSchema": UNIFIED_QUERY_PLAN_RESPONSE_SCHEMA,
+        },
+    }
+    try:
+        response = post(
+            COMPOUND_NORMALIZER_API_URL.format(model=selected_model),
+            headers={"x-goog-api-key": selected_api_key, "Content-Type": "application/json"},
+            json=request_body,
+            timeout=timeout,
+        )
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
+        response_payload = response.json()
+        raw_output = _gemini_text_from_response(response_payload if isinstance(response_payload, Mapping) else {})
+        parsed_payload = _extract_json_payload(raw_output)
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION,
+            raw_llm_output=raw_output,
+            parsed_payload=parsed_payload,
+        )
+    except Exception as exc:  # pragma: no cover - exercised with fake post in tests.
+        return AvailabilityNormalizerProviderResult(
+            model_id=selected_model,
+            prompt_template_version=COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION,
             raw_llm_output=None,
             parsed_payload=None,
             transport_error=f"{type(exc).__name__}: {exc}",
