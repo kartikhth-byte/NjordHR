@@ -2903,10 +2903,10 @@
       "deterministic_baseline": {
         "parameters": {
           "countries": [
-            "south africa"
+            "usa"
           ],
-          "display_value": "South African CoC",
-          "operator": "contains_any",
+          "display_value": "exactly USA CoC only",
+          "operator": "equals",
           "type": "coc_country_match",
           "version": "v1"
         }
@@ -2919,17 +2919,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "south africa"
+                "usa"
               ],
-              "display_value": "South African CoC",
-              "operator": "contains_any",
+              "display_value": "exactly USA CoC only",
+              "operator": "equals",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 61,
-              "start": 44,
-              "text": "South African CoC"
+              "end": 33,
+              "start": 13,
+              "text": "exactly USA CoC only"
             }
           }
         ],
@@ -2938,17 +2938,17 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 070: Only show resumes that mention South African CoC"
+      "prompt": "Request 070: exactly USA CoC only"
     },
     {
       "class": "A",
       "deterministic_baseline": {
         "parameters": {
           "countries": [
-            "netherlands"
+            "india"
           ],
-          "display_value": "Dutch CoC",
-          "operator": "contains_any",
+          "display_value": "strictly Indian CoC only",
+          "operator": "equals",
           "type": "coc_country_match",
           "version": "v1"
         }
@@ -2961,17 +2961,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "netherlands"
+                "india"
               ],
-              "display_value": "Dutch CoC",
-              "operator": "contains_any",
+              "display_value": "strictly Indian CoC only",
+              "operator": "equals",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 53,
-              "start": 44,
-              "text": "Dutch CoC"
+              "end": 37,
+              "start": 13,
+              "text": "strictly Indian CoC only"
             }
           }
         ],
@@ -2980,7 +2980,175 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 071: Only show resumes that mention Dutch CoC"
+      "prompt": "Request 071: strictly Indian CoC only"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "countries": [
+            "uk"
+          ],
+          "display_value": "only UK CoC",
+          "operator": "equals",
+          "type": "coc_country_match",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A072",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "coc_country_match",
+            "parameters": {
+              "countries": [
+                "uk"
+              ],
+              "display_value": "only UK CoC",
+              "operator": "equals",
+              "type": "coc_country_match",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 24,
+              "start": 13,
+              "text": "only UK CoC"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 072: only UK CoC accepted"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "countries": [
+            "india"
+          ],
+          "display_value": "Indian CoC",
+          "operator": "contains_any",
+          "type": "coc_country_match",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A073",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "coc_country_match",
+            "parameters": {
+              "countries": [
+                "india"
+              ],
+              "display_value": "Indian CoC",
+              "operator": "contains_any",
+              "type": "coc_country_match",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 23,
+              "start": 13,
+              "text": "Indian CoC"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 073: Indian CoC required and available immediately"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "countries": [
+            "philippines"
+          ],
+          "display_value": "Filipino CoC",
+          "operator": "contains_any",
+          "type": "coc_country_match",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A074",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "coc_country_match",
+            "parameters": {
+              "countries": [
+                "philippines"
+              ],
+              "display_value": "Filipino CoC",
+              "operator": "contains_any",
+              "type": "coc_country_match",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 25,
+              "start": 13,
+              "text": "Filipino CoC"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 074: Filipino CoC required and available by 15 Apr 2026"
+    },
+    {
+      "class": "A",
+      "deterministic_baseline": {
+        "parameters": {
+          "countries": [
+            "panama"
+          ],
+          "display_value": "Panama CoC",
+          "operator": "contains_any",
+          "type": "coc_country_match",
+          "version": "v1"
+        }
+      },
+      "expected_route": "constraints",
+      "id": "A075",
+      "llm_query_plan": {
+        "constraints": [
+          {
+            "filter_family": "coc_country_match",
+            "parameters": {
+              "countries": [
+                "panama"
+              ],
+              "display_value": "Panama CoC",
+              "operator": "contains_any",
+              "type": "coc_country_match",
+              "version": "v1"
+            },
+            "source_span": {
+              "end": 23,
+              "start": 13,
+              "text": "Panama CoC"
+            }
+          }
+        ],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [],
+        "version": "v1"
+      },
+      "prompt": "Request 075: Panama CoC required with vessel tonnage above 50000 GT"
     },
     {
       "class": "A",
@@ -2996,7 +3164,7 @@
         }
       },
       "expected_route": "constraints",
-      "id": "A072",
+      "id": "A076",
       "llm_query_plan": {
         "constraints": [
           {
@@ -3011,8 +3179,8 @@
               "version": "v1"
             },
             "source_span": {
-              "end": 51,
-              "start": 44,
+              "end": 20,
+              "start": 13,
               "text": "UAE CoC"
             }
           }
@@ -3022,184 +3190,16 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 072: Only show resumes that mention UAE CoC"
+      "prompt": "Request 076: UAE CoC required with vessel tonnage minimum 30000 DWT"
     },
     {
       "class": "A",
       "deterministic_baseline": {
         "parameters": {
           "countries": [
-            "singapore"
+            "usa"
           ],
-          "display_value": "Singapore CoC",
-          "operator": "contains_any",
-          "type": "coc_country_match",
-          "version": "v1"
-        }
-      },
-      "expected_route": "constraints",
-      "id": "A073",
-      "llm_query_plan": {
-        "constraints": [
-          {
-            "filter_family": "coc_country_match",
-            "parameters": {
-              "countries": [
-                "singapore"
-              ],
-              "display_value": "Singapore CoC",
-              "operator": "contains_any",
-              "type": "coc_country_match",
-              "version": "v1"
-            },
-            "source_span": {
-              "end": 57,
-              "start": 44,
-              "text": "Singapore CoC"
-            }
-          }
-        ],
-        "needs_review": [],
-        "soft_signals": [],
-        "unapplied": [],
-        "version": "v1"
-      },
-      "prompt": "Request 073: Only show resumes that mention Singapore CoC"
-    },
-    {
-      "class": "A",
-      "deterministic_baseline": {
-        "parameters": {
-          "countries": [
-            "australia"
-          ],
-          "display_value": "Australian CoC",
-          "operator": "contains_any",
-          "type": "coc_country_match",
-          "version": "v1"
-        }
-      },
-      "expected_route": "constraints",
-      "id": "A074",
-      "llm_query_plan": {
-        "constraints": [
-          {
-            "filter_family": "coc_country_match",
-            "parameters": {
-              "countries": [
-                "australia"
-              ],
-              "display_value": "Australian CoC",
-              "operator": "contains_any",
-              "type": "coc_country_match",
-              "version": "v1"
-            },
-            "source_span": {
-              "end": 58,
-              "start": 44,
-              "text": "Australian CoC"
-            }
-          }
-        ],
-        "needs_review": [],
-        "soft_signals": [],
-        "unapplied": [],
-        "version": "v1"
-      },
-      "prompt": "Request 074: Only show resumes that mention Australian CoC"
-    },
-    {
-      "class": "A",
-      "deterministic_baseline": {
-        "parameters": {
-          "countries": [
-            "canada"
-          ],
-          "display_value": "Canadian CoC",
-          "operator": "contains_any",
-          "type": "coc_country_match",
-          "version": "v1"
-        }
-      },
-      "expected_route": "constraints",
-      "id": "A075",
-      "llm_query_plan": {
-        "constraints": [
-          {
-            "filter_family": "coc_country_match",
-            "parameters": {
-              "countries": [
-                "canada"
-              ],
-              "display_value": "Canadian CoC",
-              "operator": "contains_any",
-              "type": "coc_country_match",
-              "version": "v1"
-            },
-            "source_span": {
-              "end": 56,
-              "start": 44,
-              "text": "Canadian CoC"
-            }
-          }
-        ],
-        "needs_review": [],
-        "soft_signals": [],
-        "unapplied": [],
-        "version": "v1"
-      },
-      "prompt": "Request 075: Only show resumes that mention Canadian CoC"
-    },
-    {
-      "class": "A",
-      "deterministic_baseline": {
-        "parameters": {
-          "countries": [
-            "liberia"
-          ],
-          "display_value": "Liberian CoC",
-          "operator": "contains_any",
-          "type": "coc_country_match",
-          "version": "v1"
-        }
-      },
-      "expected_route": "constraints",
-      "id": "A076",
-      "llm_query_plan": {
-        "constraints": [
-          {
-            "filter_family": "coc_country_match",
-            "parameters": {
-              "countries": [
-                "liberia"
-              ],
-              "display_value": "Liberian CoC",
-              "operator": "contains_any",
-              "type": "coc_country_match",
-              "version": "v1"
-            },
-            "source_span": {
-              "end": 56,
-              "start": 44,
-              "text": "Liberian CoC"
-            }
-          }
-        ],
-        "needs_review": [],
-        "soft_signals": [],
-        "unapplied": [],
-        "version": "v1"
-      },
-      "prompt": "Request 076: Only show resumes that mention Liberian CoC"
-    },
-    {
-      "class": "A",
-      "deterministic_baseline": {
-        "parameters": {
-          "countries": [
-            "malta"
-          ],
-          "display_value": "Malta CoC",
+          "display_value": "US CoC",
           "operator": "contains_any",
           "type": "coc_country_match",
           "version": "v1"
@@ -3213,17 +3213,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "malta"
+                "usa"
               ],
-              "display_value": "Malta CoC",
+              "display_value": "US CoC",
               "operator": "contains_any",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 53,
-              "start": 44,
-              "text": "Malta CoC"
+              "end": 19,
+              "start": 13,
+              "text": "US CoC"
             }
           }
         ],
@@ -3232,7 +3232,7 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 077: Only show resumes that mention Malta CoC"
+      "prompt": "Request 077: US CoC required for this search"
     },
     {
       "class": "A",
@@ -6615,9 +6615,9 @@
       "human_label": {
         "parameters": {
           "countries": [
-            "uk"
+            "india"
           ],
-          "display_value": "competency certificate from the United Kingdom",
+          "display_value": "CoC in India",
           "operator": "contains_any",
           "type": "coc_country_match",
           "version": "v1"
@@ -6630,17 +6630,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "uk"
+                "india"
               ],
-              "display_value": "competency certificate from the United Kingdom",
+              "display_value": "CoC in India",
               "operator": "contains_any",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 78,
-              "start": 32,
-              "text": "competency certificate from the United Kingdom"
+              "end": 25,
+              "start": 13,
+              "text": "CoC in India"
             }
           }
         ],
@@ -6649,28 +6649,17 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 070: Filter should read competency certificate from the United Kingdom"
+      "prompt": "Request 070: CoC in India and available within 30 days"
     },
     {
       "class": "B",
-      "deterministic_baseline": {
-        "parameters": {
-          "countries": [
-            "uae"
-          ],
-          "display_value": "certificate of competency under UAE",
-          "operator": "contains_any",
-          "type": "coc_country_match",
-          "version": "v1"
-        }
-      },
       "expected_route": "constraints",
       "human_label": {
         "parameters": {
           "countries": [
-            "uae"
+            "usa"
           ],
-          "display_value": "certificate of competency under UAE",
+          "display_value": "certificate issued in the United States",
           "operator": "contains_any",
           "type": "coc_country_match",
           "version": "v1"
@@ -6683,17 +6672,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "uae"
+                "usa"
               ],
-              "display_value": "certificate of competency under UAE",
+              "display_value": "certificate issued in the United States",
               "operator": "contains_any",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 67,
-              "start": 32,
-              "text": "certificate of competency under UAE"
+              "end": 52,
+              "start": 13,
+              "text": "certificate issued in the United States"
             }
           }
         ],
@@ -6702,7 +6691,7 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 071: Filter should read certificate of competency under UAE"
+      "prompt": "Request 071: certificate issued in the United States and available from 1 Sep 2026"
     },
     {
       "class": "B",
@@ -6710,9 +6699,9 @@
       "human_label": {
         "parameters": {
           "countries": [
-            "south africa"
+            "philippines"
           ],
-          "display_value": "COC nationality South Africa",
+          "display_value": "CoC country Philippines",
           "operator": "contains_any",
           "type": "coc_country_match",
           "version": "v1"
@@ -6725,17 +6714,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "south africa"
+                "philippines"
               ],
-              "display_value": "COC nationality South Africa",
+              "display_value": "CoC country Philippines",
               "operator": "contains_any",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 60,
-              "start": 32,
-              "text": "COC nationality South Africa"
+              "end": 36,
+              "start": 13,
+              "text": "CoC country Philippines"
             }
           }
         ],
@@ -6744,7 +6733,7 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 072: Filter should read COC nationality South Africa"
+      "prompt": "Request 072: CoC country Philippines with vessel tonnage above 50000 GT"
     },
     {
       "class": "B",
@@ -6752,9 +6741,10 @@
       "human_label": {
         "parameters": {
           "countries": [
-            "netherlands"
+            "uk",
+            "uae"
           ],
-          "display_value": "CoC recognised as Dutch",
+          "display_value": "CoC from UK or UAE",
           "operator": "contains_any",
           "type": "coc_country_match",
           "version": "v1"
@@ -6767,17 +6757,18 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "netherlands"
+                "uk",
+                "uae"
               ],
-              "display_value": "CoC recognised as Dutch",
+              "display_value": "CoC from UK or UAE",
               "operator": "contains_any",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 55,
-              "start": 32,
-              "text": "CoC recognised as Dutch"
+              "end": 31,
+              "start": 13,
+              "text": "CoC from UK or UAE"
             }
           }
         ],
@@ -6786,7 +6777,7 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 073: Filter should read CoC recognised as Dutch"
+      "prompt": "Request 073: CoC from UK or UAE with vessel tonnage minimum 30000 DWT"
     },
     {
       "class": "B",
@@ -6794,9 +6785,9 @@
       "human_label": {
         "parameters": {
           "countries": [
-            "marshall islands"
+            "usa"
           ],
-          "display_value": "certificate country Marshall Islands",
+          "display_value": "CoC in the US",
           "operator": "contains_any",
           "type": "coc_country_match",
           "version": "v1"
@@ -6809,17 +6800,17 @@
             "filter_family": "coc_country_match",
             "parameters": {
               "countries": [
-                "marshall islands"
+                "usa"
               ],
-              "display_value": "certificate country Marshall Islands",
+              "display_value": "CoC in the US",
               "operator": "contains_any",
               "type": "coc_country_match",
               "version": "v1"
             },
             "source_span": {
-              "end": 68,
-              "start": 32,
-              "text": "certificate country Marshall Islands"
+              "end": 26,
+              "start": 13,
+              "text": "CoC in the US"
             }
           }
         ],
@@ -6828,7 +6819,7 @@
         "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 074: Filter should read certificate country Marshall Islands"
+      "prompt": "Request 074: CoC in the US"
     },
     {
       "class": "B",
@@ -7710,15 +7701,15 @@
           {
             "reason": "out of scope",
             "span": {
-              "end": 44,
+              "end": 56,
               "start": 33,
-              "text": "Indian crew"
+              "text": "Indian nationality only"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 025: Recruiter mentioned Indian crew"
+      "prompt": "Request 025: Recruiter mentioned Indian nationality only"
     },
     {
       "class": "C",
@@ -7732,15 +7723,15 @@
           {
             "reason": "out of scope",
             "span": {
-              "end": 50,
+              "end": 55,
               "start": 33,
-              "text": "work in Singapore"
+              "text": "Singapore joining port"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 026: Recruiter mentioned work in Singapore"
+      "prompt": "Request 026: Recruiter mentioned Singapore joining port"
     },
     {
       "class": "C",
@@ -7754,15 +7745,15 @@
           {
             "reason": "out of scope",
             "span": {
-              "end": 49,
+              "end": 51,
               "start": 33,
-              "text": "route via Panama"
+              "text": "Panama canal route"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 027: Recruiter mentioned route via Panama"
+      "prompt": "Request 027: Recruiter mentioned Panama canal route"
     },
     {
       "class": "C",
@@ -7776,15 +7767,15 @@
           {
             "reason": "out of scope",
             "span": {
-              "end": 40,
+              "end": 45,
               "start": 33,
-              "text": "US visa"
+              "text": "US C1-D visa"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 028: Recruiter mentioned US visa"
+      "prompt": "Request 028: Recruiter mentioned US C1-D visa"
     },
     {
       "class": "C",
@@ -7798,15 +7789,15 @@
           {
             "reason": "out of scope",
             "span": {
-              "end": 51,
+              "end": 55,
               "start": 33,
-              "text": "Liberia flag state"
+              "text": "Liberia flagged vessel"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 029: Recruiter mentioned Liberia flag state"
+      "prompt": "Request 029: Recruiter mentioned Liberia flagged vessel"
     },
     {
       "class": "C",
@@ -7820,115 +7811,103 @@
           {
             "reason": "no matching capability",
             "span": {
-              "end": 42,
+              "end": 45,
               "start": 33,
-              "text": "valid CoC"
+              "text": "CoC required"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 030: Recruiter mentioned valid CoC"
+      "prompt": "Request 030: Recruiter mentioned CoC required"
     },
     {
       "class": "C",
-      "expected_route": "needs_review",
+      "expected_route": "unapplied",
       "id": "C031",
       "llm_query_plan": {
         "constraints": [],
-        "needs_review": [
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
           {
-            "candidate_families": [
-              "coc_country_match"
-            ],
-            "reason": "issue authority country requires review",
+            "reason": "out of scope",
             "span": {
-              "end": 58,
+              "end": 46,
               "start": 33,
-              "text": "Panama Maritime Authority"
+              "text": "Schengen visa"
             }
           }
         ],
-        "soft_signals": [],
-        "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 031: Filter request says Panama Maritime Authority"
+      "prompt": "Request 031: Filter request says Schengen visa"
     },
     {
       "class": "C",
-      "expected_route": "needs_review",
+      "expected_route": "unapplied",
       "id": "C032",
       "llm_query_plan": {
         "constraints": [],
-        "needs_review": [
-          {
-            "candidate_families": [
-              "coc_country_match"
-            ],
-            "reason": "issue authority country requires review",
-            "span": {
-              "end": 66,
-              "start": 33,
-              "text": "Maritime and Coastguard Agency UK"
-            }
-          }
-        ],
+        "needs_review": [],
         "soft_signals": [],
-        "unapplied": [],
-        "version": "v1"
-      },
-      "prompt": "Request 032: Filter request says Maritime and Coastguard Agency UK"
-    },
-    {
-      "class": "C",
-      "expected_route": "needs_review",
-      "id": "C033",
-      "llm_query_plan": {
-        "constraints": [],
-        "needs_review": [
+        "unapplied": [
           {
-            "candidate_families": [
-              "coc_country_match"
-            ],
-            "reason": "issue authority country requires review",
+            "reason": "out of scope",
             "span": {
               "end": 51,
               "start": 33,
-              "text": "MARINA Philippines"
+              "text": "Australia MCV visa"
             }
           }
         ],
-        "soft_signals": [],
-        "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 033: Filter request says MARINA Philippines"
+      "prompt": "Request 032: Filter request says Australia MCV visa"
     },
     {
       "class": "C",
-      "expected_route": "needs_review",
-      "id": "C034",
+      "expected_route": "unapplied",
+      "id": "C033",
       "llm_query_plan": {
         "constraints": [],
-        "needs_review": [
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
           {
-            "candidate_families": [
-              "coc_country_match"
-            ],
-            "reason": "issue authority country requires review",
+            "reason": "out of scope",
             "span": {
-              "end": 50,
+              "end": 51,
               "start": 33,
-              "text": "DG Shipping India"
+              "text": "Bahamas flag state"
             }
           }
         ],
-        "soft_signals": [],
-        "unapplied": [],
         "version": "v1"
       },
-      "prompt": "Request 034: Filter request says DG Shipping India"
+      "prompt": "Request 033: Filter request says Bahamas flag state with vessel tonnage above 50000 GT"
+    },
+    {
+      "class": "C",
+      "expected_route": "unapplied",
+      "id": "C034",
+      "llm_query_plan": {
+        "constraints": [],
+        "needs_review": [],
+        "soft_signals": [],
+        "unapplied": [
+          {
+            "reason": "out of scope",
+            "span": {
+              "end": 52,
+              "start": 33,
+              "text": "route via Singapore"
+            }
+          }
+        ],
+        "version": "v1"
+      },
+      "prompt": "Request 034: Filter request says route via Singapore with vessel tonnage above 50000 GT"
     },
     {
       "class": "C",
@@ -7942,15 +7921,15 @@
           {
             "reason": "out of scope",
             "span": {
-              "end": 44,
+              "end": 48,
               "start": 33,
-              "text": "Indian crew"
+              "text": "Indian passport"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 035: Filter request says Indian crew"
+      "prompt": "Request 035: Filter request says Indian passport and available within 30 days"
     },
     {
       "class": "C",
@@ -7962,17 +7941,17 @@
         "soft_signals": [],
         "unapplied": [
           {
-            "reason": "out of scope",
+            "reason": "no matching capability",
             "span": {
-              "end": 50,
+              "end": 64,
               "start": 33,
-              "text": "work in Singapore"
+              "text": "valid certificate of competency"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 036: Filter request says work in Singapore"
+      "prompt": "Request 036: Filter request says valid certificate of competency and available within 30 days"
     },
     {
       "class": "C",
@@ -7988,13 +7967,13 @@
             "span": {
               "end": 49,
               "start": 33,
-              "text": "route via Panama"
+              "text": "joining from UAE"
             }
           }
         ],
         "version": "v1"
       },
-      "prompt": "Request 037: Filter request says route via Panama"
+      "prompt": "Request 037: Filter request says joining from UAE and available within 30 days"
     },
     {
       "class": "C",

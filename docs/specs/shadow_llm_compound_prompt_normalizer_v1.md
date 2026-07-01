@@ -905,9 +905,10 @@ Adds a `coc_country_match` provider prompt and a fixed 200-prompt fixture
 corpus at
 `docs/eval-evidence/coc-country-shadow-normalizer-corpus-2026-07-01.json`.
 The corpus distribution is Class A=80, Class B=80, Class C=40. Class A covers
-deterministic-covered country CoC phrasings. Class B covers human-labeled
-country-CoC phrasings the deterministic parser misses or partially narrows,
-with multi-country OR prompts included. Class C covers this closed list of
+deterministic-covered country CoC phrasings and strict single-country
+operator-selection fixtures. Class B covers human-labeled country-CoC phrasings
+the deterministic parser misses or partially narrows, with multi-country OR
+prompts included. Class C covers this closed list of
 adversarial or out-of-scope phrases: CoC issue-authority names,
 nationality-only mentions, work-location countries, route countries, visa
 countries, flag states, and document-gate-only CoC wording.
@@ -923,6 +924,14 @@ country IDs, routes issue-authority phrasing to `needs_review`, and prefers
 This PR adds fixture validation only. It does not invoke Gemini, adopt helper
 tools, add `coc_country_match` to `PROMOTED_FAMILIES`, add a dispatcher branch,
 change `/analyze` or `/analyze_stream`, change frontend behavior, add
+telemetry, add CSV columns, or add durable audit-event fields.
+
+### PR-15 — coc_country_match real Gemini JSON-only evidence
+
+Runs Gemini against the PR-14 corpus with `use_helper_tools=false` and stores
+the JSON-only evidence artifact. PR-15 is evidence-only: it does not add
+`coc_country_match` to `PROMOTED_FAMILIES`, adopt helper tools, add a dispatcher
+branch, change `/analyze` or `/analyze_stream`, change frontend behavior, add
 telemetry, add CSV columns, or add durable audit-event fields.
 
 ### PR-N — next family
