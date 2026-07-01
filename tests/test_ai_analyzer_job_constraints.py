@@ -342,6 +342,150 @@ class AIAnalyzerJobConstraintTests(unittest.TestCase):
         )
         self.assertTrue(constraints["llm_normalizer_audit"]["availability"]["dispatched"])
 
+    def test_live_compound_normalizer_dispatches_availability_and_vessel_tonnage(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT"
+        availability_phrase = "available immediately"
+        tonnage_phrase = "vessels above 50000 GT"
+        availability_start = prompt.index(availability_phrase)
+        tonnage_start = prompt.index(tonnage_phrase)
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output="{}",
+            parsed_payload={
+                "version": "v1",
+                "constraints": [
+                    {
+                        "filter_family": "availability",
+                        "parameters": {
+                            "version": "v1",
+                            "value_type": "status",
+                            "status": "immediate",
+                            "available_by_date": None,
+                            "available_from_date": None,
+                            "available_until_date": None,
+                            "relative_days": None,
+                            "resolved_reference_date": "2026-06-30",
+                            "display_value": availability_phrase,
+                        },
+                        "source_span": {
+                            "text": availability_phrase,
+                            "start": availability_start,
+                            "end": availability_start + len(availability_phrase),
+                        },
+                    },
+                    {
+                        "filter_family": "vessel_tonnage",
+                        "parameters": {
+                            "version": "v1",
+                            "value_type": "minimum",
+                            "min_value": 50000,
+                            "max_value": None,
+                            "unit": "gt_grt",
+                            "years_back": None,
+                            "display_value": tonnage_phrase,
+                        },
+                        "source_span": {
+                            "text": tonnage_phrase,
+                            "start": tonnage_start,
+                            "end": tonnage_start + len(tonnage_phrase),
+                        },
+                    },
+                ],
+                "soft_signals": [],
+                "unapplied": [],
+                "needs_review": [],
+            },
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints = self.analyzer._extract_job_constraints(
+                prompt,
+                rank=self.rank,
+                llm_normalizer_provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(
+            constraints["hard_constraints"]["availability"],
+            {
+                "value_type": "status",
+                "display_value": availability_phrase,
+                "resolved_reference_date": "2026-06-30",
+                "status": "immediately",
+            },
+        )
+        self.assertEqual(
+            constraints["hard_constraints"]["vessel_tonnage"],
+            {
+                "min_value": 50000,
+                "max_value": None,
+                "unit": "gt_grt",
+            },
+        )
+        self.assertEqual(constraints["applied_constraints"].count("availability"), 1)
+        self.assertEqual(constraints["applied_constraints"].count("vessel_tonnage"), 1)
+        self.assertTrue(constraints["llm_normalizer_audit"]["availability"]["dispatched"])
+        self.assertTrue(constraints["llm_normalizer_audit"]["vessel_tonnage"]["dispatched"])
+
+    def test_live_compound_normalizer_keeps_deterministic_tonnage_when_provider_only_sees_availability(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT"
+        availability_phrase = "available immediately"
+        availability_start = prompt.index(availability_phrase)
+        provider = Mock(return_value=AvailabilityNormalizerProviderResult(
+            model_id="fake-model",
+            prompt_template_version="test-template",
+            raw_llm_output="{}",
+            parsed_payload={
+                "version": "v1",
+                "constraints": [{
+                    "filter_family": "availability",
+                    "parameters": {
+                        "version": "v1",
+                        "value_type": "status",
+                        "status": "immediate",
+                        "available_by_date": None,
+                        "available_from_date": None,
+                        "available_until_date": None,
+                        "relative_days": None,
+                        "resolved_reference_date": "2026-06-30",
+                        "display_value": availability_phrase,
+                    },
+                    "source_span": {
+                        "text": availability_phrase,
+                        "start": availability_start,
+                        "end": availability_start + len(availability_phrase),
+                    },
+                }],
+                "soft_signals": [],
+                "unapplied": [],
+                "needs_review": [],
+            },
+        ))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints = self.analyzer._extract_job_constraints(
+                prompt,
+                rank=self.rank,
+                llm_normalizer_provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertTrue(constraints["llm_normalizer_audit"]["availability"]["family_seen"])
+        self.assertFalse(constraints["llm_normalizer_audit"]["vessel_tonnage"]["family_seen"])
+        self.assertTrue(constraints["llm_normalizer_audit"]["availability"]["dispatched"])
+        self.assertFalse(constraints["llm_normalizer_audit"]["vessel_tonnage"]["dispatched"])
+        self.assertEqual(
+            constraints["hard_constraints"]["vessel_tonnage"],
+            {
+                "min_value": 50000,
+                "max_value": None,
+                "unit": "gt_grt",
+                "display_value": "above 50000 GT",
+            },
+        )
+        self.assertEqual(constraints["applied_constraints"].count("vessel_tonnage"), 1)
+
     def test_shadow_compound_normalizer_availability_does_not_dispatch(self):
         provider = Mock(return_value=AvailabilityNormalizerProviderResult(
             model_id="fake-model",

@@ -258,10 +258,10 @@ CAPABILITY_REGISTRY: dict[str, Evaluator] = {
 ### Promoted families
 
 ```python
-PROMOTED_FAMILIES: set[str] = {"availability"}  # populated by promotion PRs
+PROMOTED_FAMILIES: set[str] = {"availability", "vessel_tonnage"}  # populated by promotion PRs
 ```
 
-`PROMOTED_FAMILIES` is the closed subset of `CAPABILITY_REGISTRY` whose constraints are dispatched in live mode. PR-2 ships with `PROMOTED_FAMILIES = set()` and the catalog already populated. The `availability` promotion PR adds the first family to this set after its 200-prompt evidence gate and deterministic enforcement coverage gate pass. Promotion PRs add family IDs to this set; no other PR is allowed to modify it. Startup verifies `PROMOTED_FAMILIES <= CAPABILITY_REGISTRY.keys()`.
+`PROMOTED_FAMILIES` is the closed subset of `CAPABILITY_REGISTRY` whose constraints are dispatched in live mode. PR-2 ships with `PROMOTED_FAMILIES = set()` and the catalog already populated. The `availability` promotion PR adds the first family to this set after its 200-prompt evidence gate and deterministic enforcement coverage gate pass. The `vessel_tonnage` promotion PR adds the second family after its passing JSON-only evidence artifact and deterministic enforcement coverage gate pass. Promotion PRs add family IDs to this set; no other PR is allowed to modify it. Startup verifies `PROMOTED_FAMILIES <= CAPABILITY_REGISTRY.keys()`.
 
 ### Dispatch loop
 
@@ -651,6 +651,14 @@ The `availability` promotion cites these deterministic enforcement tests:
 - `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_deterministic_mode_does_not_invoke_provider_or_dispatch`, `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_shadow_mode_invokes_provider_but_does_not_dispatch`, and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_dispatches_valid_promoted_availability_constraint` for `promoted_family_dispatch_gate`.
 - `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_needs_review_suppresses_deterministic_availability_fallback` for Class C unsafe-widening suppression after a validator-accepted `needs_review` plan.
 
+The `vessel_tonnage` promotion cites these deterministic enforcement tests:
+
+- `tests/test_availability_normalizer_evidence.py::AvailabilityNormalizerEvidenceTests::test_query_plan_fixture_rejects_bad_span` for `source_span_exact_replay`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_vessel_tonnage_schema_accepts_all_value_types` and `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_vessel_tonnage_schema_rejects_inactive_and_invalid_fields` for `catalog_parameter_validator`.
+- `tests/test_filter_capability_catalog.py::FilterCapabilityCatalogTests::test_vessel_tonnage_schema_accepts_all_value_types` for `plausibility_bounds_checker` boundary acceptance.
+- `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_deterministic_mode_does_not_dispatch_any_promoted_family`, `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_shadow_mode_invokes_provider_but_dispatches_no_promoted_families`, and `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_dispatches_availability_and_vessel_tonnage_independently` for `promoted_family_dispatch_gate`.
+- `tests/test_compound_prompt_normalizer_runtime.py::CompoundPromptNormalizerRuntimeTests::test_live_mode_marks_only_families_seen_in_provider_payload` and `tests/test_ai_analyzer_job_constraints.py::AIAnalyzerJobConstraintTests::test_live_compound_normalizer_keeps_deterministic_tonnage_when_provider_only_sees_availability` for family-scoped live fallback suppression.
+
 ## Rollout slices
 
 The migration follows the same per-PR discipline as `coc_country_alias_migration_v1.md`.
@@ -783,6 +791,38 @@ not add `vessel_tonnage` to `PROMOTED_FAMILIES`, adopt helper tools, add a
 dispatcher branch, change `/analyze` or `/analyze_stream`, change frontend
 behavior, add telemetry, add CSV columns, or add durable audit-event fields.
 
+### PR-10 — vessel_tonnage live promotion
+
+Adds `"vessel_tonnage"` to `PROMOTED_FAMILIES`. `PROMOTED_FAMILIES` becomes
+`{"availability", "vessel_tonnage"}`. Live mode dispatches both promoted
+families through the generic compound-normalizer runtime. The runtime invokes
+one provider per promoted family on the default path and also accepts an
+injected provider that returns a combined `query_plan.v1` payload for tests and
+future provider adapters.
+
+The analyzer records `llm_normalizer_audit` per promoted family when the
+provider is invoked. Deterministic fallback suppression is family-scoped:
+a validator-accepted payload suppresses a deterministic parser only for a
+family that appears in `constraints[].filter_family` or
+`needs_review[].candidate_families`. An accepted availability-only payload does
+not suppress deterministic vessel-tonnage parsing, and an accepted
+vessel-tonnage-only payload does not suppress deterministic availability
+parsing.
+
+The PR-10 evidence artifact is
+`docs/eval-evidence/vessel-tonnage-normalizer-json-only-prompt-fix-llm-evidence-2026-06-30.json`:
+200 prompts with class distribution A=80, B=80, C=40; schema-valid rate 1.0;
+unsafe widening count 0; Class A match rate 1.0; Class B correct rate 0.7875
+with deterministic baseline 0.0 and recall lift 0.7875; Class C safe-route
+rate 1.0; reviewed false-positive rate 0.0; promotion gate `passes=true`.
+The PR-10 promotion does not adopt helper tools for `vessel_tonnage`.
+
+The PR-10 scope guard is: no frontend change, no `/analyze` or
+`/analyze_stream` payload-shape change, no request-fingerprint change, no
+recovery-draft change, no existing hard-filter audit CSV column change, no
+telemetry field change, no durable audit-event field change, no helper-tool
+adoption, and no evidence-artifact rewrite.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
@@ -825,4 +865,4 @@ This spec follows the discipline established by `coc_country_alias_migration_v1.
 
 ## Summary
 
-The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 live dispatch ships with one promoted family (`availability`); additional catalog-declared families enter live dispatch only through their own per-family promotion PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.
+The shadow LLM compound-prompt normalizer emits a four-channel `query_plan.v1` JSON with offset-tagged spans. A closed capability catalog gives the LLM rails; provider-scoped helper tools improve span, date, parameter, and conflict exactness when a family uses them; a validator rejects malformed output; a canonicalizer normalizes and detects conflicts; a sanity checker enforces per-family plausibility bounds; a `CAPABILITY_REGISTRY` of all catalog-declared families is loaded at startup, and a separate `PROMOTED_FAMILIES` subset controls which families are dispatched in live mode. The LLM never sees Python function names, executor IDs, or evaluator/search tools. A tri-state `NJORDHR_LLM_NORMALIZER_MODE` env var (`deterministic` / `shadow` / `live`) controls runtime behavior and serves as the rollback path. Per-family promotion from shadow to live is gated by a three-class evidence ledger (deterministic-covered, deterministic-missed, adversarial), explicit metric thresholds, deterministic enforcement coverage across validator, canonicalizer, sanity checker, and dispatcher, and helper-tool coverage whenever helper tools are used. v1 live dispatch currently has two promoted families (`availability` and `vessel_tonnage`); additional catalog-declared families enter live dispatch only through their own per-family promotion PRs following the rollout above. LangGraph and agentic orchestration are out of scope; LangChain is permitted only behind a provider adapter scoped to the LLM call and must not leak into validation, canonicalization, sanity checking, dispatch, or evaluator logic.

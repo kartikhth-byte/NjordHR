@@ -53,7 +53,7 @@ from query_understanding.hard_filter_catalog import (
     canonical_engine_family_values,
 )
 from query_understanding.compound_prompt_normalizer_runtime import (
-    promoted_availability_constraint_from_prompt,
+    promoted_constraints_from_prompt,
 )
 
 _PROMOTION_STAGE_FAMILIES = [
@@ -4865,7 +4865,29 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["rank_duration_experience"] = rank_duration_experience_constraint
             constraints["applied_constraints"].append("rank_duration_experience")
 
-        vessel_tonnage_constraint = self._extract_vessel_tonnage_constraint(user_prompt)
+        llm_normalizer_constraints, llm_normalizer_diagnostics = promoted_constraints_from_prompt(
+            user_prompt,
+            provider=llm_normalizer_provider,
+            api_key=getattr(getattr(self, "config", None), "gemini_api_key", None),
+        )
+        for family, diagnostics in (llm_normalizer_diagnostics or {}).items():
+            if isinstance(diagnostics, dict) and diagnostics.get("provider_invoked"):
+                constraints.setdefault("llm_normalizer_audit", {})[family] = diagnostics
+
+        vessel_tonnage_constraint = (
+            llm_normalizer_constraints.get("vessel_tonnage")
+            if isinstance(llm_normalizer_constraints, dict)
+            else None
+        )
+        vessel_tonnage_live_authoritative = (
+            isinstance(llm_normalizer_diagnostics, dict)
+            and isinstance(llm_normalizer_diagnostics.get("vessel_tonnage"), dict)
+            and llm_normalizer_diagnostics["vessel_tonnage"].get("mode") == "live"
+            and llm_normalizer_diagnostics["vessel_tonnage"].get("validator_result") == "accepted"
+            and llm_normalizer_diagnostics["vessel_tonnage"].get("family_seen") is True
+        )
+        if not vessel_tonnage_constraint and not vessel_tonnage_live_authoritative:
+            vessel_tonnage_constraint = self._extract_vessel_tonnage_constraint(user_prompt)
         if vessel_tonnage_constraint:
             constraints["hard_constraints"]["vessel_tonnage"] = vessel_tonnage_constraint
             constraints["applied_constraints"].append("vessel_tonnage")
@@ -4899,16 +4921,20 @@ class AIResumeAnalyzer:
             constraints["hard_constraints"]["vessel_type"] = vessel_type_constraint
             constraints["unapplied_constraints"].append("vessel_type")
 
-        availability_constraint, availability_normalizer_diagnostics = promoted_availability_constraint_from_prompt(
-            user_prompt,
-            provider=llm_normalizer_provider,
-            api_key=getattr(getattr(self, "config", None), "gemini_api_key", None),
+        availability_constraint = (
+            llm_normalizer_constraints.get("availability")
+            if isinstance(llm_normalizer_constraints, dict)
+            else None
         )
-        if availability_normalizer_diagnostics.get("provider_invoked"):
-            constraints.setdefault("llm_normalizer_audit", {})["availability"] = availability_normalizer_diagnostics
+        availability_normalizer_diagnostics = (
+            llm_normalizer_diagnostics.get("availability")
+            if isinstance(llm_normalizer_diagnostics, dict)
+            else {}
+        )
         availability_live_authoritative = (
             availability_normalizer_diagnostics.get("mode") == "live"
             and availability_normalizer_diagnostics.get("validator_result") == "accepted"
+            and availability_normalizer_diagnostics.get("family_seen") is True
         )
         if not availability_constraint and not availability_live_authoritative:
             availability_constraint = self._extract_availability_constraint(user_prompt)

@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 from candidate_facts.aliases.filter_capability_catalog import PROMOTED_FAMILIES
 from query_understanding.compound_prompt_normalizer_provider import AvailabilityNormalizerProviderResult
 from query_understanding.compound_prompt_normalizer_runtime import (
+    promoted_constraints_from_prompt,
     promoted_availability_constraint_from_prompt,
 )
 
@@ -67,9 +68,47 @@ def _availability_payload(prompt, phrase="available immediately"):
     }
 
 
+def _vessel_tonnage_constraint(prompt, phrase="vessels above 50000 GT"):
+    start = prompt.index(phrase)
+    return {
+        "filter_family": "vessel_tonnage",
+        "parameters": {
+            "version": "v1",
+            "value_type": "minimum",
+            "min_value": 50000,
+            "max_value": None,
+            "unit": "gt_grt",
+            "years_back": None,
+            "display_value": phrase,
+        },
+        "source_span": {
+            "text": phrase,
+            "start": start,
+            "end": start + len(phrase),
+        },
+    }
+
+
+def _availability_constraint(prompt, phrase="available immediately"):
+    return _availability_payload(prompt, phrase=phrase)["constraints"][0]
+
+
+def _combined_payload(prompt):
+    return {
+        "version": "v1",
+        "constraints": [
+            _availability_constraint(prompt),
+            _vessel_tonnage_constraint(prompt),
+        ],
+        "soft_signals": [],
+        "unapplied": [],
+        "needs_review": [],
+    }
+
+
 class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
-    def test_availability_is_promoted_family(self):
-        self.assertEqual(PROMOTED_FAMILIES, {"availability"})
+    def test_promoted_families_include_availability_and_vessel_tonnage(self):
+        self.assertEqual(PROMOTED_FAMILIES, {"availability", "vessel_tonnage"})
 
     def test_deterministic_mode_does_not_invoke_provider_or_dispatch(self):
         provider = Mock()
@@ -84,6 +123,21 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertIsNone(constraint)
         self.assertFalse(diagnostics["provider_invoked"])
         self.assertFalse(diagnostics["dispatched"])
+
+    def test_deterministic_mode_does_not_dispatch_any_promoted_family(self):
+        provider = Mock()
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "deterministic"}, clear=False):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                "Need crew available immediately with vessels above 50000 GT",
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_not_called()
+        self.assertEqual(constraints, {})
+        self.assertEqual(set(diagnostics), {"availability", "vessel_tonnage"})
+        self.assertFalse(diagnostics["availability"]["dispatched"])
+        self.assertFalse(diagnostics["vessel_tonnage"]["dispatched"])
 
     def test_unknown_mode_falls_back_to_deterministic_without_provider_call(self):
         provider = Mock()
@@ -117,6 +171,24 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertFalse(diagnostics["dispatched"])
         self.assertEqual(diagnostics["validator_result"], "accepted")
 
+    def test_shadow_mode_invokes_provider_but_dispatches_no_promoted_families(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT"
+        provider = Mock(return_value=_provider_result(_combined_payload(prompt)))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "shadow"}, clear=False):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(constraints, {})
+        self.assertFalse(diagnostics["availability"]["dispatched"])
+        self.assertFalse(diagnostics["vessel_tonnage"]["dispatched"])
+        self.assertEqual(diagnostics["availability"]["validator_result"], "accepted")
+        self.assertEqual(diagnostics["vessel_tonnage"]["validator_result"], "accepted")
+
     def test_live_mode_dispatches_valid_promoted_availability_constraint(self):
         prompt = "Need crew available immediately"
         provider = Mock(return_value=_provider_result(_availability_payload(prompt)))
@@ -141,6 +213,58 @@ class CompoundPromptNormalizerRuntimeTests(unittest.TestCase):
         self.assertTrue(diagnostics["provider_invoked"])
         self.assertTrue(diagnostics["dispatched"])
         self.assertEqual(diagnostics["validator_result"], "accepted")
+
+    def test_live_mode_dispatches_availability_and_vessel_tonnage_independently(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT"
+        provider = Mock(return_value=_provider_result(_combined_payload(prompt)))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(
+            constraints["availability"],
+            {
+                "value_type": "status",
+                "display_value": "available immediately",
+                "resolved_reference_date": "2026-06-30",
+                "status": "immediately",
+            },
+        )
+        self.assertEqual(
+            constraints["vessel_tonnage"],
+            {
+                "min_value": 50000,
+                "max_value": None,
+                "unit": "gt_grt",
+            },
+        )
+        self.assertTrue(diagnostics["availability"]["dispatched"])
+        self.assertTrue(diagnostics["vessel_tonnage"]["dispatched"])
+        self.assertEqual(diagnostics["availability"]["validator_result"], "accepted")
+        self.assertEqual(diagnostics["vessel_tonnage"]["validator_result"], "accepted")
+
+    def test_live_mode_marks_only_families_seen_in_provider_payload(self):
+        prompt = "Need crew available immediately with vessels above 50000 GT"
+        provider = Mock(return_value=_provider_result(_availability_payload(prompt)))
+
+        with patch.dict("os.environ", {"NJORDHR_LLM_NORMALIZER_MODE": "live"}, clear=False):
+            constraints, diagnostics = promoted_constraints_from_prompt(
+                prompt,
+                reference_date="2026-06-30",
+                provider=provider,
+            )
+
+        provider.assert_called_once()
+        self.assertEqual(set(constraints), {"availability"})
+        self.assertTrue(diagnostics["availability"]["family_seen"])
+        self.assertFalse(diagnostics["vessel_tonnage"]["family_seen"])
+        self.assertFalse(diagnostics["vessel_tonnage"]["dispatched"])
+        self.assertEqual(diagnostics["vessel_tonnage"]["validator_result"], "accepted")
 
     def test_live_mode_preserves_helper_tool_diagnostics(self):
         prompt = "Need crew available immediately"

@@ -18,6 +18,7 @@ from typing import Any, Mapping
 
 from candidate_facts.aliases.filter_capability_catalog import (
     FilterCapabilityCatalog,
+    PROMOTED_FAMILIES,
     load_filter_capability_catalog,
     validate_catalog_parameters,
 )
@@ -765,7 +766,7 @@ def _evaluate_family_payloads(
         "mode": mode,
         "llm_invoked": llm_invoked,
         "live_dispatch": False,
-        "promoted_family": False,
+        "promoted_family": family in PROMOTED_FAMILIES,
         "summary": {
             "total_cases": total,
             "class_counts": class_counts,
