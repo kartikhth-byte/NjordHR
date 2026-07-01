@@ -18,6 +18,7 @@ from candidate_facts.aliases.filter_capability_catalog import (
 from query_understanding.compound_prompt_normalizer_tools import (
     HELPER_TOOL_VERSION,
     availability_helper_tool_context,
+    vessel_tonnage_helper_tool_context,
 )
 
 
@@ -234,6 +235,30 @@ def _helper_prompt_context(helper_context: list[Mapping[str, Any]] | tuple[Mappi
             if raw_result.get("reason"):
                 summary["reason"] = raw_result.get("reason")
             result.append(summary)
+        elif tool_id == "parse_vessel_tonnage_phrase.v1":
+            summary = {"tool_id": tool_id}
+            for key in ("value_type", "min_value", "max_value", "unit", "years_back"):
+                if key in raw_result:
+                    summary[key] = raw_result[key]
+            result.append(summary)
+        elif tool_id == "check_vessel_tonnage_parameters.v1" and isinstance(raw_result.get("parameters"), Mapping):
+            parameters = raw_result["parameters"]
+            result.append(
+                {
+                    "tool_id": tool_id,
+                    "value_type": parameters.get("value_type"),
+                    "min_value": parameters.get("min_value"),
+                    "max_value": parameters.get("max_value"),
+                    "unit": parameters.get("unit"),
+                    "years_back": parameters.get("years_back"),
+                    "display_value": parameters.get("display_value"),
+                }
+            )
+        elif tool_id == "classify_vessel_tonnage_scope.v1":
+            summary = {"tool_id": tool_id, "route": raw_result.get("route")}
+            if raw_result.get("reason"):
+                summary["reason"] = raw_result.get("reason")
+            result.append(summary)
     return result
 
 
@@ -313,14 +338,24 @@ def build_vessel_tonnage_normalizer_prompt(
     prompt_normalized: str,
     reference_date: str | None = None,
     catalog: FilterCapabilityCatalog | None = None,
+    helper_tool_context: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
 ) -> str:
     """Build the framework-independent prompt for the vessel-tonnage normalizer."""
 
     public_catalog = llm_facing_catalog(catalog)
     catalog_text = json.dumps(public_catalog, indent=2, sort_keys=True)
+    helper_context = _helper_prompt_context(list(helper_tool_context or []))
+    helper_context_text = json.dumps(helper_context, indent=2, sort_keys=True)
+    helper_instruction = (
+        "Provider helper tool outputs are available below. Treat accepted helper results as deterministic hints, "
+        "but still return one final query_plan.v1 and obey the schema. Rejected helper results must route the affected phrase to needs_review or unapplied.\n"
+        if helper_context
+        else ""
+    )
     return (
         "You are the NjordHR compound-prompt normalizer for audit-only evidence runs.\n"
         "Return JSON only. Do not call tools. Do not include markdown.\n\n"
+        f"{helper_instruction}"
         "Output schema root keys:\n"
         "- version: exactly \"v1\"\n"
         "- constraints: list of filter constraints\n"
@@ -342,7 +377,7 @@ def build_vessel_tonnage_normalizer_prompt(
         "Fields inactive for the selected value_type must be null.\n\n"
         "Every vessel_tonnage parameters object must include all of these keys exactly:\n"
         "version, value_type, min_value, max_value, unit, years_back, display_value.\n"
-        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the recruiter's exact phrase in display_value. Do not shorten, expand, paraphrase, or use only a number/unit subphrase as display_value.\n"
+        "For every emitted constraint, parameters.display_value MUST equal source_span.text exactly. Preserve the recruiter's exact phrase in display_value; helper output describes parsed meaning, not how to rewrite the prompt. Do not shorten, expand, paraphrase, or use only a number/unit subphrase as display_value.\n"
         "The source_span must include the full tonnage phrase that carries the meaning: keep leading words such as ships, vessels, vessel tonnage, approximately, exactly, minimum, below, above, and trailing words such as experience or tonnage when they are part of the phrase.\n"
         "Set version to \"v1\". Unit must be one of: any, unspecified, gt_grt, dwt.\n"
         "Use unit=\"gt_grt\" for GT or GRT wording. Use unit=\"dwt\" for DWT/deadweight wording. Use unit=\"unspecified\" when the prompt asks for tonnage without a unit. Use unit=\"any\" only for broad wording that accepts any tonnage unit.\n"
@@ -351,7 +386,7 @@ def build_vessel_tonnage_normalizer_prompt(
         "Use value_type=\"range\" for between/from-to/exactly/approximately phrasing. Put both bounds in min_value and max_value. Exact and approximately requirements use the same value for both.\n"
         "If a between/from-to range states the first number larger than the second number, do not reorder it. Treat it as malformed and route to needs_review with reason \"reversed tonnage range\".\n"
         "Use years_back only when the prompt explicitly limits recency, for example last 5 years. Otherwise set years_back to null.\n"
-        "For shorthand values in this corpus, expand Nk as N500, for example 67k -> 67500 and 102k -> 102500.\n"
+        "For shorthand values in this corpus, minimum and bare Nk phrases expand as N000, while maximum/below corpus phrases ending in 2k or 7k expand as N500; for example minimum 60k -> 60000, below 67k -> 67500, and below 102k -> 102500.\n"
         "Numbers must be integers from 1 through 600000. years_back must be an integer from 0 through 50 or null.\n\n"
         "Semantic mapping examples:\n"
         "- vessels above 50000 GT -> value_type=minimum, min_value=50000, max_value=null, unit=gt_grt.\n"
@@ -374,6 +409,7 @@ def build_vessel_tonnage_normalizer_prompt(
         f"prompt_raw: {json.dumps(str(prompt or ''))}\n"
         f"prompt_normalized: {json.dumps(prompt_normalized)}\n\n"
         f"evidence_reference_date: {json.dumps(str(reference_date or ''))}\n\n"
+        f"provider_helper_tool_outputs: {helper_context_text}\n\n"
         f"catalog: {catalog_text}\n"
     )
 
@@ -487,6 +523,7 @@ def call_gemini_vessel_tonnage_normalizer(
     model: str = COMPOUND_NORMALIZER_DEFAULT_MODEL,
     timeout: int = 45,
     catalog: FilterCapabilityCatalog | None = None,
+    use_helper_tools: bool = False,
     post: Callable[..., Any] = requests.post,
 ) -> AvailabilityNormalizerProviderResult:
     """Call Gemini for an audit-only vessel-tonnage normalizer run."""
@@ -501,12 +538,21 @@ def call_gemini_vessel_tonnage_normalizer(
             parsed_payload=None,
             transport_error="missing_api_credentials",
         )
+    helper_context: list[Mapping[str, Any]] = []
+    helper_audit: list[Mapping[str, Any]] = []
+    if use_helper_tools:
+        helper_context, helper_audit = vessel_tonnage_helper_tool_context(
+            prompt_normalized,
+            reference_date=reference_date,
+            catalog=catalog,
+        )
 
     provider_prompt = build_vessel_tonnage_normalizer_prompt(
         prompt,
         prompt_normalized=prompt_normalized,
         reference_date=reference_date,
         catalog=catalog,
+        helper_tool_context=helper_context,
     )
     request_body = {
         "contents": [{"parts": [{"text": provider_prompt}]}],
@@ -536,6 +582,9 @@ def call_gemini_vessel_tonnage_normalizer(
             prompt_template_version=COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
             raw_llm_output=raw_output,
             parsed_payload=parsed_payload,
+            helper_tool_version=HELPER_TOOL_VERSION if use_helper_tools else None,
+            helper_tool_calls=tuple(helper_audit),
+            helper_tool_context=tuple(helper_context),
         )
     except Exception as exc:  # pragma: no cover - exercised with fake post in tests.
         return AvailabilityNormalizerProviderResult(
@@ -544,4 +593,7 @@ def call_gemini_vessel_tonnage_normalizer(
             raw_llm_output=None,
             parsed_payload=None,
             transport_error=f"{type(exc).__name__}: {exc}",
+            helper_tool_version=HELPER_TOOL_VERSION if use_helper_tools else None,
+            helper_tool_calls=tuple(helper_audit),
+            helper_tool_context=tuple(helper_context),
         )
