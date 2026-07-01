@@ -1055,6 +1055,36 @@ PR-18 does not change live runtime dispatch. It does not change
 behavior, request fingerprints, recovery, CSV columns, telemetry fields,
 durable audit-event fields, helper-tool adoption, or any family promotion state.
 
+### PR-19 — N=3 real dispatch strategy evidence
+
+Adds real Gemini evidence artifacts for the same N=3 promoted-family corpus:
+
+- `docs/eval-evidence/compound-dispatch-strategy-n3-sequential-llm-evidence-2026-07-01.json`
+- `docs/eval-evidence/compound-dispatch-strategy-n3-parallel-llm-evidence-2026-07-01.json`
+- `docs/eval-evidence/compound-dispatch-strategy-n3-unified-llm-evidence-2026-07-01.json`
+
+The sequential run records p50 total elapsed 5253.459ms, schema-valid rate
+0.68, unsafe widening count 0, constraint-family match rate 1.0, and
+review-family match rate 1.0.
+
+The parallel run records p50 total elapsed 2038.629ms, schema-valid rate 0.68,
+unsafe widening count 0, constraint-family match rate 1.0, and
+review-family match rate 1.0. Parallel clears the latency bar against
+sequential with a 3214.83ms p50 reduction and 61.2% relative reduction, but it
+does not clear the schema-valid gate.
+
+The unified run records p50 total elapsed 2034.953ms, schema-valid rate 0.12,
+unsafe widening count 1, constraint-family match rate 0.92, and
+review-family match rate 1.0. Unified does not clear the schema-valid gate,
+the unsafe-widening gate, the constraint-family match gate, or the latency bar
+against parallel.
+
+PR-19 does not change live runtime dispatch. Sequential live dispatch remains
+the production strategy. The next dispatch-strategy PR must repair the
+availability cross-family parameter-shape failures and rerun evidence before
+switching live dispatch to parallel. Unified dispatch remains rejected for the
+current N=3 family set.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.

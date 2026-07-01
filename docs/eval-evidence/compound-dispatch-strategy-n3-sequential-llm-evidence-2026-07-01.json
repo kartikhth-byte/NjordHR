@@ -1,0 +1,930 @@
+{
+  "adoption_thresholds": {
+    "constraint_family_match_rate_min": 1.0,
+    "latency_reduction_min_absolute_ms": 200,
+    "latency_reduction_min_relative": 0.3,
+    "latency_reduction_rule": "p50 total elapsed reduction must be >= 30% or >= 200ms absolute, whichever threshold is smaller",
+    "parallel_latency_should_improve_against_sequential": true,
+    "review_family_match_rate_min": 1.0,
+    "schema_valid_rate_min": 0.99,
+    "unified_must_not_regress_against_parallel": true
+  },
+  "case_results": [
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "all_three",
+      "constraint_family_match": true,
+      "elapsed_ms": 6202.24,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-001",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 2697.388,
+        "coc_country_match": 1466.025,
+        "vessel_tonnage": 2038.754
+      },
+      "prompt_hash": "e6709dd543432a974ea18b539b1a7d0c6e497651f891ee18fb071baf4ca0772a",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[2].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "availability_tonnage",
+      "constraint_family_match": true,
+      "elapsed_ms": 4977.584,
+      "expected_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-002",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1771.198,
+        "coc_country_match": 1451.974,
+        "vessel_tonnage": 1754.337
+      },
+      "prompt_hash": "3f91613180d8c77b2b306658ea9dc4321e05997be51db25308f20e5b016ffb2f",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match"
+      ],
+      "actual_review_families": [],
+      "class": "availability_coc",
+      "constraint_family_match": true,
+      "elapsed_ms": 4804.545,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match"
+      ],
+      "expected_review_families": [],
+      "id": "N3-003",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1657.753,
+        "coc_country_match": 1687.271,
+        "vessel_tonnage": 1459.429
+      },
+      "prompt_hash": "69eb74660243755fa720f56942e151885576c27fbe06be881561e5124b8645dd",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: max_value, min_value, unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "tonnage_coc",
+      "constraint_family_match": true,
+      "elapsed_ms": 5494.988,
+      "expected_constraint_families": [
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-004",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1960.354,
+        "coc_country_match": 1752.601,
+        "vessel_tonnage": 1781.944
+      },
+      "prompt_hash": "64722853ce245d173bc6a557b2af231cf83b0426677d754252170e504d475298",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed",
+        "query_plan.unapplied[2].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [
+        "coc_country_match"
+      ],
+      "class": "all_three_review",
+      "constraint_family_match": true,
+      "elapsed_ms": 7031.222,
+      "expected_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [
+        "coc_country_match"
+      ],
+      "id": "N3-005",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 2364.895,
+        "coc_country_match": 1521.287,
+        "vessel_tonnage": 3144.959
+      },
+      "prompt_hash": "fb84912bfa40fa0b98ab157a1b75ce685324b2d0c1b4d09d920a8d29bb89885d",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "all_three_multi_country",
+      "constraint_family_match": true,
+      "elapsed_ms": 5537.545,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-006",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1755.001,
+        "coc_country_match": 2076.173,
+        "vessel_tonnage": 1706.345
+      },
+      "prompt_hash": "cd7cacca447206151b0e5b9772f642ba5f43f44f31cf84deb1dd6242ae5b46a5",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[2].source_span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability"
+      ],
+      "actual_review_families": [],
+      "class": "availability_only",
+      "constraint_family_match": true,
+      "elapsed_ms": 4931.329,
+      "expected_constraint_families": [
+        "availability"
+      ],
+      "expected_review_families": [],
+      "id": "N3-007",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1654.034,
+        "coc_country_match": 1575.18,
+        "vessel_tonnage": 1702.045
+      },
+      "prompt_hash": "6d2d5b97947672667014cefaaa373c520afe8a30796be22e7fab1c4e83d18511",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "tonnage_only",
+      "constraint_family_match": true,
+      "elapsed_ms": 5029.753,
+      "expected_constraint_families": [
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-008",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1560.858,
+        "coc_country_match": 1650.053,
+        "vessel_tonnage": 1818.792
+      },
+      "prompt_hash": "5598bd14f81918f5f58018058503d1479f7bb50ddbf09bae491455737d14c70a",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "coc_country_match"
+      ],
+      "actual_review_families": [],
+      "class": "coc_only",
+      "constraint_family_match": true,
+      "elapsed_ms": 4100.16,
+      "expected_constraint_families": [
+        "coc_country_match"
+      ],
+      "expected_review_families": [],
+      "id": "N3-009",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1221.102,
+        "coc_country_match": 1447.421,
+        "vessel_tonnage": 1431.554
+      },
+      "prompt_hash": "05e64e22b8dcabbe8d1fcfa1c9ae3c604786ce0061b5899ed0e3b45319a68cca",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [],
+      "actual_review_families": [],
+      "class": "unsupported",
+      "constraint_family_match": true,
+      "elapsed_ms": 4437.249,
+      "expected_constraint_families": [],
+      "expected_review_families": [],
+      "id": "N3-010",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1710.386,
+        "coc_country_match": 1292.953,
+        "vessel_tonnage": 1433.856
+      },
+      "prompt_hash": "2d0555eb6c25f3ae12f436a7e79875a2ab639f2e26a247c6f02a7197f4268aea",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.unapplied[0].span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed",
+        "query_plan.unapplied[2].span.offsets_replayed",
+        "query_plan.unapplied[3].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "all_three_strict",
+      "constraint_family_match": true,
+      "elapsed_ms": 5614.941,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-011",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1847.806,
+        "coc_country_match": 1636.601,
+        "vessel_tonnage": 2130.462
+      },
+      "prompt_hash": "eafeb7f4dd8374b79c4a84caf06daf65e82b73283e6437bd727921459a9b6d6a",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[2].source_span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match"
+      ],
+      "actual_review_families": [
+        "vessel_tonnage"
+      ],
+      "class": "ambiguous_tonnage",
+      "constraint_family_match": true,
+      "elapsed_ms": 5803.017,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match"
+      ],
+      "expected_review_families": [
+        "vessel_tonnage"
+      ],
+      "id": "N3-012",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 2260.259,
+        "coc_country_match": 1335.703,
+        "vessel_tonnage": 2206.976
+      },
+      "prompt_hash": "9d8a0cc960b5c8b740334ece11c30a3f3539f9fc0970d942b5c09f7fa54883fb",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed",
+        "query_plan.needs_review[0].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "cross_family_context_flag",
+      "constraint_family_match": true,
+      "elapsed_ms": 5202.264,
+      "expected_constraint_families": [
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-013",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1807.903,
+        "coc_country_match": 1805.461,
+        "vessel_tonnage": 1588.799
+      },
+      "prompt_hash": "3efb25aba7152b788311d6cb2d66d24995cd76702098682d7544931e265731ef",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.unapplied[4].span.offsets_replayed",
+        "query_plan.unapplied[5].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "cross_family_context_nationality",
+      "constraint_family_match": true,
+      "elapsed_ms": 6023.229,
+      "expected_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-014",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1941.272,
+        "coc_country_match": 1932.092,
+        "vessel_tonnage": 2149.802
+      },
+      "prompt_hash": "9d50df55b73d3dbfe52eaab60b7680d23a82149efe6286225e028ac9b89bcab5",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "cross_family_context_route",
+      "constraint_family_match": true,
+      "elapsed_ms": 5076.572,
+      "expected_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-015",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1829.953,
+        "coc_country_match": 1555.301,
+        "vessel_tonnage": 1691.213
+      },
+      "prompt_hash": "e8b0f1fbd227a0900b6e08c6e2606c83eb3dee3269cb526ce490a0d17c58a336",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed",
+        "query_plan.unapplied[5].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "all_three_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 5294.395,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-016",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1714.134,
+        "coc_country_match": 1538.259,
+        "vessel_tonnage": 2041.915
+      },
+      "prompt_hash": "ffaa3e60fab97efe26b573d5017a267eb19a829e605afeff2b1ee4189428ce26",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[2].source_span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "all_three_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 6598.471,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-017",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 2943.119,
+        "coc_country_match": 1788.815,
+        "vessel_tonnage": 1866.443
+      },
+      "prompt_hash": "783c3ae42c5bead5a775c64763419a7f1b5dae6147f961a70ca23f61cb0d5353",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[2].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "coc_country_match"
+      ],
+      "actual_review_families": [],
+      "class": "availability_coc_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 5785.713,
+      "expected_constraint_families": [
+        "availability",
+        "coc_country_match"
+      ],
+      "expected_review_families": [],
+      "id": "N3-018",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 2067.196,
+        "coc_country_match": 1707.907,
+        "vessel_tonnage": 2010.498
+      },
+      "prompt_hash": "6f3f8ba392756589805d7704948cede13f19a700649753817bc6cd37b745101c",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed",
+        "query_plan.unapplied[2].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "tonnage_coc_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 4435.245,
+      "expected_constraint_families": [
+        "coc_country_match",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-019",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1531.391,
+        "coc_country_match": 1336.286,
+        "vessel_tonnage": 1567.482
+      },
+      "prompt_hash": "eb538fb65afd2085007703d3450b8534fc2f73744e7681e2221798be6ab61426",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[3].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "availability_tonnage_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 4641.644,
+      "expected_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-020",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1805.003,
+        "coc_country_match": 1123.024,
+        "vessel_tonnage": 1713.544
+      },
+      "prompt_hash": "8bf77dba90b16fce45695cca158833241debd57c6011588d6442cebc6417e068",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[0].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [
+        "coc_country_match"
+      ],
+      "actual_review_families": [],
+      "class": "coc_only_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 5329.042,
+      "expected_constraint_families": [
+        "coc_country_match"
+      ],
+      "expected_review_families": [],
+      "id": "N3-021",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1563.925,
+        "coc_country_match": 1758.962,
+        "vessel_tonnage": 2006.027
+      },
+      "prompt_hash": "4c9f1531452205fb5ed24d92f22d0b92733e9e3f842a493c8d3da0f87831dad1",
+      "provider_call_count": 3,
+      "repair_actions": [],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [],
+      "class": "tonnage_only_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 5253.459,
+      "expected_constraint_families": [
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [],
+      "id": "N3-022",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1938.683,
+        "coc_country_match": 1668.415,
+        "vessel_tonnage": 1646.282
+      },
+      "prompt_hash": "12eb45d9ee1219f7e86772bcc61f178cd1cc23300202ebb990db9b43dec874d5",
+      "provider_call_count": 3,
+      "repair_actions": [],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability"
+      ],
+      "actual_review_families": [],
+      "class": "availability_only_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 4286.089,
+      "expected_constraint_families": [
+        "availability"
+      ],
+      "expected_review_families": [],
+      "id": "N3-023",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1627.256,
+        "coc_country_match": 1182.931,
+        "vessel_tonnage": 1475.83
+      },
+      "prompt_hash": "d16c13d6cfe2f09f0579d102e0d14fec8dc55846e4688836427a04e88457d225",
+      "provider_call_count": 3,
+      "repair_actions": [],
+      "review_family_match": true,
+      "schema_valid": false,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": [
+        "query_plan.constraints[0].parameters invalid: parameters.availability has unknown fields: unit, years_back"
+      ]
+    },
+    {
+      "actual_constraint_families": [],
+      "actual_review_families": [],
+      "class": "unsupported_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 5064.708,
+      "expected_constraint_families": [],
+      "expected_review_families": [],
+      "id": "N3-024",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1499.711,
+        "coc_country_match": 1926.074,
+        "vessel_tonnage": 1638.86
+      },
+      "prompt_hash": "9480e94efdbbb11efab4c1d99aa6d137faf8e6471ce742ef8a429132a88bd1a3",
+      "provider_call_count": 3,
+      "repair_actions": [],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    },
+    {
+      "actual_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "actual_review_families": [
+        "coc_country_match"
+      ],
+      "class": "issue_authority_review_variant",
+      "constraint_family_match": true,
+      "elapsed_ms": 5588.361,
+      "expected_constraint_families": [
+        "availability",
+        "vessel_tonnage"
+      ],
+      "expected_review_families": [
+        "coc_country_match"
+      ],
+      "id": "N3-025",
+      "missing_constraint_families": [],
+      "missing_review_families": [],
+      "per_family_elapsed_ms": {
+        "availability": 1893.777,
+        "coc_country_match": 1950.657,
+        "vessel_tonnage": 1743.762
+      },
+      "prompt_hash": "65f349c3531edaded7853b36927e9e326700c5dcd1bb0b66aee93f1f00d357ab",
+      "provider_call_count": 3,
+      "repair_actions": [
+        "query_plan.constraints[0].source_span.offsets_replayed",
+        "query_plan.constraints[1].source_span.offsets_replayed",
+        "query_plan.unapplied[1].span.offsets_replayed",
+        "query_plan.unapplied[2].span.offsets_replayed",
+        "query_plan.unapplied[3].span.offsets_replayed"
+      ],
+      "review_family_match": true,
+      "schema_valid": true,
+      "transport_errors": {},
+      "unexpected_constraint_families": [],
+      "unexpected_review_families": [],
+      "validator_errors": []
+    }
+  ],
+  "corpus_id": "compound-dispatch-strategy-n3",
+  "corpus_version": "1.0.0",
+  "dry_run": false,
+  "live_dispatch": false,
+  "model_id": "gemini-3.1-flash-lite",
+  "promoted_families": [
+    "availability",
+    "coc_country_match",
+    "vessel_tonnage"
+  ],
+  "reference_date": "2026-07-01",
+  "strategy": "sequential_per_family",
+  "summary": {
+    "constraint_family_match_rate": 1.0,
+    "mean_elapsed_ms": 5301.751,
+    "p50_elapsed_ms": 5253.459,
+    "provider_calls_per_case": 3,
+    "review_family_match_rate": 1.0,
+    "schema_valid_rate": 0.68,
+    "total_cases": 25,
+    "total_elapsed_ms": 132543.765,
+    "unsafe_widening_count": 0
+  },
+  "version": "compound_dispatch_strategy_evidence.v1"
+}
