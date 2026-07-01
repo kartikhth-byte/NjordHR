@@ -853,6 +853,33 @@ remaining. A later real-LLM A/B run decides whether helper context improves the
 `vessel_tonnage` provider path enough to adopt. This PR does not make that
 adoption decision.
 
+### PR-12 — vessel_tonnage helper-tool real-LLM A/B evidence
+
+Runs Gemini against the PR-7 corpus twice from the same prompt state: once with
+`use_helper_tools=false` and once with `use_helper_tools=true`. The JSON-only
+baseline artifact is
+`docs/eval-evidence/vessel-tonnage-normalizer-json-only-helper-baseline-llm-evidence-2026-07-01.json`:
+schema-valid rate 0.985, unsafe widening count 0, Class A match rate 0.975,
+Class B correct rate 0.825 with recall lift 0.825, Class C safe-route rate
+0.925, reviewed false-positive rate 0.0, and promotion gate `passes=false`.
+
+The helper-assisted artifact is
+`docs/eval-evidence/vessel-tonnage-normalizer-helper-tools-llm-evidence-2026-07-01.json`:
+schema-valid rate 0.99, unsafe widening count 0, Class A match rate 0.825,
+Class B correct rate 0.8375 with recall lift 0.8375, Class C safe-route rate
+0.975, reviewed false-positive rate 0.0, helper accepted count 802, helper
+rejected count 24, and promotion gate `passes=false`.
+
+Helper adoption for `vessel_tonnage` fails this A/B run. The helper-assisted
+run improves schema-valid rate, Class B correct rate, and Class C safe-route
+rate, but it regresses Class A from 0.975 to 0.825 and falls below the 0.95
+Class A floor. The failure mechanism is source-span narrowing: helper context
+led the model to choose the minimal parseable substring, such as
+`below 45000 tonnage`, instead of the wider corpus-expected phrase, such as
+`ships below 45000 tonnage`. The provider path remains JSON-only by default:
+`use_helper_tools=false`. The helper path remains opt-in for audit experiments
+only.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
@@ -880,6 +907,11 @@ PR-2, PR-3, and any promotion PR must each independently verify:
 - Whether `soft_signals` ever wire to a ranking layer. v1 ignores them at dispatch; future work owns the question.
 - Whether multi-turn refinement is supported. v1.1 helper tools operate inside
   one prompt-normalization run only; refinement is a separate spec.
+- Whether unmatched prompts route to a semantic-search fallback. The fallback
+  would run only after the compound normalizer emits no constraints,
+  `needs_review`, or `unapplied` entries. It would return JSON-only routing
+  such as `semantic_search`, `out_of_scope`, or `needs_review`; it must not
+  invent hard-filter constraints.
 
 ## Compliance with existing migration discipline
 
