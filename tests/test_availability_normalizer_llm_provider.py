@@ -7,6 +7,7 @@ from unittest.mock import patch
 from scripts.availability_normalizer_evidence import _gemini_api_key_from_config
 from query_understanding.compound_prompt_normalizer_evidence import (
     evaluate_availability_helper_tool_fixture_corpus,
+    evaluate_age_range_llm_corpus,
     evaluate_availability_llm_corpus,
     evaluate_vessel_tonnage_helper_tool_fixture_corpus,
     evaluate_vessel_tonnage_llm_corpus,
@@ -15,14 +16,17 @@ from query_understanding.compound_prompt_normalizer_evidence import (
 )
 from query_understanding.compound_prompt_normalizer_provider import (
     COMPOUND_NORMALIZER_DEFAULT_MODEL,
+    COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION,
     COMPOUND_NORMALIZER_COC_COUNTRY_PROMPT_TEMPLATE_VERSION,
     COMPOUND_NORMALIZER_TONNAGE_PROMPT_TEMPLATE_VERSION,
     COMPOUND_NORMALIZER_UNIFIED_PROMPT_TEMPLATE_VERSION,
     AvailabilityNormalizerProviderResult,
+    build_age_range_normalizer_prompt,
     build_availability_normalizer_prompt,
     build_coc_country_normalizer_prompt,
     build_vessel_tonnage_normalizer_prompt,
     call_gemini_availability_normalizer,
+    call_gemini_age_range_normalizer,
     call_gemini_coc_country_normalizer,
     call_gemini_unified_compound_normalizer,
     call_gemini_vessel_tonnage_normalizer,
@@ -31,6 +35,7 @@ from query_understanding.compound_prompt_normalizer_provider import (
 
 CORPUS_FILE = Path("docs/eval-evidence/availability-shadow-normalizer-corpus-2026-06-29.json")
 VESSEL_TONNAGE_CORPUS_FILE = Path("docs/eval-evidence/vessel-tonnage-shadow-normalizer-corpus-2026-06-30.json")
+AGE_RANGE_CORPUS_FILE = Path("docs/eval-evidence/age-range-shadow-normalizer-corpus-2026-07-01.json")
 
 
 class _FakeGeminiResponse:
@@ -108,6 +113,28 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("valid CoC, CoC required, valid certificate of competency", prompt)
         self.assertIn("reason=\"no matching capability\"", prompt)
         self.assertIn("Do not put unrelated availability", prompt)
+        self.assertNotIn("executor_id", prompt)
+
+    def test_age_range_prompt_uses_catalog_without_executor_ids(self):
+        prompt = build_age_range_normalizer_prompt(
+            "Need candidates age between 30 and 50 with Indian CoC",
+            prompt_normalized="Need candidates age between 30 and 50 with Indian CoC",
+            reference_date="2026-07-01",
+        )
+
+        self.assertIn('"family": "age_range"', prompt)
+        self.assertIn('"family": "availability"', prompt)
+        self.assertIn('"family": "vessel_tonnage"', prompt)
+        self.assertIn('"family": "coc_country_match"', prompt)
+        self.assertIn("filter_family=\"age_range\"", prompt)
+        self.assertIn("minimum_years", prompt)
+        self.assertIn("maximum_years", prompt)
+        self.assertIn("age between 30 and 50 -> minimum_years=30, maximum_years=50", prompt)
+        self.assertIn("born after 1990", prompt)
+        self.assertIn("DOB after 1990", prompt)
+        self.assertIn("Do not put unrelated availability", prompt)
+        self.assertIn("Preserve the full recruiter age phrase", prompt)
+        self.assertIn("display_value MUST equal source_span.text exactly", prompt)
         self.assertNotIn("executor_id", prompt)
 
     def test_gemini_provider_parses_json_payload(self):
@@ -269,6 +296,61 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("countries", schema_parameters["required"])
         self.assertIn("operator", schema_parameters["required"])
         self.assertNotIn("value_type", schema_parameters["properties"])
+
+    def test_age_range_gemini_provider_parses_json_payload(self):
+        calls = []
+        payload = {
+            "version": "v1",
+            "constraints": [
+                {
+                    "filter_family": "age_range",
+                    "parameters": {
+                        "version": "v1",
+                        "type": "age_range",
+                        "minimum_years": 30,
+                        "maximum_years": 50,
+                        "display_value": "age between 30 and 50",
+                    },
+                    "source_span": {"text": "age between 30 and 50", "start": 21, "end": 42},
+                }
+            ],
+            "soft_signals": [],
+            "unapplied": [],
+            "needs_review": [],
+        }
+
+        def fake_post(url, *, headers, json, timeout):
+            calls.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+            return _FakeGeminiResponse(
+                {
+                    "candidates": [
+                        {"content": {"parts": [{"text": __import__("json").dumps(payload)}]}}
+                    ]
+                }
+            )
+
+        result = call_gemini_age_range_normalizer(
+            "Need candidates with age between 30 and 50",
+            prompt_normalized="Need candidates with age between 30 and 50",
+            reference_date="2026-07-01",
+            api_key="test-key",
+            post=fake_post,
+        )
+
+        self.assertEqual(result.model_id, COMPOUND_NORMALIZER_DEFAULT_MODEL)
+        self.assertEqual(result.prompt_template_version, COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION)
+        self.assertEqual(result.parsed_payload, payload)
+        self.assertIsNone(result.transport_error)
+        provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
+        self.assertIn("filter_family=\"age_range\"", provider_prompt)
+        self.assertNotIn("executor_id", provider_prompt)
+        schema_parameters = calls[0]["json"]["generationConfig"]["responseSchema"]["properties"]["constraints"]["items"]["properties"]["parameters"]
+        self.assertIn("minimum_years", schema_parameters["required"])
+        self.assertIn("maximum_years", schema_parameters["required"])
+        self.assertIn("type", schema_parameters["required"])
+        self.assertNotIn("available_by_date", schema_parameters["properties"])
+        self.assertNotIn("min_value", schema_parameters["properties"])
+        self.assertNotIn("countries", schema_parameters["properties"])
 
     def test_unified_gemini_provider_parses_n3_payload(self):
         calls = []
@@ -516,6 +598,37 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertEqual(report["mode"], "shadow_llm_evidence")
         self.assertEqual(report["summary"]["class_a_llm_match_rate"], 1.0)
         self.assertEqual(report["summary"]["class_b_correct_rate_against_human_label"], 1.0)
+        self.assertEqual(report["summary"]["class_b_recall_lift"], 1.0)
+        self.assertEqual(report["summary"]["class_c_safe_route_rate"], 1.0)
+        self.assertNotIn("real_llm_run_required", report["promotion_gate"]["failures"])
+
+    def test_age_range_llm_evidence_mode_uses_provider_payloads_without_live_dispatch(self):
+        corpus = json.loads(json.dumps(load_corpus(AGE_RANGE_CORPUS_FILE)))
+        fixture_payloads = {
+            case["id"]: case["llm_query_plan"]
+            for case in corpus["cases"]
+            if isinstance(case, dict)
+        }
+
+        def provider(prompt, *, prompt_normalized, reference_date, catalog):
+            case = next(item for item in corpus["cases"] if item["prompt"] == prompt)
+            return AvailabilityNormalizerProviderResult(
+                model_id="fake-model",
+                prompt_template_version=COMPOUND_NORMALIZER_AGE_RANGE_PROMPT_TEMPLATE_VERSION,
+                raw_llm_output=json.dumps(fixture_payloads[case["id"]]),
+                parsed_payload=fixture_payloads[case["id"]],
+            )
+
+        report = evaluate_age_range_llm_corpus(corpus, provider=provider)
+
+        self.assertTrue(report["llm_invoked"])
+        self.assertFalse(report["live_dispatch"])
+        self.assertFalse(report["promoted_family"])
+        self.assertEqual(report["family"], "age_range")
+        self.assertEqual(report["mode"], "shadow_llm_evidence")
+        self.assertEqual(report["summary"]["class_a_llm_match_rate"], 1.0)
+        self.assertEqual(report["summary"]["class_b_correct_rate_against_human_label"], 1.0)
+        self.assertEqual(report["summary"]["class_b_deterministic_baseline_correct_rate"], 0.0)
         self.assertEqual(report["summary"]["class_b_recall_lift"], 1.0)
         self.assertEqual(report["summary"]["class_c_safe_route_rate"], 1.0)
         self.assertNotIn("real_llm_run_required", report["promotion_gate"]["failures"])

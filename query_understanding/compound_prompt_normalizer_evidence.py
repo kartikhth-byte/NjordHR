@@ -375,6 +375,27 @@ def evaluate_coc_country_evidence_corpus(
     )
 
 
+def evaluate_age_range_evidence_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate a fixed age-range normalizer evidence corpus."""
+
+    return _evaluate_family_payloads(
+        corpus,
+        family="age_range",
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+        mode="shadow_evidence_fixture",
+        llm_invoked=False,
+        class_a_rate_key="class_a_fixture_match_rate",
+        class_a_gate_failure="class_a_fixture_match_rate_below_95_percent",
+        class_b_recall_lift_status="measured_against_corpus_deterministic_baseline",
+    )
+
+
 def evaluate_availability_helper_tool_fixture_corpus(
     corpus: Mapping[str, Any],
     *,
@@ -552,6 +573,24 @@ def evaluate_coc_country_llm_corpus(
     return _evaluate_llm_corpus(
         corpus,
         family="coc_country_match",
+        provider=provider,
+        catalog=catalog,
+        class_b_min_correct=class_b_min_correct,
+    )
+
+
+def evaluate_age_range_llm_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    provider,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate an age-range corpus by invoking a provider per prompt."""
+
+    return _evaluate_llm_corpus(
+        corpus,
+        family="age_range",
         provider=provider,
         catalog=catalog,
         class_b_min_correct=class_b_min_correct,

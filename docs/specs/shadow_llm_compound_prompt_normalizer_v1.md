@@ -1180,6 +1180,27 @@ tools, dispatcher branch, or live cutover. `PROMOTED_FAMILIES` remains
 behavior for `age_range` until a later cutover PR explicitly promotes this
 family into the compound normalizer.
 
+### PR-24 — age_range provider prompt and fixture corpus
+
+Adds the `age_range` provider prompt, age-specific Gemini response schema,
+audit-only provider adapter, evidence harness entrypoint, and the 200-prompt
+fixture corpus at
+`docs/eval-evidence/age-range-shadow-normalizer-corpus-2026-07-01.json`.
+The corpus uses Class A = 80, Class B = 80, and Class C = 40. It includes
+cross-family prompts that combine `age_range` with each family already in
+`PROMOTED_FAMILIES` (`availability`, `vessel_tonnage`, and
+`coc_country_match`) across Class A, Class B, and Class C while scoring only
+`age_range`.
+
+The v1 prompt treats date-of-birth and birth-year wording as out of scope for
+`age_range`; those phrases route to `unapplied` because the catalog row
+represents age-in-years requirements, not date-of-birth conversion. This PR
+does not invoke Gemini, add helper tools, add a dispatcher branch, promote
+`age_range`, change `LLM_Promotion_Stage`, change `/analyze` or
+`/analyze_stream` payloads, change fingerprints, change frontend behavior,
+change CSV columns, or change durable audit-event fields. `PROMOTED_FAMILIES`
+remains `{"availability", "coc_country_match", "vessel_tonnage"}`.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
