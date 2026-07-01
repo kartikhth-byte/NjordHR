@@ -1085,6 +1085,35 @@ availability cross-family parameter-shape failures and rerun evidence before
 switching live dispatch to parallel. Unified dispatch remains rejected for the
 current N=3 family set.
 
+### PR-20 — N=3 post-schema-fix dispatch strategy evidence
+
+Adds post-schema-fix real Gemini evidence artifacts for the same N=3
+promoted-family corpus:
+
+- `docs/eval-evidence/compound-dispatch-strategy-n3-sequential-post-schema-fix-llm-evidence-2026-07-01.json`
+- `docs/eval-evidence/compound-dispatch-strategy-n3-parallel-post-schema-fix-llm-evidence-2026-07-01.json`
+- `docs/eval-evidence/compound-dispatch-strategy-n3-unified-post-schema-fix-llm-evidence-2026-07-01.json`
+
+The sequential post-fix run records p50 total elapsed 5030.604ms,
+schema-valid rate 1.0, unsafe widening count 0, constraint-family match rate
+1.0, and review-family match rate 1.0.
+
+The parallel post-fix run records p50 total elapsed 1981.997ms,
+schema-valid rate 1.0, unsafe widening count 0, constraint-family match rate
+1.0, and review-family match rate 1.0. Parallel clears the latency bar against
+sequential with a 3048.607ms p50 reduction and 60.6% relative reduction.
+
+The unified post-fix run records p50 total elapsed 1957.06ms, schema-valid
+rate 0.12, unsafe widening count 1, constraint-family match rate 0.92, and
+review-family match rate 1.0. Unified does not clear the schema-valid gate,
+the unsafe-widening gate, the constraint-family match gate, or the latency bar
+against parallel.
+
+PR-20 does not change live runtime dispatch. A future runtime PR can switch
+live dispatch from `sequential_per_family` to `parallel_per_family` for the
+current N=3 family set. Unified dispatch remains rejected for the current N=3
+family set.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
