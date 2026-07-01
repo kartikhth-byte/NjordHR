@@ -8,6 +8,7 @@ from scripts.availability_normalizer_evidence import _gemini_api_key_from_config
 from query_understanding.compound_prompt_normalizer_evidence import (
     evaluate_availability_helper_tool_fixture_corpus,
     evaluate_availability_llm_corpus,
+    evaluate_vessel_tonnage_helper_tool_fixture_corpus,
     evaluate_vessel_tonnage_llm_corpus,
     load_corpus,
     repair_query_plan_payload,
@@ -71,7 +72,9 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("source_span must include the full tonnage phrase", prompt)
         self.assertIn("reversed tonnage range", prompt)
         self.assertIn("do not add extra unapplied entries", prompt)
+        self.assertIn("minimum 60k -> 60000", prompt)
         self.assertIn("67k -> 67500", prompt)
+        self.assertIn("below 102k -> 102500", prompt)
         self.assertNotIn("executor_id", prompt)
 
     def test_gemini_provider_parses_json_payload(self):
@@ -213,6 +216,46 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertIn("locate_prompt_span.v1", provider_prompt)
         self.assertIn("check_availability_parameters.v1", provider_prompt)
         self.assertNotIn("text appears more than once", provider_prompt)
+        self.assertNotIn("executor_id", provider_prompt)
+
+    def test_vessel_tonnage_gemini_provider_includes_helper_context_when_enabled(self):
+        calls = []
+        payload = {
+            "version": "v1",
+            "constraints": [],
+            "soft_signals": [],
+            "unapplied": [],
+            "needs_review": [],
+        }
+
+        def fake_post(url, *, headers, json, timeout):
+            calls.append({"json": json})
+            return _FakeGeminiResponse(
+                {
+                    "candidates": [
+                        {"content": {"parts": [{"text": __import__("json").dumps(payload)}]}}
+                    ]
+                }
+            )
+
+        result = call_gemini_vessel_tonnage_normalizer(
+            "Need candidates with below 67k vessel tonnage",
+            prompt_normalized="Need candidates with below 67k vessel tonnage",
+            reference_date="2026-06-29",
+            api_key="test-key",
+            use_helper_tools=True,
+            post=fake_post,
+        )
+
+        self.assertEqual(result.helper_tool_version, "1.0.0")
+        self.assertTrue(result.helper_tool_calls)
+        self.assertTrue(result.helper_tool_context)
+        provider_prompt = calls[0]["json"]["contents"][0]["parts"][0]["text"]
+        self.assertIn("provider_helper_tool_outputs", provider_prompt)
+        self.assertIn("display_value MUST equal source_span.text exactly", provider_prompt)
+        self.assertIn("parse_vessel_tonnage_phrase.v1", provider_prompt)
+        self.assertIn("check_vessel_tonnage_parameters.v1", provider_prompt)
+        self.assertIn('"max_value": 67500', provider_prompt)
         self.assertNotIn("executor_id", provider_prompt)
 
     def test_gemini_provider_reports_missing_credentials(self):
@@ -388,6 +431,46 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertEqual(report["llm_audit_records"][0]["quality_failure_class"], "")
         self.assertNotIn("available immediately", json.dumps(report["llm_audit_records"][0]["helper_tool_calls"]))
 
+    def test_vessel_tonnage_llm_evidence_records_helper_tool_audit_counts(self):
+        corpus = json.loads(json.dumps(load_corpus(VESSEL_TONNAGE_CORPUS_FILE)))
+        corpus["cases"] = corpus["cases"][:3]
+
+        def provider(prompt, *, prompt_normalized, reference_date, catalog):
+            result = call_gemini_vessel_tonnage_normalizer(
+                prompt,
+                prompt_normalized=prompt_normalized,
+                reference_date=reference_date,
+                api_key="test-key",
+                catalog=catalog,
+                use_helper_tools=True,
+                post=lambda *_, **__: _FakeGeminiResponse(
+                    {
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {"text": __import__("json").dumps(next(case for case in corpus["cases"] if case["prompt"] == prompt)["llm_query_plan"])}
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                ),
+            )
+            self.assertTrue(result.helper_tool_calls)
+            return result
+
+        report = evaluate_vessel_tonnage_llm_corpus(corpus, provider=provider)
+
+        self.assertGreater(report["summary"]["helper_tool_call_count"], 0)
+        self.assertGreater(report["summary"]["helper_tool_accepted_count"], 0)
+        self.assertIn("helper_tool_calls", report["llm_audit_records"][0])
+        self.assertEqual(
+            set(report["llm_audit_records"][0]["helper_tool_calls"][0]),
+            {"tool_id", "input_hash", "accepted", "result_hash", "errors"},
+        )
+        self.assertNotIn("vessels above 30000 GT", json.dumps(report["llm_audit_records"][0]["helper_tool_calls"]))
+
     def test_llm_evidence_records_quality_failure_class_per_audit_record(self):
         corpus = json.loads(json.dumps(load_corpus(CORPUS_FILE)))
         corpus["cases"] = [next(case for case in corpus["cases"] if case["id"] == "A049")]
@@ -417,6 +500,23 @@ class AvailabilityNormalizerLlmProviderTests(unittest.TestCase):
         self.assertFalse(report["llm_invoked"])
         self.assertFalse(report["live_dispatch"])
         self.assertEqual(report["mode"], "shadow_helper_tool_fixture_evidence")
+        self.assertEqual(report["summary"]["class_a_fixture_match_rate"], 1.0)
+        self.assertGreater(report["summary"]["helper_tool_call_count"], 0)
+        self.assertGreater(report["summary"]["helper_tool_accepted_count"], 0)
+        self.assertGreaterEqual(report["summary"]["helper_tool_rejected_count"], 0)
+        self.assertIn("real_llm_run_required", report["promotion_gate"]["failures"])
+        self.assertEqual(len(report["llm_audit_records"]), 5)
+
+    def test_vessel_tonnage_helper_tool_fixture_evidence_compares_without_claiming_real_llm_run(self):
+        corpus = json.loads(json.dumps(load_corpus(VESSEL_TONNAGE_CORPUS_FILE)))
+        corpus["cases"] = corpus["cases"][:5]
+
+        report = evaluate_vessel_tonnage_helper_tool_fixture_corpus(corpus)
+
+        self.assertFalse(report["llm_invoked"])
+        self.assertFalse(report["live_dispatch"])
+        self.assertEqual(report["mode"], "shadow_helper_tool_fixture_evidence")
+        self.assertEqual(report["family"], "vessel_tonnage")
         self.assertEqual(report["summary"]["class_a_fixture_match_rate"], 1.0)
         self.assertGreater(report["summary"]["helper_tool_call_count"], 0)
         self.assertGreater(report["summary"]["helper_tool_accepted_count"], 0)

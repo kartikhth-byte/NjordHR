@@ -16,6 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from query_understanding.compound_prompt_normalizer_evidence import (
     evaluate_vessel_tonnage_evidence_corpus,
+    evaluate_vessel_tonnage_helper_tool_fixture_corpus,
     evaluate_vessel_tonnage_llm_corpus,
     load_corpus,
     write_report,
@@ -55,6 +56,11 @@ def main() -> int:
         action="store_true",
         help="Invoke the configured LLM provider for audit-only evidence. No constraints are dispatched.",
     )
+    parser.add_argument(
+        "--use-helper-tools",
+        action="store_true",
+        help="Include provider-scoped helper tool context. Without --invoke-llm, records fixture helper audit only.",
+    )
     parser.add_argument("--model", default=COMPOUND_NORMALIZER_DEFAULT_MODEL, help="Provider model id for --invoke-llm.")
     parser.add_argument(
         "--api-key-env",
@@ -84,9 +90,12 @@ def main() -> int:
                 api_key=api_key,
                 model=args.model,
                 catalog=catalog,
+                use_helper_tools=args.use_helper_tools,
             )
 
         report = evaluate_vessel_tonnage_llm_corpus(load_corpus(Path(args.corpus)), provider=provider)
+    elif args.use_helper_tools:
+        report = evaluate_vessel_tonnage_helper_tool_fixture_corpus(load_corpus(Path(args.corpus)))
     else:
         report = evaluate_vessel_tonnage_evidence_corpus(load_corpus(Path(args.corpus)))
     if args.output:

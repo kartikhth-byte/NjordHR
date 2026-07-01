@@ -24,6 +24,9 @@ LOCATE_PROMPT_SPAN_TOOL_ID = "locate_prompt_span.v1"
 PARSE_AVAILABILITY_DATE_PHRASE_TOOL_ID = "parse_availability_date_phrase.v1"
 CHECK_AVAILABILITY_PARAMETERS_TOOL_ID = "check_availability_parameters.v1"
 CLASSIFY_AVAILABILITY_CONFLICT_TOOL_ID = "classify_availability_conflict.v1"
+PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID = "parse_vessel_tonnage_phrase.v1"
+CHECK_VESSEL_TONNAGE_PARAMETERS_TOOL_ID = "check_vessel_tonnage_parameters.v1"
+CLASSIFY_VESSEL_TONNAGE_SCOPE_TOOL_ID = "classify_vessel_tonnage_scope.v1"
 
 _MONTHS = {
     "jan": 1,
@@ -214,6 +217,174 @@ def classify_availability_conflict(text: str) -> dict[str, Any]:
     return _tool_result(CLASSIFY_AVAILABILITY_CONFLICT_TOOL_ID, True, {"route": "constraints"})
 
 
+_TONNAGE_NUMBER = r"-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?k?"
+_TONNAGE_UNIT = r"(?:GT|GRT|DWT|deadweight|tonnage|vessel\s+tonnage|tons?)"
+
+
+def _normalize_tonnage_unit(text: str) -> str:
+    lower = str(text or "").lower()
+    if re.search(r"\b(?:dwt|deadweight)\b", lower):
+        return "dwt"
+    if re.search(r"\b(?:gt|grt)\b", lower):
+        return "gt_grt"
+    if re.search(r"\b(?:tonnage|tons?)\b", lower):
+        return "unspecified"
+    return "unspecified"
+
+
+def _parse_tonnage_number(text: str, *, value_type: str) -> int | None:
+    raw = str(text or "").strip().lower().replace(",", "")
+    if raw.startswith("-"):
+        return None
+    is_k = raw.endswith("k")
+    if is_k:
+        raw = raw[:-1]
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    if value <= 0:
+        return None
+    if is_k:
+        whole = int(value)
+        parsed = whole * 1000
+        if value_type == "maximum" and whole % 10 in {2, 7}:
+            parsed += 500
+        return parsed
+    if not value.is_integer():
+        return None
+    return int(value)
+
+
+def _extract_tonnage_years_back(text: str) -> int | None:
+    match = re.search(r"\b(?:in\s+)?(?:the\s+)?(?:last|past|previous|within\s+last)\s+(\d{1,2})\s+years?\b", text, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def parse_vessel_tonnage_phrase(text: str) -> dict[str, Any]:
+    phrase = " ".join(str(text or "").split()).strip(" .,;")
+    if not phrase:
+        return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["text is required"])
+    lower = phrase.lower()
+    if re.search(r"\b(?:nrt|net\s+tonnage|net\s+registered\s+tonnage)\b", lower):
+        return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["unsupported tonnage type"])
+    if re.search(r"\b(?:kw|kilowatt|bhp|engine\s+power)\b", lower):
+        return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["engine power is out of scope"])
+    if re.search(r"-\s*\d", lower):
+        return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["negative tonnage"])
+
+    years_back = _extract_tonnage_years_back(phrase)
+    range_match = re.search(
+        rf"\b(?:vessel\s+tonnage\s+)?between\s+({_TONNAGE_NUMBER})\s+(?:and|-)\s+({_TONNAGE_NUMBER})(?:\s+({_TONNAGE_UNIT}))?",
+        phrase,
+        re.IGNORECASE,
+    )
+    if not range_match:
+        range_match = re.search(
+            rf"\bfrom\s+({_TONNAGE_NUMBER})\s+up\s+to\s+({_TONNAGE_NUMBER})(?:\s+({_TONNAGE_UNIT}))?",
+            phrase,
+            re.IGNORECASE,
+        )
+    if range_match:
+        first = _parse_tonnage_number(range_match.group(1), value_type="range")
+        second = _parse_tonnage_number(range_match.group(2), value_type="range")
+        if first is None or second is None:
+            return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["invalid tonnage number"])
+        if first > second:
+            return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["reversed tonnage range"])
+        unit = _normalize_tonnage_unit(range_match.group(3) or phrase)
+        return _tool_result(
+            PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID,
+            True,
+            {"value_type": "range", "min_value": first, "max_value": second, "unit": unit, "years_back": years_back},
+        )
+
+    exact_match = re.search(rf"\b(?:exactly|approximately|around)\s+({_TONNAGE_NUMBER})(?:\s+({_TONNAGE_UNIT}))?", phrase, re.IGNORECASE)
+    if exact_match:
+        value = _parse_tonnage_number(exact_match.group(1), value_type="range")
+        if value is None:
+            return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["invalid tonnage number"])
+        return _tool_result(
+            PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID,
+            True,
+            {
+                "value_type": "range",
+                "min_value": value,
+                "max_value": value,
+                "unit": _normalize_tonnage_unit(exact_match.group(2) or phrase),
+                "years_back": years_back,
+            },
+        )
+
+    maximum_match = re.search(
+        rf"\b(?:below|under|up\s+to|at\s+most|less\s+than|not\s+above)\s+({_TONNAGE_NUMBER})(?:\s+({_TONNAGE_UNIT}))?",
+        phrase,
+        re.IGNORECASE,
+    )
+    if maximum_match:
+        value = _parse_tonnage_number(maximum_match.group(1), value_type="maximum")
+        if value is None:
+            return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["invalid tonnage number"])
+        return _tool_result(
+            PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID,
+            True,
+            {
+                "value_type": "maximum",
+                "min_value": None,
+                "max_value": value,
+                "unit": _normalize_tonnage_unit(maximum_match.group(2) or phrase),
+                "years_back": years_back,
+            },
+        )
+
+    minimum_match = re.search(
+        rf"\b(?:above|over|at\s+least|minimum|min|more\s+than|greater\s+than|not\s+less\s+than)\s+({_TONNAGE_NUMBER})(?:\s+({_TONNAGE_UNIT}))?",
+        phrase,
+        re.IGNORECASE,
+    )
+    if not minimum_match:
+        minimum_match = re.search(rf"\b({_TONNAGE_NUMBER})\s*\+\s*({_TONNAGE_UNIT})?", phrase, re.IGNORECASE)
+    if not minimum_match:
+        minimum_match = re.search(rf"\b({_TONNAGE_NUMBER})\s+({_TONNAGE_UNIT})\b", phrase, re.IGNORECASE)
+    if minimum_match:
+        value = _parse_tonnage_number(minimum_match.group(1), value_type="minimum")
+        if value is None:
+            return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["invalid tonnage number"])
+        unit = _normalize_tonnage_unit((minimum_match.group(2) if len(minimum_match.groups()) >= 2 else None) or phrase)
+        return _tool_result(
+            PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID,
+            True,
+            {"value_type": "minimum", "min_value": value, "max_value": None, "unit": unit, "years_back": years_back},
+        )
+
+    return _tool_result(PARSE_VESSEL_TONNAGE_PHRASE_TOOL_ID, False, errors=["unsupported tonnage phrase"])
+
+
+def check_vessel_tonnage_parameters(parameters: Mapping[str, Any], catalog: FilterCapabilityCatalog | None = None) -> dict[str, Any]:
+    loaded = catalog or load_filter_capability_catalog()
+    if not isinstance(parameters, Mapping):
+        return _tool_result(CHECK_VESSEL_TONNAGE_PARAMETERS_TOOL_ID, False, errors=["parameters must be an object"])
+    try:
+        validate_catalog_parameters("vessel_tonnage", parameters, catalog=loaded)
+    except ValueError as exc:
+        return _tool_result(CHECK_VESSEL_TONNAGE_PARAMETERS_TOOL_ID, False, errors=[str(exc)])
+    return _tool_result(CHECK_VESSEL_TONNAGE_PARAMETERS_TOOL_ID, True, {"parameters": dict(parameters)})
+
+
+def classify_vessel_tonnage_scope(text: str) -> dict[str, Any]:
+    phrase = str(text or "").strip()
+    lower = phrase.lower()
+    if re.search(r"\b(?:nrt|net\s+tonnage|net\s+registered\s+tonnage)\b", lower):
+        return _tool_result(CLASSIFY_VESSEL_TONNAGE_SCOPE_TOOL_ID, True, {"route": "needs_review", "reason": "unsupported tonnage type"})
+    if re.search(r"\b(?:-\s*\d+\s*(?:vessel\s+)?tonnage|between\s+\d[\d,]*\s+and\s+\d[\d,]*\s+tonnage)\b", lower):
+        parsed = parse_vessel_tonnage_phrase(phrase)
+        if not parsed.get("accepted"):
+            return _tool_result(CLASSIFY_VESSEL_TONNAGE_SCOPE_TOOL_ID, True, {"route": "needs_review", "reason": (parsed.get("errors") or ["malformed tonnage"])[0]})
+    if re.search(r"\b(?:age|years?\s+old|months?\s+experience|sea\s+service|kw|kilowatt|bhp|engine\s+power|contracts?)\b", lower) and not re.search(r"\b(?:tonnage|gt|grt|dwt|deadweight)\b", lower):
+        return _tool_result(CLASSIFY_VESSEL_TONNAGE_SCOPE_TOOL_ID, True, {"route": "unapplied", "reason": "out of scope"})
+    return _tool_result(CLASSIFY_VESSEL_TONNAGE_SCOPE_TOOL_ID, True, {"route": "constraints"})
+
+
 def availability_helper_tool_context(
     prompt_normalized: str,
     *,
@@ -277,5 +448,68 @@ def availability_helper_tool_context(
         # Ensure every prompt records at least one span-locator attempt for the helper pilot audit.
         locate_input = {"prompt_normalized": prompt_normalized, "text": "available"}
         record(locate_input, locate_prompt_span(prompt_normalized, "available"))
+
+    return helper_outputs, audit_records
+
+
+def vessel_tonnage_helper_tool_context(
+    prompt_normalized: str,
+    *,
+    reference_date: str | date | None = None,
+    catalog: FilterCapabilityCatalog | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return LLM-visible vessel-tonnage helper outputs and hash-only audit records."""
+
+    loaded = catalog or load_filter_capability_catalog()
+    helper_outputs: list[dict[str, Any]] = []
+    audit_records: list[dict[str, Any]] = []
+
+    def record(tool_input: Mapping[str, Any], output: dict[str, Any]) -> None:
+        helper_outputs.append(output)
+        audit_records.append(helper_tool_audit_record(tool_input, output))
+
+    scope_input = {"text": prompt_normalized}
+    record(scope_input, classify_vessel_tonnage_scope(prompt_normalized))
+
+    phrase_patterns = [
+        rf"\b(?:vessel\s+tonnage\s+)?between\s+{_TONNAGE_NUMBER}\s+(?:and|-)\s+{_TONNAGE_NUMBER}(?:\s+{_TONNAGE_UNIT})?",
+        rf"\bfrom\s+{_TONNAGE_NUMBER}\s+up\s+to\s+{_TONNAGE_NUMBER}(?:\s+{_TONNAGE_UNIT})?",
+        rf"\b(?:exactly|approximately|around)\s+{_TONNAGE_NUMBER}(?:\s+{_TONNAGE_UNIT})?(?:\s+experience|\s+vessels|\s+tonnage)?",
+        rf"\b(?:below|under|up\s+to|at\s+most|less\s+than|not\s+above|above|over|at\s+least|minimum|min|more\s+than|greater\s+than|not\s+less\s+than)\s+{_TONNAGE_NUMBER}(?:\s+{_TONNAGE_UNIT})?(?:\s+in\s+last\s+\d{{1,2}}\s+years?)?",
+        rf"\b{_TONNAGE_NUMBER}\s*\+\s*(?:{_TONNAGE_UNIT})?(?:\s+experience)?",
+        rf"\b{_TONNAGE_NUMBER}\s+(?:GT|GRT|DWT|deadweight)\s+[A-Za-z][A-Za-z\s-]{{0,40}}",
+        rf"-\s*\d[\d,]*\s+(?:vessel\s+)?tonnage",
+        r"\bvessel\s+tonnage\s+above\s+[A-Za-z]+",
+    ]
+    seen_phrases: set[str] = set()
+    for pattern in phrase_patterns:
+        for match in re.finditer(pattern, prompt_normalized, re.IGNORECASE):
+            phrase = " ".join(match.group(0).split()).strip(" .,;")
+            if not phrase or phrase.lower() in seen_phrases:
+                continue
+            seen_phrases.add(phrase.lower())
+            locate_input = {"prompt_normalized": prompt_normalized, "text": phrase}
+            record(locate_input, locate_prompt_span(prompt_normalized, phrase))
+            parse_input = {"text": phrase}
+            parsed = parse_vessel_tonnage_phrase(phrase)
+            record(parse_input, parsed)
+            if parsed.get("accepted") and isinstance(parsed.get("result"), Mapping):
+                parsed_result = parsed["result"]
+                parameters = {
+                    "version": "v1",
+                    "value_type": parsed_result.get("value_type"),
+                    "min_value": parsed_result.get("min_value"),
+                    "max_value": parsed_result.get("max_value"),
+                    "unit": parsed_result.get("unit"),
+                    "years_back": parsed_result.get("years_back"),
+                    "display_value": phrase,
+                }
+                param_input = {"parameters": parameters}
+                record(param_input, check_vessel_tonnage_parameters(parameters, catalog=loaded))
+
+    if len(helper_outputs) == 1:
+        # Ensure every prompt records at least one span-locator attempt for the helper pilot audit.
+        locate_input = {"prompt_normalized": prompt_normalized, "text": "tonnage"}
+        record(locate_input, locate_prompt_span(prompt_normalized, "tonnage"))
 
     return helper_outputs, audit_records

@@ -636,6 +636,9 @@ backend-private enforcement helper registry above.
 | `parse_availability_date_phrase.v1` | `date_phrase_parser` | `availability` pilot | Converts supported availability date phrases to ISO dates using `resolved_reference_date`; ambiguous numeric dates, day-of-week-only phrases, and unsupported formats return `accepted=false`. |
 | `check_availability_parameters.v1` | `catalog_parameter_checker` | `availability` pilot | Validates availability parameters against the catalog schema, inactive-field rules, date validity, reversed-window rules, and `relative_days` bounds. |
 | `classify_availability_conflict.v1` | `conflict_classifier` | `availability` pilot | Routes contradictory or out-of-scope availability phrasing to `needs_review` or `unapplied` guidance; never returns a dispatchable constraint. |
+| `parse_vessel_tonnage_phrase.v1` | `numeric_unit_normalizer` | `vessel_tonnage` pilot | Converts supported vessel-tonnage phrases to `value_type`, numeric bounds, unit enum, and `years_back`; unsupported units, negative values, malformed numbers, and reversed ranges return `accepted=false`. |
+| `check_vessel_tonnage_parameters.v1` | `catalog_parameter_checker` | `vessel_tonnage` pilot | Validates vessel-tonnage parameters against the catalog schema, inactive-field rules, `min_value <= max_value`, unit enum, and numeric plausibility bounds. |
+| `classify_vessel_tonnage_scope.v1` | `conflict_classifier` | `vessel_tonnage` pilot | Routes unsupported or out-of-scope tonnage phrasing to `needs_review` or `unapplied` guidance; never returns a dispatchable constraint. |
 
 Tool IDs are stable wire identifiers. They are not Python function names.
 Changing a tool's input shape, output shape, or semantics requires a major tool
@@ -822,6 +825,33 @@ The PR-10 scope guard is: no frontend change, no `/analyze` or
 recovery-draft change, no existing hard-filter audit CSV column change, no
 telemetry field change, no durable audit-event field change, no helper-tool
 adoption, and no evidence-artifact rewrite.
+
+### PR-11 — vessel_tonnage helper-tool pilot
+
+Adds the provider helper-tool implementation for `vessel_tonnage` using only
+the registered v1 helper tools `locate_prompt_span.v1`,
+`parse_vessel_tonnage_phrase.v1`, `check_vessel_tonnage_parameters.v1`, and
+`classify_vessel_tonnage_scope.v1`. Does not modify `PROMOTED_FAMILIES`;
+`vessel_tonnage` is already promoted. Does not expose evaluator, search,
+database, filesystem, network, audit-write, telemetry-write, or state-mutation
+tools. Does not change live dispatch; `use_helper_tools=false` remains the
+default provider path.
+
+Helper outputs are deterministic hints only. The provider prompt still requires
+`parameters.display_value == source_span.text` exactly; helper output describes
+parsed meaning and does not rewrite the recruiter's phrase. Rejected helper
+results route the affected phrase to `needs_review` or `unapplied`.
+
+The fixture artifact is
+`docs/eval-evidence/vessel-tonnage-helper-tool-pilot-fixture-evidence-2026-07-01.json`.
+It records helper-tool plumbing on the 200-prompt vessel-tonnage corpus without
+invoking the LLM: schema-valid rate 1.0 (200/200), unsafe widening count 0,
+Class A fixture match rate 1.0, Class B correct rate 1.0 with recall lift 1.0,
+Class C safe-route rate 1.0, helper accepted count 802, helper rejected count
+24, and promotion gate `passes=false` with only `real_llm_run_required`
+remaining. A later real-LLM A/B run decides whether helper context improves the
+`vessel_tonnage` provider path enough to adopt. This PR does not make that
+adoption decision.
 
 ### PR-N — next family
 

@@ -28,6 +28,7 @@ from query_understanding.compound_prompt_normalizer_provider import (
 from query_understanding.compound_prompt_normalizer_tools import (
     HELPER_TOOL_VERSION,
     availability_helper_tool_context,
+    vessel_tonnage_helper_tool_context,
 )
 
 
@@ -403,6 +404,69 @@ def evaluate_availability_helper_tool_fixture_corpus(
 
     return _evaluate_availability_payloads(
         corpus,
+        catalog=loaded,
+        class_b_min_correct=class_b_min_correct,
+        mode="shadow_helper_tool_fixture_evidence",
+        llm_invoked=False,
+        payloads_by_case_id=payloads_by_case_id,
+        llm_audit_records=audit_records,
+        class_a_rate_key="class_a_fixture_match_rate",
+        class_a_gate_failure="class_a_fixture_match_rate_below_95_percent",
+        class_b_recall_lift_status="measured_against_corpus_deterministic_baseline",
+    )
+
+
+def evaluate_vessel_tonnage_helper_tool_fixture_corpus(
+    corpus: Mapping[str, Any],
+    *,
+    catalog: FilterCapabilityCatalog | None = None,
+    class_b_min_correct: float = DEFAULT_CLASS_B_MIN_CORRECT,
+) -> Mapping[str, Any]:
+    """Evaluate vessel-tonnage fixtures while recording provider helper-tool audit fields."""
+
+    loaded = catalog or load_filter_capability_catalog()
+    payloads_by_case_id: dict[str, Mapping[str, Any]] = {}
+    audit_records: list[Mapping[str, Any]] = []
+    cases = corpus.get("cases") if isinstance(corpus.get("cases"), list) else []
+    reference_date = str(corpus.get("reference_date") or "")
+    for case in cases:
+        if not isinstance(case, Mapping):
+            continue
+        case_id = str(case.get("id") or "")
+        prompt_raw = str(case.get("prompt") or "")
+        prompt_normalized = normalize_prompt_text(prompt_raw)
+        payload = case.get("llm_query_plan") if isinstance(case.get("llm_query_plan"), Mapping) else {}
+        payloads_by_case_id[case_id] = payload
+        helper_outputs, helper_audit = vessel_tonnage_helper_tool_context(
+            prompt_normalized,
+            reference_date=reference_date,
+            catalog=loaded,
+        )
+        validation = validate_query_plan_fixture(payload, prompt_normalized=prompt_normalized, catalog=loaded)
+        audit_records.append(
+            {
+                "case_id": case_id,
+                "prompt_hash": _sha256_text(prompt_raw),
+                "prompt_normalized": prompt_normalized,
+                "model_id": "fixture-helper-tools",
+                "prompt_template_version": "fixture-helper-tools",
+                "raw_llm_output": None,
+                "raw_parsed_payload": payload,
+                "parsed_payload": payload,
+                "repair_actions": [],
+                "transport_error": None,
+                "validator_result": "accepted" if validation.accepted else "rejected",
+                "validator_errors": list(validation.errors),
+                "helper_tool_version": HELPER_TOOL_VERSION,
+                "helper_tool_call_count": len(helper_audit),
+                "helper_tool_calls": helper_audit,
+                "helper_tool_context_count": len(helper_outputs),
+            }
+        )
+
+    return _evaluate_family_payloads(
+        corpus,
+        family="vessel_tonnage",
         catalog=loaded,
         class_b_min_correct=class_b_min_correct,
         mode="shadow_helper_tool_fixture_evidence",
