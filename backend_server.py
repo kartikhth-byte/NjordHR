@@ -47,6 +47,10 @@ from candidate_facts.present_rank_index import PresentRankIndex
 from candidate_facts.repository import CandidateFactsRepository
 from candidate_facts.validation_cache import candidate_facts_validation_cache_base_dir
 from query_understanding import build_shadow_audit_entry, build_shadow_llm_query_plan
+from query_understanding.compound_prompt_normalizer_runtime import (
+    llm_normalizer_dispatch_strategy,
+    llm_normalizer_mode,
+)
 from query_understanding.hard_filter_catalog import canonical_engine_family_values, canonical_ship_family_values
 from query_understanding.supabase_telemetry_store import SupabaseTelemetryStore
 
@@ -1142,6 +1146,14 @@ def _record_supabase_telemetry(
     except Exception as exc:
         print(f"[BACKEND WARN] Failed to persist telemetry: {exc}")
         return None
+
+
+def _compound_normalizer_dispatch_strategy_telemetry_value():
+    return llm_normalizer_dispatch_strategy()
+
+
+def _compound_normalizer_mode_telemetry_value():
+    return llm_normalizer_mode()
 
 
 def _list_all_prompt_audit_summaries(store, page_size=200):
@@ -6504,6 +6516,8 @@ def analyze_stream():
                             "notices": progress_event.get("notices", []),
                             "verified_matches": len(progress_event.get("verified_matches", [])),
                             "uncertain_matches": len(progress_event.get("uncertain_matches", [])),
+                            "compound_normalizer_mode": _compound_normalizer_mode_telemetry_value(),
+                            "compound_normalizer_dispatch_strategy": _compound_normalizer_dispatch_strategy_telemetry_value(),
                         },
                         actor_role=actor_role,
                         actor_username=actor_username,
@@ -6748,6 +6762,8 @@ def analyze():
                 "notices": result.get("notices", []),
                 "verified_matches": len(result.get("verified_matches", [])),
                 "uncertain_matches": len(result.get("uncertain_matches", [])),
+                "compound_normalizer_mode": _compound_normalizer_mode_telemetry_value(),
+                "compound_normalizer_dispatch_strategy": _compound_normalizer_dispatch_strategy_telemetry_value(),
             },
             actor_role=actor_role,
             actor_username=actor_username,
