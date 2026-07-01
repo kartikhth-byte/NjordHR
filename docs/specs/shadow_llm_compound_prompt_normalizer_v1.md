@@ -899,6 +899,32 @@ membership against the migrated CoC country alias file. This PR does not add a
 adoption, dispatcher branch, `/analyze` payload change, frontend change,
 telemetry field, CSV column, or durable audit-event field.
 
+### PR-14 — coc_country_match prompt and fixture corpus
+
+Adds a `coc_country_match` provider prompt and a fixed 200-prompt fixture
+corpus at
+`docs/eval-evidence/coc-country-shadow-normalizer-corpus-2026-07-01.json`.
+The corpus distribution is Class A=80, Class B=80, Class C=40. Class A covers
+deterministic-covered country CoC phrasings. Class B covers human-labeled
+country-CoC phrasings the deterministic parser misses or partially narrows,
+with multi-country OR prompts included. Class C covers this closed list of
+adversarial or out-of-scope phrases: CoC issue-authority names,
+nationality-only mentions, work-location countries, route countries, visa
+countries, flag states, and document-gate-only CoC wording.
+
+The corpus includes cross-family prompts combining `coc_country_match` with
+`availability` across Class A, Class B, and Class C, and combining
+`coc_country_match` with `vessel_tonnage` across Class A, Class B, and Class C,
+because both families are already in `PROMOTED_FAMILIES`. The provider prompt
+preserves full CoC-country source spans, rejects ambiguous shortcuts as output
+country IDs, routes issue-authority phrasing to `needs_review`, and prefers
+`contains_any` for OR-style multi-country recruiter phrasing.
+
+This PR adds fixture validation only. It does not invoke Gemini, adopt helper
+tools, add `coc_country_match` to `PROMOTED_FAMILIES`, add a dispatcher branch,
+change `/analyze` or `/analyze_stream`, change frontend behavior, add
+telemetry, add CSV columns, or add durable audit-event fields.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
