@@ -20,6 +20,13 @@ def _write_catalog(payload):
     return temp_dir, path
 
 
+def _catalog_family(payload, family):
+    for row in payload["families"]:
+        if row.get("family") == family:
+            return row
+    raise AssertionError(f"missing catalog family fixture: {family}")
+
+
 def _base_parameters(**overrides):
     value = {
         "version": "v1",
@@ -62,15 +69,37 @@ def _coc_country_parameters(**overrides):
     return value
 
 
+def _age_range_parameters(**overrides):
+    value = {
+        "version": "v1",
+        "type": "age_range",
+        "minimum_years": 30,
+        "maximum_years": 50,
+        "display_value": "age between 30 and 50",
+    }
+    value.update(overrides)
+    return value
+
+
 class FilterCapabilityCatalogTests(unittest.TestCase):
     def test_catalog_loads_declared_families_and_promoted_subset(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
         self.assertEqual(catalog.version, "1.0.0")
+        self.assertIn("age_range", catalog.families_by_id)
         self.assertIn("availability", catalog.families_by_id)
         self.assertIn("vessel_tonnage", catalog.families_by_id)
         self.assertIn("coc_country_match", catalog.families_by_id)
         self.assertEqual(PROMOTED_FAMILIES, {"availability", "coc_country_match", "vessel_tonnage"})
+        age_range = catalog.families_by_id["age_range"]
+        self.assertEqual(age_range["executor_id"], "age_range")
+        self.assertEqual(
+            age_range["plausibility_bounds"],
+            {
+                "minimum_years": {"min": 16, "max": 75},
+                "maximum_years": {"min": 16, "max": 75},
+            },
+        )
         availability = catalog.families_by_id["availability"]
         self.assertEqual(availability["executor_id"], "availability")
         self.assertEqual(
@@ -98,11 +127,13 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
         backend_rows = {row["family"]: row for row in backend_catalog(catalog)}
         public_rows = {row["family"]: row for row in llm_facing_catalog(catalog)}
 
+        self.assertEqual(backend_rows["age_range"]["executor_id"], "age_range")
         self.assertEqual(backend_rows["availability"]["executor_id"], "availability")
         self.assertEqual(backend_rows["vessel_tonnage"]["executor_id"], "vessel_tonnage")
         self.assertEqual(backend_rows["coc_country_match"]["executor_id"], "coc_country_match")
         for public_row in public_rows.values():
             self.assertNotIn("executor_id", public_row)
+        self.assertEqual(public_rows["age_range"]["family"], "age_range")
         self.assertEqual(public_rows["availability"]["family"], "availability")
         self.assertEqual(public_rows["vessel_tonnage"]["family"], "vessel_tonnage")
         self.assertEqual(public_rows["coc_country_match"]["family"], "coc_country_match")
@@ -110,14 +141,14 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
     def test_catalog_views_do_not_poison_cached_rows(self):
         catalog = load_filter_capability_catalog(CATALOG_FILE)
 
-        backend_row = backend_catalog(catalog)[0]
+        backend_row = next(row for row in backend_catalog(catalog) if row["family"] == "availability")
         backend_row["plausibility_bounds"]["relative_days"]["max"] = 99999
         backend_row["output_schema"]["properties"]["version"]["const"] = "v999"
-        public_row = llm_facing_catalog(catalog)[0]
+        public_row = next(row for row in llm_facing_catalog(catalog) if row["family"] == "availability")
         public_row["accepted_phrases"].append("mutated phrase")
 
-        fresh_backend_row = backend_catalog(catalog)[0]
-        fresh_public_row = llm_facing_catalog(catalog)[0]
+        fresh_backend_row = next(row for row in backend_catalog(catalog) if row["family"] == "availability")
+        fresh_public_row = next(row for row in llm_facing_catalog(catalog) if row["family"] == "availability")
         self.assertEqual(fresh_backend_row["plausibility_bounds"]["relative_days"]["max"], 365)
         self.assertEqual(fresh_backend_row["output_schema"]["properties"]["version"]["const"], "v1")
         self.assertNotIn("mutated phrase", fresh_public_row["accepted_phrases"])
@@ -150,7 +181,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
     def test_loader_rejects_short_phrase_lists(self):
         payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
-        payload["families"][0]["accepted_phrases"] = ["available now", "available by date"]
+        _catalog_family(payload, "availability")["accepted_phrases"] = ["available now", "available by date"]
         temp_dir, path = _write_catalog(payload)
         self.addCleanup(temp_dir.cleanup)
 
@@ -158,7 +189,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
             load_filter_capability_catalog(path)
 
         payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
-        payload["families"][0]["do_not_use_for"] = ["salary"]
+        _catalog_family(payload, "availability")["do_not_use_for"] = ["salary"]
         temp_dir, path = _write_catalog(payload)
         self.addCleanup(temp_dir.cleanup)
 
@@ -167,7 +198,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
     def test_loader_rejects_duplicate_family_id(self):
         payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
-        payload["families"].append(dict(payload["families"][0]))
+        payload["families"].append(dict(_catalog_family(payload, "availability")))
         temp_dir, path = _write_catalog(payload)
         self.addCleanup(temp_dir.cleanup)
 
@@ -176,7 +207,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
     def test_loader_rejects_invalid_family_id(self):
         payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
-        payload["families"][0]["family"] = "Availability-Filter"
+        _catalog_family(payload, "availability")["family"] = "Availability-Filter"
         temp_dir, path = _write_catalog(payload)
         self.addCleanup(temp_dir.cleanup)
 
@@ -185,7 +216,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
     def test_loader_rejects_missing_numeric_plausibility_bound(self):
         payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
-        payload["families"][0]["plausibility_bounds"] = {}
+        _catalog_family(payload, "availability")["plausibility_bounds"] = {}
         temp_dir, path = _write_catalog(payload)
         self.addCleanup(temp_dir.cleanup)
 
@@ -194,7 +225,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
     def test_loader_rejects_extra_plausibility_bound(self):
         payload = json.loads(CATALOG_FILE.read_text(encoding="utf-8"))
-        payload["families"][0]["plausibility_bounds"]["available_by_date"] = {"min": 0, "max": 1}
+        _catalog_family(payload, "availability")["plausibility_bounds"]["available_by_date"] = {"min": 0, "max": 1}
         temp_dir, path = _write_catalog(payload)
         self.addCleanup(temp_dir.cleanup)
 
@@ -209,6 +240,55 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "last_updated must match YYYY-MM-DD"):
             load_filter_capability_catalog(path)
+
+    def test_age_range_schema_accepts_all_bound_shapes(self):
+        cases = [
+            _age_range_parameters(),
+            _age_range_parameters(
+                minimum_years=28,
+                maximum_years=None,
+                display_value="minimum age 28",
+            ),
+            _age_range_parameters(
+                minimum_years=None,
+                maximum_years=45,
+                display_value="below 45 years old",
+            ),
+            _age_range_parameters(
+                minimum_years=30,
+                maximum_years=30,
+                display_value="age exactly 30",
+            ),
+        ]
+
+        for parameters in cases:
+            with self.subTest(parameters=parameters):
+                validate_catalog_parameters("age_range", parameters)
+
+    def test_age_range_schema_rejects_invalid_shape(self):
+        with self.assertRaisesRegex(ValueError, "exactly one schema variant"):
+            validate_catalog_parameters(
+                "age_range",
+                _age_range_parameters(minimum_years=None, maximum_years=None),
+            )
+
+        with self.assertRaisesRegex(ValueError, "minimum_years cannot exceed maximum_years"):
+            validate_catalog_parameters(
+                "age_range",
+                _age_range_parameters(minimum_years=55, maximum_years=30),
+            )
+
+        with self.assertRaisesRegex(ValueError, "outside plausibility bounds"):
+            validate_catalog_parameters(
+                "age_range",
+                _age_range_parameters(minimum_years=15),
+            )
+
+        with self.assertRaisesRegex(ValueError, "display_value"):
+            validate_catalog_parameters(
+                "age_range",
+                _age_range_parameters(display_value=""),
+            )
 
     def test_availability_schema_accepts_all_value_types(self):
         cases = [
@@ -253,7 +333,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
             display_value="available by 2026-04-15",
         )
 
-        with self.assertRaisesRegex(ValueError, "exactly one value_type schema"):
+        with self.assertRaisesRegex(ValueError, "exactly one schema variant"):
             validate_catalog_parameters("availability", parameters)
 
     def test_availability_schema_rejects_missing_required_discriminator_field(self):
@@ -264,7 +344,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
             display_value="available within 30 days",
         )
 
-        with self.assertRaisesRegex(ValueError, "exactly one value_type schema"):
+        with self.assertRaisesRegex(ValueError, "exactly one schema variant"):
             validate_catalog_parameters("availability", parameters)
 
     def test_availability_schema_rejects_relative_days_out_of_bounds(self):
@@ -362,7 +442,7 @@ class FilterCapabilityCatalogTests(unittest.TestCase):
                 validate_catalog_parameters("vessel_tonnage", parameters)
 
     def test_vessel_tonnage_schema_rejects_inactive_and_invalid_fields(self):
-        with self.assertRaisesRegex(ValueError, "exactly one value_type schema"):
+        with self.assertRaisesRegex(ValueError, "exactly one schema variant"):
             validate_catalog_parameters(
                 "vessel_tonnage",
                 _vessel_tonnage_parameters(max_value=80000),

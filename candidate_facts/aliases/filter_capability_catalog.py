@@ -225,7 +225,7 @@ def _validate_schema_value(schema: Mapping[str, Any], value: Any, path: str) -> 
                 else:
                     matches += 1
             if matches != 1:
-                raise ValueError(f"{path} must match exactly one value_type schema")
+                raise ValueError(f"{path} must match exactly one schema variant")
 
 
 def validate_catalog_parameters(
@@ -240,6 +240,8 @@ def validate_catalog_parameters(
         raise ValueError(f"Unknown filter capability family: {family}")
     schema = _validate_mapping(row.get("output_schema"), f"filter_capability_catalog.families.{family}.output_schema")
     _validate_schema_value(schema, parameters, f"parameters.{family}")
+    if family == "age_range":
+        _validate_age_range_parameters(parameters)
     if family == "availability":
         _validate_availability_parameters(parameters)
     if family == "vessel_tonnage":
@@ -254,6 +256,15 @@ def validate_catalog_parameters(
         bound = _validate_mapping(bound_value, f"filter_capability_catalog.families.{family}.plausibility_bounds.{field}")
         if value < bound["min"] or value > bound["max"]:
             raise ValueError(f"parameters.{family}.{field} is outside plausibility bounds")
+
+
+def _validate_age_range_parameters(parameters: Mapping[str, Any]) -> None:
+    if not isinstance(parameters.get("display_value"), str) or not parameters.get("display_value", "").strip():
+        raise ValueError("parameters.age_range.display_value must be a non-empty string")
+    minimum_years = parameters.get("minimum_years")
+    maximum_years = parameters.get("maximum_years")
+    if isinstance(minimum_years, int) and isinstance(maximum_years, int) and minimum_years > maximum_years:
+        raise ValueError("parameters.age_range.minimum_years cannot exceed maximum_years")
 
 
 def _validate_availability_parameters(parameters: Mapping[str, Any]) -> None:

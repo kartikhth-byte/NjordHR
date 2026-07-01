@@ -1164,6 +1164,22 @@ payloads, request fingerprints, recovery drafts, frontend behavior, CSV
 columns, durable audit-event fields, helper-tool adoption, `PROMOTED_FAMILIES`,
 or provider dispatch behavior.
 
+### PR-23 — age_range catalog backfill
+
+Adds `age_range` to the capability catalog as the first legacy rescue-family
+backfill row. The catalog row uses the existing `query_plan.v1` shape:
+`type="age_range"`, `minimum_years`, `maximum_years`, and `display_value`.
+At least one bound is required, `minimum_years <= maximum_years` is enforced
+when both bounds are present, and both numeric fields use the closed
+plausibility range `[16, 75]`.
+
+This PR does not add an `age_range` provider prompt, evidence corpus, helper
+tools, dispatcher branch, or live cutover. `PROMOTED_FAMILIES` remains
+`{"availability", "coc_country_match", "vessel_tonnage"}`. The existing
+`LLM_Promotion_Stage` rescue path and deterministic age parser remain the live
+behavior for `age_range` until a later cutover PR explicitly promotes this
+family into the compound normalizer.
+
 ### PR-N — next family
 
 Per-family pipeline: catalog row addition, evidence corpus, promotion. One family at a time. Each its own PR.
